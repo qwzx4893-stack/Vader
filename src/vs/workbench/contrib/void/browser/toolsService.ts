@@ -8,7 +8,7 @@ import { QueryBuilder } from '../../../services/search/common/queryBuilder.js'
 import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
-import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName } from '../common/toolsServiceTypes.js'
+import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
 import { IVoidModelService } from '../common/voidModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVoidCommandBarService } from './voidCommandBarService.js'
@@ -19,6 +19,7 @@ import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
+import { IAgentsService } from '../common/agents/agentsService.js'
 
 
 // tool use for AI
@@ -153,6 +154,7 @@ export class ToolsService implements IToolsService {
 		@IDirectoryStrService private readonly directoryStrService: IDirectoryStrService,
 		@IMarkerService private readonly markerService: IMarkerService,
 		@IVoidSettingsService private readonly voidSettingsService: IVoidSettingsService,
+		@IAgentsService private readonly agentsService: IAgentsService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -288,6 +290,20 @@ export class ToolsService implements IToolsService {
 				const { persistent_terminal_id: terminalIdUnknown } = params;
 				const persistentTerminalId = validateProposedTerminalId(terminalIdUnknown);
 				return { persistentTerminalId };
+			},
+
+			create_persistent_agent: (params: RawToolParamsObj) => {
+				const { name: nameUnknown, description: descriptionUnknown, instructions: instructionsUnknown, allowed_approval_types: allowedUnknown, filesystem_scope_globs: globsUnknown } = params
+				const name = validateStr('name', nameUnknown)
+				const description = validateStr('description', descriptionUnknown)
+				const instructions = validateStr('instructions', instructionsUnknown)
+				const allowedStr = validateOptionalStr('allowed_approval_types', allowedUnknown)
+				const allowedApprovalTypes = allowedStr
+					? allowedStr.split(',').map(s => s.trim()).filter((s): s is ToolApprovalType => (toolApprovalTypes as Set<string>).has(s))
+					: null
+				const globsStr = validateOptionalStr('filesystem_scope_globs', globsUnknown)
+				const filesystemScopeGlobs = globsStr ? globsStr.split(',').map(s => s.trim()).filter(s => !!s) : null
+				return { name, description, instructions, allowedApprovalTypes, filesystemScopeGlobs }
 			},
 
 		}
@@ -461,6 +477,17 @@ export class ToolsService implements IToolsService {
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
 				return { result: {} }
 			},
+
+			create_persistent_agent: async ({ name, description, instructions, allowedApprovalTypes, filesystemScopeGlobs }) => {
+				const agent = this.agentsService.createAgent({
+					name,
+					description,
+					instructions,
+					allowedApprovalTypes: allowedApprovalTypes ?? undefined,
+					filesystemScopeGlobs: filesystemScopeGlobs ?? undefined,
+				}, 'main-agent')
+				return { result: { agentId: agent.id } }
+			},
 		}
 
 
@@ -563,6 +590,9 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+			create_persistent_agent: (params, result) => {
+				return `Created persistent agent "${params.name}" (id=${result.agentId}). It's now available in Vader's Agent settings and can be assigned to a chat thread.`;
 			},
 		}
 

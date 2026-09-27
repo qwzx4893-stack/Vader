@@ -336,6 +336,18 @@ export const builtinTools: {
 		name: 'kill_persistent_terminal',
 		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	},
+
+	create_persistent_agent: {
+		name: 'create_persistent_agent',
+		description: `Creates a new permanent, named agent that persists across sessions with its own instructions, so future tasks needing this same expertise or scope can be handed to it directly instead of you re-explaining context each time. Use this when you notice a task needs a specialized, repeatable role (e.g. "the person keeps asking Vulkan questions, a Vulkan Specialist agent would help"), not for one-off tasks.`,
+		params: {
+			name: { description: `Short, human-readable name for the agent, e.g. "Vulkan Specialist".` },
+			description: { description: `One sentence describing what this agent is for.` },
+			instructions: { description: `The system instructions this agent should always follow when active.` },
+			allowed_approval_types: { description: `Optional. Comma-separated subset of: edits, terminal, MCP tools. Leave empty to allow all.` },
+			filesystem_scope_globs: { description: `Optional. Comma-separated glob patterns restricting which files this agent may read/write/delete. Leave empty for no restriction.` },
+		}
 	}
 
 

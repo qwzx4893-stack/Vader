@@ -54,6 +54,8 @@ import { IExtensionManagementService } from '../../../../../../../platform/exten
 import { IMCPService } from '../../../../common/mcpService.js';
 import { IStorageService, StorageScope } from '../../../../../../../platform/storage/common/storage.js'
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
+import { IAgentsService, AgentsServiceState } from '../../../../common/agents/agentsService.js'
+import { IPolicyService, PolicyServiceState } from '../../../../common/policy/policyService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -83,6 +85,12 @@ const activeURIListeners: Set<(uri: URI | null) => void> = new Set();
 
 const mcpListeners: Set<() => void> = new Set()
 
+let agentsState: AgentsServiceState
+const agentsStateListeners: Set<(s: AgentsServiceState) => void> = new Set()
+
+let policyState: PolicyServiceState
+const policyStateListeners: Set<(s: PolicyServiceState) => void> = new Set()
+
 
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
@@ -101,9 +109,11 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		voidCommandBarService: accessor.get(IVoidCommandBarService),
 		modelService: accessor.get(IModelService),
 		mcpService: accessor.get(IMCPService),
+		agentsService: accessor.get(IAgentsService),
+		policyService: accessor.get(IPolicyService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService } = stateServices
 
 
 
@@ -176,6 +186,22 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	agentsState = agentsService.state
+	disposables.push(
+		agentsService.onDidChangeState(() => {
+			agentsState = agentsService.state
+			agentsStateListeners.forEach(l => l(agentsState))
+		})
+	)
+
+	policyState = policyService.state
+	disposables.push(
+		policyService.onDidChangeState(() => {
+			policyState = policyService.state
+			policyStateListeners.forEach(l => l(policyState))
+		})
+	)
+
 
 	return disposables
 }
@@ -229,6 +255,9 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMCPService: accessor.get(IMCPService),
 
 		IStorageService: accessor.get(IStorageService),
+
+		IAgentsService: accessor.get(IAgentsService),
+		IPolicyService: accessor.get(IPolicyService),
 
 	} as const
 	return reactAccessor
@@ -399,6 +428,32 @@ export const useMCPServiceState = () => {
 		const listener = () => { ss(mcpService.state) }
 		mcpListeners.add(listener);
 		return () => { mcpListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useAgentsServiceState = () => {
+	const accessor = useAccessor()
+	const agentsService = accessor.get('IAgentsService')
+	const [s, ss] = useState(agentsService.state)
+	useEffect(() => {
+		const listener = (newState: AgentsServiceState) => { ss(newState) }
+		agentsStateListeners.add(listener);
+		return () => { agentsStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const usePolicyServiceState = () => {
+	const accessor = useAccessor()
+	const policyService = accessor.get('IPolicyService')
+	const [s, ss] = useState(policyService.state)
+	useEffect(() => {
+		const listener = (newState: PolicyServiceState) => { ss(newState) }
+		policyStateListeners.add(listener);
+		return () => { policyStateListeners.delete(listener) };
 	}, []);
 	return s
 }

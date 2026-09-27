@@ -86,3 +86,9 @@ import '../common/voidModelService.js'
 
 // Vader agent platform: hard policy engine (see ARCHITECTURE.md)
 import '../common/policy/policyService.js'
+
+// Vader agent platform: layered instruction system
+import '../common/instructions/instructionsService.js'
+
+// Vader agent platform: permanent agents
+import '../common/agents/agentsService.js'

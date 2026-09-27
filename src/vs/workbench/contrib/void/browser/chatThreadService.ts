@@ -41,6 +41,7 @@ import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
+import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 
 
 // related to retrying when LLM message has error
@@ -120,6 +121,11 @@ export type ThreadType = {
 
 	messages: ChatMessage[];
 	filesWithUserChanges: Set<string>;
+
+	// Vader addition: which permanent agent (agents/agentsService.ts) this thread runs as,
+	// if any. undefined/null on old, pre-Vader threads and on threads never assigned one -
+	// both mean "no agent, use default Chat behavior".
+	agentId?: string | null;
 
 	// this doesn't need to go in a state object, but feels right
 	state: {
@@ -214,6 +220,7 @@ const newThreadObject = () => {
 		createdAt: now,
 		lastModified: now,
 		messages: [],
+		agentId: null,
 		state: {
 			currCheckpointIdx: null,
 			stagingSelections: [],
@@ -241,6 +248,10 @@ export interface IChatThreadService {
 	getCurrentThread(): ThreadType;
 	openNewThread(): void;
 	switchToThread(threadId: string): void;
+
+	// Vader addition: run a thread as a given permanent agent (or null to go back to
+	// default Chat behavior). See common/agents/agentsService.ts.
+	setThreadAgentId(threadId: string, agentId: string | null): void;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -330,6 +341,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IPolicyService private readonly _policyService: IPolicyService,
+		@IAgentsService private readonly _agentsService: IAgentsService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -492,10 +504,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 
-	private _currentModelSelectionProps = () => {
+	private _currentModelSelectionProps = (threadId: string) => {
 		// these settings should not change throughout the loop (eg anthropic breaks if you change its thinking mode and it's using tools)
 		const featureName: FeatureName = 'Chat'
-		const modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
+		let modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
+
+		// Vader addition: a permanent agent running this thread can pin its own model
+		const agentId = this.state.allThreads[threadId]?.agentId
+		if (agentId) {
+			const agent = this._agentsService.getAgent(agentId)
+			if (agent?.modelSelection) modelSelection = agent.modelSelection
+		}
+
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
 		return { modelSelection, modelSelectionOptions }
 	}
@@ -530,7 +550,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const callThisToolFirst: ToolMessage<ToolName> = lastMsg
 
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps() })
+			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps(threadId) })
 			, threadId
 		)
 	}
@@ -642,11 +662,36 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
 			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
 
+			// 1.4. Permanent agent scope: if this thread is running as a permanent agent
+			// (agents/agentsService.ts), its own restrictions apply on top of the global
+			// policy, and are checked the same hard way (before approval, not advisory).
+			const runningAgentId = this.state.allThreads[threadId]?.agentId
+			const runningAgent = runningAgentId ? this._agentsService.getAgent(runningAgentId) : undefined
+			if (runningAgent) {
+				const approvalTypeForAgentCheck = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
+				const blockedReason =
+					runningAgent.deniedToolNames.includes(toolName) ? `Agent "${runningAgent.name}" is not permitted to use ${toolName}.`
+						: approvalTypeForAgentCheck && !runningAgent.allowedApprovalTypes.includes(approvalTypeForAgentCheck) ? `Agent "${runningAgent.name}" is not permitted to perform ${approvalTypeForAgentCheck} actions.`
+							: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
+								: null
+				if (blockedReason) {
+					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${blockedReason}` })
+					return {}
+				}
+			}
+
 			// 1.5. Policy Engine: a hard, pre-execution gate that runs regardless of what the
 			// model was told, and regardless of the user's auto-approve settings. A 'deny'
 			// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
 			// verdict forces an approval prompt even if this tool category is auto-approved.
-			const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, undefined)
+			const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+			if (runningAgent && policyReq?.filePaths) {
+				const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths)
+				if (scopeVerdict.kind === 'deny') {
+					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${scopeVerdict.reason}` })
+					return {}
+				}
+			}
 			const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
 			if (policyVerdict.kind === 'deny') {
 				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` })
@@ -796,7 +841,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
 				chatMessages,
 				modelSelection,
-				chatMode
+				chatMode,
+				agentId: this.state.allThreads[threadId]?.agentId,
 			})
 
 			if (interruptedWhenIdle) {
@@ -1273,7 +1319,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
 
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(), }),
+			this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId), }),
 			threadId,
 		)
 
@@ -1824,6 +1870,17 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 	// set thread.state
+	setThreadAgentId(threadId: string, agentId: string | null): void {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		this._setState({
+			allThreads: {
+				...this.state.allThreads,
+				[thread.id]: { ...thread, agentId }
+			}
+		}, true)
+	}
+
 	private _setThreadState(threadId: string, state: Partial<ThreadType['state']>, doNotRefreshMountInfo?: boolean): void {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return

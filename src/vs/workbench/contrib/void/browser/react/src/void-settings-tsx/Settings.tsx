@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState } from '../util/services.js'
+import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -741,6 +741,98 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 				: null}
 		</div>
 	</div >
+}
+
+
+// Vader addition: manage permanent agents and the policy engine's permission mode.
+// See common/agents/agentsService.ts and common/policy/policyService.ts.
+export const AgentsAndPolicySection = () => {
+	const accessor = useAccessor()
+	const agentsService = accessor.get('IAgentsService')
+	const policyService = accessor.get('IPolicyService')
+	const chatThreadService = accessor.get('IChatThreadService')
+
+	const agentsState = useAgentsServiceState()
+	const policyState = usePolicyServiceState()
+
+	const [showNewAgentForm, setShowNewAgentForm] = useState(false)
+	const [newName, setNewName] = useState('')
+	const [newDescription, setNewDescription] = useState('')
+	const [newInstructions, setNewInstructions] = useState('')
+
+	const currentThread = chatThreadService.getCurrentThread()
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Agents & Permissions</h2>
+		<h4 className={`text-void-fg-3 mb-4`}>
+			Permanent agents are named identities with their own instructions, model, and tool/file restrictions that persist across sessions. The permission mode below controls how much the policy engine lets an agent do without asking first - even in Autonomous mode, a small set of hard rules (destructive commands, credential files) can never be bypassed.
+		</h4>
+
+		<div className='my-4'>
+			<div className='text-void-fg-3 text-sm mb-1'>Permission mode</div>
+			<div className='flex gap-x-2'>
+				{(['safe', 'balanced', 'autonomous'] as const).map(mode => (
+					<VoidButtonBgDarken
+						key={mode}
+						className={`px-3 py-1 capitalize ${policyState.mode === mode ? 'ring-1 ring-void-fg-3' : ''}`}
+						onClick={() => policyService.setMode(mode)}
+					>
+						{mode}
+					</VoidButtonBgDarken>
+				))}
+			</div>
+		</div>
+
+		<div className='my-4'>
+			<div className='text-void-fg-3 text-sm mb-2'>Permanent agents ({agentsState.agents.length})</div>
+			{agentsState.agents.length === 0 ? <div className='text-void-fg-3 text-xs italic mb-2'>No permanent agents yet. Create one below, or ask the main agent to create one for a task it does repeatedly.</div> : null}
+			<div className='flex flex-col gap-y-2'>
+				{agentsState.agents.map(agent => (
+					<div key={agent.id} className='border border-void-border-3 rounded p-2 flex flex-col gap-y-1'>
+						<div className='flex items-center justify-between'>
+							<span className='font-medium'>{agent.name}</span>
+							<div className='flex gap-x-1'>
+								<VoidButtonBgDarken
+									className={`px-2 py-0.5 text-xs ${currentThread.agentId === agent.id ? 'ring-1 ring-void-fg-3' : ''}`}
+									onClick={() => chatThreadService.setThreadAgentId(currentThread.id, currentThread.agentId === agent.id ? null : agent.id)}
+								>
+									{currentThread.agentId === agent.id ? 'In use (click to unset)' : 'Use in current chat'}
+								</VoidButtonBgDarken>
+								<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => agentsService.deleteAgent(agent.id)}>
+									Delete
+								</VoidButtonBgDarken>
+							</div>
+						</div>
+						<span className='text-void-fg-3 text-xs'>{agent.description}</span>
+						{agent.createdBy === 'main-agent' ? <span className='text-void-fg-3 text-xs italic'>Created by the main agent</span> : null}
+					</div>
+				))}
+			</div>
+		</div>
+
+		<div className='my-4'>
+			{!showNewAgentForm ? (
+				<VoidButtonBgDarken className='px-3 py-1' onClick={() => setShowNewAgentForm(true)}>+ New Agent</VoidButtonBgDarken>
+			) : (
+				<div className='flex flex-col gap-y-2 border border-void-border-3 rounded p-3'>
+					<VoidSimpleInputBox value={newName} onChangeValue={setNewName} placeholder='Name (e.g. "Vulkan Specialist")' />
+					<VoidSimpleInputBox value={newDescription} onChangeValue={setNewDescription} placeholder='One-sentence description' />
+					<VoidInputBox2 initValue='' multiline onChangeText={setNewInstructions} placeholder='Instructions this agent should always follow' />
+					<div className='flex gap-x-2'>
+						<VoidButtonBgDarken
+							className='px-3 py-1'
+							onClick={() => {
+								if (!newName.trim() || !newInstructions.trim()) return
+								agentsService.createAgent({ name: newName.trim(), description: newDescription.trim(), instructions: newInstructions.trim() }, 'user')
+								setNewName(''); setNewDescription(''); setNewInstructions(''); setShowNewAgentForm(false)
+							}}
+						>Create</VoidButtonBgDarken>
+						<VoidButtonBgDarken className='px-3 py-1' onClick={() => setShowNewAgentForm(false)}>Cancel</VoidButtonBgDarken>
+					</div>
+				</div>
+			)}
+		</div>
+	</div>
 }
 
 
@@ -1489,6 +1581,8 @@ export const Settings = () => {
 										</ErrorBoundary>
 									</div>
 								</div>
+
+								<AgentsAndPolicySection />
 
 								{/* AI Instructions section */}
 								<div className='max-w-[600px]'>

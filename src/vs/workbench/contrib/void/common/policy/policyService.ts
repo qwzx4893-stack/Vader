@@ -30,8 +30,12 @@ export interface IPolicyService {
 	/** every rule currently in effect (built-in + custom), for display in settings UI */
 	getAllRules(): PolicyRule[];
 
-	/** the hard, pre-execution check every tool/terminal/MCP call must pass through */
-	evaluate(req: IPolicyRequest): PolicyVerdict;
+	/**
+	 * The hard, pre-execution check every tool/terminal/MCP call must pass through.
+	 * `extraRules` lets a caller (e.g. the running permanent agent's own restrictions)
+	 * contribute additional rules for just this one call, without persisting them.
+	 */
+	evaluate(req: IPolicyRequest, extraRules?: PolicyRule[]): PolicyVerdict;
 
 	setMode(mode: PolicyMode): void;
 	addCustomRule(rule: UserPolicyRuleInput): PolicyRule;
@@ -113,8 +117,8 @@ class PolicyService extends Disposable implements IPolicyService {
 		return [...builtIns, ...this._state.customRules];
 	}
 
-	evaluate(req: IPolicyRequest): PolicyVerdict {
-		const rules = this.getAllRules().filter(r => r.enabled);
+	evaluate(req: IPolicyRequest, extraRules?: PolicyRule[]): PolicyVerdict {
+		const rules = [...this.getAllRules(), ...(extraRules ?? [])].filter(r => r.enabled);
 
 		// deny takes priority, and is never bypassed by mode
 		for (const rule of rules) {
