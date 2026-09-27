@@ -547,7 +547,7 @@ const VoidOnboardingContent = () => {
 					voidMetricsService.capture('Completed Onboarding', { selectedProviderName, wantToUseOption })
 				}}
 				ringSize={voidSettingsState.globalSettings.isOnboardingComplete ? 'screen' : undefined}
-			>Enter the Void</PrimaryActionButton>
+			>Get Started</PrimaryActionButton>
 		</div>
 	</div>
 
@@ -563,7 +563,7 @@ const VoidOnboardingContent = () => {
 	// can be md
 	const detailedDescOfWantToUseOption: { [wantToUseOption in WantToUseOption]: string } = {
 		smart: "Most intelligent and best for agent mode.",
-		private: "Private-hosted so your data never leaves your computer or network. [Email us](mailto:founders@voideditor.com) for help setting up at your company.",
+		private: "Private-hosted so your data never leaves your computer or network. [Open an issue](https://github.com/qwzx4893-stack/Vader/issues) for help setting up at your company.",
 		cheap: "Use great deals like Gemini 2.5 Pro, or self-host a model with Ollama or vLLM for free.",
 		all: "",
 	}
@@ -596,7 +596,7 @@ const VoidOnboardingContent = () => {
 		0: <OnboardingPageShell
 			content={
 				<div className='flex flex-col items-center gap-8'>
-					<div className="text-5xl font-light text-center">Welcome to Void</div>
+					<div className="text-5xl font-light text-center">Welcome to Vader</div>
 
 					{/* Slice of Void image */}
 					<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>

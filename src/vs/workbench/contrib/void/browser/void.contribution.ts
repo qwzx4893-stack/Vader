@@ -83,3 +83,6 @@ import '../common/voidUpdateService.js'
 
 // model service
 import '../common/voidModelService.js'
+
+// Vader agent platform: hard policy engine (see ARCHITECTURE.md)
+import '../common/policy/policyService.js'

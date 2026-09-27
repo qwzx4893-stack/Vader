@@ -1,0 +1,13 @@
+This is Vader, an AI-native IDE built on Void (itself a fork of VS Code). Void is the deprecated upstream project this codebase was imported from.
+
+Most Void-inherited AI code lives in src/vs/workbench/contrib/void. Vader's new agent-platform code (policy engine, permanent/temporary agents, layered instructions, MCP registry, SkillNet skill provider, browser automation, capability bus) lives alongside it under the same folder, in dedicated subfolders — see ARCHITECTURE.md for the map.
+
+You may often need to explore the full repo to find relevant parts of code. Look for services and built-in functions that you might need to use to solve the problem.
+
+In typescript, do NOT cast to types if not necessary. NEVER lazily cast to 'any'. Find the correct type to apply and use it.
+
+Do not add or remove semicolons to any of my files. Just go with convention and make the least number of changes.
+
+All types that map from a value A to B should be called bOfA. For example, if you create a hashmap that goes from toolId to toolName, it should be called toolNameOfToolId, etc.
+
+When touching product identity, branding, or install/update metadata, keep "Vader" as the user-facing product name and preserve references to Void only where they document ancestry, licensing, or attribution (see README.md's "License and attribution" section).

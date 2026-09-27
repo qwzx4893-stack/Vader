@@ -545,14 +545,18 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		super()
 	}
 
-	// Read .voidrules files from workspace folders
+	// Read .vaderrules (or legacy .voidrules, for repos forked from Void) files from workspace folders
 	private _getVoidRulesFileContents(): string {
 		try {
 			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 			let voidRules = '';
 			for (const folder of workspaceFolders) {
-				const uri = URI.joinPath(folder.uri, '.voidrules')
-				const { model } = this.voidModelService.getModel(uri)
+				let model: ReturnType<typeof this.voidModelService.getModel>['model'] | null = null
+				for (const filename of ['.vaderrules', '.voidrules']) {
+					const uri = URI.joinPath(folder.uri, filename)
+					model = this.voidModelService.getModel(uri).model
+					if (model) break
+				}
 				if (!model) continue
 				voidRules += model.getValue(EndOfLinePreference.LF) + '\n\n';
 			}
@@ -563,7 +567,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		}
 	}
 
-	// Get combined AI instructions from settings and .voidrules files
+	// Get combined AI instructions from settings and .vaderrules/.voidrules files
 	private _getCombinedAIInstructions(): string {
 		const globalAIInstructions = this.voidSettingsService.state.globalSettings.aiInstructions;
 		const voidRulesFileContent = this._getVoidRulesFileContents();

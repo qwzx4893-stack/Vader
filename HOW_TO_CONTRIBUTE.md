@@ -1,5 +1,8 @@
-# Contributing to Void
+# Contributing to Void (inherited build guide)
 ### Welcome! 👋
+
+> **Note (Vader):** this is upstream Void's own contribution/build guide, kept as-is because the day-to-day build steps (npm install, `scripts/code.sh`, gulp tasks, etc.) still apply to Vader unchanged. Void's own Discord/roadmap/email links below are historical and belong to that (now-deprecated) project, not Vader; for Vader's own issue tracker see the main [`README.md`](./README.md).
+
 This is the official guide on how to contribute to Void. We want to make it as easy as possible to contribute, so if you have any questions or comments, reach out via email or discord!
 
 There are a few ways to contribute:

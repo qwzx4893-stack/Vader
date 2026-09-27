@@ -1,5 +1,7 @@
 # Void Codebase Guide
 
+> **Note (Vader):** this document is inherited unmodified from upstream Void and describes the `src/vs/workbench/contrib/void/` code that Vader builds on. It's kept here as-is because it's still accurate about that layer. For what Vader adds on top, see [`ARCHITECTURE.md`](./ARCHITECTURE.md).
+
 The Void codebase is not as intimidating as it seems!
 
 Most of Void's code lives in the folder `src/vs/workbench/contrib/void/`.

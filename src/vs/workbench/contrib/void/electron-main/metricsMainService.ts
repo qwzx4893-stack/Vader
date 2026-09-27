@@ -35,12 +35,26 @@ const osInfo = _getOSInfo()
 export class MetricsMainService extends Disposable implements IMetricsService {
 	_serviceBrand: undefined;
 
-	private readonly client: PostHog
+	// Vader note: upstream Void reported anonymous usage metrics to Void's own
+	// PostHog project (opt-out, on by default) using a key hardcoded for that
+	// product. Routing Vader users' data into a third party's analytics account
+	// under a different product's name is both a privacy problem and not ours
+	// to send, so telemetry capture is hard-disabled here rather than merely
+	// re-pointed. The IMetricsService interface and local opt-out storage are
+	// kept intact so this can be wired to Vader's own (self-hosted or none)
+	// analytics endpoint later without touching call sites. No network client
+	// is constructed, so no telemetry request is ever made.
+	private readonly client: Pick<PostHog, 'optOut' | 'optIn' | 'identify' | 'capture'> = {
+		optOut: async () => { },
+		optIn: async () => { },
+		identify: () => { },
+		capture: () => { },
+	}
 
 	private _initProperties: object = {}
 
 
-	// helper - looks like this is stored in a .vscdb file in ~/Library/Application Support/Void
+	// helper - looks like this is stored in a .vscdb file in ~/Library/Application Support/Vader
 	private _memoStorage(key: string, target: StorageTarget, setValIfNotExist?: string) {
 		const currVal = this._appStorage.get(key, StorageScope.APPLICATION)
 		if (currVal !== undefined) return currVal
@@ -88,9 +102,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
-			host: 'https://us.i.posthog.com',
-		})
+		// No PostHog client is constructed and no telemetry host is contacted; see the
+		// `client` field comment above.
 
 		this.initialize() // async
 	}
@@ -99,7 +112,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		// very important to await whenReady!
 		await this._appStorage.whenReady
 
-		const { commit, version, voidVersion, release, quality } = this._productService
+		const { commit, version, vaderVersion, release, quality } = this._productService
 
 		const isDevMode = !this._envMainService.isBuilt // found in abstractUpdateService.ts
 
@@ -107,7 +120,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		this._initProperties = {
 			commit,
 			vscodeVersion: version,
-			voidVersion: voidVersion,
+			vaderVersion: vaderVersion,
 			release,
 			os,
 			quality,
@@ -125,7 +138,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 
 		const didOptOut = this._appStorage.getBoolean(OPT_OUT_KEY, StorageScope.APPLICATION, false)
 
-		console.log('User is opted out of basic Void metrics?', didOptOut)
+		// Vader: metrics capture is hard-disabled (see class comment above), so these
+		// calls are local no-ops regardless of the stored opt-out flag.
 		if (didOptOut) {
 			this.client.optOut()
 		}
@@ -133,9 +147,6 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 			this.client.optIn()
 			this.client.identify(identifyMessage)
 		}
-
-
-		console.log('Void posthog metrics info:', JSON.stringify(identifyMessage, null, 2))
 	}
 
 

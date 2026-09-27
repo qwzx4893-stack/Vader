@@ -39,6 +39,8 @@ import { IDirectoryStrService } from '../common/directoryStrService.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
+import { IPolicyService } from '../common/policy/policyService.js';
+import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
 
 
 // related to retrying when LLM message has error
@@ -327,6 +329,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@IPolicyService private readonly _policyService: IPolicyService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -443,11 +446,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// set streamState
 			const messages = newState.allThreads[threadId]?.messages
 			const lastMessage = messages && messages[messages.length - 1]
-			// if awaiting user but stream state doesn't indicate it (happens if restart Void)
+			// if awaiting user but stream state doesn't indicate it (happens if restart Vader)
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'tool_request')
 				this._setStreamState(threadId, { isRunning: 'awaiting_user', })
 
-			// if running now but stream state doesn't indicate it (happens if restart Void), cancel that last tool
+			// if running now but stream state doesn't indicate it (happens if restart Vader), cancel that last tool
 			if (lastMessage && lastMessage.role === 'tool' && lastMessage.type === 'running_now') {
 
 				this._updateLatestTool(threadId, { role: 'tool', type: 'rejected', content: lastMessage.content, id: lastMessage.id, rawParams: lastMessage.rawParams, result: null, name: lastMessage.name, params: lastMessage.params, mcpServerName: lastMessage.mcpServerName })
@@ -639,13 +642,26 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
 			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
 
+			// 1.5. Policy Engine: a hard, pre-execution gate that runs regardless of what the
+			// model was told, and regardless of the user's auto-approve settings. A 'deny'
+			// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
+			// verdict forces an approval prompt even if this tool category is auto-approved.
+			const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, undefined)
+			const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
+			if (policyVerdict.kind === 'deny') {
+				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` })
+				return {}
+			}
+
 			// 2. if tool requires approval, break from the loop, awaiting approval
 
 			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-			if (approvalType) {
-				const autoApprove = this._settingsService.state.globalSettings.autoApprove[approvalType]
+			const policyForcesAsk = policyVerdict.kind === 'ask'
+			if (approvalType || policyForcesAsk) {
+				const autoApprove = !policyForcesAsk && approvalType ? this._settingsService.state.globalSettings.autoApprove[approvalType] : false
 				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
-				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: '(Awaiting user permission...)', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
+				const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
+				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
 				if (!autoApprove) {
 					return { awaitingUserApproval: true }
 				}

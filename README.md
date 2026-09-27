@@ -1,61 +1,34 @@
-## Void is now deprecated.
-Void is deprecated and no longer accepting contributions.
-Thank you to everyone who contributed, both with lines of code and support from the community. Void remains open source and is still one of the best references to use when forking VS Code.
+# Vader
 
+Vader is a modular, AI-native IDE built on the [Void](https://github.com/voideditor/void) / [VS Code](https://github.com/microsoft/vscode) foundation.
 
-## Download
+Void started as an open-source, privacy-respecting AI code editor and was later deprecated by its original maintainers (see [Void's own README](https://github.com/voideditor/void#readme)). Vader takes that codebase as its upstream technical and UI foundation — the editor shell, workbench, chat/inline-edit UX, and diff/review experience are all inherited from Void largely as-is — and builds a substantially stronger agent platform on top of it: policy-gated tool execution, permanent and temporary agents, layered instructions, MCP, skill discovery, browser automation, and checkpointed/verifiable edits.
 
-To view a list of newer Void forks, see [Void Forks](http://github.com/voideditor/void-forks/).
+See [`ARCHITECTURE.md`](./ARCHITECTURE.md) for how the new agent platform is put together, [`PROVIDERS.md`](./PROVIDERS.md) for supported model providers, and [`docs/integrations/`](./docs/integrations/) for how to add or replace a subsystem.
 
-To download an old version of Void, see [Releases](https://github.com/voideditor/void/releases).
+## What's here vs. what's inherited
 
-## Forking VS Code
+- **Inherited from Void (mostly unchanged):** the editor shell and VS Code workbench, the chat/agent UI, inline Ctrl+K edits, the streaming diff/apply engine, checkpoints, the terminal tool, and the original multi-provider LLM abstraction (Anthropic, OpenAI, Gemini, and OpenAI-compatible endpoints including Ollama, LM Studio, vLLM, OpenRouter, and more).
+- **New in Vader:** a hard policy engine that gates tool/terminal execution before it runs (not just model-obedience), permanent/persistent agents with their own instructions and permissions, temporary subagent delegation, a layered instruction system, MCP registry discovery with lazy tool exposure, a SkillNet-backed skill provider, a Playwright-based browser automation tool, and a capability bus that unifies all of the above behind one interface.
+- **Rebranded, not redesigned:** the visual identity (name, icons where practical, window/application metadata, About dialog, settings copy) says "Vader," but the original Void interaction design is intentionally preserved rather than reworked.
 
-If you're forking VS Code, you might still want to reference Void's logic, and see our [Codebase Guide](https://github.com/voideditor/void/blob/main/VOID_CODEBASE_GUIDE.md) and [How to Contribute](https://github.com/voideditor/void/blob/main/HOW_TO_CONTRIBUTE.md).
+## Building and running
 
-- We mount React + Tailwind. This is not possible in plain VS Code, and required extending the build pipeline to compile React and [scope](https://github.com/andrewpareles/scope-tailwind) Tailwind ourselves.
+This is a VS Code-family Electron application. From a clean checkout:
 
-- You can copy our GitHub Actions to package, sign, and auto-update Void. VS Code's build pipeline is private, so this is normally very hard.
+```bash
+npm install
+npm run buildreact   # builds the React chat/settings UI bundle
+npm run compile      # compiles the TypeScript workbench/extensions
+./scripts/code.sh    # launch a dev build (macOS/Linux)
+```
 
-- Our AI provider code is built from scratch, allowing us to support autocomplete (FIM) and other custom responses. We expose grammars for common `<thinking>` tags, tool tags, etc. Feel free to reference our architecture for using IPC and satisfying CSP.
+On Windows, use `scripts\code.bat`. See [`HOW_TO_CONTRIBUTE.md`](./HOW_TO_CONTRIBUTE.md) for the full development setup this project inherited from Void, and the build pipeline under `build/` (including `build/gulpfile.vscode.win32.js` and `build/win32/code.iss`) for producing an installable Windows build.
 
-- Use our custom services to edit files. EditCodeService lets you show diffs as code streams in, even token by token. VoidModelService lets you edit files in the background and syncs OS files with your text buffers.
+## License and attribution
 
-- Everything we've done is 100% open source. See [repos](https://github.com/orgs/voideditor/repositories) for a complete picture of all the repos that make up Void.
-
-
-
-# Welcome to Void.
-
-<div align="center">
-	<img
-		src="./src/vs/workbench/browser/parts/editor/media/slice_of_void.png"
-	 	alt="Void Welcome"
-		width="300"
-	 	height="300"
-	/>
-</div>
-
-Use AI agents on your codebase, checkpoint and visualize changes, and bring any model or host locally. Void sends messages directly to providers without retaining your data.
-
-This repo contains the full sourcecode for Void's Desktop app. If you're new, welcome!
-
-- 🧭 [Website](https://voideditor.com)
-
-- 🚙 [Roadmap](https://github.com/orgs/voideditor/projects/2)
-
-- 🔨 [Contribute](https://github.com/voideditor/void/blob/main/HOW_TO_CONTRIBUTE.md)
-
-
-
-
-## Reference
-
-Void is a fork of the [vscode](https://github.com/microsoft/vscode) repository. For a guide to our codebase, see [VOID_CODEBASE_GUIDE](https://github.com/voideditor/void/blob/main/VOID_CODEBASE_GUIDE.md).
-
-For a guide on how to develop your own version of Void, see [HOW_TO_CONTRIBUTE](https://github.com/voideditor/void/blob/main/HOW_TO_CONTRIBUTE.md) and [void-builder](https://github.com/voideditor/void-builder).
-
-
+Vader is licensed under the MIT license (see [`LICENSE.txt`](./LICENSE.txt)), the same as the underlying VS Code and Void code it builds on (see [`LICENSE-VS-Code.txt`](./LICENSE-VS-Code.txt) and [`ThirdPartyNotices.txt`](./ThirdPartyNotices.txt)). Void's own additions were originally released under the Apache License 2.0 by Glass Devtools, Inc.; those notices are preserved in the relevant source files rather than removed.
 
 ## Support
-You can always reach us in our [Discord server](https://discord.gg/RSNjgaugJs) or contact us via email at hello@voideditor.com.
+
+This project is maintained on GitHub at [qwzx4893-stack/Vader](https://github.com/qwzx4893-stack/Vader). Please open an issue there for bugs or questions.
