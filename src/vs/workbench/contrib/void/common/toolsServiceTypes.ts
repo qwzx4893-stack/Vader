@@ -30,6 +30,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// Vader addition: creating a persistent agent is a mutating, persistent action, so it
 	// reuses the 'edits' approval bucket rather than introducing a new one.
 	'create_persistent_agent': 'edits',
+	// Vader addition: delegating a task can itself cause file edits/terminal commands
+	// (via the subagent's own thread, which auto-approves those on itself - see
+	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
+	'delegate_subagent_task': 'edits',
 }
 
 
@@ -53,6 +57,11 @@ export type BuiltinToolCallParams = {
 	'search_for_files': { query: string, isRegex: boolean, searchInFolder: URI | null, pageNumber: number },
 	'search_in_file': { uri: URI, query: string, isRegex: boolean },
 	'read_lint_errors': { uri: URI },
+	// Vader addition: external capability/skill discovery (read-only, no approval needed -
+	// same trust tier as search_for_files. See common/discovery/.)
+	'search_mcp_registry': { query: string },
+	'search_skillnet': { query: string },
+	'fetch_skill_instructions': { repositoryUrl: string },
 	// ---
 	'rewrite_file': { uri: URI, newContent: string },
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
@@ -65,6 +74,7 @@ export type BuiltinToolCallParams = {
 	'kill_persistent_terminal': { persistentTerminalId: string },
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
+	'delegate_subagent_task': { task: string, agentName: string | null },
 }
 
 // RESULT OF TOOL CALL
@@ -76,6 +86,9 @@ export type BuiltinToolResultType = {
 	'search_for_files': { uris: URI[], hasNextPage: boolean },
 	'search_in_file': { lines: number[]; },
 	'read_lint_errors': { lintErrors: LintErrorItem[] | null },
+	'search_mcp_registry': { results: import('./discovery/discoveryServiceTypes.js').McpRegistrySearchResult[] },
+	'search_skillnet': { results: import('./discovery/discoveryServiceTypes.js').SkillNetSearchResult[] },
+	'fetch_skill_instructions': { content: string | null },
 	// ---
 	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
@@ -88,6 +101,7 @@ export type BuiltinToolResultType = {
 	'kill_persistent_terminal': {},
 	// ---
 	'create_persistent_agent': { agentId: string },
+	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
 }
 
 

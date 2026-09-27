@@ -92,3 +92,6 @@ import '../common/instructions/instructionsService.js'
 
 // Vader agent platform: permanent agents
 import '../common/agents/agentsService.js'
+
+// Vader agent platform: external discovery (MCP Registry, SkillNet)
+import '../common/discovery/discoveryService.js'

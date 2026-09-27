@@ -127,6 +127,11 @@ export type ThreadType = {
 	// both mean "no agent, use default Chat behavior".
 	agentId?: string | null;
 
+	// Vader addition: true for a hidden thread spun up by the delegate_subagent_task tool.
+	// Filtered out of the visible thread selector, but not deleted, so its history can
+	// still be inspected by threadId if something needs debugging.
+	isSubagentThread?: boolean;
+
 	// this doesn't need to go in a state object, but feels right
 	state: {
 		currCheckpointIdx: number | null; // the latest checkpoint we're at (null if not at a particular checkpoint, like if the chat is streaming, or chat just finished and we haven't clicked on a checkpt)
@@ -153,6 +158,17 @@ export type ThreadType = {
 
 type ChatThreads = {
 	[id: string]: undefined | ThreadType;
+}
+
+// Vader addition: structured result handed back from a delegated subagent task, per the
+// mission's requirement that subagents return "conclusion, evidence, changed files,
+// warnings" rather than their full transcript.
+export type SubagentTaskResult = {
+	threadId: string;
+	conclusion: string;
+	changedFilePaths: string[];
+	stalledAwaitingApproval: boolean;
+	hadError: boolean;
 }
 
 
@@ -252,6 +268,11 @@ export interface IChatThreadService {
 	// Vader addition: run a thread as a given permanent agent (or null to go back to
 	// default Chat behavior). See common/agents/agentsService.ts.
 	setThreadAgentId(threadId: string, agentId: string | null): void;
+
+	// Vader addition: temporary subagent delegation. Spins up a hidden thread, runs it to
+	// completion (or until it stalls on a real approval requirement), and returns a
+	// structured summary rather than merging its full message history into the caller.
+	runSubagentTask(opts: { task: string, agentId?: string }): Promise<SubagentTaskResult>;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -703,7 +724,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
 			const policyForcesAsk = policyVerdict.kind === 'ask'
 			if (approvalType || policyForcesAsk) {
-				const autoApprove = !policyForcesAsk && approvalType ? this._settingsService.state.globalSettings.autoApprove[approvalType] : false
+				// A subagent thread (delegate_subagent_task) has no human present to click
+				// approve, so it auto-approves the ordinary tool-category gate on its own
+				// thread only - never the user's global setting, and never a policy 'ask'
+				// verdict, which still stalls it exactly like it would a human-driven thread.
+				const isSubagentThread = !!this.state.allThreads[threadId]?.isSubagentThread
+				const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType]) : false
 				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
 				const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
 				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
@@ -1879,6 +1905,49 @@ We only need to do it for files that were edited since `from`, ie files between 
 				[thread.id]: { ...thread, agentId }
 			}
 		}, true)
+	}
+
+	private _createHiddenSubagentThread(agentId: string | undefined): string {
+		const newThread: ThreadType = { ...newThreadObject(), isSubagentThread: true, agentId: agentId ?? null }
+		// deliberately does NOT change currentThreadId, so the user's active thread is untouched
+		this._setState({ allThreads: { ...this.state.allThreads, [newThread.id]: newThread } }, true)
+		return newThread.id
+	}
+
+	async runSubagentTask({ task, agentId }: { task: string, agentId?: string }): Promise<SubagentTaskResult> {
+		const threadId = this._createHiddenSubagentThread(agentId)
+
+		this._addUserCheckpoint({ threadId })
+		const userMessageContent = await chat_userMessageContent(task, [], { directoryStrService: this._directoryStringService, fileService: this._fileService })
+		this._addMessageToThread(threadId, { role: 'user', content: userMessageContent, displayContent: task, selections: null, state: defaultMessageState })
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+
+		// unlike the interactive path, we await _runChatAgent directly so this resolves
+		// exactly when the subagent's loop truly stops (success, error, or a stall) - see
+		// the "SubagentTaskResult stalledAwaitingApproval" note below for why a stall isn't
+		// silently auto-approved.
+		await this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) })
+
+		const finalThread = this.state.allThreads[threadId]
+		const messages = finalThread?.messages ?? []
+
+		const lastAssistant = findLast(messages, m => m.role === 'assistant')
+		const conclusion = (lastAssistant && lastAssistant.role === 'assistant' && lastAssistant.displayContent)
+			|| '(the subagent finished without producing a final text response - see changedFilePaths/stalledAwaitingApproval for what happened instead)'
+
+		const editToolNames = new Set(['edit_file', 'rewrite_file', 'create_file_or_folder', 'delete_file_or_folder'])
+		const changedFilePaths = [...new Set(
+			messages
+				.filter((m): m is ChatMessage & { role: 'tool', type: 'success' } => m.role === 'tool' && m.type === 'success' && editToolNames.has(m.name))
+				.map(m => (m.params as { uri?: URI }).uri?.fsPath)
+				.filter((p): p is string => !!p)
+		)]
+
+		const finalStreamState = this.streamState[threadId]
+		const stalledAwaitingApproval = finalStreamState?.isRunning === 'awaiting_user'
+		const hadError = !!finalStreamState?.error
+
+		return { threadId, conclusion, changedFilePaths, stalledAwaitingApproval, hadError }
 	}
 
 	private _setThreadState(threadId: string, state: Partial<ThreadType['state']>, doNotRefreshMountInfo?: boolean): void {

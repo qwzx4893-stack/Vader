@@ -37,6 +37,9 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 	const sortedThreadIds = Object.keys(allThreads ?? {})
 		.sort((threadId1, threadId2) => (allThreads[threadId1]?.lastModified ?? 0) > (allThreads[threadId2]?.lastModified ?? 0) ? -1 : 1)
 		.filter(threadId => (allThreads![threadId]?.messages.length ?? 0) !== 0)
+		// Vader: hidden threads spun up by delegate_subagent_task don't clutter the thread list;
+		// they're still on disk and reachable by threadId (e.g. via the tool's result) if needed.
+		.filter(threadId => !allThreads![threadId]?.isSubagentThread)
 
 	// Get only first 5 threads if not showing all
 	const hasMoreThreads = sortedThreadIds.length > numInitialThreads;
