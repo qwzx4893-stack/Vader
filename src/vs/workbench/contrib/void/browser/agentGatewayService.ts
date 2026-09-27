@@ -82,7 +82,7 @@ class AgentGatewayService extends Disposable implements IAgentGatewayService {
 		this._chatThreadService.dismissStreamError(threadId);
 	}
 
-	async runIsolatedTask(opts: { task: string, agentId?: string }): Promise<IsolatedTaskResult> {
+	async runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<IsolatedTaskResult> {
 		return this._chatThreadService.runSubagentTask(opts);
 	}
 }

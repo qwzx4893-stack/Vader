@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased - Parallel agents with real concurrency + git worktree isolation
+
+New `common/orchestration/` (`IAgentOrchestrationService`) and `common/worktree/` +
+`electron-main/gitWorktreeMainService.ts` (`IGitWorktreeMainService`). New
+`delegate_parallel_tasks` tool: runs up to 8 subagent tasks with genuine bounded
+concurrency (a worker-pool over `Promise.all`, up to 4 at once - not a loop that awaits
+each task in turn under a "parallel" label). Read-only tasks run directly against the live
+workspace; tasks marked `uses_worktree` get a full isolation lifecycle: `git worktree add`
+on a sibling directory (never nested in the main workspace), an explicit working-directory
+instruction prepended to the task prompt (works with zero changes to the tool-execution
+engine, since every file tool already takes explicit absolute URIs), commit + `git merge
+--no-ff` back into the current branch, and cleanup - or, on conflict, `git merge --abort`
+plus leaving the worktree and branch in place for manual resolution (never destroys work).
+A worktree that fails to create at all stops that task rather than falling back to editing
+the live workspace unisolated. `cancelRun` cancels in-flight tasks through the Agent
+Gateway's existing `cancelTask`, via a new `onThreadCreated` callback on
+`runIsolatedTask`/`runSubagentTask` that exposes a task's hidden thread id before it
+finishes.
+
+See `docs/integrations/parallel-agents.md` for the exact lifecycle. Orchestration state
+(per-task status/thread/worktree/merge outcome) is fully real and queryable
+(`IAgentOrchestrationService.runs`) but has no dedicated UI yet - tracked as later Agent
+Manager UI work, not silently skipped.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Model Router (AUTO/MANUAL) and capability descriptors
 
 New `common/modelRouter/` (`IModelRouterService`): AUTO/MANUAL routing for work that doesn't

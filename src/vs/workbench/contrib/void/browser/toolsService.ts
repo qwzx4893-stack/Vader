@@ -26,6 +26,7 @@ import { ICapabilityBusService } from '../common/capabilities/capabilityBusServi
 import { IBrowserToolMainService, BrowserSnapshot } from '../common/browser/browserToolService.js'
 import { VSBuffer } from '../../../../base/common/buffer.js'
 import { IMemoryService } from '../common/memory/memoryService.js'
+import { IAgentOrchestrationService, ParallelTaskSpec } from './orchestrationService.js'
 
 
 // tool use for AI
@@ -347,6 +348,25 @@ export class ToolsService implements IToolsService {
 				return { task, agentName }
 			},
 
+			delegate_parallel_tasks: (params: RawToolParamsObj) => {
+				const { specs: specsJsonUnknown } = params
+				const specsJson = validateStr('specs', specsJsonUnknown)
+				let parsed: unknown
+				try { parsed = JSON.parse(specsJson) } catch { throw new Error(`delegate_parallel_tasks: "specs" is not valid JSON.`) }
+				if (!Array.isArray(parsed) || parsed.length === 0) throw new Error(`delegate_parallel_tasks: "specs" must be a non-empty JSON array.`)
+				if (parsed.length > 8) throw new Error(`delegate_parallel_tasks: at most 8 tasks per call (got ${parsed.length}).`)
+				const specs: ParallelTaskSpec[] = parsed.map((item, i) => {
+					if (typeof item !== 'object' || item === null || typeof (item as Record<string, unknown>).task !== 'string' || !(item as Record<string, unknown>).task) {
+						throw new Error(`delegate_parallel_tasks: specs[${i}] must be an object with a non-empty "task" string.`)
+					}
+					const rec = item as Record<string, unknown>
+					const agentName = typeof rec.agent_name === 'string' && rec.agent_name.trim() ? rec.agent_name.trim() : null
+					const usesWorktree = !!rec.uses_worktree
+					return { task: rec.task as string, agentName, usesWorktree }
+				})
+				return { specs }
+			},
+
 			remember: (params: RawToolParamsObj) => {
 				const { content: contentUnknown, label: labelUnknown, scope: scopeUnknown, agent_name: agentNameUnknown } = params
 				const content = validateStr('content', contentUnknown)
@@ -642,6 +662,24 @@ export class ToolsService implements IToolsService {
 				return { result }
 			},
 
+			delegate_parallel_tasks: async ({ specs }) => {
+				const orchestrationService = instantiationService.invokeFunction(accessor => accessor.get(IAgentOrchestrationService))
+				const run = await orchestrationService.runParallelTasks(specs)
+				return {
+					result: {
+						runId: run.id,
+						tasks: run.tasks.map(t => ({
+							task: t.task,
+							status: t.status,
+							conclusion: t.conclusion ?? null,
+							changedFilePaths: t.changedFilePaths ?? [],
+							mergeOutcome: t.mergeOutcome ?? null,
+							errorMessage: t.errorMessage ?? null,
+						})),
+					}
+				}
+			},
+
 			remember: async ({ content, label, scope, agentName }) => {
 				if (scope === 'agent') {
 					const agent = agentName ? this.agentsService.state.agents.find(a => a.name === agentName) : undefined
@@ -809,6 +847,17 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+			delegate_parallel_tasks: (params, result) => {
+				const lines = result.tasks.map((t, i) => {
+					const parts = [`Task ${i + 1} (${t.status}): ${t.task.slice(0, 80)}`]
+					if (t.conclusion) parts.push(`  ${t.conclusion}`)
+					if (t.changedFilePaths.length) parts.push(`  Files changed: ${t.changedFilePaths.join(', ')}`)
+					if (t.mergeOutcome) parts.push(`  Merge: ${t.mergeOutcome}`)
+					if (t.errorMessage) parts.push(`  WARNING: ${t.errorMessage}`)
+					return parts.join('\n')
+				})
+				return `Parallel run complete (${result.tasks.length} task(s)):\n\n${lines.join('\n\n')}`
 			},
 			remember: (params, result) => {
 				return `Saved to ${result.scope} memory (id=${result.memoryId}). It will be included in future conversations${result.scope === 'agent' ? ` run as ${params.agentName}` : ' in this workspace'}.`;

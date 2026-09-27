@@ -37,6 +37,8 @@ The **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gate
 | Memory | `common/memory/` | Persistent project/agent memory (`remember` tool) + the compaction archive; see `docs/integrations/memory-and-compaction.md` |
 | Context compaction | `browser/chatThreadService.ts` (`_maybeCompactThread`) | Structured summarization of older messages before the context window fills, with raw messages archived (not destroyed) to Memory |
 | Model Router | `common/modelRouter/` | AUTO/MANUAL routing + machine-readable capability descriptors for subagent/research/browser/summarization/verification categories, on top of (not replacing) Void's per-feature Settings dropdowns; see `docs/integrations/model-router.md` |
+| Agent Orchestration | `common/orchestration/`, `browser/orchestrationService.ts` | Real bounded-concurrency parallel subagent tasks (`delegate_parallel_tasks`), with git-worktree isolation for code-modifying ones; see `docs/integrations/parallel-agents.md` |
+| Git worktree lifecycle | `common/worktree/`, `electron-main/gitWorktreeMainService.ts` | Create/execute/merge-or-conflict/cleanup for a single isolated worktree - used by Agent Orchestration |
 | Checkpoints | `browser/editCodeService.ts`, `browser/chatThreadService.ts` (`CheckpointEntry`) | Inherited from Void, unmodified - per-file snapshot/restore tied to chat messages |
 | Verification | `browser/toolsService.ts` (`run_verification`) | Runs a project's own build/lint/test scripts and reports pass/fail |
 

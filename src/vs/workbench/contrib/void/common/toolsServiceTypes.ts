@@ -38,6 +38,9 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
 	'delegate_subagent_task': 'edits',
+	// Vader addition: same reasoning as delegate_subagent_task, but for several tasks at
+	// once (see common/orchestration/) - worktree-isolated tasks can commit real changes.
+	'delegate_parallel_tasks': 'edits',
 	'run_verification': 'terminal',
 	'browser_navigate': 'terminal',
 	'browser_click': 'terminal',
@@ -99,6 +102,10 @@ export type BuiltinToolCallParams = {
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
 	'delegate_subagent_task': { task: string, agentName: string | null },
+	// Vader addition: run several subagent tasks with real bounded concurrency - see
+	// common/orchestration/. tasksJson is a JSON array of
+	// {task: string, agent_name?: string, uses_worktree?: boolean}.
+	'delegate_parallel_tasks': { specs: import('./orchestration/orchestrationTypes.js').ParallelTaskSpec[] },
 	// Vader addition: write to persistent memory (common/memory/). 'project' memory is
 	// visible to every future thread in this workspace; 'agent' memory requires agentName
 	// and is visible only to threads running as that permanent agent.
@@ -138,6 +145,10 @@ export type BuiltinToolResultType = {
 	// ---
 	'create_persistent_agent': { agentId: string },
 	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
+	'delegate_parallel_tasks': {
+		runId: string,
+		tasks: { task: string, status: string, conclusion: string | null, changedFilePaths: string[], mergeOutcome: string | null, errorMessage: string | null }[],
+	},
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
 }
 

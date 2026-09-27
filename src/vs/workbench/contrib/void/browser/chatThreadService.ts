@@ -275,7 +275,7 @@ export interface IChatThreadService {
 	// Vader addition: temporary subagent delegation. Spins up a hidden thread, runs it to
 	// completion (or until it stalls on a real approval requirement), and returns a
 	// structured summary rather than merging its full message history into the caller.
-	runSubagentTask(opts: { task: string, agentId?: string }): Promise<SubagentTaskResult>;
+	runSubagentTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult>;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -2089,8 +2089,13 @@ We only need to do it for files that were edited since `from`, ie files between 
 		return newThread.id
 	}
 
-	async runSubagentTask({ task, agentId }: { task: string, agentId?: string }): Promise<SubagentTaskResult> {
+	async runSubagentTask({ task, agentId, onThreadCreated }: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult> {
 		const threadId = this._createHiddenSubagentThread(agentId)
+		// Vader addition: lets a caller (the Agent Orchestration service, for cancellable
+		// parallel runs) capture the hidden thread's id synchronously, before this resolves,
+		// so it has something to call abortRunning/cancelTask on if the run is cancelled
+		// mid-flight - runSubagentTask itself only ever resolves once the subagent is done.
+		onThreadCreated?.(threadId)
 
 		this._addUserCheckpoint({ threadId })
 		const userMessageContent = await chat_userMessageContent(task, [], { directoryStrService: this._directoryStringService, fileService: this._fileService })

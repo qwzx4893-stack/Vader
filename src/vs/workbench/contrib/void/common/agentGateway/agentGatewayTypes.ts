@@ -91,8 +91,15 @@ export interface IAgentGatewayService {
 	/** Clear a surfaced run error so callers stop reporting it as active. */
 	dismissError(threadId: string): void;
 
-	/** run a self-contained task to completion in an isolated context and get back a structured result - see chatThreadService.ts's runSubagentTask for the exact semantics */
-	runIsolatedTask(opts: { task: string, agentId?: string }): Promise<IsolatedTaskResult>;
+	/**
+	 * run a self-contained task to completion in an isolated context and get back a
+	 * structured result - see chatThreadService.ts's runSubagentTask for the exact
+	 * semantics. `onThreadCreated` fires synchronously with the hidden thread's id as soon
+	 * as it's created (before the task starts running) - callers that need to cancel a
+	 * still-running isolated task (see common/orchestration/) capture it from here, since
+	 * this method itself only ever resolves once the task is done.
+	 */
+	runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<IsolatedTaskResult>;
 }
 
 export const IAgentGatewayService = createDecorator<IAgentGatewayService>('vaderAgentGatewayService');

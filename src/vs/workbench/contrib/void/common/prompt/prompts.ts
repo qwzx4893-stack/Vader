@@ -426,6 +426,14 @@ export const builtinTools: {
 		}
 	},
 
+	delegate_parallel_tasks: {
+		name: 'delegate_parallel_tasks',
+		description: `Runs several independent, self-contained tasks AT THE SAME TIME (real concurrency, up to 4 at once, up to 8 total) instead of one after another - use this when you have multiple genuinely independent pieces of work (e.g. "research how auth works" and "research how logging works" for two different files/features), not for tasks that depend on each other's output. Set uses_worktree=true for a task that will edit files (it gets its own isolated git branch/worktree and its changes are automatically committed and merged back, or left as a separate branch if they conflict); leave it false for read-only/research tasks, which run directly with no isolation overhead.`,
+		params: {
+			specs: { description: `A JSON array of task objects, e.g. [{"task": "...", "agent_name": null, "uses_worktree": false}, {"task": "...", "uses_worktree": true}]. Each "task" must be a self-contained description (the subagent does NOT see this conversation). "agent_name" (optional) is the exact name of an existing permanent agent to run this task as. "uses_worktree" (optional, default false) - see above.` },
+		}
+	},
+
 	delegate_subagent_task: {
 		name: 'delegate_subagent_task',
 		description: `Delegates a self-contained task (research, a focused implementation, debugging, review) to a temporary subagent that runs in its own thread with its own context, then returns a structured summary - not its full conversation - to you. Use this to keep your own context focused when a subtask can be described independently (e.g. "find every place X is used and summarize the pattern", "implement function Y in file Z given this spec"). The subagent can edit files and run terminal commands on its own within this one task; it will stop and report back if it needs a genuinely sensitive action approved (e.g. touching credentials). Do not use this for trivial one-line changes you can just make yourself.`,
