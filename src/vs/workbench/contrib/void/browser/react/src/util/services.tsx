@@ -56,6 +56,7 @@ import { IStorageService, StorageScope } from '../../../../../../../platform/sto
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { IAgentsService, AgentsServiceState } from '../../../../common/agents/agentsService.js'
 import { IPolicyService, PolicyServiceState } from '../../../../common/policy/policyService.js'
+import { IAgentGatewayService } from '../../../agentGatewayService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -258,6 +259,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 
 		IAgentsService: accessor.get(IAgentsService),
 		IPolicyService: accessor.get(IPolicyService),
+		IAgentGatewayService: accessor.get(IAgentGatewayService),
 
 	} as const
 	return reactAccessor

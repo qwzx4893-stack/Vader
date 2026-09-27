@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased - Agent Gateway as the primary execution seam
+
+`IAgentGatewayService` (`common/agentGateway/`) is now the real path the chat UI uses to run a
+task, not only `delegate_subagent_task`'s call site. Added `startTask`/`reviseTask`/
+`cancelTask`/`approveToolRequest`/`rejectToolRequest`/`dismissError` plus a normalized
+`getExecutionState`/`getExecutionMetadata` projection (`AgentExecutionState`/
+`AgentExecutionMetadata` - a smaller, runtime-independent vocabulary than
+`chatThreadService.ts`'s own `ThreadStreamState`/`ThreadType`). `SidebarChat.tsx`'s
+send/edit-message/abort/approve/reject/dismiss-error actions all now call through the
+Gateway instead of `IChatThreadService` directly; rendering the conversation itself
+(persisted messages, checkpoints, thread list, staging selections, codespan links) still
+reads `IChatThreadService` directly in `SidebarThreadSelector.tsx`/`Settings.tsx`/
+`ChatMarkdownRender.tsx`/`inputs.tsx` and the read side of `SidebarChat.tsx`, since that's
+inherent to displaying history, not to driving execution - see
+`docs/integrations/agent-gateway.md` for the exact boundary. Verified with a clean
+`npm run buildreact` and a clean `tsc -p src/tsconfig.json --noEmit` (0 errors) after the
+change.
+
 ## Unreleased - agent runtime hardening, Agent Gateway, Windows CI
 
 **Agent runtime decision**: evaluated replacing the core agent loop with Cline, Kilo Code,

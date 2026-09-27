@@ -19,13 +19,13 @@ Vader adds two things to `_runToolCall`, in order, before any tool actually exec
 
 Either can produce a `deny` (the call never runs; a `rejected` tool message explains why) or an `ask` (forces the interactive approval flow even if the tool category is globally auto-approved, and stops the rest of that turn's tool calls from running until it's resolved). This is the mechanism the mission calls a "hard policy engine" - see `common/policy/policyService.ts` and `common/policy/builtInPolicyRules.ts` for the actual rules.
 
-A thin **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gateway.md`) sits in front of this loop for callers that don't need its live-rendering coupling - today, that's `delegate_subagent_task`. The workbench's own chat UI still talks to `IChatThreadService` directly, since it's built around that service's live thread/stream state for rendering; the Gateway is real and used, but it doesn't yet cover everything.
+The **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gateway.md`) is the stable seam in front of this loop, and it's the real primary path for executing a task: the chat UI's send/edit/abort/approve/reject/dismiss-error actions (`SidebarChat.tsx`) all go through `IAgentGatewayService`, as does `delegate_subagent_task`. The UI still reads `IChatThreadService`'s persisted thread data and live stream-state event directly for *rendering* the conversation (messages, checkpoints, thread list) - that's inherent to displaying history, not to driving execution, and duplicating it behind the Gateway would just mirror the same event bus a second time. Swapping the runtime behind the Gateway now means implementing one interface and changing one `registerSingleton` call, without touching the UI's send/abort/approve code paths.
 
 ## Subsystem map
 
 | Subsystem | Where | What it owns |
 |---|---|---|
-| Agent Gateway | `common/agentGateway/`, `browser/agentGatewayService.ts` | Stable seam in front of the agent loop, for callers that don't need live-render coupling (currently: subagent delegation) |
+| Agent Gateway | `common/agentGateway/`, `browser/agentGatewayService.ts` | Real primary seam for executing a task - start/revise/cancel a turn, approve/reject a tool, dismiss an error, normalized execution state; used by the chat UI and subagent delegation alike |
 | Policy Engine | `common/policy/` | Pre-execution allow/ask/deny rules, permission mode (safe/balanced/autonomous) |
 | Layered instructions | `common/instructions/` | Composes system invariants + policy summary + global settings + `.vaderrules` + agent instructions into the system prompt, in a fixed, inspectable order |
 | Permanent agents | `common/agents/` | Named, persistent agent definitions (instructions, model override, tool/MCP/filesystem restrictions); `create_persistent_agent` tool lets the main agent create one itself |

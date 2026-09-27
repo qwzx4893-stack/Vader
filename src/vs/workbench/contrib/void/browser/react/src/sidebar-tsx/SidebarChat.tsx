@@ -1021,6 +1021,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const agentGatewayService = accessor.get('IAgentGatewayService')
 
 	// global state
 	let isBeingEdited = false
@@ -1103,7 +1104,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			// cancel any streams on this thread
 			const threadId = chatThreadsService.state.currentThreadId
 
-			await chatThreadsService.abortRunning(threadId)
+			await agentGatewayService.cancelTask(threadId)
 
 			// update state
 			setIsBeingEdited(false)
@@ -1112,7 +1113,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			// stream the edit
 			const userMessage = textAreaRefState.value;
 			try {
-				await chatThreadsService.editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId })
+				await agentGatewayService.reviseTask({ userMessage, fromMessageIdx: messageIdx, threadId })
 			} catch (e) {
 				console.error('Error while editing message:', e)
 			}
@@ -1122,7 +1123,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 		const onAbort = async () => {
 			const threadId = chatThreadsService.state.currentThreadId
-			await chatThreadsService.abortRunning(threadId)
+			await agentGatewayService.cancelTask(threadId)
 		}
 
 		const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1573,6 +1574,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) => {
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const agentGatewayService = accessor.get('IAgentGatewayService')
 	const metricsService = accessor.get('IMetricsService')
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const voidSettingsState = useSettingsState()
@@ -1580,18 +1582,18 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 	const onAccept = useCallback(() => {
 		try { // this doesn't need to be wrapped in try/catch anymore
 			const threadId = chatThreadsService.state.currentThreadId
-			chatThreadsService.approveLatestToolRequest(threadId)
+			agentGatewayService.approveToolRequest(threadId)
 			metricsService.capture('Tool Request Accepted', {})
 		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, metricsService])
+	}, [chatThreadsService, agentGatewayService, metricsService])
 
 	const onReject = useCallback(() => {
 		try {
 			const threadId = chatThreadsService.state.currentThreadId
-			chatThreadsService.rejectLatestToolRequest(threadId)
+			agentGatewayService.rejectToolRequest(threadId)
 		} catch (e) { console.error('Error while approving message in chat:', e) }
 		metricsService.capture('Tool Request Rejected', {})
-	}, [chatThreadsService, metricsService])
+	}, [chatThreadsService, agentGatewayService, metricsService])
 
 	const approveButton = (
 		<button
@@ -2885,6 +2887,7 @@ export const SidebarChat = () => {
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const agentGatewayService = accessor.get('IAgentGatewayService')
 
 	const settingsState = useSettingsState()
 	// ----- HIGHER STATE -----
@@ -2928,7 +2931,7 @@ export const SidebarChat = () => {
 		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
 
 		try {
-			await chatThreadsService.addUserMessageAndStreamResponse({ userMessage, threadId })
+			await agentGatewayService.startTask({ userMessage, threadId })
 		} catch (e) {
 			console.error('Error while sending message in chat:', e)
 		}
@@ -2937,11 +2940,11 @@ export const SidebarChat = () => {
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
-		await chatThreadsService.abortRunning(threadId)
+		await agentGatewayService.cancelTask(threadId)
 	}
 
 	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VOID_CTRL_L_ACTION_ID)?.getLabel()
@@ -3042,7 +3045,7 @@ export const SidebarChat = () => {
 				<ErrorDisplay
 					message={latestError.message}
 					fullError={latestError.fullError}
-					onDismiss={() => { chatThreadsService.dismissStreamError(currentThread.id) }}
+					onDismiss={() => { agentGatewayService.dismissError(currentThread.id) }}
 					showDismiss={true}
 				/>
 
