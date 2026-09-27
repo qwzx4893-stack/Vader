@@ -98,3 +98,6 @@ import '../common/discovery/discoveryService.js'
 
 // Vader agent platform: capability bus (unifies native tools, MCP tools, agents, discovery)
 import '../common/capabilities/capabilityBusService.js'
+
+// Vader agent platform: browser automation (Playwright-backed)
+import '../common/browser/browserToolService.js'

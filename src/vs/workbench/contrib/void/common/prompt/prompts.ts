@@ -283,6 +283,41 @@ export const builtinTools: {
 		params: { repository_url: { description: 'The GitHub repository URL from a search result.' } }
 	},
 
+	browser_navigate: {
+		name: 'browser_navigate',
+		description: `Opens a URL in Vader's automated browser (a real, headless Chromium) and returns a snapshot of the page. Use this to test a local dev server, check how a page actually renders/behaves, or read a live web page. Reuses the same browser tab across calls in this thread.`,
+		params: { url: { description: 'The URL to open, e.g. http://localhost:3000.' } }
+	},
+	browser_snapshot: {
+		name: 'browser_snapshot',
+		description: `Returns the current page's title, URL, and an accessibility-tree snapshot where each interactive element is tagged [ref=eN]. Use that ref string for browser_click/browser_type.`,
+		params: {}
+	},
+	browser_click: {
+		name: 'browser_click',
+		description: `Clicks the element with the given ref (e.g. "e3") from the most recent snapshot's [ref=...] tags, and returns a fresh snapshot.`,
+		params: { ref: { description: 'The element\'s ref string (e.g. "e3") from the last snapshot\'s [ref=...] tags.' } }
+	},
+	browser_type: {
+		name: 'browser_type',
+		description: `Types text into the input/textbox with the given ref from the most recent snapshot, replacing its current value, and returns a fresh snapshot.`,
+		params: {
+			ref: { description: 'The input element\'s ref string (e.g. "e4") from the last snapshot\'s [ref=...] tags.' },
+			text: { description: 'The text to type.' },
+			submit: { description: 'Optional. If true, presses Enter after typing. Default false.' },
+		}
+	},
+	browser_screenshot: {
+		name: 'browser_screenshot',
+		description: `Takes a PNG screenshot of the current page for visual inspection/debugging.`,
+		params: {}
+	},
+	browser_console_logs: {
+		name: 'browser_console_logs',
+		description: `Returns recent browser console messages (log/warn/error) from the current page - useful for catching frontend errors a visual check would miss.`,
+		params: {}
+	},
+
 	run_verification: {
 		name: 'run_verification',
 		description: `Runs this project's own build/typecheck/lint/test scripts (auto-detected from package.json) and reports which passed or failed, with output. Use this after making a non-trivial change to verify it actually works, instead of just asserting that it does - "agent says done" is not sufficient. If something fails, use the output to fix it, then run this again.`,

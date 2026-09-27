@@ -135,6 +135,8 @@ import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMType
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { IDiscoveryMainService } from '../../workbench/contrib/void/common/discovery/discoveryServiceTypes.js';
 import { DiscoveryMainService } from '../../workbench/contrib/void/electron-main/discoveryMainService.js';
+import { IBrowserToolMainService } from '../../workbench/contrib/void/common/browser/browserToolServiceTypes.js';
+import { BrowserToolMainService } from '../../workbench/contrib/void/electron-main/browserToolMainService.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1108,6 +1110,7 @@ export class CodeApplication extends Disposable {
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
 		services.set(IDiscoveryMainService, new SyncDescriptor(DiscoveryMainService, undefined, false));
+		services.set(IBrowserToolMainService, new SyncDescriptor(BrowserToolMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1260,6 +1263,10 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const discoveryChannel = ProxyChannel.fromService(accessor.get(IDiscoveryMainService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-discovery', discoveryChannel);
+
+		// Vader added this
+		const browserToolChannel = ProxyChannel.fromService(accessor.get(IBrowserToolMainService), disposables);
+		mainProcessElectronServer.registerChannel('void-channel-browser', browserToolChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

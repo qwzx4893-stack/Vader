@@ -23,6 +23,8 @@ import { IAgentsService } from '../common/agents/agentsService.js'
 import { IChatThreadService } from './chatThreadService.js'
 import { IDiscoveryMainService } from '../common/discovery/discoveryService.js'
 import { ICapabilityBusService } from '../common/capabilities/capabilityBusService.js'
+import { IBrowserToolMainService, BrowserSnapshot } from '../common/browser/browserToolService.js'
+import { VSBuffer } from '../../../../base/common/buffer.js'
 
 
 // tool use for AI
@@ -160,6 +162,7 @@ export class ToolsService implements IToolsService {
 		@IAgentsService private readonly agentsService: IAgentsService,
 		@IDiscoveryMainService private readonly discoveryService: IDiscoveryMainService,
 		@ICapabilityBusService private readonly capabilityBusService: ICapabilityBusService,
+		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -256,6 +259,24 @@ export class ToolsService implements IToolsService {
 			run_verification: (_params: RawToolParamsObj) => {
 				return {}
 			},
+
+			browser_navigate: (params: RawToolParamsObj) => {
+				const url = validateStr('url', params.url)
+				return { url }
+			},
+			browser_snapshot: () => ({}),
+			browser_click: (params: RawToolParamsObj) => {
+				const ref = validateStr('ref', params.ref)
+				return { ref }
+			},
+			browser_type: (params: RawToolParamsObj) => {
+				const ref = validateStr('ref', params.ref)
+				const text = validateStr('text', params.text)
+				const submit = validateBoolean(params.submit, { default: false })
+				return { ref, text, submit }
+			},
+			browser_screenshot: () => ({}),
+			browser_console_logs: () => ({}),
 
 			// ---
 
@@ -446,6 +467,38 @@ export class ToolsService implements IToolsService {
 				const results = await this.capabilityBusService.resolve(query)
 				return { result: { results } }
 			},
+
+			browser_navigate: async ({ url }) => {
+				const result = await this.browserToolService.navigate(url)
+				return { result }
+			},
+			browser_snapshot: async () => {
+				const result = await this.browserToolService.snapshot()
+				return { result }
+			},
+			browser_click: async ({ ref }) => {
+				const result = await this.browserToolService.click(ref)
+				return { result }
+			},
+			browser_type: async ({ ref, text, submit }) => {
+				const result = await this.browserToolService.type(ref, text, submit)
+				return { result }
+			},
+			browser_screenshot: async () => {
+				const base64Png = await this.browserToolService.screenshot()
+				const root = workspaceContextService.getWorkspace().folders[0]?.uri
+				if (!root) throw new Error(`Cannot save a screenshot: no workspace folder is open.`)
+				const filePath = URI.joinPath(root, '.vader', 'screenshots', `screenshot-${Date.now()}.png`)
+				const binaryStr = atob(base64Png)
+				const bytes = new Uint8Array(binaryStr.length)
+				for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i)
+				await fileService.writeFile(filePath, VSBuffer.wrap(bytes))
+				return { result: { filePath: filePath.fsPath } }
+			},
+			browser_console_logs: async () => {
+				const logs = await this.browserToolService.consoleLogs()
+				return { result: { logs } }
+			},
 			search_mcp_registry: async ({ query }) => {
 				const results = await this.discoveryService.searchMcpRegistry(query)
 				return { result: { results } }
@@ -594,6 +647,10 @@ export class ToolsService implements IToolsService {
 				.substring(0, MAX_FILE_CHARS_PAGE)
 		}
 
+		const stringifyBrowserSnapshot = (snapshot: BrowserSnapshot) => {
+			return `${snapshot.title}\n${snapshot.url}\n\n${snapshot.snapshotText}`
+		}
+
 		// given to the LLM after the call for successful tool calls
 		this.stringOfResult = {
 			read_file: (params, result) => {
@@ -626,6 +683,14 @@ export class ToolsService implements IToolsService {
 					stringifyLintErrors(result.lintErrors)
 					: 'No lint errors found.'
 			},
+			browser_navigate: (params, result) => stringifyBrowserSnapshot(result),
+			browser_snapshot: (params, result) => stringifyBrowserSnapshot(result),
+			browser_click: (params, result) => stringifyBrowserSnapshot(result),
+			browser_type: (params, result) => stringifyBrowserSnapshot(result),
+			browser_screenshot: (params, result) => `Screenshot saved to ${result.filePath}`,
+			browser_console_logs: (params, result) => result.logs.length
+				? result.logs.map(l => `[${l.type}] ${l.text}`).join('\n')
+				: '(no console output)',
 			find_capability: (params, result) => {
 				if (result.results.length === 0) return `Nothing found for "${params.query}" - not in your tools/MCP servers/agents, and no MCP Registry or SkillNet match either.`
 				return result.results.map(r => `[${r.source}${r.trust === 'untrusted' ? ', untrusted/not installed' : ''}] ${r.name}: ${r.description}`).join('\n')

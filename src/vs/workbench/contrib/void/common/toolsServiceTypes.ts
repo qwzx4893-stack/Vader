@@ -35,6 +35,9 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
 	'delegate_subagent_task': 'edits',
 	'run_verification': 'terminal',
+	'browser_navigate': 'terminal',
+	'browser_click': 'terminal',
+	'browser_type': 'terminal',
 }
 
 
@@ -69,6 +72,16 @@ export type BuiltinToolCallParams = {
 	// it does under the hood.
 	'run_verification': {},
 	'find_capability': { query: string },
+	// Vader addition: browser automation. Snapshot/screenshot/console are read-only;
+	// navigate/click/type can cause real page side effects (submitting a form, following a
+	// link) and go through the 'terminal' approval bucket, the same tier as running a shell
+	// command against the outside world.
+	'browser_navigate': { url: string },
+	'browser_snapshot': {},
+	'browser_click': { ref: string },
+	'browser_type': { ref: string, text: string, submit: boolean },
+	'browser_screenshot': {},
+	'browser_console_logs': {},
 	// ---
 	'rewrite_file': { uri: URI, newContent: string },
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
@@ -98,6 +111,12 @@ export type BuiltinToolResultType = {
 	'fetch_skill_instructions': { content: string | null },
 	'run_verification': { checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean },
 	'find_capability': { results: import('./capabilities/capabilityBusTypes.js').CapabilityDescriptor[] },
+	'browser_navigate': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_snapshot': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_click': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_type': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_screenshot': { filePath: string },
+	'browser_console_logs': { logs: import('./browser/browserToolServiceTypes.js').ConsoleLogEntry[] },
 	// ---
 	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
