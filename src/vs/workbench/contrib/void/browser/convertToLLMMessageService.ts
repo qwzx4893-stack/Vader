@@ -20,6 +20,8 @@ import { ToolName } from '../common/toolsServiceTypes.js';
 import { IMCPService } from '../common/mcpService.js';
 import { IInstructionsService } from '../common/instructions/instructionsService.js';
 import { IAgentsService } from '../common/agents/agentsService.js';
+import { IContextEngineService } from './contextEngineService.js';
+import { findLast } from '../../../../base/common/arraysFind.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -545,6 +547,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IMCPService private readonly mcpService: IMCPService,
 		@IInstructionsService private readonly instructionsService: IInstructionsService,
 		@IAgentsService private readonly agentsService: IAgentsService,
+		@IContextEngineService private readonly contextEngineService: IContextEngineService,
 	) {
 		super()
 	}
@@ -582,11 +585,37 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	}
 
 
+	// Vader addition: the Context Engine's dynamic per-turn section (symbol outlines,
+	// diagnostics, git diff/log for files the user mentioned or has open) - see
+	// contextEngineService.ts. Kept separate from _generateChatMessagesSystemMessage so its
+	// token budget can be sized from the model's own context window, which that function
+	// doesn't otherwise need to know about.
+	private async _generateContextEngineBlock(opts: { userMessage: string, mentionedURIs: URI[], openedURIModels: URI[], contextWindow: number }): Promise<string> {
+		// a fixed slice of the context window dedicated to dynamic context, capped so a huge
+		// context window doesn't turn this into an unbounded scan of every open file's symbols
+		const tokenBudget = Math.min(6000, Math.floor(opts.contextWindow * 0.15))
+		if (tokenBudget <= 0) return ''
+		try {
+			const { text } = await this.contextEngineService.buildContext({
+				userMessage: opts.userMessage,
+				mentionedURIs: opts.mentionedURIs,
+				openedURIs: opts.openedURIModels,
+				tokenBudget,
+			})
+			return text
+		} catch {
+			// the Context Engine is an enhancement, never load-bearing - a failure here must
+			// not prevent the turn from sending at all
+			return ''
+		}
+	}
+
 	// system message
-	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined) => {
+	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, contextEngineOpts: { userMessage: string, mentionedURIs: URI[], contextWindow: number }) => {
 		const workspaceFolders = this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 
-		const openedURIs = this.modelService.getModels().filter(m => m.isAttachedToEditor()).map(m => m.uri.fsPath) || [];
+		const openedURIModels = this.modelService.getModels().filter(m => m.isAttachedToEditor()).map(m => m.uri)
+		const openedURIs = openedURIModels.map(u => u.fsPath) || [];
 		const activeURI = this.editorService.activeEditor?.resource?.fsPath;
 
 		const directoryStr = await this.directoryStrService.getAllDirectoriesStr({
@@ -595,12 +624,19 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				: `...Directories string cut off, ask user for more if necessary...`
 		})
 
+		const contextEngineBlock = await this._generateContextEngineBlock({
+			userMessage: contextEngineOpts.userMessage,
+			mentionedURIs: contextEngineOpts.mentionedURIs,
+			openedURIModels,
+			contextWindow: contextEngineOpts.contextWindow,
+		})
+
 		const includeXMLToolDefinitions = !specialToolFormat
 
 		const mcpTools = this.mcpService.getMCPTools()
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
-		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions })
+		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, contextEngineBlock })
 		return systemMessage
 	}
 
@@ -687,7 +723,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		} = getModelCapabilities(providerName, modelName, overridesOfModel)
 
 		const { disableSystemMessage } = this.voidSettingsService.state.globalSettings;
-		const fullSystemMessage = await this._generateChatMessagesSystemMessage(chatMode, specialToolFormat)
+		const lastUserMessage = findLast(chatMessages, m => m.role === 'user')
+		const mentionedURIs: URI[] = (lastUserMessage?.role === 'user' ? lastUserMessage.selections ?? [] : [])
+			.filter((s): s is Extract<typeof s, { uri: URI }> => 'uri' in s && !!s.uri)
+			.map(s => s.uri)
+		const fullSystemMessage = await this._generateChatMessagesSystemMessage(chatMode, specialToolFormat, {
+			userMessage: lastUserMessage?.role === 'user' ? lastUserMessage.displayContent : '',
+			mentionedURIs,
+			contextWindow,
+		})
 		const systemMessage = disableSystemMessage ? '' : fullSystemMessage;
 
 		const modelSelectionOptions = this.voidSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]

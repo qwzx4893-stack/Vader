@@ -33,6 +33,7 @@ The **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gate
 | External discovery | `common/discovery/` | Live search against the official MCP Registry and SkillNet; read-only, no auto-install |
 | Capability bus | `common/capabilities/` | Read-only inventory/resolver over native tools + MCP tools + agents, falling back to discovery only when nothing local matches |
 | Browser automation | `common/browser/`, `electron-main/browserToolMainService.ts` | Playwright-backed navigate/snapshot/click/type/screenshot/console |
+| Context Engine | `common/context/`, `browser/contextEngineService.ts` | Per-turn dynamic context (symbol outlines, diagnostics, git diff/log) for mentioned/open files - relevance-ranked, token-budget-aware, incrementally cached; see `docs/integrations/context-engine.md` |
 | Checkpoints | `browser/editCodeService.ts`, `browser/chatThreadService.ts` (`CheckpointEntry`) | Inherited from Void, unmodified - per-file snapshot/restore tied to chat messages |
 | Verification | `browser/toolsService.ts` (`run_verification`) | Runs a project's own build/lint/test scripts and reports pass/fail |
 

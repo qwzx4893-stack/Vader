@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased - Context Engine
+
+New `common/context/` + `browser/contextEngineService.ts`: a per-turn dynamic context
+section (symbol outlines, live diagnostics, git diff/log) for files the user mentioned or
+has open, wired into `convertToLLMMessageService.ts`'s system-message generation - every
+chat turn (agent/gather/normal/subagent) gets it, not just a new tool the model has to
+remember to call. Built entirely on data sources already real and present in this codebase
+(`ILanguageFeaturesService`'s document symbol provider, `IMarkerService`, and
+`IVoidSCMService` - the git service that existed fully wired end-to-end but had exactly one
+consumer before this, the commit-message generator). Relevance-ranked by a keyword-based
+task-type classifier (bug-fixing/architecture/ui/general) that decides section priority
+when the token budget (min(6000, 15% of the model's context window), heuristic chars/4)
+can't fit everything; truncates the first section that overflows rather than dropping
+sections outright. Symbol/diagnostic caches are invalidated by the text model's own
+`getVersionId()`/marker-changed events - not a timer, not a full-repo rescan. Bounded to at
+most 12 mentioned/open files regardless of repo size - no full-repo symbol indexing.
+See `docs/integrations/context-engine.md` for what this does and doesn't cover (no
+repo-wide semantic search, no independent LSP client - diagnostics/symbols are only as good
+as whatever language service is already active for a file).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors) and the full `npm run compile`
+gulp task (0 errors) after the change.
+
 ## Unreleased - Agent Gateway as the primary execution seam
 
 `IAgentGatewayService` (`common/agentGateway/`) is now the real path the chat UI uses to run a

@@ -511,7 +511,7 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 // ======================================================== chat (normal, gather, agent) ========================================================
 
 
-export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean }) => {
+export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions, contextEngineBlock }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean, contextEngineBlock?: string }) => {
 	const header = (`You are an expert coding ${mode === 'agent' ? 'agent' : 'assistant'} whose job is \
 ${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase.`
 			: mode === 'gather' ? `to search, understand, and reference files in the user's codebase.`
@@ -543,6 +543,14 @@ ${openedURIs.join('\n') || 'NO OPENED FILES'}${''/* separator */}${mode === 'age
 <files_overview>
 ${directoryStr}
 </files_overview>`)
+
+	// Vader addition: relevance-ranked, token-budget-aware dynamic context (symbol outlines,
+	// diagnostics, git diff/log) for files the user mentioned or has open right now - see
+	// contextEngineService.ts. Empty when the Context Engine found nothing worth including.
+	const contextEngineInfo = contextEngineBlock ? (`Here is additional context relevant to the current message (symbol outlines, diagnostics, and/or git changes for files you mentioned or have open) - this is a snapshot, so re-read a file with your tools before editing it if you need the exact current contents:
+<dynamic_context>
+${contextEngineBlock}
+</dynamic_context>`) : null
 
 
 	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt(mode, mcpTools) : null
@@ -605,6 +613,7 @@ ${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`)
 	if (toolDefinitions) ansStrs.push(toolDefinitions)
 	ansStrs.push(importantDetails)
 	ansStrs.push(fsInfo)
+	if (contextEngineInfo) ansStrs.push(contextEngineInfo)
 
 	const fullSystemMsgStr = ansStrs
 		.join('\n\n\n')
