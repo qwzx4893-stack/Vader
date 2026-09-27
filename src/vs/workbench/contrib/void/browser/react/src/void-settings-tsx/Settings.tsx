@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState } from '../util/services.js'
+import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -18,6 +18,7 @@ import { IconLoading } from '../sidebar-tsx/SidebarChat.js'
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
 import Severity from '../../../../../../../base/common/severity.js'
 import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
+import { RouterCategory } from '../../../../common/modelRouter/modelRouterService.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
@@ -836,6 +837,68 @@ export const AgentsAndPolicySection = () => {
 }
 
 
+const ROUTER_CATEGORIES: { category: RouterCategory, label: string, desc: string }[] = [
+	{ category: 'subagent', label: 'Subagent delegation', desc: 'Tasks handed off via delegate_subagent_task with no agent-pinned model.' },
+	{ category: 'research', label: 'Research', desc: 'Read-only, information-gathering subagent work.' },
+	{ category: 'browser', label: 'Browser automation', desc: 'Turns that primarily drive the browser tool.' },
+	{ category: 'summarization', label: 'Summarization', desc: 'Context compaction\'s own summarization calls.' },
+	{ category: 'verification', label: 'Verification', desc: 'The independent verification pass.' },
+]
+
+// Vader addition: AUTO/MANUAL Model Router. See common/modelRouter/. This is a first,
+// functional pass - a full per-category model picker (not just visibility into what AUTO
+// would pick) is Agent Manager UI work, tracked separately.
+export const ModelRouterSection = () => {
+	const accessor = useAccessor()
+	const modelRouterService = accessor.get('IModelRouterService')
+	const routerState = useModelRouterServiceState()
+	useSettingsState() // re-render when provider settings change, since that changes what's "configured"
+
+	const configuredModels = modelRouterService.listConfiguredModels()
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Model Router</h2>
+		<h4 className={`text-void-fg-3 mb-4`}>
+			Controls which model handles work that isn't the visible Chat/Autocomplete/Apply/SCM features above - subagent delegation, research, browser automation, and context-compaction summarization. In Auto mode, Vader only ever picks from models you've actually configured below (never a provider with no credentials entered), preferring your Chat model unless another configured model is meaningfully better-suited. In Manual mode, these all use your Chat model unless overridden.
+		</h4>
+
+		<div className='my-4'>
+			<div className='text-void-fg-3 text-sm mb-1'>Mode</div>
+			<div className='flex gap-x-2'>
+				{(['auto', 'manual'] as const).map(mode => (
+					<VoidButtonBgDarken
+						key={mode}
+						className={`px-3 py-1 capitalize ${routerState.mode === mode ? 'ring-1 ring-void-fg-3' : ''}`}
+						onClick={() => modelRouterService.setMode(mode)}
+					>
+						{mode}
+					</VoidButtonBgDarken>
+				))}
+			</div>
+		</div>
+
+		<div className='my-4'>
+			<div className='text-void-fg-3 text-sm mb-2'>Resolved model per category</div>
+			{configuredModels.length === 0 ? <div className='text-void-fg-3 text-xs italic'>No models configured yet - add a provider above first.</div> : null}
+			<div className='flex flex-col gap-y-1'>
+				{ROUTER_CATEGORIES.map(({ category, label, desc }) => {
+					const resolved = modelRouterService.resolveModel(category)
+					return <div key={category} className='flex items-center justify-between text-xs border-b border-void-border-3 py-1'>
+						<div>
+							<div className='font-medium'>{label}</div>
+							<div className='text-void-fg-3'>{desc}</div>
+						</div>
+						<div className='text-void-fg-3 text-right whitespace-nowrap ml-2'>
+							{resolved ? `${resolved.providerName} / ${resolved.modelName}` : '(none configured)'}
+						</div>
+					</div>
+				})}
+			</div>
+		</div>
+	</div>
+}
+
+
 export const VoidProviderSettings = ({ providerNames }: { providerNames: ProviderName[] }) => {
 	return <>
 		{providerNames.map(providerName =>
@@ -1583,6 +1646,8 @@ export const Settings = () => {
 								</div>
 
 								<AgentsAndPolicySection />
+
+								<ModelRouterSection />
 
 								{/* AI Instructions section */}
 								<div className='max-w-[600px]'>

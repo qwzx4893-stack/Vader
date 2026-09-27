@@ -57,6 +57,7 @@ import { OPT_OUT_KEY } from '../../../../common/storageKeys.js'
 import { IAgentsService, AgentsServiceState } from '../../../../common/agents/agentsService.js'
 import { IPolicyService, PolicyServiceState } from '../../../../common/policy/policyService.js'
 import { IAgentGatewayService } from '../../../agentGatewayService.js'
+import { IModelRouterService, ModelRouterState } from '../../../../common/modelRouter/modelRouterService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -92,6 +93,9 @@ const agentsStateListeners: Set<(s: AgentsServiceState) => void> = new Set()
 let policyState: PolicyServiceState
 const policyStateListeners: Set<(s: PolicyServiceState) => void> = new Set()
 
+let modelRouterState: ModelRouterState
+const modelRouterStateListeners: Set<(s: ModelRouterState) => void> = new Set()
+
 
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
@@ -112,9 +116,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		mcpService: accessor.get(IMCPService),
 		agentsService: accessor.get(IAgentsService),
 		policyService: accessor.get(IPolicyService),
+		modelRouterService: accessor.get(IModelRouterService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService } = stateServices
 
 
 
@@ -203,6 +208,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	modelRouterState = modelRouterService.state
+	disposables.push(
+		modelRouterService.onDidChangeRouter(() => {
+			modelRouterState = modelRouterService.state
+			modelRouterStateListeners.forEach(l => l(modelRouterState))
+		})
+	)
+
 
 	return disposables
 }
@@ -260,6 +273,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IAgentsService: accessor.get(IAgentsService),
 		IPolicyService: accessor.get(IPolicyService),
 		IAgentGatewayService: accessor.get(IAgentGatewayService),
+		IModelRouterService: accessor.get(IModelRouterService),
 
 	} as const
 	return reactAccessor
@@ -456,6 +470,19 @@ export const usePolicyServiceState = () => {
 		const listener = (newState: PolicyServiceState) => { ss(newState) }
 		policyStateListeners.add(listener);
 		return () => { policyStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useModelRouterServiceState = () => {
+	const accessor = useAccessor()
+	const modelRouterService = accessor.get('IModelRouterService')
+	const [s, ss] = useState(modelRouterService.state)
+	useEffect(() => {
+		const listener = (newState: ModelRouterState) => { ss(newState) }
+		modelRouterStateListeners.add(listener);
+		return () => { modelRouterStateListeners.delete(listener) };
 	}, []);
 	return s
 }

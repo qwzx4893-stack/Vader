@@ -14,6 +14,7 @@ import { ILLMMessageService } from '../common/sendLLMMessageService.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName } from '../common/prompt/prompts.js';
 import { getModelCapabilities } from '../common/modelCapabilities.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
+import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
@@ -366,6 +367,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IPolicyService private readonly _policyService: IPolicyService,
 		@IAgentsService private readonly _agentsService: IAgentsService,
 		@IMemoryService private readonly _memoryService: IMemoryService,
+		@IModelRouterService private readonly _modelRouterService: IModelRouterService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -542,10 +544,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let modelSelection = this._settingsService.state.modelSelectionOfFeature[featureName]
 
 		// Vader addition: a permanent agent running this thread can pin its own model
-		const agentId = this.state.allThreads[threadId]?.agentId
+		const thread = this.state.allThreads[threadId]
+		const agentId = thread?.agentId
+		let agentPinnedModel = false
 		if (agentId) {
 			const agent = this._agentsService.getAgent(agentId)
-			if (agent?.modelSelection) modelSelection = agent.modelSelection
+			if (agent?.modelSelection) { modelSelection = agent.modelSelection; agentPinnedModel = true }
+		}
+
+		// Vader addition: a subagent thread with no agent-pinned model defers to the Model
+		// Router's 'subagent' category (common/modelRouter/) instead of always silently
+		// inheriting the Main Agent's Chat model - see docs/integrations/model-router.md.
+		if (!agentPinnedModel && thread?.isSubagentThread) {
+			const routed = this._modelRouterService.resolveModel('subagent')
+			if (routed) modelSelection = routed
 		}
 
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
@@ -875,9 +887,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				simpleMessages: [{ role: 'user', content: contextCompaction_userMessage(conversationText) }],
 				systemMessage: contextCompaction_systemMessage,
 				modelSelection,
-				// no dedicated 'Summarization' feature category exists yet - see the Model
-				// Router section of ARCHITECTURE.md; this reuses the Chat model selection,
-				// which is a correct, if not cost-optimal, default until that category exists.
+				// there's no dedicated Settings-configurable "Summarization" feature (see
+				// voidSettingsTypes.ts's featureNames) - reuse 'Chat' purely for
+				// optionsOfModelSelection lookup (reasoning slider, etc); which *model* gets
+				// used is already decided by the Model Router before this is called.
 				featureName: 'Chat',
 			})
 			this._llmMessageService.sendLLMMessage({
@@ -919,9 +932,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const conversationText = toCompact.map(m => this._renderMessageForCompaction(m)).filter(Boolean).join('\n\n')
 		if (!conversationText.trim()) return
 
+		// Vader addition: route the summarization call itself through the Model Router's
+		// 'summarization' category (favors cheap/configured models - see
+		// modelRouterService.ts's scoreForCategory) rather than always reusing the thread's
+		// own Chat model, falling back to it if the router has nothing better configured.
+		const compactionModelSelection = this._modelRouterService.resolveModel('summarization') ?? modelSelection
+
 		let summaryText: string
 		try {
-			summaryText = await this._sendCompactionRequest(conversationText, modelSelection)
+			summaryText = await this._sendCompactionRequest(conversationText, compactionModelSelection)
 		} catch {
 			// compaction is a best-effort optimization, never load-bearing - if the
 			// summarization call itself fails, do nothing this round. Void's original

@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased - Model Router (AUTO/MANUAL) and capability descriptors
+
+New `common/modelRouter/` (`IModelRouterService`): AUTO/MANUAL routing for work that doesn't
+have its own Settings dropdown (subagent delegation, research, browser automation,
+compaction summarization), sitting on top of - not replacing - Void's original per-feature
+model selection (Chat/Ctrl+K/Autocomplete/Apply/SCM keep their own dropdowns and storage
+unchanged; MANUAL mode, the default, reproduces exactly the old behavior for anyone
+upgrading). AUTO mode ranks only `listConfiguredModels()` - providers with real credentials
+entered - so an unconfigured provider is never silently selected however capable its static
+info claims it is; ranking uses a `ModelCapabilityDescriptor` built entirely from data this
+codebase already tracks (`getModelCapabilities`'s tool-calling format/context
+window/reasoning/FIM/cost/cache fields, plus `localProviderNames` for local-vs-cloud) -
+vision/multimodal capability is deliberately left out rather than guessed, since this
+codebase doesn't track it per-model today.
+
+Wired into two real consumers: subagent delegation (`chatThreadService.ts`'s
+`_currentModelSelectionProps`, for subagent threads with no agent-pinned model) and context
+compaction's own summarization call. A new `ModelRouterSection` in Settings gives a
+functional (if first-pass) Auto/Manual toggle and a live read-out of what each category
+resolves to. See `docs/integrations/model-router.md` for exactly what's wired vs. what's
+tracked follow-up (research/browser/verification categories exist but have no execution
+path calling them yet; no per-category manual-override picker in Settings yet).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Memory layers and structured context compaction
 
 New `common/memory/` (`IMemoryService`): persistent, inspectable, clearable project memory
