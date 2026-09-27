@@ -95,3 +95,6 @@ import '../common/agents/agentsService.js'
 
 // Vader agent platform: external discovery (MCP Registry, SkillNet)
 import '../common/discovery/discoveryService.js'
+
+// Vader agent platform: capability bus (unifies native tools, MCP tools, agents, discovery)
+import '../common/capabilities/capabilityBusService.js'

@@ -34,6 +34,7 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
 	'delegate_subagent_task': 'edits',
+	'run_verification': 'terminal',
 }
 
 
@@ -62,6 +63,12 @@ export type BuiltinToolCallParams = {
 	'search_mcp_registry': { query: string },
 	'search_skillnet': { query: string },
 	'fetch_skill_instructions': { repositoryUrl: string },
+	// Vader addition: verification pipeline. Read-only in the sense that it only *runs*
+	// whatever build/lint/test scripts the project already defines - it's classified as a
+	// 'terminal' action (same approval bucket as run_command) because that's exactly what
+	// it does under the hood.
+	'run_verification': {},
+	'find_capability': { query: string },
 	// ---
 	'rewrite_file': { uri: URI, newContent: string },
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
@@ -89,6 +96,8 @@ export type BuiltinToolResultType = {
 	'search_mcp_registry': { results: import('./discovery/discoveryServiceTypes.js').McpRegistrySearchResult[] },
 	'search_skillnet': { results: import('./discovery/discoveryServiceTypes.js').SkillNetSearchResult[] },
 	'fetch_skill_instructions': { content: string | null },
+	'run_verification': { checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean },
+	'find_capability': { results: import('./capabilities/capabilityBusTypes.js').CapabilityDescriptor[] },
 	// ---
 	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
