@@ -30,6 +30,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// Vader addition: creating a persistent agent is a mutating, persistent action, so it
 	// reuses the 'edits' approval bucket rather than introducing a new one.
 	'create_persistent_agent': 'edits',
+	// Vader addition: writing persistent memory (project or agent-scoped) outlives this
+	// turn and silently shapes every future turn's context, so it reuses the 'edits' bucket
+	// rather than being auto-approved like a read-only lookup.
+	'remember': 'edits',
 	// Vader addition: delegating a task can itself cause file edits/terminal commands
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
@@ -95,6 +99,10 @@ export type BuiltinToolCallParams = {
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
 	'delegate_subagent_task': { task: string, agentName: string | null },
+	// Vader addition: write to persistent memory (common/memory/). 'project' memory is
+	// visible to every future thread in this workspace; 'agent' memory requires agentName
+	// and is visible only to threads running as that permanent agent.
+	'remember': { content: string, label: string, scope: 'project' | 'agent', agentName: string | null },
 }
 
 // RESULT OF TOOL CALL
@@ -130,6 +138,7 @@ export type BuiltinToolResultType = {
 	// ---
 	'create_persistent_agent': { agentId: string },
 	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
+	'remember': { memoryId: string, scope: 'project' | 'agent' },
 }
 
 

@@ -11,7 +11,9 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { getModelCapabilities } from '../common/modelCapabilities.js';
+import { IMemoryService } from '../common/memory/memoryService.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
@@ -20,7 +22,7 @@ import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, T
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
-import { ChatMessage, CheckpointEntry, CodespanLocationLink, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, CheckpointEntry, CodespanLocationLink, CompactedSummaryEntry, StagingSelectionItem, ToolMessage } from '../common/chatThreadServiceTypes.js';
 import { Position } from '../../../../editor/common/core/position.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { shorten } from '../../../../base/common/labels.js';
@@ -363,6 +365,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IPolicyService private readonly _policyService: IPolicyService,
 		@IAgentsService private readonly _agentsService: IAgentsService,
+		@IMemoryService private readonly _memoryService: IMemoryService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -824,6 +827,136 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 
+	// Vader addition: structured context compaction. Void's original safety net for context
+	// overflow is convertToLLMMessageService.ts's prepareMessages, which blindly truncates
+	// the largest individual message's raw content when the final assembled request would
+	// still be too big - a real, still-present last resort, but one that discards whatever
+	// it cuts with no structure and no way back. This runs earlier, with a safety margin,
+	// and replaces older messages with a structured summary instead - see
+	// contextCompaction_systemMessage in prompts.ts for exactly what it preserves.
+	private static readonly COMPACTION_SAFETY_MARGIN_FRACTION = 0.7 // compact once usage crosses 70% of the model's usable window
+	private static readonly COMPACTION_TAIL_MESSAGES_TO_KEEP = 6 // always keep the most recent messages in full, uncompacted
+	private static readonly COMPACTION_MIN_MESSAGES_TO_COMPACT = 6 // not worth an LLM call to compact a handful of short messages
+	private static readonly COMPACTION_CHARS_PER_TOKEN_ESTIMATE = 4
+
+	private _renderMessageForCompaction(m: ChatMessage): string {
+		if (m.role === 'user') return `USER: ${m.displayContent || m.content}`
+		if (m.role === 'assistant') return `ASSISTANT: ${m.displayContent}`
+		if (m.role === 'tool') {
+			if (m.type === 'success') return `TOOL[${m.name}]: ${truncate(m.content, 2000)}`
+			if (m.type === 'tool_error') return `TOOL[${m.name}] ERROR: ${m.content}`
+			if (m.type === 'rejected') return `TOOL[${m.name}] REJECTED: ${m.content}`
+			return ''
+		}
+		return '' // checkpoint / interrupted_streaming_tool / compacted_summary don't contribute raw content
+	}
+
+	private _parseCompactionTags(text: string): CompactedSummaryEntry['summary'] {
+		const extract = (tag: string): string => {
+			const m = text.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'))
+			return m ? m[1].trim() : '(not extracted)'
+		}
+		return {
+			objective: extract('objective'),
+			constraints: extract('constraints'),
+			decisions: extract('decisions'),
+			architectureNotes: extract('architecture_notes'),
+			filesModified: extract('files_modified'),
+			importantLocations: extract('important_locations'),
+			unresolvedProblems: extract('unresolved_problems'),
+			testResults: extract('test_results'),
+			nextSteps: extract('next_steps'),
+		}
+	}
+
+	private _sendCompactionRequest(conversationText: string, modelSelection: ModelSelection): Promise<string> {
+		return new Promise((resolve, reject) => {
+			const { messages, separateSystemMessage } = this._convertToLLMMessagesService.prepareLLMSimpleMessages({
+				simpleMessages: [{ role: 'user', content: contextCompaction_userMessage(conversationText) }],
+				systemMessage: contextCompaction_systemMessage,
+				modelSelection,
+				// no dedicated 'Summarization' feature category exists yet - see the Model
+				// Router section of ARCHITECTURE.md; this reuses the Chat model selection,
+				// which is a correct, if not cost-optimal, default until that category exists.
+				featureName: 'Chat',
+			})
+			this._llmMessageService.sendLLMMessage({
+				messagesType: 'chatMessages',
+				chatMode: null,
+				messages,
+				modelSelection,
+				modelSelectionOptions: undefined,
+				overridesOfModel: this._settingsService.state.overridesOfModel,
+				logging: { loggingName: 'Vader - Context Compaction' },
+				separateSystemMessage,
+				onText: () => { },
+				onFinalMessage: ({ fullText }) => resolve(fullText),
+				onError: (error) => reject(error),
+				onAbort: () => reject(new Error('Compaction request was aborted')),
+			})
+		})
+	}
+
+	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null): Promise<void> {
+		if (!modelSelection) return
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+
+		const { overridesOfModel } = this._settingsService.state
+		const { contextWindow, reservedOutputTokenSpace } = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, overridesOfModel)
+		const usableChars = Math.max(0, contextWindow - (reservedOutputTokenSpace ?? 4096)) * ChatThreadService.COMPACTION_CHARS_PER_TOKEN_ESTIMATE
+
+		const lastSummaryIdx = findLastIdx(thread.messages, m => m.role === 'compacted_summary') ?? -1
+		const compactableRange = thread.messages.slice(lastSummaryIdx + 1)
+		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+
+		const totalChars = thread.messages.reduce((n, m) => n + this._renderMessageForCompaction(m).length, 0)
+		if (totalChars < usableChars * ChatThreadService.COMPACTION_SAFETY_MARGIN_FRACTION) return // plenty of room left - the common case, checked cheaply every turn
+
+		const toCompact = compactableRange.slice(0, compactableRange.length - ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP)
+		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+
+		const conversationText = toCompact.map(m => this._renderMessageForCompaction(m)).filter(Boolean).join('\n\n')
+		if (!conversationText.trim()) return
+
+		let summaryText: string
+		try {
+			summaryText = await this._sendCompactionRequest(conversationText, modelSelection)
+		} catch {
+			// compaction is a best-effort optimization, never load-bearing - if the
+			// summarization call itself fails, do nothing this round. Void's original
+			// per-message truncation (prepareMessages, convertToLLMMessageService.ts) is
+			// still the final safety net if the raw context genuinely overflows.
+			return
+		}
+
+		const summary = this._parseCompactionTags(summaryText)
+		const compactedAt = new Date().toISOString()
+
+		// archive the raw messages being replaced - moved out of the live context sent to
+		// the model, never destroyed - see common/memory/ ('compactionArchive' scope)
+		this._memoryService.write({
+			scope: 'compactionArchive',
+			scopeKey: threadId,
+			label: `Compacted ${toCompact.length} messages at ${compactedAt}`,
+			content: JSON.stringify(toCompact),
+			source: 'compaction',
+		})
+
+		const summaryEntry: CompactedSummaryEntry = { role: 'compacted_summary', originalMessageCount: toCompact.length, compactedAt, summary }
+		const beforeRange = thread.messages.slice(0, lastSummaryIdx + 1)
+		const preservedTail = compactableRange.slice(toCompact.length)
+		const newMessages: ChatMessage[] = [...beforeRange, summaryEntry, ...preservedTail]
+
+		const { allThreads } = this.state
+		const newThreads = {
+			...allThreads,
+			[threadId]: { ...thread, messages: newMessages, lastModified: new Date().toISOString() },
+		}
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
+	}
+
 	private async _runChatAgent({
 		threadId,
 		modelSelection,
@@ -870,6 +1003,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			nMessagesSent += 1
 
 			this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
+
+			await this._maybeCompactThread(threadId, modelSelection)
 
 			const chatMessages = this.state.allThreads[threadId]?.messages ?? []
 			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({

@@ -25,7 +25,9 @@ export type InstructionLayerName =
 	| 'policy'
 	| 'globalUser'
 	| 'workspace'
+	| 'projectMemory'
 	| 'agent'
+	| 'agentMemory'
 	| 'skill'
 	| 'task';
 
@@ -40,8 +42,12 @@ export interface ComposeInstructionsInput {
 	globalUser?: string;
 	/** .vaderrules / .voidrules file(s) for the open workspace folder(s) */
 	workspace?: string;
+	/** facts written via the `remember` tool (or the Memory UI) with scope='project' - see common/memory/ */
+	projectMemory?: string;
 	/** the running permanent agent's own instructions, if any (see agents/agentsService.ts) */
 	agent?: string;
+	/** facts written via the `remember` tool with scope='agent' for the currently running agent - see common/memory/ */
+	agentMemory?: string;
 	/** instructions contributed by an active Skill, if any */
 	skill?: string;
 	/** one-off instructions scoped to the current task/message only */
@@ -93,7 +99,9 @@ class InstructionsService implements IInstructionsService {
 			{ name: 'policy', label: 'Policy engine (hard rules)', content: this._policySummary() },
 			{ name: 'globalUser', label: 'Global AI Instructions (Settings)', content: (input.globalUser ?? '').trim() },
 			{ name: 'workspace', label: 'Workspace rules (.vaderrules)', content: (input.workspace ?? '').trim() },
+			{ name: 'projectMemory', label: 'Project memory', content: (input.projectMemory ?? '').trim() },
 			{ name: 'agent', label: 'Agent instructions', content: (input.agent ?? '').trim() },
+			{ name: 'agentMemory', label: 'Agent memory', content: (input.agentMemory ?? '').trim() },
 			{ name: 'skill', label: 'Active skill instructions', content: (input.skill ?? '').trim() },
 			{ name: 'task', label: 'Task-specific instructions', content: (input.task ?? '').trim() },
 		];

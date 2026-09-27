@@ -2579,6 +2579,13 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		/>
 	}
 
+	else if (role === 'compacted_summary') {
+		return <div className={`my-2 px-2 py-1.5 rounded text-xs text-void-fg-3 bg-void-bg-2 border border-void-border-3 ${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			<div className='font-medium'>Earlier context compacted ({chatMessage.originalMessageCount} messages condensed)</div>
+			{chatMessage.summary.objective ? <div className='mt-0.5 opacity-80'>{chatMessage.summary.objective}</div> : null}
+		</div>
+	}
+
 }
 
 const CommandBarInChat = () => {

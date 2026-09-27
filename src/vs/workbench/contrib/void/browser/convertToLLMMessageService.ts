@@ -5,7 +5,7 @@ import { registerSingleton, InstantiationType } from '../../../../platform/insta
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { ChatMessage } from '../common/chatThreadServiceTypes.js';
+import { ChatMessage, CompactedSummaryEntry } from '../common/chatThreadServiceTypes.js';
 import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -22,8 +22,23 @@ import { IInstructionsService } from '../common/instructions/instructionsService
 import { IAgentsService } from '../common/agents/agentsService.js';
 import { IContextEngineService } from './contextEngineService.js';
 import { findLast } from '../../../../base/common/arraysFind.js';
+import { IMemoryService } from '../common/memory/memoryService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
+
+// Vader addition: render a CompactedSummaryEntry (chatThreadServiceTypes.ts) as plain text
+// for the model - the earlier messages it replaces are gone from what's sent, but their
+// content lives on here in structured form. See chatThreadService.ts's _maybeCompactThread.
+const renderCompactedSummaryForLLM = (m: CompactedSummaryEntry): string => `[Earlier context compacted - ${m.originalMessageCount} messages condensed into this summary]
+Objective: ${m.summary.objective}
+Constraints: ${m.summary.constraints}
+Decisions made: ${m.summary.decisions}
+Architecture notes: ${m.summary.architectureNotes}
+Files modified so far: ${m.summary.filesModified}
+Important locations: ${m.summary.importantLocations}
+Unresolved problems: ${m.summary.unresolvedProblems}
+Test results so far: ${m.summary.testResults}
+Next steps: ${m.summary.nextSteps}`
 
 
 
@@ -548,6 +563,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IInstructionsService private readonly instructionsService: IInstructionsService,
 		@IAgentsService private readonly agentsService: IAgentsService,
 		@IContextEngineService private readonly contextEngineService: IContextEngineService,
+		@IMemoryService private readonly memoryService: IMemoryService,
 	) {
 		super()
 	}
@@ -574,14 +590,27 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		}
 	}
 
+	// Vader addition: render a workspace's or agent's memory records (common/memory/) as
+	// plain text for the instructions layer - each memory is a fact the model should treat
+	// as already-established, not something it needs to re-derive or verify this turn.
+	private _renderMemoryRecords(scope: 'project' | 'agent', scopeKey: string | undefined): string {
+		if (!scopeKey) return ''
+		const records = this.memoryService.list(scope, scopeKey)
+		if (records.length === 0) return ''
+		return records.map(r => `- ${r.label}: ${r.content}`).join('\n')
+	}
+
 	// Get combined AI instructions, composed by Vader's layered instruction system
-	// (system invariants + policy summary + global settings + .vaderrules/.voidrules),
-	// in fixed precedence order. See common/instructions/instructionsService.ts.
+	// (system invariants + policy summary + global settings + .vaderrules/.voidrules +
+	// memory), in fixed precedence order. See common/instructions/instructionsService.ts.
 	private _getCombinedAIInstructions(agentId?: string): string {
 		const globalAIInstructions = this.voidSettingsService.state.globalSettings.aiInstructions;
 		const voidRulesFileContent = this._getVoidRulesFileContents();
 		const agentInstructions = agentId ? this.agentsService.getAgent(agentId)?.instructions : undefined;
-		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: voidRulesFileContent, agent: agentInstructions })
+		const workspaceRoot = this.workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
+		const projectMemory = this._renderMemoryRecords('project', workspaceRoot);
+		const agentMemory = agentId ? this._renderMemoryRecords('agent', agentId) : '';
+		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: voidRulesFileContent, projectMemory, agent: agentInstructions, agentMemory })
 	}
 
 
@@ -671,6 +700,12 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				simpleLLMMessages.push({
 					role: m.role,
 					content: m.content,
+				})
+			}
+			else if (m.role === 'compacted_summary') {
+				simpleLLMMessages.push({
+					role: 'user',
+					content: renderCompactedSummaryForLLM(m),
 				})
 			}
 		}

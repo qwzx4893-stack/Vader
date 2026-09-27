@@ -34,6 +34,30 @@ export type DecorativeCanceledTool = {
 }
 
 
+// Vader addition: structured context compaction. Replaces a run of older messages with a
+// structured summary when a thread approaches its model's context limit - see
+// chatThreadService.ts's _maybeCompactThread. This is purely additive to the ChatMessage
+// union (a new role, not a changed meaning for an existing one), so old persisted threads -
+// which can never contain this role - need no migration; they simply never hit this case.
+// The raw messages this replaces are archived via common/memory/ (scope 'compactionArchive'),
+// never deleted outright, so compaction can never be a silent, permanent loss of history.
+export type CompactedSummaryEntry = {
+	role: 'compacted_summary';
+	originalMessageCount: number;
+	compactedAt: string; // ISO timestamp, also used as the memory archive's lookup key
+	summary: {
+		objective: string;
+		constraints: string;
+		decisions: string;
+		architectureNotes: string;
+		filesModified: string;
+		importantLocations: string;
+		unresolvedProblems: string;
+		testResults: string;
+		nextSteps: string;
+	};
+}
+
 // checkpoints
 export type CheckpointEntry = {
 	role: 'checkpoint';
@@ -67,6 +91,7 @@ export type ChatMessage =
 	| ToolMessage<ToolName>
 	| DecorativeCanceledTool
 	| CheckpointEntry
+	| CompactedSummaryEntry
 
 
 // one of the square items that indicates a selection in a chat bubble

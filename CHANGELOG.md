@@ -1,5 +1,35 @@
 # Changelog
 
+## Unreleased - Memory layers and structured context compaction
+
+New `common/memory/` (`IMemoryService`): persistent, inspectable, clearable project memory
+(keyed by workspace) and agent memory (keyed by agent id), plus a bounded compaction
+archive. New `remember` tool lets the Main Agent (or a running permanent agent) write a
+durable fact; memory is read back into every turn via two new instruction layers
+(`projectMemory`, `agentMemory` in `instructionsService.ts`), composed alongside
+`.vaderrules` and agent instructions - real end-to-end, not a tool with nothing reading its
+output back.
+
+New structured context compaction (`chatThreadService.ts`'s `_maybeCompactThread`, prompts in
+`prompts.ts`): checked every turn, triggers at 70% of the model's usable context window,
+replaces older messages (always keeping the most recent 6 in full) with one structured
+summary message (objective/constraints/decisions/architecture notes/files
+modified/important locations/unresolved problems/test results/next steps) instead of
+Void's original blind per-message character truncation - which is untouched and still runs
+as the final safety net, since compaction is a best-effort pass that can fail (provider
+error) without blocking the turn. The raw messages a compaction pass replaces are archived
+to `IMemoryService` (`scope: 'compactionArchive'`, capped at 20 per thread), never deleted
+outright. New `ChatMessage` role `compacted_summary` (purely additive - old persisted
+threads can't contain it, so no migration) rendered in both the chat UI and the LLM-facing
+message conversion.
+
+See `docs/integrations/memory-and-compaction.md` for what's real vs. still open (no Memory
+UI yet; compaction uses the Chat feature's model selection, not a dedicated cheaper
+category).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), and
+the full `npm run compile` gulp task (0 errors).
+
 ## Unreleased - Context Engine
 
 New `common/context/` + `browser/contextEngineService.ts`: a per-turn dynamic context

@@ -25,6 +25,7 @@ import { IDiscoveryMainService } from '../common/discovery/discoveryService.js'
 import { ICapabilityBusService } from '../common/capabilities/capabilityBusService.js'
 import { IBrowserToolMainService, BrowserSnapshot } from '../common/browser/browserToolService.js'
 import { VSBuffer } from '../../../../base/common/buffer.js'
+import { IMemoryService } from '../common/memory/memoryService.js'
 
 
 // tool use for AI
@@ -163,6 +164,7 @@ export class ToolsService implements IToolsService {
 		@IDiscoveryMainService private readonly discoveryService: IDiscoveryMainService,
 		@ICapabilityBusService private readonly capabilityBusService: ICapabilityBusService,
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
+		@IMemoryService private readonly memoryService: IMemoryService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -343,6 +345,17 @@ export class ToolsService implements IToolsService {
 				const task = validateStr('task', taskUnknown)
 				const agentName = validateOptionalStr('agent_name', agentNameUnknown)
 				return { task, agentName }
+			},
+
+			remember: (params: RawToolParamsObj) => {
+				const { content: contentUnknown, label: labelUnknown, scope: scopeUnknown, agent_name: agentNameUnknown } = params
+				const content = validateStr('content', contentUnknown)
+				const label = validateStr('label', labelUnknown)
+				const scopeStr = validateStr('scope', scopeUnknown)
+				if (scopeStr !== 'project' && scopeStr !== 'agent') throw new Error(`remember's "scope" must be "project" or "agent", got "${scopeStr}"`)
+				const agentName = validateOptionalStr('agent_name', agentNameUnknown)
+				if (scopeStr === 'agent' && !agentName) throw new Error(`remember requires "agent_name" when scope is "agent"`)
+				return { content, label, scope: scopeStr, agentName }
 			},
 
 			create_persistent_agent: (params: RawToolParamsObj) => {
@@ -629,6 +642,19 @@ export class ToolsService implements IToolsService {
 				return { result }
 			},
 
+			remember: async ({ content, label, scope, agentName }) => {
+				if (scope === 'agent') {
+					const agent = agentName ? this.agentsService.state.agents.find(a => a.name === agentName) : undefined
+					if (!agent) throw new Error(`remember: no agent named "${agentName}" exists. Use create_persistent_agent first, or use scope="project".`)
+					const record = this.memoryService.write({ scope: 'agent', scopeKey: agent.id, label, content, source: 'agent_written' })
+					return { result: { memoryId: record.id, scope: 'agent' } }
+				}
+				const workspaceRoot = workspaceContextService.getWorkspace().folders[0]?.uri.fsPath
+				if (!workspaceRoot) throw new Error(`remember: no workspace is open, so there's nowhere to attach project memory. Open a folder first.`)
+				const record = this.memoryService.write({ scope: 'project', scopeKey: workspaceRoot, label, content, source: 'agent_written' })
+				return { result: { memoryId: record.id, scope: 'project' } }
+			},
+
 			create_persistent_agent: async ({ name, description, instructions, allowedApprovalTypes, filesystemScopeGlobs }) => {
 				const agent = this.agentsService.createAgent({
 					name,
@@ -783,6 +809,9 @@ export class ToolsService implements IToolsService {
 			},
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
+			},
+			remember: (params, result) => {
+				return `Saved to ${result.scope} memory (id=${result.memoryId}). It will be included in future conversations${result.scope === 'agent' ? ` run as ${params.agentName}` : ' in this workspace'}.`;
 			},
 			create_persistent_agent: (params, result) => {
 				return `Created persistent agent "${params.name}" (id=${result.agentId}). It's now available in Vader's Agent settings and can be assigned to a chat thread.`;

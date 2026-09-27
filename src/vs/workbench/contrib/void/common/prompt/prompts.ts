@@ -415,6 +415,17 @@ export const builtinTools: {
 		}
 	},
 
+	remember: {
+		name: 'remember',
+		description: `Writes a fact/decision/preference to persistent memory so it's available in every future conversation, not just this one - use it for durable things worth not re-discovering (a project convention, a constraint the user stated, a subtlety about the codebase), not for anything already recoverable by reading the code, and not for anything task-specific that won't matter once this task is done.`,
+		params: {
+			content: { description: `The fact to remember, written so it makes sense read cold in an unrelated future conversation (no "as I just found" or "the file we're editing").` },
+			label: { description: `A short (few-word) label for this memory, shown in the Memory settings UI.` },
+			scope: { description: `Either "project" (visible in every future thread in this workspace) or "agent" (visible only to threads running as the named permanent agent - requires agent_name).` },
+			agent_name: { description: `Required when scope is "agent": the exact name of an existing permanent agent (see create_persistent_agent). Leave empty when scope is "project".` },
+		}
+	},
+
 	delegate_subagent_task: {
 		name: 'delegate_subagent_task',
 		description: `Delegates a self-contained task (research, a focused implementation, debugging, review) to a temporary subagent that runs in its own thread with its own context, then returns a structured summary - not its full conversation - to you. Use this to keep your own context focused when a subtask can be described independently (e.g. "find every place X is used and summarize the pattern", "implement function Y in file Z given this spec"). The subagent can edit files and run terminal commands on its own within this one task; it will stop and report back if it needs a genuinely sensitive action approved (e.g. touching credentials). Do not use this for trivial one-line changes you can just make yourself.`,
@@ -1162,3 +1173,38 @@ ${section4}
 
 ${log}`.trim()
 }
+
+
+// ======================================================== context compaction ========================================================================
+// Vader addition: structured context compaction - see chatThreadService.ts's
+// _maybeCompactThread and chatThreadServiceTypes.ts's CompactedSummaryEntry. Turns a run of
+// older messages into a structured summary instead of Void's original fallback (blind
+// per-message character truncation in convertToLLMMessageService.ts's prepareMessages,
+// which still exists as the final safety net for whatever compaction doesn't catch in time).
+
+export const CONTEXT_COMPACTION_TAGS = ['objective', 'constraints', 'decisions', 'architecture_notes', 'files_modified', 'important_locations', 'unresolved_problems', 'test_results', 'next_steps'] as const
+
+export const contextCompaction_systemMessage = `
+You are compacting an in-progress coding agent conversation that's approaching its context limit. You will be given the earlier portion of the conversation (not the whole thing - the most recent messages are kept in full and are not shown to you). Produce a structured summary that preserves everything a fresh continuation of this exact task would need, and nothing else.
+
+Respond with EXACTLY these tags, each on its own, every tag present even if empty (use "(none)"):
+<objective>What the user originally asked for, in their terms.</objective>
+<constraints>Any limits, preferences, or requirements the user stated.</constraints>
+<decisions>Technical/design decisions already made and why, so they aren't redone or reversed.</decisions>
+<architecture_notes>Relevant structure of the codebase discovered so far (files, modules, how pieces connect) - only what's actually relevant to this task.</architecture_notes>
+<files_modified>Newline-separated list of file paths already changed in this task.</files_modified>
+<important_locations>Newline-separated list of specific files/functions/lines worth remembering (not modified, but relevant).</important_locations>
+<unresolved_problems>Anything tried and failed, or discovered but not yet fixed.</unresolved_problems>
+<test_results>What's been verified to work or not work so far, and how (build/test/lint/manual).</test_results>
+<next_steps>What should happen next to continue this task.</next_steps>
+
+Be concrete and specific - file paths, function names, exact decisions - not vague summaries. Omit nothing that the next continuation would need to rediscover by re-reading files or re-running commands it already ran. Do not include anything outside these tags.`.trim()
+
+export const contextCompaction_userMessage = (conversationText: string) => `
+Here is the earlier portion of the conversation to compact:
+
+<conversation_to_compact>
+${conversationText}
+</conversation_to_compact>
+
+Produce the structured summary now, using every tag listed in your instructions.`
