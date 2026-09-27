@@ -10,17 +10,22 @@ Vader is Void (a deprecated, MIT/Apache-2.0-licensed fork of VS Code) with a new
 
 ## The agent loop, and where Vader hooks into it
 
-The single most important file to understand is `browser/chatThreadService.ts`. `_runChatAgent` is the tool-calling loop: send an LLM message, get back an optional tool call, run it via `_runToolCall`, repeat until the model stops asking for tools. This loop is unchanged in shape from Void; Vader adds two things to `_runToolCall`, in order, before any tool actually executes:
+The single most important file to understand is `browser/chatThreadService.ts`. `_runChatAgent` is the tool-calling loop: send an LLM message, get back zero or more tool calls, run each via `_runToolCall`, repeat until the model stops asking for tools. **This loop is Void's own, hardened and extended in place - not replaced with an external agent runtime.** `docs/integrations/agent-gateway.md` covers why a wholesale swap for Cline/Kilo Code/OpenHands/Zed's runtimes was evaluated and rejected as an architectural mismatch (extension-host-only, Python-first, and Rust/GPUI-only respectively - none is a clean transplant into a native VS Code-family workbench), and what was fixed instead: every native tool-calling provider path (OpenAI-compatible, Anthropic, Gemini) used to silently keep only the *first* tool call a model returned in one turn and drop the rest; all three now collect every tool call, and the loop executes each one serially (never concurrently - Void's diff/checkpoint engine assumes one edit lands before the next starts).
+
+Vader adds two things to `_runToolCall`, in order, before any tool actually executes (per call, when a turn has more than one):
 
 1. **Agent scope** (if the thread is running as a permanent agent - see below): checks the agent's `deniedToolNames`, `allowedApprovalTypes`, `mcpServerNames`, and `filesystemScopeGlobs`.
 2. **Policy Engine** (`common/policy/`): a hard, rule-based gate that runs unconditionally - independent of the model's behavior, the user's auto-approve settings, and the running agent's own restrictions.
 
-Either can produce a `deny` (the call never runs; a `rejected` tool message explains why) or an `ask` (forces the interactive approval flow even if the tool category is globally auto-approved). This is the mechanism the mission calls a "hard policy engine" - see `common/policy/policyService.ts` and `common/policy/builtInPolicyRules.ts` for the actual rules.
+Either can produce a `deny` (the call never runs; a `rejected` tool message explains why) or an `ask` (forces the interactive approval flow even if the tool category is globally auto-approved, and stops the rest of that turn's tool calls from running until it's resolved). This is the mechanism the mission calls a "hard policy engine" - see `common/policy/policyService.ts` and `common/policy/builtInPolicyRules.ts` for the actual rules.
+
+A thin **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gateway.md`) sits in front of this loop for callers that don't need its live-rendering coupling - today, that's `delegate_subagent_task`. The workbench's own chat UI still talks to `IChatThreadService` directly, since it's built around that service's live thread/stream state for rendering; the Gateway is real and used, but it doesn't yet cover everything.
 
 ## Subsystem map
 
 | Subsystem | Where | What it owns |
 |---|---|---|
+| Agent Gateway | `common/agentGateway/`, `browser/agentGatewayService.ts` | Stable seam in front of the agent loop, for callers that don't need live-render coupling (currently: subagent delegation) |
 | Policy Engine | `common/policy/` | Pre-execution allow/ask/deny rules, permission mode (safe/balanced/autonomous) |
 | Layered instructions | `common/instructions/` | Composes system invariants + policy summary + global settings + `.vaderrules` + agent instructions into the system prompt, in a fixed, inspectable order |
 | Permanent agents | `common/agents/` | Named, persistent agent definitions (instructions, model override, tool/MCP/filesystem restrictions); `create_persistent_agent` tool lets the main agent create one itself |
@@ -49,5 +54,7 @@ Real functional changes beyond the name (see `CHANGELOG.md` for the full list): 
 
 ## Known gaps (see the final report for the complete, current list)
 
-- Multi-tool-per-turn and multi-tab browser sessions are not supported (Void's provider layer and the browser tool are both single-item-at-a-time by design choice, not oversight - see the code comments at each).
-- The full Electron build/packaging pipeline could not be executed in the sandbox this was built in (outbound access to Electron's and Playwright's binary CDNs is policy-blocked there); see `docs/integrations/windows-build.md` for exactly what that means and what a normal dev machine needs to do instead.
+- The XML tool-calling fallback grammar (for models without native function-calling) is still single-tool-per-turn - only the three native provider paths were extended to multiple. Multi-tab browser sessions are also not supported (single-item-at-a-time by design choice for this version, not oversight - see the code comments at each).
+- A model turn with multiple tool calls, where one partway through needs interactive approval, does not resume the rest of that turn's calls after the user approves - the remaining calls in that specific batch are simply not attempted. This is a known, deliberate limitation of the current approve/resume mechanism, not a crash risk.
+- A full, unpackaged Electron launch of this codebase (Vader or an unmodified Void checkout alike) does not reach a fully interactive workbench in the Linux sandbox this was built in - see `docs/integrations/windows-build.md` for what was verified (via CDP screenshots and console capture, not just log reading) and what's still unresolved.
+- The Windows GitHub Actions build workflow (`.github/workflows/windows-build.yml`) has not been run - there's no Windows runner available here to test it against.

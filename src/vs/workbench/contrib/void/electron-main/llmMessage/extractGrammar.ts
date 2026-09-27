@@ -354,7 +354,12 @@ export const extractXMLToolsWrapper = (
 		// console.log('----- tools ----\n', JSON.stringify(firstToolCallRef.current, null, 2))
 		// console.log('----- toolCall ----\n', JSON.stringify(toolCall, null, 2))
 
-		onFinalMessage({ ...params, fullText, toolCall: toolCall })
+		// Vader: this XML fallback grammar (for models without native function-calling) only
+		// ever detects the first tool tag in a response - see foundOpenTag above, which locks
+		// onto the first match and never resets. Wrapping in a single-element array keeps it
+		// conforming to the now-plural OnFinalMessage contract without claiming multi-tool
+		// support this parser doesn't actually have.
+		onFinalMessage({ ...params, fullText, toolCalls: toolCall ? [toolCall] : undefined })
 	}
 	return { newOnText, newOnFinalMessage };
 }

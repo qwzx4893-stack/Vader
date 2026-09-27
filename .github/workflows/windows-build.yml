@@ -1,0 +1,113 @@
+name: Windows Build
+
+# Produces a real Vader Windows package, built natively on a Windows runner - this
+# project's own build tooling (build/lib/electron.ts) always fetches Electron for the
+# host's own platform, matching how this repo's other platform CI configs work
+# (build/azure-pipelines/{win32,linux,darwin}/), so a Windows build has to run on Windows;
+# it cannot be cross-compiled from Linux. See docs/integrations/windows-build.md.
+
+on:
+  workflow_dispatch:
+    inputs:
+      arch:
+        description: 'Target architecture'
+        required: true
+        default: 'x64'
+        type: choice
+        options: [x64, arm64]
+  push:
+    branches: [main]
+    paths:
+      - 'product.json'
+      - 'package.json'
+      - 'build/win32/**'
+      - 'build/gulpfile.vscode.win32.js'
+      - '.github/workflows/windows-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Windows (${{ github.event.inputs.arch || 'x64' }})
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      ARCH: ${{ github.event.inputs.arch || 'x64' }}
+      NPM_CONFIG_ARCH: ${{ github.event.inputs.arch || 'x64' }}
+      # No secrets are embedded here: this produces an unsigned build. A real release
+      # pipeline would add code-signing via a separate, secret-backed step - do not add
+      # signing credentials to this workflow file directly.
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Setup Python (for native module builds)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install extension dependencies
+        run: node build/npm/postinstall.js
+
+      - name: Build React chat/settings UI
+        run: npm run buildreact
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Fetch Electron
+        run: node build/lib/electron.js ${{ env.ARCH }}
+
+      - name: Package Windows application
+        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-min
+        shell: cmd
+
+      - name: Build Inno Setup updater icon
+        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-inno-updater
+        shell: cmd
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+        shell: cmd
+
+      - name: Build installer
+        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-user-setup
+        shell: cmd
+
+      - name: Locate build output
+        id: locate
+        shell: pwsh
+        run: |
+          $appDir = Get-ChildItem -Path ".." -Directory -Filter "VSCode-win32-*" | Select-Object -First 1
+          if ($appDir) {
+            echo "app_dir=$($appDir.FullName)" >> $env:GITHUB_OUTPUT
+          }
+          $setup = Get-ChildItem -Path ".build\win32-$env:ARCH" -Filter "*.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($setup) {
+            echo "setup_exe=$($setup.FullName)" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Upload unpacked application
+        if: steps.locate.outputs.app_dir != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: vader-win32-${{ env.ARCH }}-unpacked
+          path: ${{ steps.locate.outputs.app_dir }}
+          retention-days: 14
+
+      - name: Upload installer
+        if: steps.locate.outputs.setup_exe != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: vader-win32-${{ env.ARCH }}-setup
+          path: ${{ steps.locate.outputs.setup_exe }}
+          retention-days: 14

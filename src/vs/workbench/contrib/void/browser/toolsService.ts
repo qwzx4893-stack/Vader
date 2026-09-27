@@ -20,7 +20,7 @@ import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TI
 import { IVoidSettingsService } from '../common/voidSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { IAgentsService } from '../common/agents/agentsService.js'
-import { IChatThreadService } from './chatThreadService.js'
+import { IAgentGatewayService } from './agentGatewayService.js'
 import { IDiscoveryMainService } from '../common/discovery/discoveryService.js'
 import { ICapabilityBusService } from '../common/capabilities/capabilityBusService.js'
 import { IBrowserToolMainService, BrowserSnapshot } from '../common/browser/browserToolService.js'
@@ -619,9 +619,13 @@ export class ToolsService implements IToolsService {
 			},
 
 			delegate_subagent_task: async ({ task, agentName }) => {
-				const chatThreadService = instantiationService.invokeFunction(accessor => accessor.get(IChatThreadService))
+				// Goes through the Agent Gateway (not IChatThreadService directly) - see
+				// common/agentGateway/agentGatewayTypes.ts. This is the one call site today
+				// that would need to change, not the UI, if the underlying runtime is ever
+				// replaced.
+				const agentGatewayService = instantiationService.invokeFunction(accessor => accessor.get(IAgentGatewayService))
 				const agentId = agentName ? this.agentsService.state.agents.find(a => a.name === agentName)?.id : undefined
-				const result = await chatThreadService.runSubagentTask({ task, agentId })
+				const result = await agentGatewayService.runIsolatedTask({ task, agentId })
 				return { result }
 			},
 

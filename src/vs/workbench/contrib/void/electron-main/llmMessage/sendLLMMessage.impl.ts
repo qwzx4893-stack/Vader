@@ -329,9 +329,15 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
 
+	// Vader: accumulate EVERY tool call index the provider streams, not just index 0 - a
+	// model asking for N tools in one turn used to silently have N-1 of them dropped here.
+	// `toolName`/`toolId` (index 0's accumulator) are kept as their own variables just for
+	// the live-progress onText callback below (which only ever shows one in-progress call,
+	// and only needs the name/id, not the raw params) - the real per-index data used to
+	// build the final tool calls lives in toolCallsByIndex.
 	let toolName = ''
 	let toolId = ''
-	let toolParamsStr = ''
+	const toolCallsByIndex = new Map<number, { name: string, id: string, paramsStr: string }>()
 
 	openai.chat.completions
 		.create(options)
@@ -343,14 +349,19 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 				const newText = chunk.choices[0]?.delta?.content ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool call(s)
 				for (const tool of chunk.choices[0]?.delta?.tool_calls ?? []) {
-					const index = tool.index
-					if (index !== 0) continue
+					const index = tool.index ?? 0
+					const acc = toolCallsByIndex.get(index) ?? { name: '', id: '', paramsStr: '' }
+					acc.name += tool.function?.name ?? ''
+					acc.paramsStr += tool.function?.arguments ?? ''
+					acc.id += tool.id ?? ''
+					toolCallsByIndex.set(index, acc)
 
-					toolName += tool.function?.name ?? ''
-					toolParamsStr += tool.function?.arguments ?? '';
-					toolId += tool.id ?? ''
+					if (index === 0) {
+						toolName = acc.name
+						toolId = acc.id
+					}
 				}
 
 
@@ -371,13 +382,14 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 
 			}
 			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			if (!fullTextSoFar && !fullReasoningSoFar && toolCallsByIndex.size === 0) {
 				onError({ message: 'Vader: Response from model was empty.', fullError: null })
 			}
 			else {
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
+				const toolCalls = [...toolCallsByIndex.values()]
+					.map(({ name, id, paramsStr }) => rawToolCallObjOfParamsStr(name, paramsStr, id))
+					.filter((t): t is RawToolCallObj => t !== null)
+				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined });
 			}
 		})
 		// when error/fail - this catches errors of both .create() and .then(for await)
@@ -562,13 +574,12 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 	// on done - (or when error/fail) - this is called AFTER last streamEvent
 	stream.on('finalMessage', (response) => {
 		const anthropicReasoning = response.content.filter(c => c.type === 'thinking' || c.type === 'redacted_thinking')
+		// Vader: take every tool_use block Anthropic returns, not just the first - Anthropic
+		// natively supports multiple tool calls in one response when a model wants them.
 		const tools = response.content.filter(c => c.type === 'tool_use')
-		// console.log('TOOLS!!!!!!', JSON.stringify(tools, null, 2))
-		// console.log('TOOLS!!!!!!', JSON.stringify(response, null, 2))
-		const toolCall = tools[0] && rawToolCallObjOfAnthropicParams(tools[0])
-		const toolCallObj = toolCall ? { toolCall } : {}
+		const toolCalls = tools.map(rawToolCallObjOfAnthropicParams).filter((t): t is RawToolCallObj => t !== null)
 
-		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, ...toolCallObj })
+		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, toolCalls: toolCalls.length ? toolCalls : undefined })
 	})
 	// on error
 	stream.on('error', (error) => {
@@ -774,8 +785,9 @@ const sendGeminiChat = async ({
 	let fullTextSoFar = ''
 
 	let toolName = ''
-	let toolParamsStr = ''
 	let toolId = ''
+	// Vader: every functionCall the model returns, not just functionCalls[0]
+	let allFunctionCalls: { name?: string, args?: Record<string, unknown>, id?: string }[] = []
 
 
 	genAI.models.generateContentStream({
@@ -796,12 +808,12 @@ const sendGeminiChat = async ({
 				const newText = chunk.text ?? ''
 				fullTextSoFar += newText
 
-				// tool call
+				// tool call(s)
 				const functionCalls = chunk.functionCalls
 				if (functionCalls && functionCalls.length > 0) {
-					const functionCall = functionCalls[0] // Get the first function call
+					allFunctionCalls = functionCalls // Gemini sends each turn's function calls in full (not deltas), so just keep the latest
+					const functionCall = functionCalls[0] // first call only, for the live-progress display below
 					toolName = functionCall.name ?? ''
-					toolParamsStr = JSON.stringify(functionCall.args ?? {})
 					toolId = functionCall.id ?? ''
 				}
 
@@ -816,13 +828,13 @@ const sendGeminiChat = async ({
 			}
 
 			// on final
-			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
+			if (!fullTextSoFar && !fullReasoningSoFar && allFunctionCalls.length === 0) {
 				onError({ message: 'Vader: Response from model was empty.', fullError: null })
 			} else {
-				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
-				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
-				const toolCallObj = toolCall ? { toolCall } : {}
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, ...toolCallObj });
+				const toolCalls = allFunctionCalls
+					.map(fc => rawToolCallObjOfParamsStr(fc.name ?? '', JSON.stringify(fc.args ?? {}), fc.id || generateUuid()))
+					.filter((t): t is RawToolCallObj => t !== null)
+				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined });
 			}
 		})
 		.catch(error => {

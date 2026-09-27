@@ -91,8 +91,13 @@ export type RawToolCallObj = {
 
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })
 
-export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void
-export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
+export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: RawToolCallObj }) => void // toolCall here is the most-recent/in-progress call, for live "generating..." display only
+// Vader addition: toolCalls (plural) - native tool-calling providers can return more than one
+// tool call per turn; chatThreadService now executes each one (serially) instead of the
+// pre-Vader behavior of silently keeping only the first and dropping the rest. The XML
+// fallback grammar (extractGrammar.ts, used by models without native function-calling) still
+// only ever produces one, and wraps it in a single-element array.
+export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCalls?: RawToolCallObj[]; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
 export type OnError = (p: { message: string; fullError: Error | null }) => void
 export type OnAbort = () => void
 export type AbortRef = { current: (() => void) | null }

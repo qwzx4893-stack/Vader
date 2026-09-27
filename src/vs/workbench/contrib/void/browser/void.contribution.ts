@@ -101,3 +101,6 @@ import '../common/capabilities/capabilityBusService.js'
 
 // Vader agent platform: browser automation (Playwright-backed)
 import '../common/browser/browserToolService.js'
+
+// Vader agent platform: Agent Gateway seam (see ARCHITECTURE.md)
+import './agentGatewayService.js'
