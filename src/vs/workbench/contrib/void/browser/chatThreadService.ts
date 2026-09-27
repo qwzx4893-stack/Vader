@@ -19,7 +19,7 @@ import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj }
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
-import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
+import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolCallParams, ToolName, ToolResult } from '../common/toolsServiceTypes.js';
 import { IToolsService } from './toolsService.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
 import { ILanguageFeaturesService } from '../../../../editor/common/services/languageFeatures.js';
@@ -50,6 +50,25 @@ import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsServic
 // related to retrying when LLM message has error
 const CHAT_RETRIES = 3
 const RETRY_DELAY = 2500
+
+// Vader addition: tools blocked outright in 'gather' and 'plan' chat modes - hard
+// enforcement, not the prompt-only "you're in gather mode, please don't edit" Void shipped
+// with (the UI already claimed "Reads files, but can't edit" for Gather; nothing actually
+// enforced that before this - see docs/integrations/plan-mode.md's audit note). Every
+// built-in tool that can write a file, run a shell command, delegate to another agent (which
+// could itself edit files), write persistent memory, or touch a real webpage is listed
+// explicitly, rather than derived from the 'edits'/'terminal' approval buckets, since those
+// buckets exist for a different purpose (how visible/interruptive an approval prompt is) and
+// conflating the two would silently change behavior if a tool's approval bucket changes for
+// unrelated reasons. Any non-built-in (MCP) tool call is also blocked, since an MCP tool's
+// side effects can't be verified as read-only from here.
+const READONLY_MODE_BLOCKED_BUILTIN_TOOLS = new Set<BuiltinToolName>([
+	'edit_file', 'rewrite_file', 'create_file_or_folder', 'delete_file_or_folder',
+	'run_command', 'run_persistent_command', 'open_persistent_terminal', 'kill_persistent_terminal',
+	'delegate_subagent_task', 'delegate_parallel_tasks',
+	'browser_navigate', 'browser_click', 'browser_type',
+	'create_persistent_agent', 'remember',
+])
 
 
 const findStagingSelectionIndex = (currentSelections: StagingSelectionItem[] | undefined, newSelection: StagingSelectionItem): number | null => {
@@ -117,6 +136,19 @@ type WhenMounted = {
 
 
 
+// Vader addition: the structured Plan→Execute handoff object Plan Mode produces. Preserves
+// exactly the fields the mission's Plan Mode requirement names, each as its own field
+// (not pasted-together free text) so an "Approve & Execute" action can hand them to the
+// agent as structured context rather than the agent having to re-parse prose.
+export type PlanObject = {
+	objective: string;
+	phases: string[]; // ordered
+	filesOrSubsystems: string[];
+	constraints: string;
+	validationRequirements: string;
+	unresolvedAssumptions: string;
+}
+
 export type ThreadType = {
 	id: string; // store the id here too
 	createdAt: string; // ISO string
@@ -134,6 +166,13 @@ export type ThreadType = {
 	// Filtered out of the visible thread selector, but not deleted, so its history can
 	// still be inspected by threadId if something needs debugging.
 	isSubagentThread?: boolean;
+
+	// Vader addition: the latest structured plan Plan Mode produced for this thread, parsed
+	// from a <vader_plan> block in an assistant message - see _maybeCaptureThreadPlan and
+	// docs/integrations/plan-mode.md. null/undefined means no plan yet (or it was cleared
+	// after being approved into execution). Additive/optional, so old persisted threads -
+	// which can never have one - need no migration.
+	activePlan?: PlanObject | null;
 
 	// this doesn't need to go in a state object, but feels right
 	state: {
@@ -276,6 +315,11 @@ export interface IChatThreadService {
 	// completion (or until it stalls on a real approval requirement), and returns a
 	// structured summary rather than merging its full message history into the caller.
 	runSubagentTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult>;
+
+	// Vader addition: Plan Mode. See PlanObject and _maybeCaptureThreadPlan above - a plan
+	// is captured automatically from a <vader_plan> block in an assistant message; this only
+	// clears it (e.g. once "Approve & Execute" has handed it off).
+	clearThreadPlan(threadId: string): void;
 
 	// thread selector
 	deleteThread(threadId: string): void;
@@ -724,6 +768,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				}
 			}
 
+			// 1.45. Read-only chat mode enforcement (Gather/Plan): hard, unconditional -
+			// see READONLY_MODE_BLOCKED_BUILTIN_TOOLS above for why each tool is listed and
+			// docs/integrations/plan-mode.md for the audit finding this fixes.
+			const currentChatMode = this._settingsService.state.globalSettings.chatMode
+			if (currentChatMode === 'gather' || currentChatMode === 'plan') {
+				const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
+				if (blockedInReadonlyMode) {
+					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${currentChatMode === 'plan' ? 'Plan' : 'Gather'} mode is read-only - this tool could modify the project or run something with side effects. Switch to Agent mode to actually make this change.` })
+					return {}
+				}
+			}
+
 			// 1.5. Policy Engine: a hard, pre-execution gate that runs regardless of what the
 			// model was told, and regardless of the user's auto-approve settings. A 'deny'
 			// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
@@ -976,6 +1032,52 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setState({ allThreads: newThreads })
 	}
 
+	// Vader addition: Plan Mode's plan capture. Parses a <vader_plan> block (see
+	// contextCompaction-style tag extraction; prompts.ts's planMode_instructions for the
+	// exact tags asked for) out of an assistant message and stores it as the thread's
+	// activePlan - structured fields, not the raw prose, so "Approve & Execute" hands the
+	// agent something it doesn't have to re-derive by re-reading the whole plan message.
+	private _maybeCaptureThreadPlan(threadId: string, assistantText: string): void {
+		const blockMatch = assistantText.match(/<vader_plan>([\s\S]*?)<\/vader_plan>/i)
+		if (!blockMatch) return
+		const block = blockMatch[1]
+
+		const extract = (tag: string): string => {
+			const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'))
+			return m ? m[1].trim() : ''
+		}
+		const extractList = (tag: string): string[] => extract(tag)
+			.split('\n')
+			.map(line => line.replace(/^[-*\d.)\s]+/, '').trim())
+			.filter(Boolean)
+
+		const plan: PlanObject = {
+			objective: extract('objective'),
+			phases: extractList('phases'),
+			filesOrSubsystems: extractList('files_or_subsystems'),
+			constraints: extract('constraints'),
+			validationRequirements: extract('validation_requirements'),
+			unresolvedAssumptions: extract('unresolved_assumptions'),
+		}
+		// nothing meaningful parsed (e.g. the model echoed the tag names without content) -
+		// don't clobber a previously-captured real plan with an empty one
+		if (!plan.objective && plan.phases.length === 0) return
+
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, activePlan: plan } }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
+	}
+
+	clearThreadPlan(threadId: string): void {
+		const thread = this.state.allThreads[threadId]
+		if (!thread || !thread.activePlan) return
+		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, activePlan: null } }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
+	}
+
 	private async _runChatAgent({
 		threadId,
 		modelSelection,
@@ -1128,6 +1230,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const { toolCalls, info } = llmRes
 
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
+				this._maybeCaptureThreadPlan(threadId, info.fullText)
 
 				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
 

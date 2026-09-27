@@ -39,6 +39,7 @@ The **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gate
 | Model Router | `common/modelRouter/` | AUTO/MANUAL routing + machine-readable capability descriptors for subagent/research/browser/summarization/verification categories, on top of (not replacing) Void's per-feature Settings dropdowns; see `docs/integrations/model-router.md` |
 | Agent Orchestration | `common/orchestration/`, `browser/orchestrationService.ts` | Real bounded-concurrency parallel subagent tasks (`delegate_parallel_tasks`), with git-worktree isolation for code-modifying ones; see `docs/integrations/parallel-agents.md` |
 | Git worktree lifecycle | `common/worktree/`, `electron-main/gitWorktreeMainService.ts` | Create/execute/merge-or-conflict/cleanup for a single isolated worktree - used by Agent Orchestration |
+| Plan Mode | `browser/chatThreadService.ts` (`PlanObject`), `common/prompt/prompts.ts` | Hard-enforced read-only research mode producing a structured plan with an Approve & Execute handoff into Agent mode; see `docs/integrations/plan-mode.md` (also fixes Gather mode's previously-unenforced read-only claim) |
 | Checkpoints | `browser/editCodeService.ts`, `browser/chatThreadService.ts` (`CheckpointEntry`) | Inherited from Void, unmodified - per-file snapshot/restore tied to chat messages |
 | Verification | `browser/toolsService.ts` (`run_verification`) | Runs a project's own build/lint/test scripts and reports pass/fail |
 

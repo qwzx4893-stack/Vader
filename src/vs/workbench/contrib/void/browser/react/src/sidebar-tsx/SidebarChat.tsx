@@ -13,7 +13,7 @@ import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markd
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor } from '../util/inputs.js';
+import { BlockCode, TextAreaFns, VoidCustomDropdownBox, VoidInputBox2, VoidSlider, VoidSwitch, VoidDiffEditor, VoidButtonBgDarken } from '../util/inputs.js';
 import { ModelDropdown, } from '../void-settings-tsx/ModelDropdown.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VOID_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
@@ -250,12 +250,14 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 const nameOfChatMode = {
 	'normal': 'Chat',
 	'gather': 'Gather',
+	'plan': 'Plan',
 	'agent': 'Agent',
 }
 
 const detailOfChatMode = {
 	'normal': 'Normal chat',
 	'gather': 'Reads files, but can\'t edit',
+	'plan': 'Read-only research, ends in a structured plan you can approve into Agent mode',
 	'agent': 'Edits files and uses tools',
 }
 
@@ -266,7 +268,7 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
 
-	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'agent'], [])
+	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'plan', 'agent'], [])
 
 	const onChangeOption = useCallback((newVal: ChatMode) => {
 		voidSettingsService.setGlobalSetting('chatMode', newVal)
@@ -2895,6 +2897,7 @@ export const SidebarChat = () => {
 	const commandService = accessor.get('ICommandService')
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const agentGatewayService = accessor.get('IAgentGatewayService')
+	const voidSettingsService = accessor.get('IVoidSettingsService')
 
 	const settingsState = useSettingsState()
 	// ----- HIGHER STATE -----
@@ -2953,6 +2956,34 @@ export const SidebarChat = () => {
 		const threadId = currentThread.id
 		await agentGatewayService.cancelTask(threadId)
 	}
+
+	// Vader addition: Plan Mode's "Approve & Execute" handoff - see chatThreadService.ts's
+	// PlanObject/_maybeCaptureThreadPlan and docs/integrations/plan-mode.md.
+	const onApprovePlan = useCallback(async () => {
+		const plan = currentThread.activePlan
+		if (!plan) return
+		const planMessage = `Execute the plan below exactly as approved. If executing it reveals that one of its assumptions was wrong, say so and explain what you're doing differently before proceeding.
+
+Objective: ${plan.objective}
+
+Phases:
+${plan.phases.map((p, i) => `${i + 1}. ${p}`).join('\n')}
+
+Files/subsystems involved: ${plan.filesOrSubsystems.join(', ') || '(none listed)'}
+
+Constraints: ${plan.constraints || '(none stated)'}
+
+Validation requirements: ${plan.validationRequirements || '(none stated)'}
+
+Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAssumptions || '(none noted)'}`
+		voidSettingsService.setGlobalSetting('chatMode', 'agent')
+		chatThreadsService.clearThreadPlan(currentThread.id)
+		await agentGatewayService.startTask({ threadId: currentThread.id, userMessage: planMessage })
+	}, [currentThread, voidSettingsService, chatThreadsService, agentGatewayService])
+
+	const onDiscardPlan = useCallback(() => {
+		chatThreadsService.clearThreadPlan(currentThread.id)
+	}, [chatThreadsService, currentThread])
 
 	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VOID_CTRL_L_ACTION_ID)?.getLabel()
 
@@ -3059,6 +3090,18 @@ export const SidebarChat = () => {
 				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VOID_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
 			</div>
 		}
+
+		{/* Plan Mode: a captured plan waiting for approval - see PlanObject in chatThreadService.ts */}
+		{currentThread.activePlan && !isRunning ?
+			<div className='mx-2 my-1 px-3 py-2 rounded border border-void-border-1 bg-void-bg-2'>
+				<div className='font-medium text-sm mb-1'>Plan ready</div>
+				<div className='text-void-fg-3 text-xs mb-2'>{currentThread.activePlan.objective}</div>
+				<div className='flex gap-x-2'>
+					<VoidButtonBgDarken className='px-3 py-1 text-xs' onClick={onApprovePlan}>Approve &amp; Execute (switches to Agent mode)</VoidButtonBgDarken>
+					<VoidButtonBgDarken className='px-3 py-1 text-xs' onClick={onDiscardPlan}>Discard</VoidButtonBgDarken>
+				</div>
+			</div>
+			: null}
 	</ScrollToBottomContainer>
 
 

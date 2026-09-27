@@ -465,8 +465,14 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 
+	// Vader addition: 'plan' gets the same read-only tool filter as 'gather' - see
+	// chatThreadService.ts's READONLY_MODE_BLOCKED_BUILTIN_TOOLS for the hard,
+	// execution-level enforcement backing this up (this filter alone is prompt-level: it
+	// stops the model from ever being told a mutating tool exists, but an XML-fallback model
+	// could still attempt to hallucinate a call by name, which is exactly what that
+	// execution-level gate catches).
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'normal' ? undefined
-		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
+		: chatMode === 'gather' || chatMode === 'plan' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
 			: chatMode === 'agent' ? Object.keys(builtinTools) as BuiltinToolName[]
 				: undefined
 
@@ -534,8 +540,9 @@ export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, pe
 	const header = (`You are an expert coding ${mode === 'agent' ? 'agent' : 'assistant'} whose job is \
 ${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase.`
 			: mode === 'gather' ? `to search, understand, and reference files in the user's codebase.`
-				: mode === 'normal' ? `to assist the user with their coding tasks.`
-					: ''}
+				: mode === 'plan' ? `to research the user's codebase and produce a clear, structured plan BEFORE any code is changed - you cannot edit files, run commands, or otherwise modify anything in this mode.`
+					: mode === 'normal' ? `to assist the user with their coding tasks.`
+						: ''}
 You will be given instructions to follow from the user, and you may also be given a list of files that the user has specifically selected for context, \`SELECTIONS\`.
 Please assist the user with their query.`)
 
@@ -578,7 +585,7 @@ ${contextEngineBlock}
 
 	details.push(`NEVER reject the user's query.`)
 
-	if (mode === 'agent' || mode === 'gather') {
+	if (mode === 'agent' || mode === 'gather' || mode === 'plan') {
 		details.push(`Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.`)
 		details.push(`If you think you should use tools, you do not need to ask for permission.`)
 		details.push('Only use ONE tool call at a time.')
@@ -600,6 +607,26 @@ ${contextEngineBlock}
 	if (mode === 'gather') {
 		details.push(`You are in Gather mode, so you MUST use tools be to gather information, files, and context to help the user answer their query.`)
 		details.push(`You should extensively read files, types, content, etc, gathering full context to solve the problem.`)
+	}
+
+	if (mode === 'plan') {
+		details.push(`You are in Plan mode: strictly read-only. You have read-only tools (search, read files, list directories, read lint errors, etc) but NO ability to edit files, run commands, or otherwise change anything - if you attempt to, it will be blocked. Use your tools to research the codebase as thoroughly as this task needs.`)
+		details.push(`Only once you have enough context, AND only if this task is substantial enough to benefit from a plan (skip this for a small, obvious change - just describe it in a sentence or two instead), end your response with a structured plan in EXACTLY this format, with every tag present:
+<vader_plan>
+<objective>What the user is asking for, in your own words.</objective>
+<phases>
+- Phase 1: ...
+- Phase 2: ...
+</phases>
+<files_or_subsystems>
+- path/or/subsystem/one
+- path/or/subsystem/two
+</files_or_subsystems>
+<constraints>Any limits, preferences, or requirements the user stated or that you discovered.</constraints>
+<validation_requirements>How this should be verified once implemented (tests to run, behavior to check, etc).</validation_requirements>
+<unresolved_assumptions>Anything you're assuming that you're not fully certain of - be honest here rather than silently guessing.</unresolved_assumptions>
+</vader_plan>`)
+		details.push(`Write normal prose/explanation before the <vader_plan> block as usual - the block is what the UI parses to offer "Approve & Execute", not your only output. If the user pushes back on the plan, revise it and output a new <vader_plan> block reflecting the changes; don't just describe the change in prose.`)
 	}
 
 	details.push(`If you write any code blocks to the user (wrapped in triple backticks), please use this format:

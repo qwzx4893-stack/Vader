@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased - Plan Mode, and a real fix for Gather mode's read-only claim
+
+**Audit finding, fixed**: Void's "Gather" mode has always been described in its own UI as
+"Reads files, but can't edit" - that was never actually enforced in code, only implied by
+not telling the model a mutating tool exists (`availableTools()` in `prompts.ts`). The XML
+tool-calling fallback grammar (models without native function-calling) parses whatever tool
+tag text it finds, so a model that emitted an edit tag anyway in Gather mode would have had
+it executed. `chatThreadService.ts`'s `_runToolCall` now has a hard gate (numbered "1.45",
+same enforcement position as the Policy Engine and agent-scope checks) that rejects every
+mutating built-in tool and every MCP tool call outright in `gather` mode - independent of
+what the model was told or attempted.
+
+**New `plan` ChatMode**: gets the identical hard read-only enforcement, plus a prompt asking
+the model to end its response with a structured `<vader_plan>` block
+(objective/phases/files-or-subsystems/constraints/validation-requirements/unresolved-
+assumptions) once it has enough context - optional, skipped for small/obvious changes.
+`_maybeCaptureThreadPlan` parses this into a new `PlanObject` stored on `ThreadType.activePlan`
+(additive field, no migration needed). A new "Plan ready" banner in `SidebarChat.tsx` offers
+"Approve & Execute" (switches to `agent` mode and hands the agent every field of the
+structured plan, not re-parsed prose) and "Discard".
+
+See `docs/integrations/plan-mode.md` for the full audit note and current gaps (no dedicated
+plan-editing UI yet, no separate "revise" action distinct from just replying).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Parallel agents with real concurrency + git worktree isolation
 
 New `common/orchestration/` (`IAgentOrchestrationService`) and `common/worktree/` +

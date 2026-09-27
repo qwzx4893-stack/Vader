@@ -435,7 +435,11 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 
 
 
-export type ChatMode = 'agent' | 'gather' | 'normal'
+// Vader addition: 'plan' - like 'gather', hard-enforced read-only (see
+// chatThreadService.ts's _runToolCall PLAN_MODE_READONLY_TOOLS check), but additionally
+// asks the model to end with a structured plan block once it has enough context, which the
+// UI can capture and hand off to 'agent' mode - see docs/integrations/plan-mode.md.
+export type ChatMode = 'agent' | 'gather' | 'normal' | 'plan'
 
 
 export type GlobalSettings = {
