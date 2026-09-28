@@ -32,7 +32,7 @@ The **Agent Gateway** (`common/agentGateway/`, see `docs/integrations/agent-gate
 | Subagent delegation | `browser/chatThreadService.ts` (`runSubagentTask`) | Hidden threads for one-off delegated tasks; returns a structured summary, not the transcript |
 | External discovery | `common/discovery/` | Live search against the official MCP Registry and SkillNet; read-only, no auto-install |
 | Capability bus | `common/capabilities/` | Read-only inventory/resolver over native tools + MCP tools + agents, falling back to discovery only when nothing local matches |
-| Browser automation | `common/browser/`, `electron-main/browserToolMainService.ts` | Playwright-backed navigate/snapshot/click/type/screenshot/console |
+| Browser automation | `common/browser/`, `electron-main/browserToolMainService.ts` | Playwright-backed, multi-tab: navigate/reload/snapshot/click/type/screenshot/console/page-errors/network-log, page create/list/switch/close with stable page ids; see `docs/integrations/browser-backend.md` |
 | Context Engine | `common/context/`, `browser/contextEngineService.ts` | Per-turn dynamic context (symbol outlines, diagnostics, git diff/log) for mentioned/open files - relevance-ranked, token-budget-aware, incrementally cached; see `docs/integrations/context-engine.md` |
 | Memory | `common/memory/` | Persistent project/agent memory (`remember` tool) + the compaction archive; see `docs/integrations/memory-and-compaction.md` |
 | Context compaction | `browser/chatThreadService.ts` (`_maybeCompactThread`) | Structured summarization of older messages before the context window fills, with raw messages archived (not destroyed) to Memory |
@@ -64,7 +64,7 @@ Real functional changes beyond the name (see `CHANGELOG.md` for the full list): 
 
 ## Known gaps (see the final report for the complete, current list)
 
-- The XML tool-calling fallback grammar (for models without native function-calling) is still single-tool-per-turn - only the three native provider paths were extended to multiple. Multi-tab browser sessions are also not supported (single-item-at-a-time by design choice for this version, not oversight - see the code comments at each).
+- The XML tool-calling fallback grammar (for models without native function-calling) is still single-tool-per-turn - only the three native provider paths were extended to multiple, a deliberate scope boundary (see `docs/integrations/agent-gateway.md`), not an oversight.
 - A model turn with multiple tool calls, where one partway through needs interactive approval, does not resume the rest of that turn's calls after the user approves - the remaining calls in that specific batch are simply not attempted. This is a known, deliberate limitation of the current approve/resume mechanism, not a crash risk.
 - A full, unpackaged Electron launch of this codebase (Vader or an unmodified Void checkout alike) does not reach a fully interactive workbench in the Linux sandbox this was built in - see `docs/integrations/windows-build.md` for what was verified (via CDP screenshots and console capture, not just log reading) and what's still unresolved.
 - The Windows GitHub Actions build workflow (`.github/workflows/windows-build.yml`) has not been run - there's no Windows runner available here to test it against.

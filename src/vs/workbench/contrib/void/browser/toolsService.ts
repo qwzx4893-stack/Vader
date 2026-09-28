@@ -265,23 +265,58 @@ export class ToolsService implements IToolsService {
 				return {}
 			},
 
+			browser_new_page: () => ({}),
+			browser_list_pages: () => ({}),
+			browser_switch_page: (params: RawToolParamsObj) => {
+				const pageId = validateStr('page_id', params.page_id)
+				return { pageId }
+			},
+			browser_close_page: (params: RawToolParamsObj) => {
+				const pageId = validateStr('page_id', params.page_id)
+				return { pageId }
+			},
+
 			browser_navigate: (params: RawToolParamsObj) => {
 				const url = validateStr('url', params.url)
-				return { url }
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { url, pageId }
 			},
-			browser_snapshot: () => ({}),
+			browser_reload: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
+			browser_snapshot: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
 			browser_click: (params: RawToolParamsObj) => {
 				const ref = validateStr('ref', params.ref)
-				return { ref }
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { ref, pageId }
 			},
 			browser_type: (params: RawToolParamsObj) => {
 				const ref = validateStr('ref', params.ref)
 				const text = validateStr('text', params.text)
 				const submit = validateBoolean(params.submit, { default: false })
-				return { ref, text, submit }
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { ref, text, submit, pageId }
 			},
-			browser_screenshot: () => ({}),
-			browser_console_logs: () => ({}),
+			browser_screenshot: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
+			browser_console_logs: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
+			browser_page_errors: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
+			browser_network_log: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				return { pageId }
+			},
 
 			// ---
 
@@ -512,24 +547,45 @@ export class ToolsService implements IToolsService {
 				return { result: { results } }
 			},
 
-			browser_navigate: async ({ url }) => {
-				const result = await this.browserToolService.navigate(url)
+			browser_new_page: async () => {
+				const result = await this.browserToolService.newPage()
 				return { result }
 			},
-			browser_snapshot: async () => {
-				const result = await this.browserToolService.snapshot()
+			browser_list_pages: async () => {
+				const pages = await this.browserToolService.listPages()
+				return { result: { pages } }
+			},
+			browser_switch_page: async ({ pageId }) => {
+				const result = await this.browserToolService.switchToPage(pageId)
 				return { result }
 			},
-			browser_click: async ({ ref }) => {
-				const result = await this.browserToolService.click(ref)
+			browser_close_page: async ({ pageId }) => {
+				await this.browserToolService.closePage(pageId)
+				return { result: {} }
+			},
+
+			browser_navigate: async ({ url, pageId }) => {
+				const result = await this.browserToolService.navigate(url, pageId ?? undefined)
 				return { result }
 			},
-			browser_type: async ({ ref, text, submit }) => {
-				const result = await this.browserToolService.type(ref, text, submit)
+			browser_reload: async ({ pageId }) => {
+				const result = await this.browserToolService.reload(pageId ?? undefined)
 				return { result }
 			},
-			browser_screenshot: async () => {
-				const base64Png = await this.browserToolService.screenshot()
+			browser_snapshot: async ({ pageId }) => {
+				const result = await this.browserToolService.snapshot(pageId ?? undefined)
+				return { result }
+			},
+			browser_click: async ({ ref, pageId }) => {
+				const result = await this.browserToolService.click(ref, pageId ?? undefined)
+				return { result }
+			},
+			browser_type: async ({ ref, text, submit, pageId }) => {
+				const result = await this.browserToolService.type(ref, text, submit, pageId ?? undefined)
+				return { result }
+			},
+			browser_screenshot: async ({ pageId }) => {
+				const base64Png = await this.browserToolService.screenshot(pageId ?? undefined)
 				const root = workspaceContextService.getWorkspace().folders[0]?.uri
 				if (!root) throw new Error(`Cannot save a screenshot: no workspace folder is open.`)
 				const filePath = URI.joinPath(root, '.vader', 'screenshots', `screenshot-${Date.now()}.png`)
@@ -539,9 +595,17 @@ export class ToolsService implements IToolsService {
 				await fileService.writeFile(filePath, VSBuffer.wrap(bytes))
 				return { result: { filePath: filePath.fsPath } }
 			},
-			browser_console_logs: async () => {
-				const logs = await this.browserToolService.consoleLogs()
+			browser_console_logs: async ({ pageId }) => {
+				const logs = await this.browserToolService.consoleLogs(pageId ?? undefined)
 				return { result: { logs } }
+			},
+			browser_page_errors: async ({ pageId }) => {
+				const errors = await this.browserToolService.pageErrors(pageId ?? undefined)
+				return { result: { errors } }
+			},
+			browser_network_log: async ({ pageId }) => {
+				const entries = await this.browserToolService.networkLog(pageId ?? undefined)
+				return { result: { entries } }
 			},
 			search_mcp_registry: async ({ query }) => {
 				const results = await this.discoveryService.searchMcpRegistry(query)
@@ -736,7 +800,7 @@ export class ToolsService implements IToolsService {
 		}
 
 		const stringifyBrowserSnapshot = (snapshot: BrowserSnapshot) => {
-			return `${snapshot.title}\n${snapshot.url}\n\n${snapshot.snapshotText}`
+			return `[page ${snapshot.pageId}] ${snapshot.title}\n${snapshot.url}\n\n${snapshot.snapshotText}`
 		}
 
 		// given to the LLM after the call for successful tool calls
@@ -771,7 +835,15 @@ export class ToolsService implements IToolsService {
 					stringifyLintErrors(result.lintErrors)
 					: 'No lint errors found.'
 			},
+			browser_new_page: (params, result) => `New page opened.\n\n${stringifyBrowserSnapshot(result)}`,
+			browser_list_pages: (params, result) => result.pages.length
+				? result.pages.map(p => `[page ${p.pageId}]${p.isActive ? ' (active)' : ''}${p.isClosed ? ' (closed)' : ''} ${p.title} - ${p.url}`).join('\n')
+				: '(no pages open)',
+			browser_switch_page: (params, result) => `Switched to page.\n\n${stringifyBrowserSnapshot(result)}`,
+			browser_close_page: () => `Page closed.`,
+
 			browser_navigate: (params, result) => stringifyBrowserSnapshot(result),
+			browser_reload: (params, result) => stringifyBrowserSnapshot(result),
 			browser_snapshot: (params, result) => stringifyBrowserSnapshot(result),
 			browser_click: (params, result) => stringifyBrowserSnapshot(result),
 			browser_type: (params, result) => stringifyBrowserSnapshot(result),
@@ -779,6 +851,12 @@ export class ToolsService implements IToolsService {
 			browser_console_logs: (params, result) => result.logs.length
 				? result.logs.map(l => `[${l.type}] ${l.text}`).join('\n')
 				: '(no console output)',
+			browser_page_errors: (params, result) => result.errors.length
+				? result.errors.map(e => e.message).join('\n')
+				: '(no page errors)',
+			browser_network_log: (params, result) => result.entries.length
+				? result.entries.map(e => `${e.method} ${e.url} -> ${e.status ?? 'FAILED'}${e.failureText ? ` (${e.failureText})` : ''}`).join('\n')
+				: '(no failed requests or error responses logged)',
 			find_capability: (params, result) => {
 				if (result.results.length === 0) return `Nothing found for "${params.query}" - not in your tools/MCP servers/agents, and no MCP Registry or SkillNet match either.`
 				return result.results.map(r => `[${r.source}${r.trust === 'untrusted' ? ', untrusted/not installed' : ''}] ${r.name}: ${r.description}`).join('\n')

@@ -283,39 +283,86 @@ export const builtinTools: {
 		params: { repository_url: { description: 'The GitHub repository URL from a search result.' } }
 	},
 
+	// Vader addition: multi-tab browser automation. Every action below takes an optional
+	// page_id; omit it to act on the currently active page (one is auto-created on first
+	// use, same as before multi-tab support existed) - only reach for page_id/the
+	// page-management tools when you actually need more than one page open at once (e.g.
+	// comparing two pages, or keeping a reference page open while navigating another).
+	browser_new_page: {
+		name: 'browser_new_page',
+		description: `Opens a new, blank browser tab and makes it the active page. Returns its page_id (use this to target it explicitly later) and a snapshot. Only needed when you want more than one page open at once - a single browser_navigate call already opens a page automatically if none exists.`,
+		params: {}
+	},
+	browser_list_pages: {
+		name: 'browser_list_pages',
+		description: `Lists every currently open browser page/tab with its page_id, title, URL, and whether it's the active one.`,
+		params: {}
+	},
+	browser_switch_page: {
+		name: 'browser_switch_page',
+		description: `Makes the given page the active one (the one subsequent calls act on when you omit page_id) and returns a fresh snapshot of it.`,
+		params: { page_id: { description: 'A page_id from browser_new_page or browser_list_pages.' } }
+	},
+	browser_close_page: {
+		name: 'browser_close_page',
+		description: `Closes the given page/tab. If it was the active page, another open page (if any) becomes active.`,
+		params: { page_id: { description: 'A page_id from browser_new_page or browser_list_pages.' } }
+	},
 	browser_navigate: {
 		name: 'browser_navigate',
-		description: `Opens a URL in Vader's automated browser (a real, headless Chromium) and returns a snapshot of the page. Use this to test a local dev server, check how a page actually renders/behaves, or read a live web page. Reuses the same browser tab across calls in this thread.`,
-		params: { url: { description: 'The URL to open, e.g. http://localhost:3000.' } }
+		description: `Opens a URL in Vader's automated browser (a real, headless Chromium) and returns a snapshot of the page. Use this to test a local dev server, check how a page actually renders/behaves, or read a live web page.`,
+		params: {
+			url: { description: 'The URL to open, e.g. http://localhost:3000.' },
+			page_id: { description: 'Optional. Which page to navigate; omit to use the active page (auto-created if none exists).' },
+		}
+	},
+	browser_reload: {
+		name: 'browser_reload',
+		description: `Reloads the given page (or the active one) - use this after making a code change you want to see reflected, instead of navigating to the same URL again.`,
+		params: { page_id: { description: 'Optional. Which page to reload; omit to use the active page.' } }
 	},
 	browser_snapshot: {
 		name: 'browser_snapshot',
-		description: `Returns the current page's title, URL, and an accessibility-tree snapshot where each interactive element is tagged [ref=eN]. Use that ref string for browser_click/browser_type.`,
-		params: {}
+		description: `Returns a page's title, URL, and an accessibility-tree snapshot where each interactive element is tagged [ref=eN]. Use that ref string for browser_click/browser_type. Refs are only valid until the next navigation/reload of that page - if a click/type call tells you a ref is stale, call this again first.`,
+		params: { page_id: { description: 'Optional. Which page to snapshot; omit to use the active page.' } }
 	},
 	browser_click: {
 		name: 'browser_click',
-		description: `Clicks the element with the given ref (e.g. "e3") from the most recent snapshot's [ref=...] tags, and returns a fresh snapshot.`,
-		params: { ref: { description: 'The element\'s ref string (e.g. "e3") from the last snapshot\'s [ref=...] tags.' } }
+		description: `Clicks the element with the given ref (e.g. "e3") from that page's most recent snapshot, and returns a fresh snapshot.`,
+		params: {
+			ref: { description: 'The element\'s ref string (e.g. "e3") from the last snapshot\'s [ref=...] tags.' },
+			page_id: { description: 'Optional. Which page; omit to use the active page.' },
+		}
 	},
 	browser_type: {
 		name: 'browser_type',
-		description: `Types text into the input/textbox with the given ref from the most recent snapshot, replacing its current value, and returns a fresh snapshot.`,
+		description: `Types text into the input/textbox with the given ref from that page's most recent snapshot, replacing its current value, and returns a fresh snapshot.`,
 		params: {
 			ref: { description: 'The input element\'s ref string (e.g. "e4") from the last snapshot\'s [ref=...] tags.' },
 			text: { description: 'The text to type.' },
 			submit: { description: 'Optional. If true, presses Enter after typing. Default false.' },
+			page_id: { description: 'Optional. Which page; omit to use the active page.' },
 		}
 	},
 	browser_screenshot: {
 		name: 'browser_screenshot',
-		description: `Takes a PNG screenshot of the current page for visual inspection/debugging.`,
-		params: {}
+		description: `Takes a PNG screenshot of a page for visual inspection/debugging.`,
+		params: { page_id: { description: 'Optional. Which page; omit to use the active page.' } }
 	},
 	browser_console_logs: {
 		name: 'browser_console_logs',
-		description: `Returns recent browser console messages (log/warn/error) from the current page - useful for catching frontend errors a visual check would miss.`,
-		params: {}
+		description: `Returns recent browser console messages (log/warn/error) from a page - useful for catching frontend errors a visual check would miss.`,
+		params: { page_id: { description: 'Optional. Which page; omit to use the active page.' } }
+	},
+	browser_page_errors: {
+		name: 'browser_page_errors',
+		description: `Returns uncaught JS exceptions thrown by a page itself (distinct from console.error messages) - the clearest signal something actually broke, not just logged a warning.`,
+		params: { page_id: { description: 'Optional. Which page; omit to use the active page.' } }
+	},
+	browser_network_log: {
+		name: 'browser_network_log',
+		description: `Returns a page's failed requests and error (4xx/5xx) responses - not a full network log, just what's actually relevant for debugging why something didn't work.`,
+		params: { page_id: { description: 'Optional. Which page; omit to use the active page.' } }
 	},
 
 	run_verification: {

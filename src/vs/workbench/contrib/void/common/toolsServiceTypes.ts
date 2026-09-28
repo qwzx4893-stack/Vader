@@ -46,7 +46,11 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// once (see common/orchestration/) - worktree-isolated tasks can commit real changes.
 	'delegate_parallel_tasks': 'edits',
 	'run_verification': 'terminal',
+	'browser_new_page': 'terminal',
+	'browser_switch_page': 'terminal',
+	'browser_close_page': 'terminal',
 	'browser_navigate': 'terminal',
+	'browser_reload': 'terminal',
 	'browser_click': 'terminal',
 	'browser_type': 'terminal',
 }
@@ -83,16 +87,26 @@ export type BuiltinToolCallParams = {
 	// it does under the hood.
 	'run_verification': {},
 	'find_capability': { query: string },
-	// Vader addition: browser automation. Snapshot/screenshot/console are read-only;
-	// navigate/click/type can cause real page side effects (submitting a form, following a
-	// link) and go through the 'terminal' approval bucket, the same tier as running a shell
-	// command against the outside world.
-	'browser_navigate': { url: string },
-	'browser_snapshot': {},
-	'browser_click': { ref: string },
-	'browser_type': { ref: string, text: string, submit: boolean },
-	'browser_screenshot': {},
-	'browser_console_logs': {},
+	// Vader addition: browser automation, multi-tab. Snapshot/screenshot/console/page-errors/
+	// network-log/list-pages are read-only; navigate/click/type/new-page/switch/close can
+	// cause real page side effects (submitting a form, following a link) or manage real OS
+	// resources (a browser tab) and go through the 'terminal' approval bucket, the same tier
+	// as running a shell command against the outside world. Every action takes an optional
+	// page_id (targets the active page, auto-created if none exists, when omitted) - see
+	// docs/integrations/browser-backend.md.
+	'browser_new_page': {},
+	'browser_list_pages': {},
+	'browser_switch_page': { pageId: string },
+	'browser_close_page': { pageId: string },
+	'browser_navigate': { url: string, pageId: string | null },
+	'browser_reload': { pageId: string | null },
+	'browser_snapshot': { pageId: string | null },
+	'browser_click': { ref: string, pageId: string | null },
+	'browser_type': { ref: string, text: string, submit: boolean, pageId: string | null },
+	'browser_screenshot': { pageId: string | null },
+	'browser_console_logs': { pageId: string | null },
+	'browser_page_errors': { pageId: string | null },
+	'browser_network_log': { pageId: string | null },
 	// ---
 	'rewrite_file': { uri: URI, newContent: string },
 	'edit_file': { uri: URI, searchReplaceBlocks: string },
@@ -134,12 +148,19 @@ export type BuiltinToolResultType = {
 	'fetch_skill_instructions': { content: string | null },
 	'run_verification': { checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean },
 	'find_capability': { results: import('./capabilities/capabilityBusTypes.js').CapabilityDescriptor[] },
+	'browser_new_page': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_list_pages': { pages: import('./browser/browserToolServiceTypes.js').PageSummary[] },
+	'browser_switch_page': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_close_page': {},
 	'browser_navigate': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
+	'browser_reload': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_snapshot': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_click': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_type': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_screenshot': { filePath: string },
 	'browser_console_logs': { logs: import('./browser/browserToolServiceTypes.js').ConsoleLogEntry[] },
+	'browser_page_errors': { errors: import('./browser/browserToolServiceTypes.js').PageErrorEntry[] },
+	'browser_network_log': { entries: import('./browser/browserToolServiceTypes.js').NetworkEntry[] },
 	// ---
 	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
 	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,

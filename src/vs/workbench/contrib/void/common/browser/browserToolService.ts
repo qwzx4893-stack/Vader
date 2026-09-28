@@ -19,13 +19,21 @@ class BrowserToolService implements IBrowserToolMainService {
 		this._mainService = ProxyChannel.toService<IBrowserToolMainService>(mainProcessService.getChannel('void-channel-browser'));
 	}
 
-	navigate: IBrowserToolMainService['navigate'] = (url) => this._mainService.navigate(url);
-	snapshot: IBrowserToolMainService['snapshot'] = () => this._mainService.snapshot();
-	click: IBrowserToolMainService['click'] = (ref) => this._mainService.click(ref);
-	type: IBrowserToolMainService['type'] = (ref, text, submit) => this._mainService.type(ref, text, submit);
-	screenshot: IBrowserToolMainService['screenshot'] = () => this._mainService.screenshot();
-	consoleLogs: IBrowserToolMainService['consoleLogs'] = () => this._mainService.consoleLogs();
-	close: IBrowserToolMainService['close'] = () => this._mainService.close();
+	newPage: IBrowserToolMainService['newPage'] = () => this._mainService.newPage();
+	listPages: IBrowserToolMainService['listPages'] = () => this._mainService.listPages();
+	switchToPage: IBrowserToolMainService['switchToPage'] = (pageId) => this._mainService.switchToPage(pageId);
+	closePage: IBrowserToolMainService['closePage'] = (pageId) => this._mainService.closePage(pageId);
+
+	navigate: IBrowserToolMainService['navigate'] = (url, pageId) => this._mainService.navigate(url, pageId);
+	reload: IBrowserToolMainService['reload'] = (pageId) => this._mainService.reload(pageId);
+	snapshot: IBrowserToolMainService['snapshot'] = (pageId) => this._mainService.snapshot(pageId);
+	click: IBrowserToolMainService['click'] = (ref, pageId) => this._mainService.click(ref, pageId);
+	type: IBrowserToolMainService['type'] = (ref, text, submit, pageId) => this._mainService.type(ref, text, submit, pageId);
+	screenshot: IBrowserToolMainService['screenshot'] = (pageId) => this._mainService.screenshot(pageId);
+	consoleLogs: IBrowserToolMainService['consoleLogs'] = (pageId) => this._mainService.consoleLogs(pageId);
+	pageErrors: IBrowserToolMainService['pageErrors'] = (pageId) => this._mainService.pageErrors(pageId);
+	networkLog: IBrowserToolMainService['networkLog'] = (pageId) => this._mainService.networkLog(pageId);
+	closeAll: IBrowserToolMainService['closeAll'] = () => this._mainService.closeAll();
 }
 
 registerSingleton(IBrowserToolMainService, BrowserToolService, InstantiationType.Delayed);

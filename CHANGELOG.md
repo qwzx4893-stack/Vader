@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased - Multi-tab browser automation
+
+Removed the single-page limitation: `IBrowserToolMainService` now manages any number of
+pages, each with a stable `pageId` (a uuid, not an index - stable across other pages
+opening/closing). New page-lifecycle tools `browser_new_page`/`browser_list_pages`/
+`browser_switch_page`/`browser_close_page`; every existing browser tool
+(`navigate`/`reload`(new)/`snapshot`/`click`/`type`/`screenshot`/`console_logs`) takes an
+optional `page_id`, defaulting to the active page (auto-created if none exists) so existing
+single-page usage keeps working unchanged. New `browser_page_errors` (uncaught JS
+exceptions, distinct from console.error) and `browser_network_log` (failed requests + 4xx/5xx
+responses only - "relevant" network activity, not a full HAR dump).
+
+Session handling: a closed/crashed page gets a clear, specific error instead of a raw
+Playwright exception on next use, and stops being "active" automatically; the whole browser
+process disconnecting marks every page closed at once; a stale `aria-ref` (from before a
+navigation/reload invalidated it) is caught and rewritten into an actionable "call
+browser_snapshot again" message instead of a generic locator-timeout stack trace.
+
+See `docs/integrations/browser-backend.md` for the full interface, the
+"software-engineering loop" workflow these tools are meant to compose into, and how to
+replace the backend.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Skill lifecycle, External Agent Adapter, MCP/Policy Engine fix
 
 **Skills** (`common/skills/`, new `ISkillService`): full install/cache/pin/enable/disable/
