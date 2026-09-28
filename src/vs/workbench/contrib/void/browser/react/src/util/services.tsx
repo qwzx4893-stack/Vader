@@ -59,6 +59,8 @@ import { IPolicyService, PolicyServiceState } from '../../../../common/policy/po
 import { IAgentGatewayService } from '../../../agentGatewayService.js'
 import { IModelRouterService, ModelRouterState } from '../../../../common/modelRouter/modelRouterService.js'
 import { ISkillService, SkillRecord } from '../../../../common/skills/skillService.js'
+import { IMemoryService, MemoryRecord } from '../../../../common/memory/memoryService.js'
+import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestrationService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -100,6 +102,12 @@ const modelRouterStateListeners: Set<(s: ModelRouterState) => void> = new Set()
 let skillsState: SkillRecord[]
 const skillsStateListeners: Set<(s: SkillRecord[]) => void> = new Set()
 
+let memoryState: { project: MemoryRecord[]; agent: MemoryRecord[] }
+const memoryStateListeners: Set<(s: { project: MemoryRecord[]; agent: MemoryRecord[] }) => void> = new Set()
+
+let orchestrationRunsState: ParallelRunState[]
+const orchestrationRunsStateListeners: Set<(s: ParallelRunState[]) => void> = new Set()
+
 
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
@@ -122,9 +130,11 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		policyService: accessor.get(IPolicyService),
 		modelRouterService: accessor.get(IModelRouterService),
 		skillService: accessor.get(ISkillService),
+		memoryService: accessor.get(IMemoryService),
+		orchestrationService: accessor.get(IAgentOrchestrationService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService } = stateServices
 
 
 
@@ -229,6 +239,23 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	const _readMemoryState = () => ({ project: memoryService.list('project'), agent: memoryService.list('agent') })
+	memoryState = _readMemoryState()
+	disposables.push(
+		memoryService.onDidChangeMemory(() => {
+			memoryState = _readMemoryState()
+			memoryStateListeners.forEach(l => l(memoryState))
+		})
+	)
+
+	orchestrationRunsState = orchestrationService.runs
+	disposables.push(
+		orchestrationService.onDidChangeOrchestration(() => {
+			orchestrationRunsState = orchestrationService.runs.slice()
+			orchestrationRunsStateListeners.forEach(l => l(orchestrationRunsState))
+		})
+	)
+
 
 	return disposables
 }
@@ -288,6 +315,8 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IAgentGatewayService: accessor.get(IAgentGatewayService),
 		IModelRouterService: accessor.get(IModelRouterService),
 		ISkillService: accessor.get(ISkillService),
+		IMemoryService: accessor.get(IMemoryService),
+		IAgentOrchestrationService: accessor.get(IAgentOrchestrationService),
 
 	} as const
 	return reactAccessor
@@ -510,6 +539,32 @@ export const useSkillsState = () => {
 		const listener = (newState: SkillRecord[]) => { ss(newState) }
 		skillsStateListeners.add(listener);
 		return () => { skillsStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useMemoryState = () => {
+	const accessor = useAccessor()
+	const memoryService = accessor.get('IMemoryService')
+	const [s, ss] = useState(() => ({ project: memoryService.list('project'), agent: memoryService.list('agent') }))
+	useEffect(() => {
+		const listener = (newState: { project: MemoryRecord[]; agent: MemoryRecord[] }) => { ss(newState) }
+		memoryStateListeners.add(listener);
+		return () => { memoryStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useOrchestrationRunsState = () => {
+	const accessor = useAccessor()
+	const orchestrationService = accessor.get('IAgentOrchestrationService')
+	const [s, ss] = useState(orchestrationService.runs)
+	useEffect(() => {
+		const listener = (newState: ParallelRunState[]) => { ss(newState) }
+		orchestrationRunsStateListeners.add(listener);
+		return () => { orchestrationRunsStateListeners.delete(listener) };
 	}, []);
 	return s
 }

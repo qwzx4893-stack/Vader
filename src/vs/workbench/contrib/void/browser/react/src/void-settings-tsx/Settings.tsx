@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState } from '../util/services.js'
+import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -925,9 +925,9 @@ const ROUTER_CATEGORIES: { category: RouterCategory, label: string, desc: string
 	{ category: 'verification', label: 'Verification', desc: 'The independent verification pass.' },
 ]
 
-// Vader addition: AUTO/MANUAL Model Router. See common/modelRouter/. This is a first,
-// functional pass - a full per-category model picker (not just visibility into what AUTO
-// would pick) is Agent Manager UI work, tracked separately.
+const DEFAULT_ROUTER_OPTION = '(default: Chat model)'
+
+// Vader addition: AUTO/MANUAL Model Router. See common/modelRouter/.
 export const ModelRouterSection = () => {
 	const accessor = useAccessor()
 	const modelRouterService = accessor.get('IModelRouterService')
@@ -958,19 +958,34 @@ export const ModelRouterSection = () => {
 		</div>
 
 		<div className='my-4'>
-			<div className='text-void-fg-3 text-sm mb-2'>Resolved model per category</div>
+			<div className='text-void-fg-3 text-sm mb-2'>Per-category model{routerState.mode === 'manual' ? '' : ' (Manual mode only - Auto mode picks automatically, ignoring these)'}</div>
 			{configuredModels.length === 0 ? <div className='text-void-fg-3 text-xs italic'>No models configured yet - add a provider above first.</div> : null}
 			<div className='flex flex-col gap-y-1'>
 				{ROUTER_CATEGORIES.map(({ category, label, desc }) => {
 					const resolved = modelRouterService.resolveModel(category)
-					return <div key={category} className='flex items-center justify-between text-xs border-b border-void-border-3 py-1'>
+					const override = modelRouterService.getCategoryOverride(category)
+					const overrideKey = override ? `${override.providerName}/${override.modelName}` : DEFAULT_ROUTER_OPTION
+					const options = [DEFAULT_ROUTER_OPTION, ...configuredModels.map(d => `${d.providerName}/${d.modelName}`)]
+					return <div key={category} className='flex items-center justify-between text-xs border-b border-void-border-3 py-1 gap-x-2'>
 						<div>
 							<div className='font-medium'>{label}</div>
 							<div className='text-void-fg-3'>{desc}</div>
+							<div className='text-void-fg-3'>Currently resolves to: {resolved ? `${resolved.providerName}/${resolved.modelName}` : '(none configured)'}</div>
 						</div>
-						<div className='text-void-fg-3 text-right whitespace-nowrap ml-2'>
-							{resolved ? `${resolved.providerName} / ${resolved.modelName}` : '(none configured)'}
-						</div>
+						<VoidCustomDropdownBox
+							className='text-xs bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1 shrink-0'
+							options={options}
+							selectedOption={overrideKey}
+							onChangeOption={(val) => {
+								if (val === DEFAULT_ROUTER_OPTION) { modelRouterService.setCategoryOverride(category, null); return }
+								const [providerName, modelName] = val.split('/')
+								modelRouterService.setCategoryOverride(category, { providerName: providerName as ProviderName, modelName })
+							}}
+							getOptionDisplayName={k => k}
+							getOptionDropdownName={k => k}
+							getOptionDropdownDetail={() => ''}
+							getOptionsEqual={(a, b) => a === b}
+						/>
 					</div>
 				})}
 			</div>
@@ -1025,6 +1040,103 @@ export const SkillsSection = () => {
 							{skill.pinned ? 'Unpin' : 'Pin'}
 						</VoidButtonBgDarken>
 						<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.remove(skill.id)}>Remove</VoidButtonBgDarken>
+					</div>
+				</div>
+			))}
+		</div>
+	</div>
+}
+
+
+// Vader addition: Memory UI - see common/memory/. Never exposes hidden model
+// reasoning/chain-of-thought, only the stored facts/labels a `remember` call actually wrote.
+export const MemorySection = () => {
+	const accessor = useAccessor()
+	const memoryService = accessor.get('IMemoryService')
+	const agentsService = accessor.get('IAgentsService')
+	const memoryState = useMemoryState()
+
+	if (memoryState.project.length === 0 && memoryState.agent.length === 0) return null
+
+	const agentNameOf = (agentId: string) => agentsService.getAgent(agentId)?.name ?? '(deleted agent)'
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Memory</h2>
+		<h4 className={`text-void-fg-3 mb-4`}>
+			Facts the main agent (or a permanent agent) chose to remember with the `remember` tool. Project memory is visible to every future thread in this workspace; agent memory is visible only to threads running as that agent.
+		</h4>
+
+		{memoryState.project.length > 0 ? <div className='my-3'>
+			<div className='flex items-center justify-between mb-2'>
+				<div className='text-void-fg-3 text-sm'>Project memory ({memoryState.project.length})</div>
+				<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => memoryService.clearScope('project')}>Clear all</VoidButtonBgDarken>
+			</div>
+			<div className='flex flex-col gap-y-2'>
+				{memoryState.project.map(m => (
+					<div key={m.id} className='border border-void-border-3 rounded p-2 flex items-start justify-between gap-x-2'>
+						<div>
+							<div className='font-medium text-sm'>{m.label}</div>
+							<div className='text-void-fg-3 text-xs'>{m.content}</div>
+						</div>
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs shrink-0' onClick={() => memoryService.remove(m.id)}>Remove</VoidButtonBgDarken>
+					</div>
+				))}
+			</div>
+		</div> : null}
+
+		{memoryState.agent.length > 0 ? <div className='my-3'>
+			<div className='text-void-fg-3 text-sm mb-2'>Agent memory ({memoryState.agent.length})</div>
+			<div className='flex flex-col gap-y-2'>
+				{memoryState.agent.map(m => (
+					<div key={m.id} className='border border-void-border-3 rounded p-2 flex items-start justify-between gap-x-2'>
+						<div>
+							<div className='font-medium text-sm'>{m.label} <span className='text-void-fg-3 font-normal'>({agentNameOf(m.scopeKey)})</span></div>
+							<div className='text-void-fg-3 text-xs'>{m.content}</div>
+						</div>
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs shrink-0' onClick={() => memoryService.remove(m.id)}>Remove</VoidButtonBgDarken>
+					</div>
+				))}
+			</div>
+		</div> : null}
+	</div>
+}
+
+
+// Vader addition: Agent Manager - live visibility into parallel agent orchestration runs
+// (see common/orchestration/). A first, functional pass built as a Settings section rather
+// than a new dedicated workbench view/pane - the live orchestration state this reads
+// (IAgentOrchestrationService.runs) is fully real, not a placeholder; a standalone panel
+// with its own activity-bar icon is a larger, separate piece of workbench plumbing tracked
+// as further UI work, not silently skipped.
+export const AgentManagerSection = () => {
+	const runs = useOrchestrationRunsState()
+	if (runs.length === 0) return null
+
+	const statusColor = (status: string) =>
+		status === 'success' ? 'text-green-600' : status === 'error' ? 'text-red-500' : status === 'running' ? 'text-void-fg-1' : 'text-void-fg-3'
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Agent Manager</h2>
+		<h4 className={`text-void-fg-3 mb-4`}>Parallel agent runs from delegate_parallel_tasks, most recent first. Each task shows its model/agent, status, and - for worktree-isolated tasks - its merge outcome.</h4>
+		<div className='flex flex-col gap-y-4'>
+			{runs.slice().reverse().map(run => (
+				<div key={run.id} className='border border-void-border-3 rounded p-2'>
+					<div className='text-void-fg-3 text-xs mb-2'>Run started {new Date(run.createdAt).toLocaleTimeString()}{run.cancelled ? ' - cancelled' : ''}{run.finishedAt ? ` - finished ${new Date(run.finishedAt).toLocaleTimeString()}` : ' - in progress'}</div>
+					<div className='flex flex-col gap-y-1'>
+						{run.tasks.map(t => (
+							<div key={t.id} className='text-xs border-t border-void-border-3 pt-1'>
+								<div className='flex items-center justify-between'>
+									<span>{t.task.slice(0, 90)}</span>
+									<span className={`capitalize ${statusColor(t.status)}`}>{t.status}</span>
+								</div>
+								<div className='text-void-fg-3'>
+									{t.agentName ? `Agent: ${t.agentName} · ` : ''}
+									{t.usesWorktree ? `Worktree${t.branchName ? ` (${t.branchName})` : ''}${t.mergeOutcome ? ` · ${t.mergeOutcome}` : ''}` : 'Direct (no isolation)'}
+									{t.changedFilePaths?.length ? ` · ${t.changedFilePaths.length} file(s) changed` : ''}
+								</div>
+								{t.errorMessage ? <div className='text-red-500'>{t.errorMessage}</div> : null}
+							</div>
+						))}
 					</div>
 				</div>
 			))}
@@ -1784,6 +1896,10 @@ export const Settings = () => {
 								<ModelRouterSection />
 
 								<SkillsSection />
+
+								<MemorySection />
+
+								<AgentManagerSection />
 
 								{/* AI Instructions section */}
 								<div className='max-w-[600px]'>

@@ -35,4 +35,4 @@ Void already lets the user pick a model per feature (`voidSettingsTypes.ts`'s `f
 
 ## Settings UI
 
-`ModelRouterSection` (`void-settings-tsx/Settings.tsx`) is a first, functional pass: an Auto/Manual toggle plus a live read-out of which configured model each category currently resolves to. It does not yet offer a per-category manual override picker (only programmatic `setCategoryOverride`) - a full picker UI is Agent Manager UI work, tracked as a separate, later pass, not silently dropped.
+`ModelRouterSection` (`void-settings-tsx/Settings.tsx`) offers an Auto/Manual toggle, a live read-out of which configured model each category currently resolves to, and (added in the Agent Manager UI pass - see `docs/integrations/agent-manager-ui.md`) a per-category override picker calling `setCategoryOverride` directly.

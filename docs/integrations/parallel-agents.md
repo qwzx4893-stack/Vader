@@ -31,4 +31,4 @@ If `git worktree add` fails (not a git repo, git not installed, or any other err
 
 ## Status for a future Agent Manager UI
 
-`IAgentOrchestrationService.runs`/`getRun`/`onDidChangeOrchestration` expose every run's per-task status (`pending`/`running`/`success`/`error`/`cancelled`), thread id, worktree path/branch, conclusion, changed files, and merge outcome - real, live, queryable state. There is no UI surfacing this yet (that's Agent Manager UI work, a separate later pass) - the data layer is complete and UI-ready, not a placeholder.
+`IAgentOrchestrationService.runs`/`getRun`/`onDidChangeOrchestration` expose every run's per-task status (`pending`/`running`/`success`/`error`/`cancelled`), thread id, worktree path/branch, conclusion, changed files, and merge outcome - real, live, queryable state, now surfaced in Settings' `AgentManagerSection` (see `docs/integrations/agent-manager-ui.md`) as a first pass; a dedicated standalone panel is further, separately-scoped UI work.

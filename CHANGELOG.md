@@ -1,5 +1,26 @@
 # Changelog
 
+## Unreleased - Memory UI, Agent Manager UI, Model Router per-category picker
+
+New `MemorySection` (Settings): browse project/agent memory records, remove individually,
+clear a whole scope - `IMemoryService` had zero UI before this. New `AgentManagerSection`:
+live visibility into `IAgentOrchestrationService.runs` (Phase 5's parallel-agent
+orchestration) - every run and task's real-time status/agent/worktree/merge-outcome/error,
+not a mockup. Both built as Settings sections (same pattern as the existing
+Agents/Policy/Model-Router/Skills sections) rather than new standalone workbench views;
+a dedicated Agent Manager panel with its own activity-bar presence is further, separately-
+scoped workbench plumbing, tracked honestly as not done here rather than half-built.
+
+`ModelRouterSection` gains the per-category manual override picker it was missing - a
+dropdown per category (subagent/research/browser/summarization/verification) over every
+currently configured model, calling `IModelRouterService.setCategoryOverride` directly
+(previously only settable programmatically).
+
+See `docs/integrations/agent-manager-ui.md`.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Independent Verification Agent + checkpoint/orchestration integration
 
 New `common/verification/` (`IVerificationService`) and a new mechanism in

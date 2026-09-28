@@ -17,7 +17,7 @@ The mission's memory architecture asks for six separated layers. Three of them a
 
 ## Writing memory
 
-The `remember` tool (`toolsService.ts`) lets the Main Agent (or any thread) write project memory, or agent memory when running as a named permanent agent (`remember(content, label, scope, agent_name?)` - requires `agent_name` when `scope` is `"agent"`). It goes through the 'edits' approval bucket, same as `create_persistent_agent`, since writing memory silently shapes every future turn. There's currently no tool-based path for an agent to write another agent's memory (only its own, when running as that agent) or to update/delete a memory record - those are user-only operations for now, via `IMemoryService.update`/`remove`/`clearScope` directly (no Memory UI yet - see the Remaining Limitations note below).
+The `remember` tool (`toolsService.ts`) lets the Main Agent (or any thread) write project memory, or agent memory when running as a named permanent agent (`remember(content, label, scope, agent_name?)` - requires `agent_name` when `scope` is `"agent"`). It goes through the 'edits' approval bucket, same as `create_persistent_agent`, since writing memory silently shapes every future turn. There's currently no tool-based path for an agent to write another agent's memory (only its own, when running as that agent) or to update/delete a memory record - those are user-only operations, via Settings' `MemorySection` (see `docs/integrations/agent-manager-ui.md`), which calls `IMemoryService.remove`/`clearScope` directly (no per-record edit yet, only remove).
 
 ## Reading memory back into a turn
 
@@ -37,6 +37,6 @@ If the summarization call itself fails (provider error, offline), compaction is 
 
 ## What isn't done here
 
-- **No Memory UI yet** (inspect/clear/scope, per the mission's Agent Manager UI section) - `IMemoryService` is fully real and usable programmatically, but there's no Settings panel to browse/edit/delete records yet. This is real, tracked follow-up work, not a claim that the UI exists.
+- **Memory UI** (inspect/clear/scope) now exists - Settings' `MemorySection`, see `docs/integrations/agent-manager-ui.md`. It supports browse/remove/clear-scope; per-record editing (changing a label/content in place rather than removing and re-writing) isn't built.
 - **Compaction uses the Chat feature's model selection**, not a dedicated cheaper "Summarization" category - there's no such category in `ModelSelectionOfFeature` yet (see the Model Router section of `ARCHITECTURE.md`). Functionally correct today; not yet cost-optimal.
 - **No agent-to-agent memory writes** - an agent can only write its own memory (when running as that agent) or project memory, never another named agent's memory record.
