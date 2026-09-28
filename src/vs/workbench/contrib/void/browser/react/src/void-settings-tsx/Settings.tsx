@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState } from '../util/services.js'
+import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -19,6 +19,7 @@ import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsSer
 import Severity from '../../../../../../../base/common/severity.js'
 import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
 import { RouterCategory } from '../../../../common/modelRouter/modelRouterService.js';
+import { PolicyRequestKind, UserPolicyRuleInput } from '../../../../common/policy/policyService.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
@@ -761,7 +762,14 @@ export const AgentsAndPolicySection = () => {
 	const [newDescription, setNewDescription] = useState('')
 	const [newInstructions, setNewInstructions] = useState('')
 
+	const [showNewRuleForm, setShowNewRuleForm] = useState(false)
+	const [newRuleKind, setNewRuleKind] = useState<PolicyRequestKind>('terminal-command')
+	const [newRuleEffect, setNewRuleEffect] = useState<'deny' | 'ask'>('ask')
+	const [newRuleDescription, setNewRuleDescription] = useState('')
+	const [newRulePattern, setNewRulePattern] = useState('')
+
 	const currentThread = chatThreadService.getCurrentThread()
+	const customRules = policyService.getAllRules().filter(r => !r.builtIn)
 
 	return <div className='max-w-[600px]'>
 		<h2 className={`text-3xl mb-2`}>Agents & Permissions</h2>
@@ -781,6 +789,78 @@ export const AgentsAndPolicySection = () => {
 						{mode}
 					</VoidButtonBgDarken>
 				))}
+			</div>
+		</div>
+
+		<div className='my-4'>
+			<div className='text-void-fg-3 text-sm mb-2'>Custom policy rules ({customRules.length})</div>
+			<div className='text-void-fg-3 text-xs italic mb-2'>Hard rules beyond the built-in ones below - e.g. "ask before any MCP tool call" or "deny terminal commands matching /rm -rf/". These are evaluated the same way as built-in rules: before any approval prompt, regardless of auto-approve settings.</div>
+			<div className='flex flex-col gap-y-2'>
+				{customRules.map(rule => (
+					<div key={rule.id} className='border border-void-border-3 rounded p-2 flex items-center justify-between'>
+						<div>
+							<span className={`text-xs uppercase mr-2 ${rule.effect === 'deny' ? 'text-red-500' : 'text-void-fg-3'}`}>{rule.effect}</span>
+							<span className='text-xs'>{rule.description}</span>
+						</div>
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => policyService.removeCustomRule(rule.id)}>Remove</VoidButtonBgDarken>
+					</div>
+				))}
+			</div>
+			<div className='mt-2'>
+				{!showNewRuleForm ? (
+					<VoidButtonBgDarken className='px-3 py-1' onClick={() => setShowNewRuleForm(true)}>+ New Rule</VoidButtonBgDarken>
+				) : (
+					<div className='flex flex-col gap-y-2 border border-void-border-3 rounded p-3'>
+						<div className='flex gap-x-2'>
+							<VoidCustomDropdownBox
+								className='text-xs bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1'
+								options={['file-write', 'file-delete', 'terminal-command', 'mcp-tool'] as PolicyRequestKind[]}
+								selectedOption={newRuleKind}
+								onChangeOption={setNewRuleKind}
+								getOptionDisplayName={k => k}
+								getOptionDropdownName={k => k}
+								getOptionDropdownDetail={() => ''}
+								getOptionsEqual={(a, b) => a === b}
+							/>
+							<VoidCustomDropdownBox
+								className='text-xs bg-void-bg-1 border border-void-border-2 rounded py-0.5 px-1'
+								options={['ask', 'deny'] as const}
+								selectedOption={newRuleEffect}
+								onChangeOption={setNewRuleEffect}
+								getOptionDisplayName={k => k}
+								getOptionDropdownName={k => k}
+								getOptionDropdownDetail={() => ''}
+								getOptionsEqual={(a, b) => a === b}
+							/>
+						</div>
+						<VoidSimpleInputBox value={newRuleDescription} onChangeValue={setNewRuleDescription} placeholder='Description shown when this rule fires' />
+						<VoidSimpleInputBox value={newRulePattern} onChangeValue={setNewRulePattern}
+							placeholder={newRuleKind === 'file-write' || newRuleKind === 'file-delete' ? 'Glob pattern(s), comma-separated (e.g. **/.env*)'
+								: newRuleKind === 'terminal-command' ? 'Regex pattern(s), comma-separated (e.g. rm -rf)'
+									: 'MCP server name regex(es), comma-separated - leave empty to match every MCP server'} />
+						<div className='flex gap-x-2'>
+							<VoidButtonBgDarken
+								className='px-3 py-1'
+								onClick={() => {
+									if (!newRuleDescription.trim()) return
+									const patterns = newRulePattern.split(',').map(s => s.trim()).filter(Boolean)
+									if (patterns.length === 0 && newRuleKind !== 'mcp-tool') return // mcp-tool alone may deliberately have no patterns (matches every server); the others require a discriminator
+									const input: UserPolicyRuleInput = {
+										description: newRuleDescription.trim(),
+										effect: newRuleEffect,
+										kinds: [newRuleKind],
+										pathGlobs: newRuleKind === 'file-write' || newRuleKind === 'file-delete' ? patterns : undefined,
+										commandPatterns: newRuleKind === 'terminal-command' ? patterns : undefined,
+										serverNamePatterns: newRuleKind === 'mcp-tool' ? patterns : undefined,
+									}
+									policyService.addCustomRule(input)
+									setNewRuleDescription(''); setNewRulePattern(''); setShowNewRuleForm(false)
+								}}
+							>Create</VoidButtonBgDarken>
+							<VoidButtonBgDarken className='px-3 py-1' onClick={() => setShowNewRuleForm(false)}>Cancel</VoidButtonBgDarken>
+						</div>
+					</div>
+				)}
 			</div>
 		</div>
 
@@ -894,6 +974,60 @@ export const ModelRouterSection = () => {
 					</div>
 				})}
 			</div>
+		</div>
+	</div>
+}
+
+
+const trustBadgeClass = (trustState: string) =>
+	trustState === 'trusted' ? 'text-green-600' : trustState === 'blocked' ? 'text-red-500' : 'text-void-fg-3'
+
+// Vader addition: Skills lifecycle UI - see common/skills/. Installed skills start disabled
+// and 'review_required'; this is where a user actually reviews/enables/trusts/removes one -
+// without this, install_skill would be a tool with no way to act on what it produced.
+export const SkillsSection = () => {
+	const accessor = useAccessor()
+	const skillService = accessor.get('ISkillService')
+	const skills = useSkillsState()
+
+	if (skills.length === 0) return null
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Skills</h2>
+		<h4 className={`text-void-fg-3 mb-4`}>
+			Skills the main agent discovered (via SkillNet) and installed, or wrote itself. Every skill starts disabled and marked "review_required" - read it before enabling, and especially before marking it Trusted. An update to a skill's source content automatically downgrades a Trusted skill back to review_required, so a silent external change can never keep trusted status without you seeing it again.
+		</h4>
+		<div className='flex flex-col gap-y-2'>
+			{skills.map(skill => (
+				<div key={skill.id} className='border border-void-border-3 rounded p-2 flex flex-col gap-y-1'>
+					<div className='flex items-center justify-between'>
+						<span className='font-medium'>{skill.name}</span>
+						<span className={`text-xs capitalize ${trustBadgeClass(skill.trustState)}`}>{skill.trustState.replace('_', ' ')}</span>
+					</div>
+					<span className='text-void-fg-3 text-xs'>{skill.description}</span>
+					<span className='text-void-fg-3 text-xs'>
+						Category: {skill.category}
+						{skill.requestedCapabilities.terminal || skill.requestedCapabilities.fs || skill.requestedCapabilities.network || skill.requestedCapabilities.mcp ?
+							` · Requests: ${[skill.requestedCapabilities.fs && 'filesystem', skill.requestedCapabilities.terminal && 'terminal', skill.requestedCapabilities.network && 'network', skill.requestedCapabilities.mcp && 'MCP'].filter(Boolean).join(', ')}`
+							: ''}
+					</span>
+					<div className='flex gap-x-1 mt-1'>
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.setEnabled(skill.id, !skill.enabled)}>
+							{skill.enabled ? 'Disable' : 'Enable'}
+						</VoidButtonBgDarken>
+						{skill.trustState !== 'trusted' ?
+							<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.setTrustState(skill.id, 'trusted')}>Mark Trusted</VoidButtonBgDarken>
+							: <VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.setTrustState(skill.id, 'review_required')}>Revoke trust</VoidButtonBgDarken>}
+						{skill.trustState !== 'blocked' ?
+							<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.setTrustState(skill.id, 'blocked')}>Block</VoidButtonBgDarken>
+							: null}
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.setPinned(skill.id, !skill.pinned)}>
+							{skill.pinned ? 'Unpin' : 'Pin'}
+						</VoidButtonBgDarken>
+						<VoidButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.remove(skill.id)}>Remove</VoidButtonBgDarken>
+					</div>
+				</div>
+			))}
 		</div>
 	</div>
 }
@@ -1648,6 +1782,8 @@ export const Settings = () => {
 								<AgentsAndPolicySection />
 
 								<ModelRouterSection />
+
+								<SkillsSection />
 
 								{/* AI Instructions section */}
 								<div className='max-w-[600px]'>

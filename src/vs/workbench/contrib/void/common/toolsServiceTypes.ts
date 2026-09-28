@@ -34,6 +34,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// turn and silently shapes every future turn's context, so it reuses the 'edits' bucket
 	// rather than being auto-approved like a read-only lookup.
 	'remember': 'edits',
+	// Vader addition: installing a skill persists it and (once the user reviews/enables it)
+	// feeds its instructions into every future system prompt - a persistent, trust-relevant
+	// action, same tier as remember/create_persistent_agent.
+	'install_skill': 'edits',
 	// Vader addition: delegating a task can itself cause file edits/terminal commands
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
@@ -110,6 +114,10 @@ export type BuiltinToolCallParams = {
 	// visible to every future thread in this workspace; 'agent' memory requires agentName
 	// and is visible only to threads running as that permanent agent.
 	'remember': { content: string, label: string, scope: 'project' | 'agent', agentName: string | null },
+	// Vader addition: install a skill you already have the instructions text for (via
+	// fetch_skill_instructions, or your own distilled instructions) - see common/skills/.
+	// Installed skills start disabled and 'review_required'; the user enables/trusts them.
+	'install_skill': { name: string, description: string, instructions: string, repositoryUrl: string | null },
 }
 
 // RESULT OF TOOL CALL
@@ -150,6 +158,7 @@ export type BuiltinToolResultType = {
 		tasks: { task: string, status: string, conclusion: string | null, changedFilePaths: string[], mergeOutcome: string | null, errorMessage: string | null }[],
 	},
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
+	'install_skill': { skillId: string },
 }
 
 

@@ -46,6 +46,8 @@ export interface PolicyRule {
 	readonly pathGlobs?: string[];
 	/** regex source strings (case-insensitive) matched against the terminal command */
 	readonly commandPatterns?: string[];
+	/** regex source strings (case-insensitive) matched against mcpServerName, for kind 'mcp-tool'. Omitted = matches every MCP server (a deliberate, legitimate blanket rule for this kind only - see policyService.ts's ruleMatches). */
+	readonly serverNamePatterns?: string[];
 	/** true for Vader's built-in rules; false for user-defined rules */
 	readonly builtIn: boolean;
 	/** true = cannot be disabled or deleted from settings at all (the true hard invariants) */
@@ -61,6 +63,7 @@ export type UserPolicyRuleInput = {
 	kinds: PolicyRequestKind[];
 	pathGlobs?: string[];
 	commandPatterns?: string[];
+	serverNamePatterns?: string[];
 	neverBypassAutonomous?: boolean;
 };
 

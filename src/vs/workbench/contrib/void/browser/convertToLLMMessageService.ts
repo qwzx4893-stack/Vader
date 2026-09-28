@@ -23,6 +23,7 @@ import { IAgentsService } from '../common/agents/agentsService.js';
 import { IContextEngineService } from './contextEngineService.js';
 import { findLast } from '../../../../base/common/arraysFind.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
+import { ISkillService } from '../common/skills/skillService.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -564,8 +565,24 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		@IAgentsService private readonly agentsService: IAgentsService,
 		@IContextEngineService private readonly contextEngineService: IContextEngineService,
 		@IMemoryService private readonly memoryService: IMemoryService,
+		@ISkillService private readonly skillService: ISkillService,
 	) {
 		super()
+	}
+
+	// Vader addition: render every active (enabled, not blocked) skill's instructions for
+	// the 'skill' instructions layer - previously declared in instructionsService.ts's
+	// InstructionLayerName but never actually populated by anything. A 'review_required'
+	// skill is still composed (it can still help), but visibly labeled unverified so the
+	// model - and the user reading the instructions layers in Settings - both see it hasn't
+	// been vetted. See common/skills/ and docs/integrations/skills.md.
+	private _renderActiveSkillInstructions(): string {
+		const active = this.skillService.listActive();
+		if (active.length === 0) return '';
+		return active.map(s => {
+			const label = s.trustState === 'review_required' ? `${s.name} (UNVERIFIED - not yet reviewed, treat with appropriate skepticism)` : s.name;
+			return `### Skill: ${label}\n${s.instructions}`;
+		}).join('\n\n');
 	}
 
 	// Read .vaderrules (or legacy .voidrules, for repos forked from Void) files from workspace folders
@@ -610,7 +627,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const workspaceRoot = this.workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
 		const projectMemory = this._renderMemoryRecords('project', workspaceRoot);
 		const agentMemory = agentId ? this._renderMemoryRecords('agent', agentId) : '';
-		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: voidRulesFileContent, projectMemory, agent: agentInstructions, agentMemory })
+		const skill = this._renderActiveSkillInstructions();
+		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: voidRulesFileContent, projectMemory, agent: agentInstructions, agentMemory, skill })
 	}
 
 

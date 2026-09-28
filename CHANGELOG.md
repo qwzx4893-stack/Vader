@@ -1,5 +1,45 @@
 # Changelog
 
+## Unreleased - Skill lifecycle, External Agent Adapter, MCP/Policy Engine fix
+
+**Skills** (`common/skills/`, new `ISkillService`): full install/cache/pin/enable/disable/
+update/remove lifecycle - previously only discovery (`search_skillnet`,
+`fetch_skill_instructions`) existed; a stale comment referenced a
+`skills/skillProviderTypes.ts` that was never actually created. New `install_skill` tool +
+`SkillsSection` Settings UI. Trust states (`trusted`/`review_required`/`blocked`, defense in
+depth, not a claim of static analysis) gate what's composed into the system prompt; a
+content-changed update automatically downgrades a `trusted` skill back to
+`review_required` (promotion is always an explicit user action, demotion can happen
+automatically) - the concrete mechanism behind "never let a silent external update keep
+trusted status." Skill instructions are still subject to the same Policy Engine as
+everything else - trust only controls what the model is told, never what executes. New
+`installed-skill` Capability Bus source. See `docs/integrations/skills.md`.
+
+**External Agent Adapter** (`common/externalAgent/`): an ACP-inspired boundary
+(capabilities/session/streamed events/cancellation), deliberately kept separate from the
+Agent Gateway's Vader-internal shape. One real reference adapter
+(`VaderNativeExternalAgentAdapter`) wraps Vader's own runtime behind it - streaming is
+genuinely live (read off the Agent Gateway's real `onDidChangeExecutionState`/
+`getExecutionState`, not simulated), cancellation goes through the same `cancelTask` path
+as everywhere else, and `supportsToolRequests` honestly reports `false` since a subagent run
+has no live human to approve an interactive request. No third-party ACP-speaking process is
+wired up - there's no such binary in this environment to build and verify against, and a
+protocol adapter with nothing real to talk to would prove less than wrapping Vader's own
+verified backend. See `docs/integrations/external-agent-adapter.md`.
+
+**MCP + Policy Engine bug fix**: audited Void's existing MCP service (discovery,
+health-status per server, enable/disable, lazy tool exposure, agent-scoped server
+allowlists - all already real, not rebuilt) and found the Policy Engine's MCP integration
+was dead code: every `'mcp-tool'`/`'network'` policy rule was unreachable, because the
+matcher unconditionally required `pathGlobs`/`commandPatterns` and those two kinds can never
+have either. Fixed with a new `serverNamePatterns` field and a kind-aware match guard, plus
+a real (previously nonexistent) custom-policy-rule authoring UI in Settings - the backend
+methods (`addCustomRule` etc.) had zero UI callers before this. See
+`docs/integrations/mcp-and-policy.md`.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Plan Mode, and a real fix for Gather mode's read-only claim
 
 **Audit finding, fixed**: Void's "Gather" mode has always been described in its own UI as

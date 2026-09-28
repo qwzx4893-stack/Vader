@@ -415,6 +415,17 @@ export const builtinTools: {
 		}
 	},
 
+	install_skill: {
+		name: 'install_skill',
+		description: `Installs a skill you've already fetched the instructions for (via fetch_skill_instructions) so it's available for review and, once the user enables it, included in future system prompts. Installed skills start disabled and marked "review_required" - installing does NOT make it active immediately. Use this after finding a genuinely relevant skill via search_skillnet, not speculatively.`,
+		params: {
+			name: { description: `Short, human-readable name for the skill.` },
+			description: { description: `One sentence describing what this skill helps with.` },
+			instructions: { description: `The skill's full instructions text, exactly as fetched.` },
+			repository_url: { description: `The skill's source URL (from search_skillnet), or leave empty if this is a skill you wrote yourself for this project.` },
+		}
+	},
+
 	remember: {
 		name: 'remember',
 		description: `Writes a fact/decision/preference to persistent memory so it's available in every future conversation, not just this one - use it for durable things worth not re-discovering (a project convention, a constraint the user stated, a subtlety about the codebase), not for anything already recoverable by reading the code, and not for anything task-specific that won't matter once this task is done.`,

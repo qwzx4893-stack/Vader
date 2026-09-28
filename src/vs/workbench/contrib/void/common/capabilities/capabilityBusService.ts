@@ -7,6 +7,7 @@ import { builtinTools } from '../prompt/prompts.js';
 import { IMCPService } from '../mcpService.js';
 import { IAgentsService } from '../agents/agentsService.js';
 import { IDiscoveryMainService } from '../discovery/discoveryService.js';
+import { ISkillService } from '../skills/skillService.js';
 import { CapabilityDescriptor, ICapabilityBusService } from './capabilityBusTypes.js';
 
 export * from './capabilityBusTypes.js';
@@ -27,6 +28,7 @@ class CapabilityBusService implements ICapabilityBusService {
 		@IMCPService private readonly _mcpService: IMCPService,
 		@IAgentsService private readonly _agentsService: IAgentsService,
 		@IDiscoveryMainService private readonly _discoveryService: IDiscoveryMainService,
+		@ISkillService private readonly _skillService: ISkillService,
 	) { }
 
 	listLocalCapabilities(): CapabilityDescriptor[] {
@@ -57,7 +59,20 @@ class CapabilityBusService implements ICapabilityBusService {
 			available: true,
 		}));
 
-		return [...native, ...mcp, ...agents];
+		// installed skills that aren't yet enabled/trusted still show up here (so the model
+		// can see "you already have something for this, ask the user to enable it" instead
+		// of re-discovering/re-installing a duplicate) - trust/available reflect their real
+		// state, not blanket 'trusted' like the other local sources above
+		const skills: CapabilityDescriptor[] = this._skillService.list().map(s => ({
+			id: `installed-skill:${s.id}`,
+			source: 'installed-skill',
+			name: s.name,
+			description: s.description,
+			trust: s.trustState === 'trusted' ? 'trusted' : 'untrusted',
+			available: s.enabled && s.trustState !== 'blocked',
+		}));
+
+		return [...native, ...mcp, ...agents, ...skills];
 	}
 
 	async resolve(query: string): Promise<CapabilityDescriptor[]> {

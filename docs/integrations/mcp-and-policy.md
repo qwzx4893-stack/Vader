@@ -1,0 +1,16 @@
+# MCP lifecycle, and a real Policy Engine bug fix for it
+
+## What Void's MCP already covered (audited, not rebuilt)
+
+Void's own `mcpService.ts` already implements most of the mission's MCP lifecycle for real: `mcp.json` config-file discovery with a live file watcher (add/update/delete events over an IPC channel), per-server health status (`'loading' | 'success' | 'offline'`, plus an `'error'` variant with the failure message), enable/disable (`toggleServerIsOn`), and lazy tool schema exposure (`getMCPTools()` only returns tools for servers that are actually connected - a disabled or failed server contributes nothing to what the model is told exists). "Reconnect" isn't a separate button, but toggling a server off then on again re-triggers the same connect path `toggleServerIsOn` already drives. **Session scope**: `PermanentAgentDefinition.mcpServerNames` (already existed) restricts which globally-configured MCP servers a given agent may use - a real, already-enforced form of per-agent scoping, checked in `chatThreadService.ts`'s agent-scope gate. None of this needed rebuilding.
+
+## What was actually missing: Policy Engine integration for MCP was dead code
+
+`policyServiceTypes.ts` has always declared `'mcp-tool'` as a `PolicyRequestKind`, and `toolPolicyRequest.ts`'s `policyRequestOfToolCall` has always mapped every MCP tool call to `{ kind: 'mcp-tool', mcpServerName, agentId }` - so the *shape* for MCP-specific policy rules existed. But `PolicyRule` had no field to match against `mcpServerName`, and `policyService.ts`'s `ruleMatches` unconditionally required `pathGlobs` or `commandPatterns` to be present or the rule matched nothing (`"a rule with neither pathGlobs nor commandPatterns matches nothing"`). Since `mcp-tool` and `network` rules can never have either of those, **every policy rule of kind `'mcp-tool'` or `'network'` was unreachable dead code** - a user could write one in `addCustomRule` and it would silently never fire, with no error.
+
+Fixed:
+- Added `serverNamePatterns?: string[]` to `PolicyRule`/`UserPolicyRuleInput` (regex, matched against `mcpServerName`, same convention as `commandPatterns`).
+- `ruleMatches` now checks it, and the "needs a discriminating field" requirement is now waived specifically for `mcp-tool`/`network` kinds (an MCP rule with no `serverNamePatterns` deliberately matches *every* MCP server - a real, legitimate blanket stance like "ask before any MCP tool call, I don't trust third-party servers by default" - whereas the same waiver for file/terminal kinds would make an unqualified rule silently gate every file operation or command, which the original guard was correctly protecting against).
+- A minimal but real Settings UI to actually author one: `AgentsAndPolicySection` gained a "Custom policy rules" list with a form (kind/effect/description/pattern) - previously `addCustomRule`/`removeCustomRule`/`setRuleEnabled` had zero UI callers at all, so even a correct implementation would have been unreachable from the product.
+
+See `docs/integrations/skills.md` for the parallel MCP-adjacent gap this pass also closed (a skill's `mcp` capability flag is detected and shown, but installing a skill never touches `mcp.json` itself - deliberately, not an oversight).

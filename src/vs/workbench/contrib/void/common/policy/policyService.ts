@@ -65,8 +65,27 @@ const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 		if (!hit) return false;
 	}
 
-	// a rule with neither pathGlobs nor commandPatterns matches nothing (avoid accidental blanket rules)
-	if ((!rule.pathGlobs || rule.pathGlobs.length === 0) && (!rule.commandPatterns || rule.commandPatterns.length === 0)) {
+	if (rule.serverNamePatterns && rule.serverNamePatterns.length) {
+		const serverName = req.mcpServerName ?? '';
+		if (!serverName) return false;
+		const hit = rule.serverNamePatterns.some(src => {
+			try { return new RegExp(src, 'i').test(serverName); }
+			catch { return false; }
+		});
+		if (!hit) return false;
+	}
+
+	// A rule with none of pathGlobs/commandPatterns/serverNamePatterns matches every request
+	// of its kind. For file-read/file-write/file-delete/terminal-command that's almost
+	// certainly a mistake (an unqualified rule would silently gate every single file
+	// operation or command), so it's required there. For mcp-tool and network, "ask/deny for
+	// every call of this kind" is a real, legitimate blanket stance a user might deliberately
+	// want (e.g. "ask before any MCP tool call, I don't trust third-party servers by
+	// default") - previously this was actually impossible: every 'mcp-tool'/'network' rule
+	// was unreachable dead code, since the old version of this check unconditionally
+	// required pathGlobs or commandPatterns, which those two kinds can never have.
+	const hasDiscriminator = !!(rule.pathGlobs?.length || rule.commandPatterns?.length || rule.serverNamePatterns?.length);
+	if (!hasDiscriminator && req.kind !== 'mcp-tool' && req.kind !== 'network') {
 		return false;
 	}
 
@@ -151,6 +170,7 @@ class PolicyService extends Disposable implements IPolicyService {
 			kinds: input.kinds,
 			pathGlobs: input.pathGlobs,
 			commandPatterns: input.commandPatterns,
+			serverNamePatterns: input.serverNamePatterns,
 			builtIn: false,
 			locked: false,
 			neverBypassAutonomous: input.neverBypassAutonomous ?? (input.effect === 'deny'),

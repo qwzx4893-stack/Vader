@@ -26,6 +26,7 @@ import { ICapabilityBusService } from '../common/capabilities/capabilityBusServi
 import { IBrowserToolMainService, BrowserSnapshot } from '../common/browser/browserToolService.js'
 import { VSBuffer } from '../../../../base/common/buffer.js'
 import { IMemoryService } from '../common/memory/memoryService.js'
+import { ISkillService } from '../common/skills/skillService.js'
 import { IAgentOrchestrationService, ParallelTaskSpec } from './orchestrationService.js'
 
 
@@ -166,6 +167,7 @@ export class ToolsService implements IToolsService {
 		@ICapabilityBusService private readonly capabilityBusService: ICapabilityBusService,
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
+		@ISkillService private readonly skillService: ISkillService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -365,6 +367,15 @@ export class ToolsService implements IToolsService {
 					return { task: rec.task as string, agentName, usesWorktree }
 				})
 				return { specs }
+			},
+
+			install_skill: (params: RawToolParamsObj) => {
+				const { name: nameUnknown, description: descriptionUnknown, instructions: instructionsUnknown, repository_url: repoUnknown } = params
+				const name = validateStr('name', nameUnknown)
+				const description = validateStr('description', descriptionUnknown)
+				const instructions = validateStr('instructions', instructionsUnknown)
+				const repositoryUrl = validateOptionalStr('repository_url', repoUnknown)
+				return { name, description, instructions, repositoryUrl }
 			},
 
 			remember: (params: RawToolParamsObj) => {
@@ -680,6 +691,15 @@ export class ToolsService implements IToolsService {
 				}
 			},
 
+			install_skill: async ({ name, description, instructions, repositoryUrl }) => {
+				const record = this.skillService.install({
+					name, description, instructions,
+					category: repositoryUrl ? 'cached-external' : 'agent-created',
+					repositoryUrl: repositoryUrl ?? undefined,
+				})
+				return { result: { skillId: record.id } }
+			},
+
 			remember: async ({ content, label, scope, agentName }) => {
 				if (scope === 'agent') {
 					const agent = agentName ? this.agentsService.state.agents.find(a => a.name === agentName) : undefined
@@ -858,6 +878,9 @@ export class ToolsService implements IToolsService {
 					return parts.join('\n')
 				})
 				return `Parallel run complete (${result.tasks.length} task(s)):\n\n${lines.join('\n\n')}`
+			},
+			install_skill: (params, result) => {
+				return `Installed skill "${params.name}" (id=${result.skillId}). It's disabled and marked "review_required" until reviewed and enabled in Settings > Skills.`;
 			},
 			remember: (params, result) => {
 				return `Saved to ${result.scope} memory (id=${result.memoryId}). It will be included in future conversations${result.scope === 'agent' ? ` run as ${params.agentName}` : ' in this workspace'}.`;

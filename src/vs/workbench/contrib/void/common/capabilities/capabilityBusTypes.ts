@@ -13,7 +13,7 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 // could get) for X," matching the resolution order in the mission: installed native
 // capability -> pinned/cached skill -> SkillNet -> configured MCP -> MCP Registry.
 
-export type CapabilitySource = 'native-tool' | 'mcp-tool' | 'permanent-agent' | 'skillnet' | 'mcp-registry';
+export type CapabilitySource = 'native-tool' | 'mcp-tool' | 'permanent-agent' | 'installed-skill' | 'skillnet' | 'mcp-registry';
 
 export type CapabilityDescriptor = {
 	readonly id: string;

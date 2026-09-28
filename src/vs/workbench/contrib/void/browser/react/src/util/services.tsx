@@ -58,6 +58,7 @@ import { IAgentsService, AgentsServiceState } from '../../../../common/agents/ag
 import { IPolicyService, PolicyServiceState } from '../../../../common/policy/policyService.js'
 import { IAgentGatewayService } from '../../../agentGatewayService.js'
 import { IModelRouterService, ModelRouterState } from '../../../../common/modelRouter/modelRouterService.js'
+import { ISkillService, SkillRecord } from '../../../../common/skills/skillService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -96,6 +97,9 @@ const policyStateListeners: Set<(s: PolicyServiceState) => void> = new Set()
 let modelRouterState: ModelRouterState
 const modelRouterStateListeners: Set<(s: ModelRouterState) => void> = new Set()
 
+let skillsState: SkillRecord[]
+const skillsStateListeners: Set<(s: SkillRecord[]) => void> = new Set()
+
 
 // must call this before you can use any of the hooks below
 // this should only be called ONCE! this is the only place you don't need to dispose onDidChange. If you use state.onDidChange anywhere else, make sure to dispose it!
@@ -117,9 +121,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		agentsService: accessor.get(IAgentsService),
 		policyService: accessor.get(IPolicyService),
 		modelRouterService: accessor.get(IModelRouterService),
+		skillService: accessor.get(ISkillService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, voidCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService } = stateServices
 
 
 
@@ -216,6 +221,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	skillsState = skillService.list()
+	disposables.push(
+		skillService.onDidChangeSkills(() => {
+			skillsState = skillService.list()
+			skillsStateListeners.forEach(l => l(skillsState))
+		})
+	)
+
 
 	return disposables
 }
@@ -274,6 +287,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IPolicyService: accessor.get(IPolicyService),
 		IAgentGatewayService: accessor.get(IAgentGatewayService),
 		IModelRouterService: accessor.get(IModelRouterService),
+		ISkillService: accessor.get(ISkillService),
 
 	} as const
 	return reactAccessor
@@ -483,6 +497,19 @@ export const useModelRouterServiceState = () => {
 		const listener = (newState: ModelRouterState) => { ss(newState) }
 		modelRouterStateListeners.add(listener);
 		return () => { modelRouterStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useSkillsState = () => {
+	const accessor = useAccessor()
+	const skillService = accessor.get('ISkillService')
+	const [s, ss] = useState(skillService.list())
+	useEffect(() => {
+		const listener = (newState: SkillRecord[]) => { ss(newState) }
+		skillsStateListeners.add(listener);
+		return () => { skillsStateListeners.delete(listener) };
 	}, []);
 	return s
 }
