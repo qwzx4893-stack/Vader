@@ -1108,15 +1108,56 @@ export const MemorySection = () => {
 // (IAgentOrchestrationService.runs) is fully real, not a placeholder; a standalone panel
 // with its own activity-bar icon is a larger, separate piece of workbench plumbing tracked
 // as further UI work, not silently skipped.
+// Vader addition, part of the Cline Main Agent Runtime integration - see
+// docs/integrations/agent-runtime.md. Shows which runtime (Cline vs. legacy) is currently
+// driving Main Agent turns and why, plus both runtimes' health, so the legacy runtime is
+// never silently substituted without being visible here.
+const RuntimeStatusBlock = () => {
+	const accessor = useAccessor()
+	const registry = accessor.get('IAgentRuntimeRegistryService')
+	const [selection, setSelection] = useState(() => registry.getSelection())
+
+	const healthColor = (status: string) =>
+		status === 'initialized' ? 'text-green-600' : status === 'unavailable' || status === 'runtime-error' ? 'text-void-fg-3' : 'text-red-500'
+
+	const runtimeLabel = (kind: 'legacy' | 'cline') => kind === 'cline' ? 'Cline Agent Runtime' : 'Legacy Runtime (Void-derived loop)'
+
+	return <div className='mb-6'>
+		<div className='flex items-center justify-between mb-1'>
+			<h3 className='text-lg'>Main Agent Runtime</h3>
+			<button
+				className='text-xs text-void-fg-3 hover:text-void-fg-1 underline'
+				onClick={() => { registry.refresh().then(setSelection) }}
+			>Refresh</button>
+		</div>
+		<div className='text-xs text-void-fg-3 mb-2'>
+			Active: <span className='text-void-fg-1 font-medium'>{runtimeLabel(selection.active)}</span>
+			{selection.reason === 'fallback' ? <span className='text-yellow-600'> (fallback - Cline was not available)</span> : selection.reason === 'explicit' ? ' (explicitly selected)' : ' (default)'}
+		</div>
+		<div className='flex flex-col gap-y-1'>
+			{[selection.clineHealth, selection.legacyHealth].map(h => (
+				<div key={h.kind} className='border border-void-border-3 rounded p-2 text-xs'>
+					<div className='flex items-center justify-between'>
+						<span className='font-medium'>{runtimeLabel(h.kind)}</span>
+						<span className={`capitalize ${healthColor(h.status)}`}>{h.status}{h.version ? ` · ${h.version}` : ''}</span>
+					</div>
+					<div className='text-void-fg-3 mt-1'>{h.detail}</div>
+				</div>
+			))}
+		</div>
+	</div>
+}
+
 export const AgentManagerSection = () => {
 	const runs = useOrchestrationRunsState()
-	if (runs.length === 0) return null
 
 	const statusColor = (status: string) =>
 		status === 'success' ? 'text-green-600' : status === 'error' ? 'text-red-500' : status === 'running' ? 'text-void-fg-1' : 'text-void-fg-3'
 
 	return <div className='max-w-[600px]'>
 		<h2 className={`text-3xl mb-2`}>Agent Manager</h2>
+		<RuntimeStatusBlock />
+		{runs.length === 0 ? null : <>
 		<h4 className={`text-void-fg-3 mb-4`}>Parallel agent runs from delegate_parallel_tasks, most recent first. Each task shows its model/agent, status, and - for worktree-isolated tasks - its merge outcome.</h4>
 		<div className='flex flex-col gap-y-4'>
 			{runs.slice().reverse().map(run => (
@@ -1140,7 +1181,8 @@ export const AgentManagerSection = () => {
 					</div>
 				</div>
 			))}
-		</div>
+			</div>
+		</>}
 	</div>
 }
 

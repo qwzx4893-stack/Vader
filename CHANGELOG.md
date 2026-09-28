@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased - Cline Main Agent Runtime integration (Milestone 1) + Unified Marketplace (in progress)
+
+**Verified, not assumed**: independently confirmed (npm registry API directly, plus an actual
+`npm install @cline/sdk` in a scratch directory with the real `.d.ts` files read) that Cline's
+upstream now publishes a genuinely embeddable, non-VS-Code-extension agent SDK
+(`@cline/agents`, Apache-2.0, `0.0.86`) - see `docs/integrations/agent-runtime.md` for the full
+evidence trail and the resulting integration design.
+
+**Main Agent Runtime seam** (`common/agentRuntime/`, `browser/agentRuntime/`): a new
+`IAgentRuntimeRegistryService` reports which loop drives Main Agent turns (`legacy` today) and
+honest per-runtime health, surfaced in the Agent Manager Settings UI (`RuntimeStatusBlock`).
+`@cline/agents`/`@cline/shared` are declared in `package.json` but **could not be installed in
+this environment** - the sandbox's dependency-install safety policy declined the `npm install`
+as "Untrusted Code Integration," which is outside this session's own authority to override.
+The full `ClineRuntimeAdapter` design (tool adapter reusing the existing Policy Engine gate
+with zero duplication, a `VaderAgentModel` that preserves every existing provider by never
+routing through Cline's own provider layer, and the mid-batch-approval-resume fix this
+unlocks) is written up in `docs/integrations/agent-runtime.md`, ready to implement the moment
+a human runs that install. This is reported as a genuine environment/tooling limitation, not
+skipped work - the design is complete and reviewed against the real installed package types.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean).
+
 ## Unreleased - Branding re-audit, performance pass, verification model routing fix
 
 **Branding re-audit**: a fresh, read-only pass over every `localize`/`localize2` call,

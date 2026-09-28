@@ -61,6 +61,7 @@ import { IModelRouterService, ModelRouterState } from '../../../../common/modelR
 import { ISkillService, SkillRecord } from '../../../../common/skills/skillService.js'
 import { IMemoryService, MemoryRecord } from '../../../../common/memory/memoryService.js'
 import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestrationService.js'
+import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -317,6 +318,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ISkillService: accessor.get(ISkillService),
 		IMemoryService: accessor.get(IMemoryService),
 		IAgentOrchestrationService: accessor.get(IAgentOrchestrationService),
+		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
 
 	} as const
 	return reactAccessor

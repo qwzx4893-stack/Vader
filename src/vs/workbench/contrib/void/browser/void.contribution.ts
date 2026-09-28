@@ -104,3 +104,6 @@ import '../common/browser/browserToolService.js'
 
 // Vader agent platform: Agent Gateway seam (see ARCHITECTURE.md)
 import './agentGatewayService.js'
+
+// Vader agent platform: Main Agent Runtime health/selection (see docs/integrations/agent-runtime.md)
+import './agentRuntime/agentRuntimeRegistryService.js'
