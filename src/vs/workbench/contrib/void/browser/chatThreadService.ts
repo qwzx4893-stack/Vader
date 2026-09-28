@@ -210,6 +210,15 @@ export type ThreadType = {
 	// entire point of it being independent.
 	isVerificationThread?: boolean;
 
+	// Vader addition: set for a hidden thread spun up by delegate_research_task/
+	// delegate_browser_task - see docs/integrations/model-router.md. 'research' hard-forces
+	// the same read-only enforcement as isVerificationThread (a research delegation must
+	// never double as a way to sneak in edits); 'browser' does not, since browser automation
+	// needs to actually click/navigate. Both route model selection through the Model
+	// Router's matching category instead of generic 'subagent' - see
+	// _currentModelSelectionProps.
+	routerCategoryOverride?: 'research' | 'browser';
+
 	// Vader addition: the latest structured plan Plan Mode produced for this thread, parsed
 	// from a <vader_plan> block in an assistant message - see _maybeCaptureThreadPlan and
 	// docs/integrations/plan-mode.md. null/undefined means no plan yet (or it was cleared
@@ -357,7 +366,7 @@ export interface IChatThreadService {
 	// Vader addition: temporary subagent delegation. Spins up a hidden thread, runs it to
 	// completion (or until it stalls on a real approval requirement), and returns a
 	// structured summary rather than merging its full message history into the caller.
-	runSubagentTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult>;
+	runSubagentTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void, routerCategoryOverride?: 'research' | 'browser' }): Promise<SubagentTaskResult>;
 
 	// Vader addition: independent verification - see PlanObject/isVerificationThread and
 	// common/verification/verificationTypes.ts's IVerificationService (the actual caller).
@@ -652,6 +661,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const routed = this._modelRouterService.resolveModel('verification')
 			if (routed) modelSelection = routed
 		}
+		// Vader addition: a delegate_research_task/delegate_browser_task thread routes
+		// through its matching category - checked before the generic isSubagentThread case,
+		// since both of these are also subagent threads.
+		else if (!agentPinnedModel && thread?.routerCategoryOverride) {
+			const routed = this._modelRouterService.resolveModel(thread.routerCategoryOverride)
+			if (routed) modelSelection = routed
+		}
 		else if (!agentPinnedModel && thread?.isSubagentThread) {
 			const routed = this._modelRouterService.resolveModel('subagent')
 			if (routed) modelSelection = routed
@@ -826,11 +842,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// docs/integrations/plan-mode.md for the audit finding this fixes.
 			const currentChatMode = this._settingsService.state.globalSettings.chatMode
 			const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
-			if (currentChatMode === 'gather' || currentChatMode === 'plan' || isVerificationThread) {
+			const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
+			if (currentChatMode === 'gather' || currentChatMode === 'plan' || isVerificationThread || isResearchThread) {
 				const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
 				if (blockedInReadonlyMode) {
-					const modeLabel = isVerificationThread ? 'Verification' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
-					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : ' Switch to Agent mode to actually make this change.'}` })
+					const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
+					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` })
 					return {}
 				}
 			}
@@ -1157,8 +1174,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// user's actual global chat mode, so the model is never even told a mutating tool
 		// exists here, on top of the hard execution-level block in _runToolCall's gate.
 		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
+		// Vader addition: a delegate_research_task thread gets the same forced-gather
+		// treatment as a verification thread, for the same reason - see routerCategoryOverride.
+		const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
 		const { chatMode: globalChatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
-		const chatMode = isVerificationThread ? 'gather' : globalChatMode
+		const chatMode = (isVerificationThread || isResearchThread) ? 'gather' : globalChatMode
 		const { overridesOfModel } = this._settingsService.state
 
 		let nMessagesSent = 0
@@ -2246,15 +2266,15 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}, true)
 	}
 
-	private _createHiddenSubagentThread(agentId: string | undefined): string {
-		const newThread: ThreadType = { ...newThreadObject(), isSubagentThread: true, agentId: agentId ?? null }
+	private _createHiddenSubagentThread(agentId: string | undefined, routerCategoryOverride?: 'research' | 'browser'): string {
+		const newThread: ThreadType = { ...newThreadObject(), isSubagentThread: true, agentId: agentId ?? null, routerCategoryOverride }
 		// deliberately does NOT change currentThreadId, so the user's active thread is untouched
 		this._setState({ allThreads: { ...this.state.allThreads, [newThread.id]: newThread } }, true)
 		return newThread.id
 	}
 
-	async runSubagentTask({ task, agentId, onThreadCreated }: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult> {
-		const threadId = this._createHiddenSubagentThread(agentId)
+	async runSubagentTask({ task, agentId, onThreadCreated, routerCategoryOverride }: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void, routerCategoryOverride?: 'research' | 'browser' }): Promise<SubagentTaskResult> {
+		const threadId = this._createHiddenSubagentThread(agentId, routerCategoryOverride)
 		// Vader addition: lets a caller (the Agent Orchestration service, for cancellable
 		// parallel runs) capture the hidden thread's id synchronously, before this resolves,
 		// so it has something to call abortRunning/cancelTask on if the run is cancelled

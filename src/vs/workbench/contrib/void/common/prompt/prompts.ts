@@ -507,6 +507,22 @@ export const builtinTools: {
 			task: { description: `A self-contained description of the task, with all context the subagent needs (it does NOT see this conversation).` },
 			agent_name: { description: `Optional. The exact name of an existing permanent agent (see create_persistent_agent) to run this task as, inheriting its instructions/model/restrictions. Leave empty to use the default model and no special restrictions.` },
 		}
+	},
+
+	delegate_research_task: {
+		name: 'delegate_research_task',
+		description: `Delegates a read-only research/investigation task (e.g. "explain how the auth flow works across these files", "find every caller of X and summarize the pattern") to a temporary subagent, same as delegate_subagent_task, but hard-forced read-only for its entire run - it cannot edit files or run mutating terminal commands even if it tries, and its model is chosen by whatever is configured for research work (see the Model Router in Settings) rather than your own chat model. Use this instead of delegate_subagent_task when the task is purely investigative and you want it to be structurally impossible for the delegate to make changes.`,
+		params: {
+			task: { description: `A self-contained description of the research question, with all context the subagent needs (it does NOT see this conversation).` },
+		}
+	},
+
+	delegate_browser_task: {
+		name: 'delegate_browser_task',
+		description: `Delegates a self-contained browser-automation task (e.g. "open example.com, log in, and report what the dashboard shows") to a temporary subagent with access to the browser tools, whose model is chosen by whatever is configured for browser-automation work (see the Model Router in Settings) rather than your own chat model. Use this instead of driving browser_navigate/browser_click/etc. yourself when the browser task is a multi-step, self-contained unit of work.`,
+		params: {
+			task: { description: `A self-contained description of the browser task, with all context the subagent needs (it does NOT see this conversation).` },
+		}
 	}
 
 

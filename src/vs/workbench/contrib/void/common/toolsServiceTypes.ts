@@ -42,6 +42,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
 	'delegate_subagent_task': 'edits',
+	// research is hard-forced read-only (see BuiltinToolCallParams above), so unlike
+	// delegate_subagent_task it can never itself cause an edit/terminal side effect -
+	// no approval bucket needed, same as any other read-only tool.
+	'delegate_browser_task': 'terminal',
 	// Vader addition: same reasoning as delegate_subagent_task, but for several tasks at
 	// once (see common/orchestration/) - worktree-isolated tasks can commit real changes.
 	'delegate_parallel_tasks': 'edits',
@@ -128,6 +132,14 @@ export type BuiltinToolCallParams = {
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
 	'delegate_subagent_task': { task: string, agentName: string | null },
+	// Vader addition: wires the Model Router's 'research'/'browser' categories (see
+	// common/modelRouter/) into real, distinct delegation paths instead of leaving them
+	// resolvable-but-unused - see docs/integrations/model-router.md. delegate_research_task's
+	// hidden thread is hard-forced read-only (same enforcement as Gather/Plan/verification -
+	// see READONLY_MODE_BLOCKED_BUILTIN_TOOLS), since research must never double as a way to
+	// sneak in edits under a different tool name.
+	'delegate_research_task': { task: string },
+	'delegate_browser_task': { task: string },
 	// Vader addition: run several subagent tasks with real bounded concurrency - see
 	// common/orchestration/. tasksJson is a JSON array of
 	// {task: string, agent_name?: string, uses_worktree?: boolean}.
@@ -183,6 +195,8 @@ export type BuiltinToolResultType = {
 	// ---
 	'create_persistent_agent': { agentId: string },
 	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
+	'delegate_research_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
+	'delegate_browser_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
 	'delegate_parallel_tasks': {
 		runId: string,
 		tasks: { task: string, status: string, conclusion: string | null, changedFilePaths: string[], mergeOutcome: string | null, errorMessage: string | null }[],

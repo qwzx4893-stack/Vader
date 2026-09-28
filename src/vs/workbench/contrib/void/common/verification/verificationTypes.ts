@@ -52,11 +52,19 @@ export type VerifyRepairLoopResult = {
 export interface IVerificationService {
 	readonly _serviceBrand: undefined;
 
-	/** gathers real evidence about the current state of the workspace - no LLM judgment yet */
-	gatherEvidence(): Promise<VerificationEvidence>;
+	/**
+	 * gathers real evidence about the current state of the workspace - no LLM judgment yet.
+	 * `opts.cwd`, when given, gathers evidence about that directory instead of the main
+	 * workspace root - e.g. a git worktree's isolated checkout, for pre-merge verification
+	 * (see docs/integrations/parallel-agents.md). `diagnosticsSummary` (IMarkerService) is
+	 * always workbench-wide, since files in an unopened worktree checkout have no editor
+	 * diagnostics to read - `checks` (real build/typecheck/lint/test commands actually run
+	 * in that directory) and `gitDiffStat` are the evidence that's genuinely cwd-scoped.
+	 */
+	gatherEvidence(opts?: { cwd?: string }): Promise<VerificationEvidence>;
 
 	/** one independent verification pass: gathers evidence, then asks a fresh, read-only, separate-context agent thread to judge it against the stated objective */
-	runIndependentVerification(opts: { objective: string }): Promise<{ evidence: VerificationEvidence; verdict: VerificationVerdict }>;
+	runIndependentVerification(opts: { objective: string, cwd?: string }): Promise<{ evidence: VerificationEvidence; verdict: VerificationVerdict }>;
 
 	/**
 	 * Bounded verify -> repair -> re-verify loop: runs independent verification; if it

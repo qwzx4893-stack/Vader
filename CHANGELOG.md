@@ -23,6 +23,12 @@ skipped work - the design is complete and reviewed against the real installed pa
 
 Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean).
 
+**Pre-merge worktree verification** (previously-documented limitation #45): `IToolsService.runVerificationChecksAt(root)` factors `run_verification`'s script-detection logic into a reusable, directory-parameterized method; `IVerificationService.gatherEvidence`/`runIndependentVerification`/`runVerifyRepairLoop` now accept an optional `cwd`. `orchestrationService.ts`'s `_runWorktreeTask` runs real build/typecheck/lint/test checks inside the worktree's own isolated checkout before merging - a failure blocks the merge (`mergeOutcome: 'verification_failed'`) and leaves the branch/worktree in place for manual review, exactly like an existing merge conflict. See `docs/integrations/verification.md`.
+
+**Research/browser Model Router categories wired** (previously-documented limitation #46): two new builtin tools, `delegate_research_task` (hard-forced read-only, like a verification thread) and `delegate_browser_task`, give the Main Agent delegation paths distinct from generic `delegate_subagent_task` whose hidden threads resolve through `resolveModel('research')`/`resolveModel('browser')`. Honestly scoped: this wires model *selection*, not vision/multimodal input, which this codebase has no pipeline for at all. See `docs/integrations/model-router.md`.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors).
+
 ## Unreleased - Branding re-audit, performance pass, verification model routing fix
 
 **Branding re-audit**: a fresh, read-only pass over every `localize`/`localize2` call,

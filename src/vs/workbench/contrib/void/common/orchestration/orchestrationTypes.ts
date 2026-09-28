@@ -32,10 +32,18 @@ export type ParallelTaskState = {
 	conclusion?: string;
 	changedFilePaths?: string[];
 	/** only meaningful when usesWorktree is true */
-	mergeOutcome?: 'merged' | 'no_changes' | 'conflict' | 'not_attempted';
+	mergeOutcome?: 'merged' | 'no_changes' | 'conflict' | 'not_attempted' | 'verification_failed';
 	errorMessage?: string;
 	startedAt?: number;
 	finishedAt?: number;
+	/**
+	 * Real build/typecheck/lint/test results from `IVerificationService.gatherEvidence`, run
+	 * against the worktree's own isolated checkout before merge - see
+	 * docs/integrations/parallel-agents.md's "pre-merge worktree verification" section.
+	 * Undefined when no auto-detectable checks existed for the project (never treated as a
+	 * pass or a fail in that case - the merge proceeds exactly as it did before this existed).
+	 */
+	preMergeChecks?: { name: string; command: string; passed: boolean }[];
 };
 
 export type ParallelRunState = {

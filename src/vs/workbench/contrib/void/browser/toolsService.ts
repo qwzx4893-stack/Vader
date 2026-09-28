@@ -139,6 +139,14 @@ export interface IToolsService {
 	validateParams: ValidateBuiltinParams;
 	callTool: CallBuiltinTool;
 	stringOfResult: BuiltinToolResultToString;
+	/**
+	 * Vader addition: the same build/typecheck/lint/test auto-detection `run_verification`
+	 * uses, generalized to an explicit target directory instead of always the main workspace
+	 * root - see docs/integrations/verification.md's "pre-merge worktree verification"
+	 * section. `run_verification` itself calls this with the workspace root, so there is
+	 * exactly one implementation of the detection/execution logic, not two.
+	 */
+	runVerificationChecksAt(root: URI): Promise<{ checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean }>;
 }
 
 export const IToolsService = createDecorator<IToolsService>('ToolsService');
@@ -150,6 +158,7 @@ export class ToolsService implements IToolsService {
 	public validateParams: ValidateBuiltinParams;
 	public callTool: CallBuiltinTool;
 	public stringOfResult: BuiltinToolResultToString;
+	public runVerificationChecksAt: IToolsService['runVerificationChecksAt'];
 
 	constructor(
 		@IFileService fileService: IFileService,
@@ -172,6 +181,42 @@ export class ToolsService implements IToolsService {
 		@IVerificationService private readonly verificationService: IVerificationService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+
+		this.runVerificationChecksAt = async (root: URI) => {
+			let scripts: Record<string, string> = {}
+			try {
+				const pkgUri = URI.joinPath(root, 'package.json')
+				const pkgContent = (await fileService.readFile(pkgUri)).value.toString()
+				scripts = JSON.parse(pkgContent)?.scripts ?? {}
+			} catch {
+				return { checks: [], detected: false } // not a package.json-based project (or unreadable) - nothing this simple detector understands
+			}
+
+			let packageManager = 'npm run'
+			if (await fileService.exists(URI.joinPath(root, 'pnpm-lock.yaml'))) packageManager = 'pnpm run'
+			else if (await fileService.exists(URI.joinPath(root, 'yarn.lock'))) packageManager = 'yarn run'
+
+			// order matters: typecheck/lint before test, since a build/type error is usually the cheaper, more useful signal
+			const candidateScriptNames = ['build', 'compile', 'typecheck', 'type-check', 'lint', 'test']
+			const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string').slice(0, 5)
+
+			const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[] = []
+			for (const scriptName of scriptsToRun) {
+				const command = `${packageManager} ${scriptName}`
+				const { resPromise } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd: root.fsPath, terminalId: generateUuid() })
+				const { result, resolveReason } = await resPromise
+				const exitCode = resolveReason.type === 'done' ? resolveReason.exitCode : null
+				checks.push({
+					name: scriptName,
+					command,
+					passed: exitCode === 0,
+					exitCode,
+					outputTail: result.slice(-4000),
+				})
+			}
+
+			return { checks, detected: true }
+		}
 
 		this.validateParams = {
 			read_file: (params: RawToolParamsObj) => {
@@ -390,6 +435,18 @@ export class ToolsService implements IToolsService {
 				const task = validateStr('task', taskUnknown)
 				const agentName = validateOptionalStr('agent_name', agentNameUnknown)
 				return { task, agentName }
+			},
+
+			delegate_research_task: (params: RawToolParamsObj) => {
+				const { task: taskUnknown } = params
+				const task = validateStr('task', taskUnknown)
+				return { task }
+			},
+
+			delegate_browser_task: (params: RawToolParamsObj) => {
+				const { task: taskUnknown } = params
+				const task = validateStr('task', taskUnknown)
+				return { task }
 			},
 
 			delegate_parallel_tasks: (params: RawToolParamsObj) => {
@@ -629,40 +686,8 @@ export class ToolsService implements IToolsService {
 			run_verification: async () => {
 				const root = workspaceContextService.getWorkspace().folders[0]?.uri
 				if (!root) return { result: { checks: [], detected: false } }
-
-				let scripts: Record<string, string> = {}
-				try {
-					const pkgUri = URI.joinPath(root, 'package.json')
-					const pkgContent = (await fileService.readFile(pkgUri)).value.toString()
-					scripts = JSON.parse(pkgContent)?.scripts ?? {}
-				} catch {
-					return { result: { checks: [], detected: false } } // not a package.json-based project (or unreadable) - nothing this simple detector understands
-				}
-
-				let packageManager = 'npm run'
-				if (await fileService.exists(URI.joinPath(root, 'pnpm-lock.yaml'))) packageManager = 'pnpm run'
-				else if (await fileService.exists(URI.joinPath(root, 'yarn.lock'))) packageManager = 'yarn run'
-
-				// order matters: typecheck/lint before test, since a build/type error is usually the cheaper, more useful signal
-				const candidateScriptNames = ['build', 'compile', 'typecheck', 'type-check', 'lint', 'test']
-				const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string').slice(0, 5)
-
-				const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[] = []
-				for (const scriptName of scriptsToRun) {
-					const command = `${packageManager} ${scriptName}`
-					const { resPromise } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd: root.fsPath, terminalId: generateUuid() })
-					const { result, resolveReason } = await resPromise
-					const exitCode = resolveReason.type === 'done' ? resolveReason.exitCode : null
-					checks.push({
-						name: scriptName,
-						command,
-						passed: exitCode === 0,
-						exitCode,
-						outputTail: result.slice(-4000),
-					})
-				}
-
-				return { result: { checks, detected: true } }
+				const result = await this.runVerificationChecksAt(root)
+				return { result }
 			},
 			run_verification_agent: async ({ objective, maxIterations }) => {
 				const result = await this.verificationService.runVerifyRepairLoop({ objective, maxIterations: maxIterations ?? undefined })
@@ -745,6 +770,18 @@ export class ToolsService implements IToolsService {
 				const agentGatewayService = instantiationService.invokeFunction(accessor => accessor.get(IAgentGatewayService))
 				const agentId = agentName ? this.agentsService.state.agents.find(a => a.name === agentName)?.id : undefined
 				const result = await agentGatewayService.runIsolatedTask({ task, agentId })
+				return { result }
+			},
+
+			delegate_research_task: async ({ task }) => {
+				const agentGatewayService = instantiationService.invokeFunction(accessor => accessor.get(IAgentGatewayService))
+				const result = await agentGatewayService.runIsolatedTask({ task, routerCategoryOverride: 'research' })
+				return { result }
+			},
+
+			delegate_browser_task: async ({ task }) => {
+				const agentGatewayService = instantiationService.invokeFunction(accessor => accessor.get(IAgentGatewayService))
+				const result = await agentGatewayService.runIsolatedTask({ task, routerCategoryOverride: 'browser' })
 				return { result }
 			},
 
@@ -993,6 +1030,18 @@ export class ToolsService implements IToolsService {
 				if (result.changedFilePaths.length) parts.push(`Files changed:\n${result.changedFilePaths.join('\n')}`)
 				if (result.stalledAwaitingApproval) parts.push(`WARNING: the subagent stopped partway through, waiting on an approval that nothing can grant in this context (likely a sensitive file or command). It has NOT been approved. Review this if the task needed it.`)
 				if (result.hadError) parts.push(`WARNING: the subagent's run ended with an error - the conclusion above may be incomplete.`)
+				return parts.join('\n\n')
+			},
+			delegate_research_task: (params, result) => {
+				const parts = [`Research task complete.\nConclusion:\n${result.conclusion}`]
+				if (result.stalledAwaitingApproval) parts.push(`WARNING: the research subagent stopped partway through, waiting on an approval that nothing can grant in this context. Review this if the task needed it.`)
+				if (result.hadError) parts.push(`WARNING: the research subagent's run ended with an error - the conclusion above may be incomplete.`)
+				return parts.join('\n\n')
+			},
+			delegate_browser_task: (params, result) => {
+				const parts = [`Browser task complete.\nConclusion:\n${result.conclusion}`]
+				if (result.stalledAwaitingApproval) parts.push(`WARNING: the browser subagent stopped partway through, waiting on an approval that nothing can grant in this context. Review this if the task needed it.`)
+				if (result.hadError) parts.push(`WARNING: the browser subagent's run ended with an error - the conclusion above may be incomplete.`)
 				return parts.join('\n\n')
 			},
 		}

@@ -100,7 +100,7 @@ export interface IAgentGatewayService {
 	 * still-running isolated task (see common/orchestration/) capture it from here, since
 	 * this method itself only ever resolves once the task is done.
 	 */
-	runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<IsolatedTaskResult>;
+	runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void, routerCategoryOverride?: 'research' | 'browser' }): Promise<IsolatedTaskResult>;
 
 	/**
 	 * Runs an independent verification judgment (see common/verification/) in a hidden,

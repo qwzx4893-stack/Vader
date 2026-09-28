@@ -11,6 +11,7 @@ import { IAgentOrchestrationService, ParallelRunState, ParallelTaskSpec, Paralle
 import { IAgentGatewayService } from './agentGatewayService.js';
 import { IGitWorktreeMainService } from '../common/worktree/gitWorktreeService.js';
 import { IAgentsService } from '../common/agents/agentsService.js';
+import { IVerificationService } from './verificationService.js';
 
 export * from '../common/orchestration/orchestrationTypes.js';
 
@@ -47,6 +48,7 @@ class AgentOrchestrationService extends Disposable implements IAgentOrchestratio
 		@IAgentGatewayService private readonly _agentGatewayService: IAgentGatewayService,
 		@IGitWorktreeMainService private readonly _gitWorktreeService: IGitWorktreeMainService,
 		@IAgentsService private readonly _agentsService: IAgentsService,
+		@IVerificationService private readonly _verificationService: IVerificationService,
 	) {
 		super();
 	}
@@ -199,6 +201,31 @@ This is an isolated git worktree - a separate checkout of this same repository, 
 				? 'Subagent stalled awaiting an approval nothing could grant in this context. Its worktree and branch are left in place for manual review.'
 				: 'Subagent run ended with an error. Its worktree and branch are left in place for manual review.';
 			return;
+		}
+
+		// Vader addition: pre-merge verification. Runs the project's own build/typecheck/lint/
+		// test commands *inside the worktree's own isolated checkout* (not the main
+		// workbench's IMarkerService, which only reflects files open in editors and would
+		// never see an unopened worktree's changes) before integrating them - see
+		// docs/integrations/parallel-agents.md. A real check failure blocks the merge; the
+		// branch and worktree are left in place for manual review, exactly like a merge
+		// conflict, so nothing is silently discarded and a human (or a follow-up task) can
+		// still merge it after inspecting or fixing it - that manual path is this gate's
+		// "explicit override," rather than a new settings toggle that would let a failing
+		// check be integrated unreviewed by default. No checks detected for the project is
+		// never treated as a pass or a fail - the merge proceeds exactly as before this gate
+		// existed, since there's nothing here to judge it against.
+		const preMergeEvidence = await this._verificationService.gatherEvidence({ cwd: created.worktreePath });
+		if (preMergeEvidence.checksDetected && preMergeEvidence.checks.some(c => !c.passed)) {
+			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
+			t.status = 'error';
+			t.mergeOutcome = 'verification_failed';
+			const failed = preMergeEvidence.checks.filter(c => !c.passed).map(c => c.name).join(', ');
+			t.errorMessage = `Pre-merge verification failed in the isolated worktree (${failed}). Not merged - branch "${created.branchName}" and its worktree are left in place for manual review.`;
+			return; // never auto-remove a worktree whose verification failed
+		}
+		if (preMergeEvidence.checksDetected) {
+			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
 		}
 
 		const targetBranch = await this._gitWorktreeService.getCurrentBranch(repoPath);
