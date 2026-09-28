@@ -23,7 +23,11 @@
 				"name": "tsec",
 				"exemptionConfig": "./tsec.exemptions.json"
 			}
-		]
+		],
+		"paths": {
+			"@cline/shared": ["./typings/cline-shared.d.ts"],
+			"@cline/agents": ["./typings/cline-agents.d.ts"]
+		}
 	},
 	"include": [
 		"./*.ts",

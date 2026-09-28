@@ -16,6 +16,10 @@ import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict }
 import { getModelCapabilities } from '../common/modelCapabilities.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
+import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
+import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
+import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
+import { createClineAgentRuntime } from './agentRuntime/clineRuntimeAdapter.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
@@ -468,6 +472,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IAgentsService private readonly _agentsService: IAgentsService,
 		@IMemoryService private readonly _memoryService: IMemoryService,
 		@IModelRouterService private readonly _modelRouterService: IModelRouterService,
+		@IAgentRuntimeRegistryService private readonly _agentRuntimeRegistryService: IAgentRuntimeRegistryService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -698,6 +703,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	}
 
 	approveLatestToolRequest(threadId: string) {
+		// Vader addition: a thread whose current tool_request came from _runToolCallInline
+		// (the Cline path) is waiting on this exact promise, not on a fresh _runChatAgent
+		// call - resolving it lets @cline/agents' own AgentRuntime resume the rest of its
+		// tool-call batch itself. See _runToolCallInline's doc comment.
+		const pendingInline = this._pendingInlineApprovals.get(threadId)
+		if (pendingInline) {
+			this._pendingInlineApprovals.delete(threadId)
+			pendingInline('approved')
+			return
+		}
+
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -712,6 +728,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		)
 	}
 	rejectLatestToolRequest(threadId: string) {
+		const pendingInline = this._pendingInlineApprovals.get(threadId)
+		if (pendingInline) {
+			this._pendingInlineApprovals.delete(threadId)
+			pendingInline('rejected')
+			return
+		}
+
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -782,127 +805,143 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 	// returns true when the tool call is waiting for user approval
-	private _runToolCall = async (
+	// Vader addition, part of the Cline Main Agent Runtime integration (see
+	// docs/integrations/agent-runtime.md). Factored out of the old monolithic _runToolCall so
+	// the exact same non-bypassable gate sequence (validate -> checkpoint -> agent-scope ->
+	// read-only-mode -> Policy Engine -> approval-type resolution) backs BOTH the legacy loop
+	// (_runToolCall, below - identical behavior, pure extraction) and the Cline path
+	// (_runToolCallInline, below - awaits approval inline instead of returning early). Every
+	// blocked/rejected/needs-approval outcome adds the exact same thread message either path
+	// would have added, so thread history looks identical regardless of which runtime ran the
+	// turn. Nothing here is duplicated - there is exactly one implementation of this gate.
+	private _evaluateToolCallGate = (
 		threadId: string,
 		toolName: ToolName,
 		toolId: string,
 		mcpServerName: string | undefined,
-		opts: { preapproved: true, unvalidatedToolParams: RawToolParamsObj, validatedParams: ToolCallParams<ToolName> } | { preapproved: false, unvalidatedToolParams: RawToolParamsObj },
-	): Promise<{ awaitingUserApproval?: boolean, interrupted?: boolean }> => {
+		unvalidatedToolParams: RawToolParamsObj,
+	):
+		| { kind: 'invalid_params' }
+		| { kind: 'rejected', validatedParams: ToolCallParams<ToolName> }
+		| { kind: 'needs_approval', validatedParams: ToolCallParams<ToolName> }
+		| { kind: 'approved', validatedParams: ToolCallParams<ToolName> } => {
 
-		// compute these below
+		const isBuiltInTool = isABuiltinToolName(toolName)
 		let toolParams: ToolCallParams<ToolName>
+
+		// 1. validate tool params
+		try {
+			if (isBuiltInTool) {
+				toolParams = this._toolsService.validateParams[toolName](unvalidatedToolParams)
+			}
+			else {
+				toolParams = unvalidatedToolParams
+			}
+		}
+		catch (error) {
+			const errorMessage = getErrorMessage(error)
+			this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: errorMessage, id: toolId, mcpServerName })
+			return { kind: 'invalid_params' }
+		}
+		// once validated, add checkpoint for edit
+		if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
+		if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
+
+		// 1.4. Permanent agent scope: if this thread is running as a permanent agent
+		// (agents/agentsService.ts), its own restrictions apply on top of the global
+		// policy, and are checked the same hard way (before approval, not advisory).
+		const runningAgentId = this.state.allThreads[threadId]?.agentId
+		const runningAgent = runningAgentId ? this._agentsService.getAgent(runningAgentId) : undefined
+		if (runningAgent) {
+			const approvalTypeForAgentCheck = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
+			const blockedReason =
+				runningAgent.deniedToolNames.includes(toolName) ? `Agent "${runningAgent.name}" is not permitted to use ${toolName}.`
+					: approvalTypeForAgentCheck && !runningAgent.allowedApprovalTypes.includes(approvalTypeForAgentCheck) ? `Agent "${runningAgent.name}" is not permitted to perform ${approvalTypeForAgentCheck} actions.`
+						: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
+							: null
+			if (blockedReason) {
+				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${blockedReason}` })
+				return { kind: 'rejected', validatedParams: toolParams }
+			}
+		}
+
+		// 1.45. Read-only chat mode enforcement (Gather/Plan): hard, unconditional -
+		// see READONLY_MODE_BLOCKED_BUILTIN_TOOLS above for why each tool is listed and
+		// docs/integrations/plan-mode.md for the audit finding this fixes.
+		const currentChatMode = this._settingsService.state.globalSettings.chatMode
+		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
+		const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
+		if (currentChatMode === 'gather' || currentChatMode === 'plan' || isVerificationThread || isResearchThread) {
+			const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
+			if (blockedInReadonlyMode) {
+				const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
+				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` })
+				return { kind: 'rejected', validatedParams: toolParams }
+			}
+		}
+
+		// 1.5. Policy Engine: a hard, pre-execution gate that runs regardless of what the
+		// model was told, and regardless of the user's auto-approve settings. A 'deny'
+		// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
+		// verdict forces an approval prompt even if this tool category is auto-approved.
+		const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+		if (runningAgent && policyReq?.filePaths) {
+			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths)
+			if (scopeVerdict.kind === 'deny') {
+				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${scopeVerdict.reason}` })
+				return { kind: 'rejected', validatedParams: toolParams }
+			}
+		}
+		const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
+		if (policyVerdict.kind === 'deny') {
+			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` })
+			return { kind: 'rejected', validatedParams: toolParams }
+		}
+
+		// 2. if tool requires approval, the caller decides how to wait (return early vs await inline)
+
+		const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
+		const policyForcesAsk = policyVerdict.kind === 'ask'
+		if (approvalType || policyForcesAsk) {
+			// A subagent thread (delegate_subagent_task) has no human present to click
+			// approve, so it auto-approves the ordinary tool-category gate on its own
+			// thread only - never the user's global setting, and never a policy 'ask'
+			// verdict, which still stalls it exactly like it would a human-driven thread.
+			const isSubagentThread = !!this.state.allThreads[threadId]?.isSubagentThread
+			const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType]) : false
+			// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
+			const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
+			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+			if (!autoApprove) {
+				return { kind: 'needs_approval', validatedParams: toolParams }
+			}
+		}
+
+		return { kind: 'approved', validatedParams: toolParams }
+	}
+
+	// Vader addition: steps 3-5 of the old _runToolCall (call the tool, stringify the result,
+	// record it) - factored out so both the legacy loop and the Cline path execute a tool the
+	// exact same way once the gate above has approved it. Returns the actual result string
+	// (the legacy loop doesn't need this - it reads thread messages instead - but Cline's
+	// tool.execute() must return a real value, which is the whole reason this is a separate,
+	// callable-for-its-return-value method rather than inlined only into _runToolCall).
+	private _executeAndRecordToolCall = async (
+		threadId: string,
+		toolName: ToolName,
+		toolId: string,
+		mcpServerName: string | undefined,
+		unvalidatedToolParams: RawToolParamsObj,
+		toolParams: ToolCallParams<ToolName>,
+	): Promise<{ resultStr: string, isError: boolean } | { interrupted: true }> => {
+
+		const isBuiltInTool = isABuiltinToolName(toolName)
 		let toolResult: ToolResult<ToolName>
 		let toolResultStr: string
 
-		// Check if it's a built-in tool
-		const isBuiltInTool = isABuiltinToolName(toolName)
-
-
-		if (!opts.preapproved) { // skip this if pre-approved
-			// 1. validate tool params
-			try {
-				if (isBuiltInTool) {
-					const params = this._toolsService.validateParams[toolName](opts.unvalidatedToolParams)
-					toolParams = params
-				}
-				else {
-					toolParams = opts.unvalidatedToolParams
-				}
-			}
-			catch (error) {
-				const errorMessage = getErrorMessage(error)
-				this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: opts.unvalidatedToolParams, result: null, name: toolName, content: errorMessage, id: toolId, mcpServerName })
-				return {}
-			}
-			// once validated, add checkpoint for edit
-			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
-			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
-
-			// 1.4. Permanent agent scope: if this thread is running as a permanent agent
-			// (agents/agentsService.ts), its own restrictions apply on top of the global
-			// policy, and are checked the same hard way (before approval, not advisory).
-			const runningAgentId = this.state.allThreads[threadId]?.agentId
-			const runningAgent = runningAgentId ? this._agentsService.getAgent(runningAgentId) : undefined
-			if (runningAgent) {
-				const approvalTypeForAgentCheck = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-				const blockedReason =
-					runningAgent.deniedToolNames.includes(toolName) ? `Agent "${runningAgent.name}" is not permitted to use ${toolName}.`
-						: approvalTypeForAgentCheck && !runningAgent.allowedApprovalTypes.includes(approvalTypeForAgentCheck) ? `Agent "${runningAgent.name}" is not permitted to perform ${approvalTypeForAgentCheck} actions.`
-							: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
-								: null
-				if (blockedReason) {
-					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${blockedReason}` })
-					return {}
-				}
-			}
-
-			// 1.45. Read-only chat mode enforcement (Gather/Plan): hard, unconditional -
-			// see READONLY_MODE_BLOCKED_BUILTIN_TOOLS above for why each tool is listed and
-			// docs/integrations/plan-mode.md for the audit finding this fixes.
-			const currentChatMode = this._settingsService.state.globalSettings.chatMode
-			const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
-			const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
-			if (currentChatMode === 'gather' || currentChatMode === 'plan' || isVerificationThread || isResearchThread) {
-				const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
-				if (blockedInReadonlyMode) {
-					const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
-					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` })
-					return {}
-				}
-			}
-
-			// 1.5. Policy Engine: a hard, pre-execution gate that runs regardless of what the
-			// model was told, and regardless of the user's auto-approve settings. A 'deny'
-			// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
-			// verdict forces an approval prompt even if this tool category is auto-approved.
-			const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
-			if (runningAgent && policyReq?.filePaths) {
-				const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths)
-				if (scopeVerdict.kind === 'deny') {
-					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${scopeVerdict.reason}` })
-					return {}
-				}
-			}
-			const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
-			if (policyVerdict.kind === 'deny') {
-				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` })
-				return {}
-			}
-
-			// 2. if tool requires approval, break from the loop, awaiting approval
-
-			const approvalType = isBuiltInTool ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-			const policyForcesAsk = policyVerdict.kind === 'ask'
-			if (approvalType || policyForcesAsk) {
-				// A subagent thread (delegate_subagent_task) has no human present to click
-				// approve, so it auto-approves the ordinary tool-category gate on its own
-				// thread only - never the user's global setting, and never a policy 'ask'
-				// verdict, which still stalls it exactly like it would a human-driven thread.
-				const isSubagentThread = !!this.state.allThreads[threadId]?.isSubagentThread
-				const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType]) : false
-				// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
-				const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
-				this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
-				if (!autoApprove) {
-					return { awaitingUserApproval: true }
-				}
-			}
-		}
-		else {
-			toolParams = opts.validatedParams
-		}
-
-
-
-
-
-
 		// 3. call the tool
-		// this._setStreamState(threadId, { isRunning: 'tool' }, 'merge')
-		const runningTool = { role: 'tool', type: 'running_now', name: toolName, params: toolParams, content: '(value not received yet...)', result: null, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName } as const
+		const runningTool = { role: 'tool', type: 'running_now', name: toolName, params: toolParams, content: '(value not received yet...)', result: null, id: toolId, rawParams: unvalidatedToolParams, mcpServerName } as const
 		this._updateLatestTool(threadId, runningTool)
-
 
 		let interrupted = false
 		let resolveInterruptor: (r: () => void) => void = () => { }
@@ -910,7 +949,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		try {
 
 			// set stream state
-			this._setStreamState(threadId, { isRunning: 'tool', interrupt: interruptorPromise, toolInfo: { toolName, toolParams, id: toolId, content: 'interrupted...', rawParams: opts.unvalidatedToolParams, mcpServerName } })
+			this._setStreamState(threadId, { isRunning: 'tool', interrupt: interruptorPromise, toolInfo: { toolName, toolParams, id: toolId, content: 'interrupted...', rawParams: unvalidatedToolParams, mcpServerName } })
 
 			if (isBuiltInTool) {
 				const { result, interruptTool } = await this._toolsService.callTool[toolName](toolParams as any)
@@ -940,8 +979,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			if (interrupted) { return { interrupted: true } } // the tool result is added where we interrupt, not here
 
 			const errorMessage = getErrorMessage(error)
-			this._updateLatestTool(threadId, { role: 'tool', type: 'tool_error', params: toolParams, result: errorMessage, name: toolName, content: errorMessage, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
-			return {}
+			this._updateLatestTool(threadId, { role: 'tool', type: 'tool_error', params: toolParams, result: errorMessage, name: toolName, content: errorMessage, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+			return { resultStr: errorMessage, isError: true }
 		}
 
 		// 4. stringify the result to give to the LLM
@@ -955,14 +994,89 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			}
 		} catch (error) {
 			const errorMessage = this.toolErrMsgs.errWhenStringifying(error)
-			this._updateLatestTool(threadId, { role: 'tool', type: 'tool_error', params: toolParams, result: errorMessage, name: toolName, content: errorMessage, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
-			return {}
+			this._updateLatestTool(threadId, { role: 'tool', type: 'tool_error', params: toolParams, result: errorMessage, name: toolName, content: errorMessage, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+			return { resultStr: errorMessage, isError: true }
 		}
 
 		// 5. add to history and keep going
-		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName })
+		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+		return { resultStr: toolResultStr, isError: false }
+	}
+
+	// returns true when the tool call is waiting for user approval
+	private _runToolCall = async (
+		threadId: string,
+		toolName: ToolName,
+		toolId: string,
+		mcpServerName: string | undefined,
+		opts: { preapproved: true, unvalidatedToolParams: RawToolParamsObj, validatedParams: ToolCallParams<ToolName> } | { preapproved: false, unvalidatedToolParams: RawToolParamsObj },
+	): Promise<{ awaitingUserApproval?: boolean, interrupted?: boolean }> => {
+
+		let toolParams: ToolCallParams<ToolName>
+
+		if (!opts.preapproved) {
+			const gateResult = this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, opts.unvalidatedToolParams)
+			if (gateResult.kind === 'invalid_params' || gateResult.kind === 'rejected') return {}
+			if (gateResult.kind === 'needs_approval') return { awaitingUserApproval: true }
+			toolParams = gateResult.validatedParams
+		}
+		else {
+			toolParams = opts.validatedParams
+		}
+
+		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, opts.unvalidatedToolParams, toolParams)
+		if ('interrupted' in execResult) return { interrupted: true }
 		return {}
 	};
+
+	// Vader addition: the Cline-path equivalent of _runToolCall, used only by
+	// ClineRuntimeAdapter's tool execute() callbacks (see clineRuntimeAdapter.ts). Runs the
+	// exact same gate as the legacy loop, but instead of returning early on 'needs_approval',
+	// awaits a promise that resolves when the user approves/rejects via the ordinary
+	// approve/reject UI (see approveLatestToolRequest/rejectLatestToolRequest's
+	// _pendingInlineApprovals check) - because this await happens inside one call that
+	// @cline/agents' AgentRuntime is itself awaiting as part of a tool-call batch, the
+	// remaining calls in that same batch are never lost: AgentRuntime resumes them itself once
+	// this promise settles. This is the concrete fix for the previously-documented limitation
+	// ("a multi-tool-call turn interrupted mid-batch for approval does not resume the rest of
+	// that batch after approval").
+	private _pendingInlineApprovals = new Map<string, (decision: 'approved' | 'rejected') => void>();
+
+	private _runToolCallInline = async (
+		threadId: string,
+		toolName: ToolName,
+		toolId: string,
+		mcpServerName: string | undefined,
+		unvalidatedToolParams: RawToolParamsObj,
+	): Promise<{ resultStr: string, isError: boolean }> => {
+
+		const gateResult = this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams)
+
+		if (gateResult.kind === 'invalid_params') {
+			return { resultStr: 'Tool call had invalid parameters and was not executed.', isError: true }
+		}
+		if (gateResult.kind === 'rejected') {
+			return { resultStr: 'Tool call was blocked by Vader policy/scope and was not executed.', isError: true }
+		}
+
+		const toolParams = gateResult.validatedParams
+		if (gateResult.kind === 'needs_approval') {
+			this._setStreamState(threadId, { isRunning: 'awaiting_user' })
+			const decision = await new Promise<'approved' | 'rejected'>(resolve => {
+				this._pendingInlineApprovals.set(threadId, resolve)
+			})
+			if (decision === 'rejected') {
+				this._updateLatestTool(threadId, { role: 'tool', type: 'rejected', params: toolParams, result: null, name: toolName, content: this.toolErrMsgs.rejected, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+				return { resultStr: this.toolErrMsgs.rejected, isError: true }
+			}
+			this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })
+		}
+
+		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams, toolParams)
+		if ('interrupted' in execResult) return { resultStr: this.toolErrMsgs.interrupted, isError: true }
+		return execResult
+	}
 
 
 
@@ -1150,7 +1264,140 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._setState({ allThreads: newThreads })
 	}
 
-	private async _runChatAgent({
+	// Vader addition, part of the Cline Main Agent Runtime integration (see
+	// docs/integrations/agent-runtime.md). The single dispatcher every call site
+	// (_addUserMessageAndStreamResponse, editUserMessageAndStreamResponse, runSubagentTask,
+	// runVerificationTask, approveLatestToolRequest's legacy-only re-entry path) already goes
+	// through - Cline is the DEFAULT, chosen fresh from IAgentRuntimeRegistryService's current
+	// selection on every call (never cached), so a runtime that fails init gets a chance to
+	// recover on refresh without restarting Vader. `callThisToolFirst` (the legacy
+	// approve-and-resume re-entry point) always routes to the legacy implementation - a Cline-
+	// driven thread never produces this call shape in the first place, since its approval
+	// wait resolves through _pendingInlineApprovals instead (see _runToolCallInline).
+	//
+	// A genuine per-task error while Cline is driving a turn (a provider error, a tool
+	// throwing, an unexpected runtime exception) is surfaced as an ordinary stream error on
+	// that thread - exactly like the legacy loop already does after exhausting its own
+	// retries - and does NOT change IAgentRuntimeRegistryService's selection. Per the mission's
+	// explicit requirement, only a genuine initialization/compatibility failure (caught once,
+	// at the registry's own probe) or an explicit user/developer selection may switch the
+	// active runtime - never an ordinary task error silently substituting Legacy underneath
+	// the user.
+	private _runChatAgent = async (opts: {
+		threadId: string,
+		modelSelection: ModelSelection | null,
+		modelSelectionOptions: ModelSelectionOptions | undefined,
+		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' }
+	}): Promise<void> => {
+		if (opts.callThisToolFirst) {
+			return this._runChatAgentLegacy(opts)
+		}
+
+		const selection = this._agentRuntimeRegistryService.getSelection()
+		if (selection.active !== 'cline') {
+			return this._runChatAgentLegacy(opts)
+		}
+
+		try {
+			await this._runChatAgentViaCline(opts.threadId, opts.modelSelection, opts.modelSelectionOptions)
+		} catch (error) {
+			const errorMessage = getErrorMessage(error)
+			this._addUserCheckpoint({ threadId: opts.threadId })
+			this._setStreamState(opts.threadId, { isRunning: undefined, error: { message: errorMessage, fullError: error instanceof Error ? error : null } })
+		}
+	}
+
+	// Vader addition: drives one Main Agent turn through @cline/agents' AgentRuntime instead
+	// of the legacy hand-rolled loop below. See vaderAgentModel.ts/clineToolAdapter.ts/
+	// clineRuntimeAdapter.ts for the three pieces this assembles, and
+	// docs/integrations/agent-runtime.md for the full design this implements.
+	private async _runChatAgentViaCline(threadId: string, modelSelection: ModelSelection | null, modelSelectionOptions: ModelSelectionOptions | undefined): Promise<void> {
+		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
+		const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
+		const { chatMode: globalChatMode } = this._settingsService.state.globalSettings
+		const chatMode = (isVerificationThread || isResearchThread) ? 'gather' : globalChatMode
+		const agentId = this.state.allThreads[threadId]?.agentId
+
+		const mcpTools = this._mcpService.getMCPTools()
+		const tools = buildClineTools({
+			chatMode,
+			mcpTools,
+			computeMCPServerOfToolName: this._computeMCPServerOfToolName,
+			runToolCallInline: (toolName, toolId, mcpServerName, params) => this._runToolCallInline(threadId, toolName, toolId, mcpServerName, params),
+		})
+
+		const model = new VaderAgentModel(this._llmMessageService, this._convertToLLMMessagesService, {
+			getThreadMessages: () => this.state.allThreads[threadId]?.messages ?? [],
+			maybeCompactThread: () => this._maybeCompactThread(threadId, modelSelection),
+			chatMode,
+			agentId,
+			modelSelection,
+			modelSelectionOptions,
+			overridesOfModel: this._settingsService.state.overridesOfModel,
+			loggingName: `Chat - ${chatMode} (Cline)`,
+		})
+
+		const runtime = createClineAgentRuntime({ model, tools })
+
+		let textSoFar = ''
+		let reasoningSoFar = ''
+		const unsubscribe = runtime.subscribe((event) => {
+			if (event.type === 'assistant-text-delta') {
+				textSoFar = event.accumulatedText
+				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
+			}
+			else if (event.type === 'assistant-reasoning-delta') {
+				reasoningSoFar = event.accumulatedText
+				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
+			}
+			else if (event.type === 'assistant-message') {
+				const text = event.message.content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
+				const reasoning = event.message.content.filter(p => p.type === 'reasoning').map(p => (p as { text: string }).text).join('')
+				// anthropicReasoning is not preserved for Cline-driven turns: Cline abstracts
+				// reasoning as plain text across providers, so Anthropic's raw signed
+				// extended-thinking blocks (needed only for exact replay on a later turn) - a
+				// known, honest fidelity gap, documented in docs/integrations/agent-runtime.md.
+				this._addMessageToThread(threadId, { role: 'assistant', displayContent: text, reasoning, anthropicReasoning: null })
+				this._maybeCaptureThreadPlan(threadId, text)
+				textSoFar = ''
+				reasoningSoFar = ''
+			}
+		})
+
+		this._setStreamState(threadId, { isRunning: 'idle', interrupt: Promise.resolve(() => runtime.abort()) })
+
+		const lastUserMsg = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'user')
+		const runInput = (lastUserMsg && lastUserMsg.role === 'user') ? lastUserMsg.content : ''
+
+		try {
+			const result = await runtime.run(runInput)
+			unsubscribe()
+
+			if (result.status === 'aborted') {
+				this._setStreamState(threadId, undefined)
+				return
+			}
+			if (result.status === 'failed') {
+				const message = result.error?.message ?? 'Cline runtime run failed for an unknown reason.'
+				this._setStreamState(threadId, { isRunning: undefined, error: { message, fullError: result.error ?? null } })
+				this._addUserCheckpoint({ threadId })
+				return
+			}
+
+			// 'completed': if a tool call is still awaiting approval, _runToolCallInline has
+			// already set isRunning to 'awaiting_user' and this must not clear it.
+			if (this._currentIsRunning(threadId) !== 'awaiting_user') {
+				this._setStreamState(threadId, undefined)
+				this._addUserCheckpoint({ threadId })
+			}
+			this._metricsService.capture('Agent Loop Done', { chatMode, runtime: 'cline' })
+		} catch (error) {
+			unsubscribe()
+			throw error // handled by _runChatAgent's dispatcher, which surfaces it as a per-task stream error
+		}
+	}
+
+	private async _runChatAgentLegacy({
 		threadId,
 		modelSelection,
 		modelSelectionOptions,
