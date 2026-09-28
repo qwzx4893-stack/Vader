@@ -14,7 +14,7 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
-import { MCPServerOfName, MCPConfigFileJSON, MCPServer, MCPToolCallParams, RawMCPToolCall, MCPServerEventResponse } from './mcpServiceTypes.js';
+import { MCPServerOfName, MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, MCPToolCallParams, RawMCPToolCall, MCPServerEventResponse } from './mcpServiceTypes.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { InternalToolInfo } from './prompt/prompts.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
@@ -30,6 +30,18 @@ export interface IMCPService {
 	readonly _serviceBrand: undefined;
 	revealMCPConfigFile(): Promise<void>;
 	toggleServerIsOn(serverName: string, isOn: boolean): Promise<void>;
+
+	/**
+	 * Vader addition: programmatic add/update of one server entry in mcp.json, so the
+	 * Unified Capability Marketplace's "Configure" action for an MCP Registry result doesn't
+	 * require the user to hand-edit the config file for ordinary supported installs - see
+	 * docs/integrations/marketplace.md. Writing the file is enough: the existing file watcher
+	 * (`_addMCPConfigFileWatcher`) picks up the change and runs the real
+	 * add-server/health-check flow exactly as if the user had edited it by hand, so this adds
+	 * no second server-lifecycle path.
+	 */
+	addOrUpdateServer(name: string, entry: MCPConfigFileEntryJSON): Promise<void>;
+	removeServer(name: string): Promise<void>;
 
 	readonly state: MCPServiceState; // NOT persisted
 	onDidChangeState: Event<void>;
@@ -181,6 +193,24 @@ class MCPService extends Disposable implements IMCPService {
 		} catch (error) {
 			console.error('Error opening MCP config file:', error);
 		}
+	}
+
+	public async addOrUpdateServer(name: string, entry: MCPConfigFileEntryJSON): Promise<void> {
+		const mcpConfigUri = await this._getMCPConfigFilePath();
+		const existing = await this._parseMCPConfigFile() ?? { mcpServers: {} };
+		const newConfig: MCPConfigFileJSON = { ...existing, mcpServers: { ...existing.mcpServers, [name]: entry } };
+		await this.fileService.writeFile(mcpConfigUri, VSBuffer.fromString(JSON.stringify(newConfig, null, 2)));
+		// the file watcher (_addMCPConfigFileWatcher) picks this up and runs the real
+		// add-server/health-check flow - no second path duplicating that logic here.
+	}
+
+	public async removeServer(name: string): Promise<void> {
+		const mcpConfigUri = await this._getMCPConfigFilePath();
+		const existing = await this._parseMCPConfigFile();
+		if (!existing || !(name in existing.mcpServers)) return;
+		const { [name]: _removed, ...remaining } = existing.mcpServers;
+		const newConfig: MCPConfigFileJSON = { ...existing, mcpServers: remaining };
+		await this.fileService.writeFile(mcpConfigUri, VSBuffer.fromString(JSON.stringify(newConfig, null, 2)));
 	}
 
 	public getMCPTools(): InternalToolInfo[] | undefined {

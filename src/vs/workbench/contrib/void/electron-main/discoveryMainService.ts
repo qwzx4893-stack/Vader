@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { IDiscoveryMainService, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
+import { IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
 
 // Real, live, unauthenticated public APIs - no source code or workspace content is ever
 // sent to either of these, only the search string the user/agent typed.
@@ -49,7 +49,21 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 				const server = entry?.server ?? entry;
 				const remotes: any[] = Array.isArray(server?.remotes) ? server.remotes : [];
 				const remoteUrl: string | undefined = remotes.find(r => typeof r?.url === 'string')?.url;
-				const hasPackages = Array.isArray(server?.packages) && server.packages.length > 0;
+				const rawPackages: any[] = Array.isArray(server?.packages) ? server.packages : [];
+				const hasPackages = rawPackages.length > 0;
+				const packages: McpRegistryPackage[] = rawPackages.map((p): McpRegistryPackage => ({
+					registryType: String(p?.registryType ?? p?.registry_type ?? 'unknown'),
+					identifier: String(p?.identifier ?? p?.name ?? ''),
+					version: String(p?.version ?? ''),
+					runtimeHint: p?.runtimeHint ?? p?.runtime_hint,
+					environmentVariables: Array.isArray(p?.environmentVariables) ? p.environmentVariables.map((e: any) => ({
+						name: String(e?.name ?? ''),
+						description: e?.description ? String(e.description) : undefined,
+						isRequired: !!e?.isRequired,
+						isSecret: !!e?.isSecret,
+						default: e?.default !== undefined ? String(e.default) : undefined,
+					})) : undefined,
+				}));
 				return {
 					name: String(server?.name ?? 'unknown'),
 					description: String(server?.description ?? ''),
@@ -57,6 +71,7 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 					remoteUrl,
 					localOnly: !remoteUrl && hasPackages,
 					repositoryUrl: server?.repository?.url,
+					packages: packages.length > 0 ? packages : undefined,
 				};
 			});
 		} catch (e) {

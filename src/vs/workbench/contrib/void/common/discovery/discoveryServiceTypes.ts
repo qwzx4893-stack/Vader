@@ -10,6 +10,18 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 // no source code is ever uploaded to discover something, per the mission's privacy
 // requirement ("do not upload project source merely to discover Skills").
 
+// Vader addition: one real package entry from the official MCP Registry's own schema
+// (verified directly against a live response from registry.modelcontextprotocol.io in this
+// session) - real fields only, nothing invented, used to build an actual runnable command for
+// "one-click configure" rather than just linking the user to the package.
+export type McpRegistryPackage = {
+	readonly registryType: string; // e.g. 'npm', 'pypi', 'oci'
+	readonly identifier: string; // package name
+	readonly version: string;
+	readonly runtimeHint?: string; // e.g. 'npx', 'uvx', 'docker'
+	readonly environmentVariables?: readonly { readonly name: string; readonly description?: string; readonly isRequired?: boolean; readonly isSecret?: boolean; readonly default?: string }[];
+};
+
 export type McpRegistrySearchResult = {
 	readonly name: string;
 	readonly description: string;
@@ -19,6 +31,8 @@ export type McpRegistrySearchResult = {
 	/** true if this server only ships as a local package (npm/pip/docker/...) requiring manual setup */
 	readonly localOnly: boolean;
 	readonly repositoryUrl?: string;
+	/** real package metadata for localOnly servers, straight from the registry response - lets a real command be constructed instead of only linking the user to the package */
+	readonly packages?: readonly McpRegistryPackage[];
 };
 
 export type SkillNetSearchResult = {
