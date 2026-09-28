@@ -31,7 +31,8 @@ Void already lets the user pick a model per feature (`voidSettingsTypes.ts`'s `f
 
 - **Subagent delegation** (`chatThreadService.ts`'s `_currentModelSelectionProps`): a subagent thread with no agent-pinned model (i.e. `delegate_subagent_task` without `agent_name`, or an agent with no `modelSelection` override) resolves through `resolveModel('subagent')` instead of unconditionally inheriting the Main Agent's Chat model.
 - **Context compaction** (`_maybeCompactThread`'s `_sendCompactionRequest`): resolves through `resolveModel('summarization')`, falling back to the thread's own model if the router has nothing configured.
-- **research/browser/verification categories** exist in the type and are resolvable today, but nothing calls `resolveModel('research'|'browser'|'verification')` yet - there's no dedicated research-subagent or verification-agent execution path in this codebase yet (the latter is `run_verification`, which doesn't call an LLM at all - it runs the project's own build/lint/test commands). Wiring these in is real, tracked follow-up for when those execution paths exist, not something this router pretends to already do.
+- **`verification` is wired**: `chatThreadService.ts`'s `_currentModelSelectionProps` routes a verification thread (`isVerificationThread`) through `resolveModel('verification')` (checked before the generic `subagent` case, since a verification thread is also flagged as a subagent thread).
+- **research/browser categories** exist in the type and are resolvable today, but nothing calls `resolveModel('research'|'browser')` yet - there's no dedicated research-subagent or browser-driving execution path distinct from generic subagent delegation in this codebase yet. Wiring these in is real, tracked follow-up for when those execution paths exist, not something this router pretends to already do.
 
 ## Settings UI
 

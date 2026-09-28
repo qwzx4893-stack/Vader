@@ -38,18 +38,23 @@ class VerificationService extends Disposable implements IVerificationService {
 	async gatherEvidence(): Promise<VerificationEvidence> {
 		const repoPath = this._workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
 
-		const gitDiffStat = repoPath ? await this._scmService.gitStat(repoPath).catch(() => '') : '';
+		// Vader perf note: these three are fully independent (git diff, live in-memory
+		// diagnostics, and running the project's own build/lint/test scripts) - run
+		// concurrently rather than one after another, since the checks alone can take
+		// seconds and there's no dependency forcing them to wait on the git diff first.
+		const [gitDiffStat, { result: verificationResult }] = await Promise.all([
+			repoPath ? this._scmService.gitStat(repoPath).catch(() => '') : Promise.resolve(''),
+			// reuses run_verification's own project-command auto-detection rather than
+			// re-implementing it - see toolsService.ts's callTool.run_verification
+			this._toolsService.callTool['run_verification']({}),
+		]);
+		const { checks, detected } = await verificationResult;
 
 		const markers = this._markerService.read({ severities: MarkerSeverity.Warning | MarkerSeverity.Error });
 		const diagnosticsSummary = markers.length === 0 ? '' : markers
 			.slice(0, 50)
 			.map(m => `${m.resource.fsPath}:${m.startLineNumber}: [${MarkerSeverity.toString(m.severity)}] ${m.message}`)
 			.join('\n');
-
-		// reuses run_verification's own project-command auto-detection rather than
-		// re-implementing it - see toolsService.ts's callTool.run_verification
-		const { result } = await this._toolsService.callTool['run_verification']({});
-		const { checks, detected } = await result;
 
 		return { gitDiffStat, diagnosticsSummary, checks, checksDetected: detected };
 	}

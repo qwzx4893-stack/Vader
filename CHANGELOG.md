@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased - Branding re-audit, performance pass, verification model routing fix
+
+**Branding re-audit**: a fresh, read-only pass over every `localize`/`localize2` call,
+title/description/label/placeholder literal, `product.json`, and Vader-authored extension
+manifests under `src/vs/workbench/contrib/void/` found the user-visible rebrand already
+complete and consistent. One real finding: a dev-only `useAccessor` error message in
+`services.tsx` still said "Void" - fixed. Internal identifiers
+(`IVoidSettingsService`/`void-bg-1`/`void-channel-*`/etc.) and comments citing Void for
+historical accuracy are unchanged, per this project's own "no blind global rename" rule.
+
+**Performance**: `IVerificationService.gatherEvidence()` was awaiting the git diff fetch and
+the build/lint/test check run one after another despite them being fully independent -
+switched to `Promise.all`, matching the concurrency discipline already used in the Context
+Engine and Agent Orchestration.
+
+**Bug fix found while writing this pass's own docs**: a verification thread is also flagged
+`isSubagentThread` (so it gets checkpoints, etc.), which meant `_currentModelSelectionProps`
+was routing it through the Model Router's `'subagent'` category instead of the dedicated
+`'verification'` one added back in Phase 4/9. Fixed - `isVerificationThread` is now checked
+first.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Memory UI, Agent Manager UI, Model Router per-category picker
 
 New `MemorySection` (Settings): browse project/agent memory records, remove individually,

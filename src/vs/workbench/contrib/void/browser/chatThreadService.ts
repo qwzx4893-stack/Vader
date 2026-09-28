@@ -644,9 +644,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 
 		// Vader addition: a subagent thread with no agent-pinned model defers to the Model
-		// Router's 'subagent' category (common/modelRouter/) instead of always silently
-		// inheriting the Main Agent's Chat model - see docs/integrations/model-router.md.
-		if (!agentPinnedModel && thread?.isSubagentThread) {
+		// Router - 'verification' category for a verification thread specifically (checked
+		// first, since isVerificationThread implies isSubagentThread too), 'subagent'
+		// otherwise - instead of always silently inheriting the Main Agent's Chat model. See
+		// docs/integrations/model-router.md.
+		if (!agentPinnedModel && thread?.isVerificationThread) {
+			const routed = this._modelRouterService.resolveModel('verification')
+			if (routed) modelSelection = routed
+		}
+		else if (!agentPinnedModel && thread?.isSubagentThread) {
 			const routed = this._modelRouterService.resolveModel('subagent')
 			if (routed) modelSelection = routed
 		}
