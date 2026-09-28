@@ -107,3 +107,12 @@ import './agentGatewayService.js'
 
 // Vader agent platform: Main Agent Runtime health/selection (see docs/integrations/agent-runtime.md)
 import './agentRuntime/agentRuntimeRegistryService.js'
+
+// Vader agent platform: Unified Capability Marketplace (see docs/integrations/marketplace.md)
+import './marketplace/unifiedMarketplaceService.js'
+import './marketplace/providers/extensionGalleryProvider.js'
+import './marketplace/providers/skillMarketplaceProvider.js'
+import './marketplace/providers/mcpMarketplaceProvider.js'
+import './marketplace/providers/acpAgentMarketplaceProvider.js'
+import './marketplace/providers/languageAndDebugMarketplaceProviders.js'
+import './marketplace/providers/localToolingMarketplaceProviders.js'
