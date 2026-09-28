@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased - Unified Capability Marketplace
+
+New federated marketplace (`common/marketplace/`, `browser/marketplace/`): a normalized
+`MarketplaceItem` model, an `IMarketplaceProvider` interface where each provider exposes only
+the operations its real lifecycle supports, and `IUnifiedMarketplaceService` doing concurrent
+federated search with per-provider timeout/failure isolation, dedup, ranking, and caching.
+
+Six real providers: Extensions (wraps the existing gallery service unmodified), Skills (existing
+SkillNet/SkillProvider lifecycle), MCP servers (verified the official MCP Registry is live;
+installs map to "configure" since no programmatic add-server API exists), ACP agents (honest
+"this is a protocol, not a registry" framing - lists only what's actually registered), Language
+Servers and Debug Adapters (classify the same extension gallery by real category/manifest
+signals rather than inventing a standalone registry), Prettier and Jupyter kernels (local-only
+detection, zero network, zero fabricated data). Tree-sitter grammars are a stated, deliberate
+gap - no verified registry exists and this codebase has no runtime to consume a grammar anyway.
+
+Wired into the Capability Bus (`resolve()` now surfaces installed marketplace items and falls
+back to the marketplace for ecosystems it had no coverage of) and a new `install_marketplace_capability`
+tool the Main Agent can call on a discovered candidate - gated through the exact same Policy
+Engine/approval path as any other mutating tool, never a silent install.
+
+UI: one additive `ViewPane` registered into the *existing* Extensions view container (verified
+`rejectAddedViews` only affects drag-and-drop, not static registration, before relying on this) -
+does not touch the native extensions view files at all. Federates the 8 non-extension ecosystems
+via a React pane using the same mounting infrastructure as the Sidebar/Settings panes.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean, new
+`void-marketplace-tsx` bundle).
+
 ## Unreleased - Cline Main Agent Runtime integration (Milestone 1) + Unified Marketplace (in progress)
 
 **Verified, not assumed**: independently confirmed (npm registry API directly, plus an actual
