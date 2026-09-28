@@ -11,19 +11,19 @@ import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel } fro
 /**
  * Vader addition, part of the Cline Main Agent Runtime integration (see
  * docs/integrations/agent-runtime.md). Implements `@cline/shared`'s `AgentModel` interface by
- * wrapping `ILLMMessageService.sendLLMMessage` - the exact same call the legacy loop
- * (`chatThreadService.ts`'s `_runChatAgent`) makes. This is the whole reason Cline never needs
- * `@cline/llms`'s own provider layer: every existing provider (Anthropic/OpenAI/Gemini/
- * Mistral/OpenRouter/Ollama/vLLM/LM Studio/any OpenAI-compatible endpoint), and the Model
- * Router's category resolution, keep working completely unchanged.
+ * wrapping `ILLMMessageService.sendLLMMessage` - Vader's one existing provider entry point.
+ * This is the whole reason Cline never needs `@cline/llms`'s own provider layer: every existing
+ * provider (Anthropic/OpenAI/Gemini/Mistral/OpenRouter/Ollama/vLLM/LM Studio/any
+ * OpenAI-compatible endpoint), and the Model Router's category resolution, keep working
+ * completely unchanged.
  *
  * Deliberately does NOT build its provider request from `AgentModelRequest.messages` (the
  * `AgentRuntime`'s own internal transcript). Instead it reads Vader's own live,
  * already-authoritative `ChatMessage[]` thread history via `getThreadMessages()` on every
- * call and converts it with the exact same `IConvertToLLMMessageService.prepareLLMChatMessages`
- * the legacy loop already uses - the one, real, provider-correct (native Anthropic tool_use/
- * tool_result pairing etc.) conversion path in this codebase, not a second one written for
- * Cline. This is possible because tool calls made during a Cline-driven turn are recorded onto
+ * call and converts it with `IConvertToLLMMessageService.prepareLLMChatMessages` - the one,
+ * real, provider-correct (native Anthropic tool_use/tool_result pairing etc.) conversion path
+ * in this codebase. This is possible because tool calls made during a Cline-driven turn are
+ * recorded onto
  * that same live thread as a side effect of `_runToolCallInline` (see clineRuntimeAdapter.ts) -
  * by the time `.stream()` is called again after a tool result, Vader's thread already reflects
  * it. `AgentRuntime`'s own internal `AgentMessage[]` transcript still exists (it needs it for

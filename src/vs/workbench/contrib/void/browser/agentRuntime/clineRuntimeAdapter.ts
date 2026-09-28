@@ -6,10 +6,14 @@ import { AgentRuntime, type AgentRuntimeConfig } from '@cline/agents';
 import type { AgentModel, AgentTool } from '@cline/shared';
 
 // Vader addition, part of the Cline Main Agent Runtime integration (see
-// docs/integrations/agent-runtime.md). `@cline/agents` is now a real, installed dependency
-// (verified: registry.npmjs.org, an actual `npm install`, and now resolving in this build's
-// own node_modules) - version pinned exact in package.json.
+// docs/integrations/agent-runtime.md). `@cline/agents`/`@cline/shared` are real, installed
+// dependencies (verified: registry.npmjs.org, an actual `npm install`, and resolving in this
+// build's own node_modules) - version pinned exact in package.json. These two constants are
+// also the compatibility contract the hand-transcribed `src/typings/cline-{agents,shared}.d.ts`
+// shims were written against - keep in sync with `test/checkClineTypingsVersion.mjs`, which
+// fails loudly if the installed packages ever drift from what's declared here.
 export const CLINE_AGENTS_VERSION = '0.0.86';
+export const CLINE_SHARED_VERSION = '0.0.86';
 
 /**
  * Lightweight, synchronous-ish health probe: constructs a throwaway `AgentRuntime` with a
@@ -18,8 +22,9 @@ export const CLINE_AGENTS_VERSION = '0.0.86';
  * `ensureInitialized`/`initialize` private methods), so this is a cheap, real check that the
  * installed package's constructor and type surface actually behave as documented in this
  * environment, without making any network/provider call. A thrown error here means a genuine
- * runtime incompatibility - exactly the "genuine initialization/compatibility failure" case
- * the mission says should (and should only) trigger a fallback to the legacy runtime.
+ * runtime incompatibility, surfaced as real, honest unhealthy status in
+ * IAgentRuntimeRegistryService (see agentRuntimeRegistryService.ts) - Cline is Vader's only
+ * Main Agent runtime, so this probe informs diagnostics, not a runtime-selection fallback.
  */
 export function probeClineRuntime(): { ok: true } | { ok: false, reason: string } {
 	try {
@@ -34,7 +39,7 @@ export function probeClineRuntime(): { ok: true } | { ok: false, reason: string 
 
 /**
  * Constructs the real `AgentRuntime` that drives one Main Agent turn - see
- * chatThreadService.ts's `_runChatAgentViaCline` for how this is actually used (event
+ * chatThreadService.ts's `_runChatAgentImpl` for how this is actually used (event
  * subscription, thread-message recording, cancellation wiring). `systemPrompt`/`tools` are
  * still supplied for AgentRuntime's own bookkeeping/telemetry even though
  * `VaderAgentModel.stream()` doesn't read `request.systemPrompt`/`request.messages` for the

@@ -20,7 +20,7 @@ import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistr
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
 import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
 import { createClineAgentRuntime } from './agentRuntime/clineRuntimeAdapter.js';
-import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
+import { getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
 import { IVoidSettingsService } from '../common/voidSettingsService.js';
@@ -40,7 +40,6 @@ import { INotificationService, Severity } from '../../../../platform/notificatio
 import { truncate } from '../../../../base/common/strings.js';
 import { THREAD_STORAGE_KEY } from '../common/storageKeys.js';
 import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
-import { timeout } from '../../../../base/common/async.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
@@ -51,10 +50,6 @@ import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 
-
-// related to retrying when LLM message has error
-const CHAT_RETRIES = 3
-const RETRY_DELAY = 2500
 
 // Vader addition: tools blocked outright in 'gather' and 'plan' chat modes - hard
 // enforcement, not the prompt-only "you're in gather mode, please don't edit" Void shipped
@@ -703,10 +698,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	}
 
 	approveLatestToolRequest(threadId: string) {
-		// Vader addition: a thread whose current tool_request came from _runToolCallInline
-		// (the Cline path) is waiting on this exact promise, not on a fresh _runChatAgent
-		// call - resolving it lets @cline/agents' own AgentRuntime resume the rest of its
-		// tool-call batch itself. See _runToolCallInline's doc comment.
+		// A thread whose current tool_request came from _runToolCallInline (the normal case)
+		// is waiting on this exact promise - resolving it lets @cline/agents' own AgentRuntime
+		// resume the rest of its tool-call batch itself. See _runToolCallInline's doc comment.
 		const pendingInline = this._pendingInlineApprovals.get(threadId)
 		if (pendingInline) {
 			this._pendingInlineApprovals.delete(threadId)
@@ -714,18 +708,42 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			return
 		}
 
+		// No pending promise to resolve - Vader itself restarted while this approval was
+		// outstanding (the in-memory Map above doesn't survive a process restart, but the
+		// persisted tool_request message does). The AgentRuntime run that was waiting on it is
+		// gone either way after a restart, so there is no batch left to "resume" - instead, run
+		// the one pending tool call for real (already fully gated before the request was shown,
+		// so this is preapproved, not re-evaluated) and then start a brand-new Cline turn - see
+		// _resumeToolRequestAfterRestart.
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
 		const lastMsg = thread.messages[thread.messages.length - 1]
 		if (!(lastMsg.role === 'tool' && lastMsg.type === 'tool_request')) return // should never happen
 
-		const callThisToolFirst: ToolMessage<ToolName> = lastMsg
+		const toolRequest: ToolMessage<ToolName> & { type: 'tool_request' } = lastMsg
 
 		this._wrapRunAgentToNotify(
-			this._runChatAgent({ callThisToolFirst, threadId, ...this._currentModelSelectionProps(threadId) })
+			this._resumeToolRequestAfterRestart(threadId, toolRequest)
 			, threadId
 		)
+	}
+
+	// Vader addition, part of removing the legacy runtime: the only remaining reason a pending
+	// tool_request could ever be waiting with no live _pendingInlineApprovals entry is a Vader
+	// restart (a real "crash recovery" case, not a normal approval). VaderAgentModel always
+	// rebuilds its request from live thread messages on every run, so once this tool call is
+	// recorded, a fresh Cline turn naturally continues the conversation from exactly this point
+	// - there is no legacy loop to fall back into for this anymore.
+	private async _resumeToolRequestAfterRestart(threadId: string, toolRequest: ToolMessage<ToolName> & { type: 'tool_request' }): Promise<void> {
+		const { name: toolName, id: toolId, mcpServerName, rawParams: unvalidatedToolParams, params: validatedParams } = toolRequest
+		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams, validatedParams)
+		if ('interrupted' in execResult) {
+			this._setStreamState(threadId, undefined)
+			this._addUserCheckpoint({ threadId })
+			return
+		}
+		await this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) })
 	}
 	rejectLatestToolRequest(threadId: string) {
 		const pendingInline = this._pendingInlineApprovals.get(threadId)
@@ -804,16 +822,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// private readonly _currentlyRunningToolInterruptor: { [threadId: string]: (() => void) | undefined } = {}
 
 
-	// returns true when the tool call is waiting for user approval
 	// Vader addition, part of the Cline Main Agent Runtime integration (see
-	// docs/integrations/agent-runtime.md). Factored out of the old monolithic _runToolCall so
-	// the exact same non-bypassable gate sequence (validate -> checkpoint -> agent-scope ->
-	// read-only-mode -> Policy Engine -> approval-type resolution) backs BOTH the legacy loop
-	// (_runToolCall, below - identical behavior, pure extraction) and the Cline path
-	// (_runToolCallInline, below - awaits approval inline instead of returning early). Every
-	// blocked/rejected/needs-approval outcome adds the exact same thread message either path
-	// would have added, so thread history looks identical regardless of which runtime ran the
-	// turn. Nothing here is duplicated - there is exactly one implementation of this gate.
+	// docs/integrations/agent-runtime.md). The one non-bypassable gate sequence (validate ->
+	// checkpoint -> agent-scope -> read-only-mode -> Policy Engine -> approval-type resolution)
+	// every tool call goes through, used by _runToolCallInline below (used by
+	// _resumeToolRequestAfterRestart's one-off preapproved re-execution too, via
+	// _executeAndRecordToolCall directly). There is exactly one implementation of this gate.
 	private _evaluateToolCallGate = (
 		threadId: string,
 		toolName: ToolName,
@@ -920,12 +934,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		return { kind: 'approved', validatedParams: toolParams }
 	}
 
-	// Vader addition: steps 3-5 of the old _runToolCall (call the tool, stringify the result,
-	// record it) - factored out so both the legacy loop and the Cline path execute a tool the
-	// exact same way once the gate above has approved it. Returns the actual result string
-	// (the legacy loop doesn't need this - it reads thread messages instead - but Cline's
-	// tool.execute() must return a real value, which is the whole reason this is a separate,
-	// callable-for-its-return-value method rather than inlined only into _runToolCall).
+	// Vader addition: calls the tool, stringifies the result, and records it to thread history,
+	// once the gate above has approved a call. Returns the actual result string, since Cline's
+	// tool.execute() must return one - used by _runToolCallInline for an ordinary approved call
+	// and by _resumeToolRequestAfterRestart for a preapproved one-off re-execution after a
+	// restart.
 	private _executeAndRecordToolCall = async (
 		threadId: string,
 		toolName: ToolName,
@@ -1003,43 +1016,16 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		return { resultStr: toolResultStr, isError: false }
 	}
 
-	// returns true when the tool call is waiting for user approval
-	private _runToolCall = async (
-		threadId: string,
-		toolName: ToolName,
-		toolId: string,
-		mcpServerName: string | undefined,
-		opts: { preapproved: true, unvalidatedToolParams: RawToolParamsObj, validatedParams: ToolCallParams<ToolName> } | { preapproved: false, unvalidatedToolParams: RawToolParamsObj },
-	): Promise<{ awaitingUserApproval?: boolean, interrupted?: boolean }> => {
-
-		let toolParams: ToolCallParams<ToolName>
-
-		if (!opts.preapproved) {
-			const gateResult = this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, opts.unvalidatedToolParams)
-			if (gateResult.kind === 'invalid_params' || gateResult.kind === 'rejected') return {}
-			if (gateResult.kind === 'needs_approval') return { awaitingUserApproval: true }
-			toolParams = gateResult.validatedParams
-		}
-		else {
-			toolParams = opts.validatedParams
-		}
-
-		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, opts.unvalidatedToolParams, toolParams)
-		if ('interrupted' in execResult) return { interrupted: true }
-		return {}
-	};
-
-	// Vader addition: the Cline-path equivalent of _runToolCall, used only by
-	// ClineRuntimeAdapter's tool execute() callbacks (see clineRuntimeAdapter.ts). Runs the
-	// exact same gate as the legacy loop, but instead of returning early on 'needs_approval',
-	// awaits a promise that resolves when the user approves/rejects via the ordinary
-	// approve/reject UI (see approveLatestToolRequest/rejectLatestToolRequest's
-	// _pendingInlineApprovals check) - because this await happens inside one call that
-	// @cline/agents' AgentRuntime is itself awaiting as part of a tool-call batch, the
-	// remaining calls in that same batch are never lost: AgentRuntime resumes them itself once
-	// this promise settles. This is the concrete fix for the previously-documented limitation
-	// ("a multi-tool-call turn interrupted mid-batch for approval does not resume the rest of
-	// that batch after approval").
+	// Vader addition: the tool-execute callback @cline/agents' AgentRuntime calls for every
+	// tool call it decides to make (see clineToolAdapter.ts's buildClineTools). Runs the gate
+	// above and, instead of returning early on 'needs_approval', awaits a promise that resolves
+	// when the user approves/rejects via the ordinary approve/reject UI (see
+	// approveLatestToolRequest/rejectLatestToolRequest's _pendingInlineApprovals check) -
+	// because this await happens inside one call that AgentRuntime is itself awaiting as part
+	// of a tool-call batch, the remaining calls in that same batch are never lost: AgentRuntime
+	// resumes them itself once this promise settles. This is the concrete fix for the
+	// previously-documented limitation ("a multi-tool-call turn interrupted mid-batch for
+	// approval does not resume the rest of that batch after approval").
 	private _pendingInlineApprovals = new Map<string, (decision: 'approved' | 'rejected') => void>();
 
 	private _runToolCallInline = async (
@@ -1265,41 +1251,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	}
 
 	// Vader addition, part of the Cline Main Agent Runtime integration (see
-	// docs/integrations/agent-runtime.md). The single dispatcher every call site
+	// docs/integrations/agent-runtime.md). Cline is Vader's one and only Main Agent runtime -
+	// there is no other loop to dispatch to or fall back on. Every call site
 	// (_addUserMessageAndStreamResponse, editUserMessageAndStreamResponse, runSubagentTask,
-	// runVerificationTask, approveLatestToolRequest's legacy-only re-entry path) already goes
-	// through - Cline is the DEFAULT, chosen fresh from IAgentRuntimeRegistryService's current
-	// selection on every call (never cached), so a runtime that fails init gets a chance to
-	// recover on refresh without restarting Vader. `callThisToolFirst` (the legacy
-	// approve-and-resume re-entry point) always routes to the legacy implementation - a Cline-
-	// driven thread never produces this call shape in the first place, since its approval
-	// wait resolves through _pendingInlineApprovals instead (see _runToolCallInline).
-	//
-	// A genuine per-task error while Cline is driving a turn (a provider error, a tool
-	// throwing, an unexpected runtime exception) is surfaced as an ordinary stream error on
-	// that thread - exactly like the legacy loop already does after exhausting its own
-	// retries - and does NOT change IAgentRuntimeRegistryService's selection. Per the mission's
-	// explicit requirement, only a genuine initialization/compatibility failure (caught once,
-	// at the registry's own probe) or an explicit user/developer selection may switch the
-	// active runtime - never an ordinary task error silently substituting Legacy underneath
-	// the user.
+	// runVerificationTask, _resumeToolRequestAfterRestart) goes through this single entry
+	// point. A genuine per-task error (a provider error, a tool throwing, an unexpected runtime
+	// exception) is surfaced as a clear, ordinary stream error on that thread - it is never
+	// swallowed into a silent retry through a different runtime, because none exists.
 	private _runChatAgent = async (opts: {
 		threadId: string,
 		modelSelection: ModelSelection | null,
 		modelSelectionOptions: ModelSelectionOptions | undefined,
-		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' }
 	}): Promise<void> => {
-		if (opts.callThisToolFirst) {
-			return this._runChatAgentLegacy(opts)
-		}
-
-		const selection = this._agentRuntimeRegistryService.getSelection()
-		if (selection.active !== 'cline') {
-			return this._runChatAgentLegacy(opts)
-		}
-
 		try {
-			await this._runChatAgentViaCline(opts.threadId, opts.modelSelection, opts.modelSelectionOptions)
+			await this._runChatAgentImpl(opts.threadId, opts.modelSelection, opts.modelSelectionOptions)
 		} catch (error) {
 			const errorMessage = getErrorMessage(error)
 			this._addUserCheckpoint({ threadId: opts.threadId })
@@ -1307,11 +1272,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 	}
 
-	// Vader addition: drives one Main Agent turn through @cline/agents' AgentRuntime instead
-	// of the legacy hand-rolled loop below. See vaderAgentModel.ts/clineToolAdapter.ts/
-	// clineRuntimeAdapter.ts for the three pieces this assembles, and
-	// docs/integrations/agent-runtime.md for the full design this implements.
-	private async _runChatAgentViaCline(threadId: string, modelSelection: ModelSelection | null, modelSelectionOptions: ModelSelectionOptions | undefined): Promise<void> {
+	// Vader addition: drives one Main Agent turn through @cline/agents' AgentRuntime. See
+	// vaderAgentModel.ts/clineToolAdapter.ts/clineRuntimeAdapter.ts for the three pieces this
+	// assembles, and docs/integrations/agent-runtime.md for the full design this implements.
+	private async _runChatAgentImpl(threadId: string, modelSelection: ModelSelection | null, modelSelectionOptions: ModelSelectionOptions | undefined): Promise<void> {
+		// Fail fast and clearly if Cline itself can't even initialize, rather than letting a
+		// deep, possibly confusing construction error surface from inside createClineAgentRuntime.
+		// There is no other runtime to fall back to, so this is the whole story.
+		const health = this._agentRuntimeRegistryService.getHealth()
+		if (health.status !== 'initialized') {
+			throw new Error(`Cline Agent Runtime is not available (${health.status}): ${health.detail}`)
+		}
+
 		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
 		const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
 		const { chatMode: globalChatMode } = this._settingsService.state.globalSettings
@@ -1393,215 +1365,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._metricsService.capture('Agent Loop Done', { chatMode, runtime: 'cline' })
 		} catch (error) {
 			unsubscribe()
-			throw error // handled by _runChatAgent's dispatcher, which surfaces it as a per-task stream error
+			throw error // handled by _runChatAgent, which surfaces it as a per-task stream error
 		}
-	}
-
-	private async _runChatAgentLegacy({
-		threadId,
-		modelSelection,
-		modelSelectionOptions,
-		callThisToolFirst,
-	}: {
-		threadId: string,
-		modelSelection: ModelSelection | null,
-		modelSelectionOptions: ModelSelectionOptions | undefined,
-
-		callThisToolFirst?: ToolMessage<ToolName> & { type: 'tool_request' }
-	}) {
-
-
-		let interruptedWhenIdle = false
-		const idleInterruptor = Promise.resolve(() => { interruptedWhenIdle = true })
-		// _runToolCall does not need setStreamState({idle}) before it, but it needs it after it. (handles its own setStreamState)
-
-		// above just defines helpers, below starts the actual function
-		// Vader addition: a verification thread is forced into 'gather'-equivalent (tools
-		// advertised, none mutating - see prompts.ts's availableTools) regardless of the
-		// user's actual global chat mode, so the model is never even told a mutating tool
-		// exists here, on top of the hard execution-level block in _runToolCall's gate.
-		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
-		// Vader addition: a delegate_research_task thread gets the same forced-gather
-		// treatment as a verification thread, for the same reason - see routerCategoryOverride.
-		const isResearchThread = this.state.allThreads[threadId]?.routerCategoryOverride === 'research'
-		const { chatMode: globalChatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
-		const chatMode = (isVerificationThread || isResearchThread) ? 'gather' : globalChatMode
-		const { overridesOfModel } = this._settingsService.state
-
-		let nMessagesSent = 0
-		let shouldSendAnotherMessage = true
-		let isRunningWhenEnd: IsRunningType = undefined
-
-		// before enter loop, call tool
-		if (callThisToolFirst) {
-			const { interrupted } = await this._runToolCall(threadId, callThisToolFirst.name, callThisToolFirst.id, callThisToolFirst.mcpServerName, { preapproved: true, unvalidatedToolParams: callThisToolFirst.rawParams, validatedParams: callThisToolFirst.params })
-			if (interrupted) {
-				this._setStreamState(threadId, undefined)
-				this._addUserCheckpoint({ threadId })
-
-			}
-		}
-		this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' })  // just decorative, for clarity
-
-
-		// tool use loop
-		while (shouldSendAnotherMessage) {
-			// false by default each iteration
-			shouldSendAnotherMessage = false
-			isRunningWhenEnd = undefined
-			nMessagesSent += 1
-
-			this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
-
-			await this._maybeCompactThread(threadId, modelSelection)
-
-			const chatMessages = this.state.allThreads[threadId]?.messages ?? []
-			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
-				chatMessages,
-				modelSelection,
-				chatMode,
-				agentId: this.state.allThreads[threadId]?.agentId,
-			})
-
-			if (interruptedWhenIdle) {
-				this._setStreamState(threadId, undefined)
-				return
-			}
-
-			let shouldRetryLLM = true
-			let nAttempts = 0
-			while (shouldRetryLLM) {
-				shouldRetryLLM = false
-				nAttempts += 1
-
-				type ResTypes =
-					| { type: 'llmDone', toolCalls?: RawToolCallObj[], info: { fullText: string, fullReasoning: string, anthropicReasoning: AnthropicReasoning[] | null } }
-					| { type: 'llmError', error?: { message: string; fullError: Error | null; } }
-					| { type: 'llmAborted' }
-
-				let resMessageIsDonePromise: (res: ResTypes) => void // resolves when user approves this tool use (or if tool doesn't require approval)
-				const messageIsDonePromise = new Promise<ResTypes>((res, rej) => { resMessageIsDonePromise = res })
-
-				const llmCancelToken = this._llmMessageService.sendLLMMessage({
-					messagesType: 'chatMessages',
-					chatMode,
-					messages: messages,
-					modelSelection,
-					modelSelectionOptions,
-					overridesOfModel,
-					logging: { loggingName: `Chat - ${chatMode}`, loggingExtras: { threadId, nMessagesSent, chatMode } },
-					separateSystemMessage: separateSystemMessage,
-					onText: ({ fullText, fullReasoning, toolCall }) => {
-						this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: fullText, reasoningSoFar: fullReasoning, toolCallSoFar: toolCall ?? null }, interrupt: Promise.resolve(() => { if (llmCancelToken) this._llmMessageService.abort(llmCancelToken) }) })
-					},
-					onFinalMessage: async ({ fullText, fullReasoning, toolCalls, anthropicReasoning, }) => {
-						resMessageIsDonePromise({ type: 'llmDone', toolCalls, info: { fullText, fullReasoning, anthropicReasoning } }) // resolve with tool calls
-					},
-					onError: async (error) => {
-						resMessageIsDonePromise({ type: 'llmError', error: error })
-					},
-					onAbort: () => {
-						// stop the loop to free up the promise, but don't modify state (already handled by whatever stopped it)
-						resMessageIsDonePromise({ type: 'llmAborted' })
-						this._metricsService.capture('Agent Loop Done (Aborted)', { nMessagesSent, chatMode })
-					},
-				})
-
-				// mark as streaming
-				if (!llmCancelToken) {
-					this._setStreamState(threadId, { isRunning: undefined, error: { message: 'There was an unexpected error when sending your chat message.', fullError: null } })
-					break
-				}
-
-				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallSoFar: null }, interrupt: Promise.resolve(() => this._llmMessageService.abort(llmCancelToken)) })
-				const llmRes = await messageIsDonePromise // wait for message to complete
-
-				// if something else started running in the meantime
-				if (this.streamState[threadId]?.isRunning !== 'LLM') {
-					// console.log('Chat thread interrupted by a newer chat thread', this.streamState[threadId]?.isRunning)
-					return
-				}
-
-				// llm res aborted
-				if (llmRes.type === 'llmAborted') {
-					this._setStreamState(threadId, undefined)
-					return
-				}
-				// llm res error
-				else if (llmRes.type === 'llmError') {
-					// error, should retry
-					if (nAttempts < CHAT_RETRIES) {
-						shouldRetryLLM = true
-						this._setStreamState(threadId, { isRunning: 'idle', interrupt: idleInterruptor })
-						await timeout(RETRY_DELAY)
-						if (interruptedWhenIdle) {
-							this._setStreamState(threadId, undefined)
-							return
-						}
-						else
-							continue // retry
-					}
-					// error, but too many attempts
-					else {
-						const { error } = llmRes
-						const { displayContentSoFar, reasoningSoFar, toolCallSoFar } = this.streamState[threadId].llmInfo
-						this._addMessageToThread(threadId, { role: 'assistant', displayContent: displayContentSoFar, reasoning: reasoningSoFar, anthropicReasoning: null })
-						if (toolCallSoFar) this._addMessageToThread(threadId, { role: 'interrupted_streaming_tool', name: toolCallSoFar.name, mcpServerName: this._computeMCPServerOfToolName(toolCallSoFar.name) })
-
-						this._setStreamState(threadId, { isRunning: undefined, error })
-						this._addUserCheckpoint({ threadId })
-						return
-					}
-				}
-
-				// llm res success
-				const { toolCalls, info } = llmRes
-
-				this._addMessageToThread(threadId, { role: 'assistant', displayContent: info.fullText, reasoning: info.fullReasoning, anthropicReasoning: info.anthropicReasoning })
-				this._maybeCaptureThreadPlan(threadId, info.fullText)
-
-				this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative for clarity
-
-				// Vader: run every tool call this turn asked for, not just the first. Executed
-				// serially (never concurrently) - Void's diff/checkpoint engine assumes one
-				// edit lands before the next starts, and the mission this was built under is
-				// explicit that unsupported parallelism must not be faked. Each call still goes
-				// through the same per-call Policy Engine/agent-scope gate in _runToolCall as
-				// before; if one in the batch needs interactive approval, the batch stops there
-				// (the remaining calls in that turn are not attempted) rather than resuming
-				// mid-batch after approval, which the current approve/resume path can't express.
-				if (toolCalls && toolCalls.length > 0) {
-					let awaitingApprovalInBatch = false
-					for (const toolCall of toolCalls) {
-						if (this._currentIsRunning(threadId) !== 'idle') break // interrupted by something else mid-batch
-
-						const mcpTools = this._mcpService.getMCPTools()
-						const mcpTool = mcpTools?.find(t => t.name === toolCall.name)
-
-						const { awaitingUserApproval, interrupted } = await this._runToolCall(threadId, toolCall.name, toolCall.id, mcpTool?.mcpServerName, { preapproved: false, unvalidatedToolParams: toolCall.rawParams })
-						if (interrupted) {
-							this._setStreamState(threadId, undefined)
-							return
-						}
-						if (awaitingUserApproval) { awaitingApprovalInBatch = true; break }
-
-						this._setStreamState(threadId, { isRunning: 'idle', interrupt: 'not_needed' }) // just decorative, for clarity
-					}
-					if (awaitingApprovalInBatch) { isRunningWhenEnd = 'awaiting_user' }
-					else { shouldSendAnotherMessage = true }
-				}
-
-			} // end while (attempts)
-		} // end while (send message)
-
-		// if awaiting user approval, keep isRunning true, else end isRunning
-		this._setStreamState(threadId, { isRunning: isRunningWhenEnd })
-
-		// add checkpoint before the next user message
-		if (!isRunningWhenEnd) this._addUserCheckpoint({ threadId })
-
-		// capture number of messages sent
-		this._metricsService.capture('Agent Loop Done', { nMessagesSent, chatMode })
 	}
 
 

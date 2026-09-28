@@ -4,73 +4,55 @@
 
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
-import { AgentRuntimeHealth, AgentRuntimeSelection, IAgentRuntimeRegistryService } from '../../common/agentRuntime/agentRuntimeTypes.js';
+import { AgentRuntimeHealth, IAgentRuntimeRegistryService } from '../../common/agentRuntime/agentRuntimeTypes.js';
 import { CLINE_AGENTS_VERSION, probeClineRuntime } from './clineRuntimeAdapter.js';
 
 export * from '../../common/agentRuntime/agentRuntimeTypes.js';
 
 // Vader addition, part of the Cline Main Agent Runtime integration (see
-// docs/integrations/agent-runtime.md for the full design). `@cline/agents`/`@cline/shared`
-// are now real, installed dependencies (verified: registry.npmjs.org, an actual `npm
-// install`, and this build's own node_modules resolving them) - this service now runs a
-// real initialization probe (`probeClineRuntime()`, see clineRuntimeAdapter.ts) rather than
-// reporting a hardcoded status. Cline is the DEFAULT: it becomes `active` whenever the probe
-// succeeds, and Legacy is used only as the explicit fallback when it doesn't - never silently
-// substituted after an ordinary per-task error (see chatThreadService.ts's `_runChatAgent`
-// dispatcher, which surfaces a per-task error on the thread rather than flipping this
-// selection).
+// docs/integrations/agent-runtime.md for the full design). Cline is Vader's only Main Agent
+// runtime - this service exists purely for honest diagnostics (the Agent Manager UI, and
+// anything else that wants to know "is the runtime actually healthy right now"), never for a
+// runtime-selection decision. It runs a real initialization probe (`probeClineRuntime()`, see
+// clineRuntimeAdapter.ts) rather than reporting a hardcoded status. A failed probe does not
+// change what runtime chatThreadService.ts uses (there is only one); it surfaces as
+// `runtime-error` here so a genuine incompatibility is visible before - or instead of - a
+// confusing per-task failure.
 class AgentRuntimeRegistryService extends Disposable implements IAgentRuntimeRegistryService {
 	readonly _serviceBrand: undefined;
 
-	private _selection: AgentRuntimeSelection;
+	private _health: AgentRuntimeHealth;
 
 	constructor() {
 		super();
-		this._selection = this._computeSelection();
+		this._health = this._computeHealth();
 	}
 
-	private _computeSelection(): AgentRuntimeSelection {
+	private _computeHealth(): AgentRuntimeHealth {
 		const checkedAt = new Date().toISOString();
-
-		const legacyHealth: AgentRuntimeHealth = {
-			kind: 'legacy',
-			status: 'initialized',
-			detail: 'Legacy runtime (the Void-derived, Vader-hardened chatThreadService tool-calling loop) is always available - it has no external dependency beyond what already ships. Currently the explicit fallback.',
-			checkedAt,
-		};
-
 		const probe = probeClineRuntime();
-		const clineHealth: AgentRuntimeHealth = probe.ok
+		return probe.ok
 			? {
-				kind: 'cline',
 				status: 'initialized',
-				detail: 'Cline Agent Runtime (@cline/agents) initialized successfully and is the active Main Agent Runtime, driving every new chat turn through ClineRuntimeAdapter/VaderAgentModel - see docs/integrations/agent-runtime.md.',
+				detail: 'Cline Agent Runtime (@cline/agents) initialized successfully and is driving every chat turn through ClineRuntimeAdapter/VaderAgentModel - see docs/integrations/agent-runtime.md.',
 				version: `@cline/agents@${CLINE_AGENTS_VERSION}`,
 				checkedAt,
 			}
 			: {
-				kind: 'cline',
 				status: 'runtime-error',
-				detail: `Cline Agent Runtime failed to initialize (a genuine compatibility failure, not a missing dependency): ${probe.reason}. Falling back to the legacy runtime for this session - see docs/integrations/agent-runtime.md.`,
+				detail: `Cline Agent Runtime failed to initialize (a genuine compatibility failure, not a missing dependency): ${probe.reason}. Vader has no other Main Agent runtime to run chat turns with until this is resolved - see docs/integrations/agent-runtime.md.`,
 				version: `@cline/agents@${CLINE_AGENTS_VERSION}`,
 				checkedAt,
 			};
-
-		return {
-			active: probe.ok ? 'cline' : 'legacy',
-			reason: probe.ok ? 'default' : 'fallback',
-			clineHealth,
-			legacyHealth,
-		};
 	}
 
-	getSelection(): AgentRuntimeSelection {
-		return this._selection;
+	getHealth(): AgentRuntimeHealth {
+		return this._health;
 	}
 
-	async refresh(): Promise<AgentRuntimeSelection> {
-		this._selection = this._computeSelection();
-		return this._selection;
+	async refresh(): Promise<AgentRuntimeHealth> {
+		this._health = this._computeHealth();
+		return this._health;
 	}
 }
 

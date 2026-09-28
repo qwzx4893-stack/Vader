@@ -1109,41 +1109,31 @@ export const MemorySection = () => {
 // with its own activity-bar icon is a larger, separate piece of workbench plumbing tracked
 // as further UI work, not silently skipped.
 // Vader addition, part of the Cline Main Agent Runtime integration - see
-// docs/integrations/agent-runtime.md. Shows which runtime (Cline vs. legacy) is currently
-// driving Main Agent turns and why, plus both runtimes' health, so the legacy runtime is
-// never silently substituted without being visible here.
+// docs/integrations/agent-runtime.md. Cline is Vader's only Main Agent runtime; this shows its
+// real, live health (never a hardcoded "healthy") so a genuine incompatibility is visible here
+// instead of only surfacing as a confusing per-task chat error.
 const RuntimeStatusBlock = () => {
 	const accessor = useAccessor()
 	const registry = accessor.get('IAgentRuntimeRegistryService')
-	const [selection, setSelection] = useState(() => registry.getSelection())
+	const [health, setHealth] = useState(() => registry.getHealth())
 
 	const healthColor = (status: string) =>
-		status === 'initialized' ? 'text-green-600' : status === 'unavailable' || status === 'runtime-error' ? 'text-void-fg-3' : 'text-red-500'
-
-	const runtimeLabel = (kind: 'legacy' | 'cline') => kind === 'cline' ? 'Cline Agent Runtime' : 'Legacy Runtime (Void-derived loop)'
+		status === 'initialized' ? 'text-green-600' : status === 'unavailable' || status === 'runtime-error' ? 'text-red-500' : 'text-void-fg-3'
 
 	return <div className='mb-6'>
 		<div className='flex items-center justify-between mb-1'>
 			<h3 className='text-lg'>Main Agent Runtime</h3>
 			<button
 				className='text-xs text-void-fg-3 hover:text-void-fg-1 underline'
-				onClick={() => { registry.refresh().then(setSelection) }}
+				onClick={() => { registry.refresh().then(setHealth) }}
 			>Refresh</button>
 		</div>
-		<div className='text-xs text-void-fg-3 mb-2'>
-			Active: <span className='text-void-fg-1 font-medium'>{runtimeLabel(selection.active)}</span>
-			{selection.reason === 'fallback' ? <span className='text-yellow-600'> (fallback - Cline was not available)</span> : selection.reason === 'explicit' ? ' (explicitly selected)' : ' (default)'}
-		</div>
-		<div className='flex flex-col gap-y-1'>
-			{[selection.clineHealth, selection.legacyHealth].map(h => (
-				<div key={h.kind} className='border border-void-border-3 rounded p-2 text-xs'>
-					<div className='flex items-center justify-between'>
-						<span className='font-medium'>{runtimeLabel(h.kind)}</span>
-						<span className={`capitalize ${healthColor(h.status)}`}>{h.status}{h.version ? ` · ${h.version}` : ''}</span>
-					</div>
-					<div className='text-void-fg-3 mt-1'>{h.detail}</div>
-				</div>
-			))}
+		<div className='border border-void-border-3 rounded p-2 text-xs'>
+			<div className='flex items-center justify-between'>
+				<span className='font-medium'>Cline Agent Runtime</span>
+				<span className={`capitalize ${healthColor(health.status)}`}>{health.status}{health.version ? ` · ${health.version}` : ''}</span>
+			</div>
+			<div className='text-void-fg-3 mt-1'>{health.detail}</div>
 		</div>
 	</div>
 }

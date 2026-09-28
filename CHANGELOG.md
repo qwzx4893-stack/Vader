@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased - Legacy Main Agent runtime removed; Cline is now the only runtime
+
+With the Cline migration complete and stable, the original hand-rolled tool-calling loop
+(`chatThreadService.ts`'s former `_runChatAgentLegacy`/`_runToolCall`, and the runtime-selection
+dispatcher that briefly chose between it and Cline) has been deleted, not just hidden behind a
+default. `_runChatAgent` now drives every turn through Cline directly; a Cline failure (a
+genuine init/compatibility failure, a provider error, a tool throwing) always surfaces as a
+clear per-task error - there is no other runtime to silently substitute. `_evaluateToolCallGate`/
+`_executeAndRecordToolCall` (the shared Policy Engine/agent-scope/read-only-mode gate and tool
+executor) are preserved unchanged, since `_runToolCallInline` still needs them.
+
+One real behavior had to be re-derived rather than deleted outright: resuming a tool approval
+that was still pending when Vader itself restarted (the in-memory `_pendingInlineApprovals` map
+doesn't survive a process restart, though the persisted `tool_request` message does).
+`approveLatestToolRequest`'s restart-recovery path now runs that one pending tool call directly
+(`_resumeToolRequestAfterRestart`) and starts a fresh Cline turn, which correctly picks the
+conversation back up since `VaderAgentModel` always rebuilds its request from live thread
+messages - there was never anything to "resume" in the old `AgentRuntime` instance either, since
+a full process restart destroys its in-memory state regardless of which runtime drives turns.
+
+`IAgentRuntimeRegistryService` dropped the `legacy`/`cline` selection type entirely -
+`getSelection(): AgentRuntimeSelection` became `getHealth(): AgentRuntimeHealth`, reporting
+Cline's own real status for diagnostics (the Agent Manager UI, and an upfront check in
+`_runChatAgentImpl` that fails fast with a clear message instead of a deep construction error)
+rather than choosing a runtime. `RuntimeStatusBlock` (`Settings.tsx`) now shows one runtime's
+health, not two.
+
+**Typings shim audit**: re-evaluated the `src/tsconfig.json` `paths` redirect to
+`src/typings/cline-{agents,shared}.d.ts` (workaround for the real packages' own extensionless
+relative imports, invalid under this project's `nodenext` resolution). No cleaner mechanism was
+found that doesn't require patching `node_modules` or vendoring a fork - the `paths` redirect
+remains the least invasive fix. Added the automated guard the audit asked for:
+`test/checkClineTypingsVersion.mjs` reads the installed `@cline/agents`/`@cline/shared` versions
+and fails loudly if they've drifted from `CLINE_AGENTS_VERSION`/`CLINE_SHARED_VERSION` in
+`clineRuntimeAdapter.ts` - wired into the top of `clineRuntimeSmoke.mjs` so the ordinary smoke
+test run catches drift too, instead of a future `npm install` silently invalidating the shim.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean),
+`clineRuntimeSmoke.mjs` (14/14 passing against the real installed package, including the
+typings-version guard).
+
 ## Unreleased - Cline is now genuinely installed, default, and executing + Marketplace completion + Vision
 
 Supersedes the "Cline Main Agent Runtime integration (Milestone 1)" entry below, which reported

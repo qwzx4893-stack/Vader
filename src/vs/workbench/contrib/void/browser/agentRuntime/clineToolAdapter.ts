@@ -11,22 +11,20 @@ import { ToolName } from '../../common/toolsServiceTypes.js';
 
 /**
  * Vader addition, part of the Cline Main Agent Runtime integration (see
- * docs/integrations/agent-runtime.md). Builds `@cline/agents`' `AgentTool[]` from the exact
- * same `builtinTools`/MCP-tool registry and `availableTools(chatMode, mcpTools)` filter the
- * legacy loop's prompt already uses - no second tool-registration surface, and a thread in
- * Gather/Plan/Verification/Research mode never even has a mutating tool *advertised* to
- * Cline, on top of `_runToolCallInline`'s hard execution-level enforcement of the same rule
- * (defense in depth, matching the legacy path's own two-layer design).
+ * docs/integrations/agent-runtime.md). Builds `@cline/agents`' `AgentTool[]` from the same
+ * `builtinTools`/MCP-tool registry and `availableTools(chatMode, mcpTools)` filter the system
+ * prompt itself uses - no second tool-registration surface, and a thread in Gather/Plan/
+ * Verification/Research mode never even has a mutating tool *advertised* to Cline, on top of
+ * `_runToolCallInline`'s hard execution-level enforcement of the same rule (defense in depth).
  *
- * Every tool's `execute()` calls straight into `runToolCallInline` - the Cline-path
- * equivalent of `_runToolCall` that runs the exact same Policy Engine/agent-scope/read-only-
- * mode gate (see chatThreadService.ts's `_evaluateToolCallGate`). There is no path from a
- * Cline tool call to actual execution that bypasses this gate.
+ * Every tool's `execute()` calls straight into `runToolCallInline`, which runs the exact same
+ * Policy Engine/agent-scope/read-only-mode gate (see chatThreadService.ts's
+ * `_evaluateToolCallGate`). There is no path from a Cline tool call to actual execution that
+ * bypasses this gate.
  *
  * Every param is typed `'string'` in the generated JSON schema, matching this codebase's own
  * existing native-tool-calling schema (see `electron-main/llmMessage/sendLLMMessage.impl.ts`'s
- * `toAnthropicTool`) - real validation happens afterward in `validateParams`, exactly as it
- * does for the legacy loop.
+ * `toAnthropicTool`) - real validation happens afterward in `validateParams`.
  */
 export function buildClineTools(opts: {
 	chatMode: ChatMode;

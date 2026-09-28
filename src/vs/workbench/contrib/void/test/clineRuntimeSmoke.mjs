@@ -21,6 +21,18 @@
 // Run: node src/vs/workbench/contrib/void/test/clineRuntimeSmoke.mjs
 
 import { AgentRuntime } from '@cline/agents';
+import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
+
+// Run the typings-version compatibility guard first (see checkClineTypingsVersion.mjs) - if
+// the installed @cline/agents/@cline/shared have drifted from the version the hand-written
+// tsconfig typings shim was transcribed from, fail here loudly rather than let the rest of
+// this smoke test's PASSes give a false sense of safety.
+{
+	const __dirname = dirname(fileURLToPath(import.meta.url));
+	execFileSync(process.execPath, [resolve(__dirname, 'checkClineTypingsVersion.mjs')], { stdio: 'inherit' });
+}
 
 let passed = 0;
 let failed = 0;
