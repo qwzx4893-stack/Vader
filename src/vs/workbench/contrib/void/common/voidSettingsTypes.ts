@@ -106,6 +106,18 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'awsBedrock') {
 		return { title: 'AWS Bedrock', }
 	}
+	else if (providerName === 'minimax') {
+		return { title: 'MiniMax', }
+	}
+	else if (providerName === 'alibaba') {
+		return { title: 'Alibaba Cloud (Qwen)', }
+	}
+	else if (providerName === 'moonshot') {
+		return { title: 'Moonshot AI (Kimi)', }
+	}
+	else if (providerName === 'openCodeZen') {
+		return { title: 'OpenCode Zen', }
+	}
 
 	throw new Error(`descOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -128,6 +140,10 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
 	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
+	if (providerName === 'minimax') return 'Get your [API Key here](https://platform.minimax.io/user-center/basic-information/interface-key). Mainland China accounts should change the Endpoint above to `https://api.minimax.cn/v1` and use a China-issued key - keys are not portable across regions.'
+	if (providerName === 'alibaba') return 'Get your [API Key here](https://bailian.console.alibabacloud.com/) (Alibaba Cloud Model Studio / DashScope). Mainland China accounts should change the Endpoint above to `https://dashscope.aliyuncs.com/compatible-mode/v1` - keys are not portable across regions. Read more [here](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope).'
+	if (providerName === 'moonshot') return 'Get your [API Key here](https://platform.moonshot.ai/console/api-keys). Mainland China accounts should change the Endpoint above to `https://api.moonshot.cn/v1` and use a China-issued key - keys are not portable across regions.'
+	if (providerName === 'openCodeZen') return 'A pay-as-you-go gateway from the OpenCode team - add billing and get your [API Key here](https://opencode.ai/auth). The model catalog is beta/volatile; add the exact model id shown in your Zen console under Settings once this provider is enabled. Read more [here](https://opencode.ai/docs/zen/).'
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -350,6 +366,30 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...defaultCustomSettings,
 		...defaultProviderSettings.awsBedrock,
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.awsBedrock),
+		_didFillInProviderSettings: undefined,
+	},
+	minimax: {
+		...defaultCustomSettings,
+		...defaultProviderSettings.minimax,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.minimax),
+		_didFillInProviderSettings: undefined,
+	},
+	alibaba: {
+		...defaultCustomSettings,
+		...defaultProviderSettings.alibaba,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.alibaba),
+		_didFillInProviderSettings: undefined,
+	},
+	moonshot: {
+		...defaultCustomSettings,
+		...defaultProviderSettings.moonshot,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.moonshot),
+		_didFillInProviderSettings: undefined,
+	},
+	openCodeZen: { // aggregator (beta, re-exposes many vendors' models)
+		...defaultCustomSettings,
+		...defaultProviderSettings.openCodeZen,
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.openCodeZen),
 		_didFillInProviderSettings: undefined,
 	},
 }

@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased - Provider expansion: MiniMax, Alibaba/Qwen, Moonshot/Kimi, OpenCode Zen
+
+Four new first-class providers, each researched against current (as of this session) official
+documentation before implementation - see `docs/integrations/providers/` for the full sourcing,
+confidence level, and stated gaps per provider (several official doc domains were unreachable
+from this sandbox's egress-restricted network; facts were triangulated via search and
+corroborated against directly-fetchable secondary sources like GitHub, and every doc file says
+exactly which claims are and aren't independently confirmed).
+
+All four are OpenAI-compatible-mode providers, added through the **existing** shared
+`newOpenAICompatibleSDK`/`_sendOpenAICompatibleChat` path (one new `else if` branch + four
+one-line dispatch-map entries) rather than new per-provider networking code - see
+`docs/integrations/providers/README.md`'s "why this wasn't a bigger architectural rewrite"
+section for why the mission's "Provider Registry" restructuring turned out to already exist.
+MiniMax/Alibaba/Moonshot each get a real, region-aware, user-editable `endpoint` setting
+(international default, China endpoint documented in the in-Settings help text) since all three
+have two real regions with non-portable, region-issued API keys. OpenCode Zen's model catalog is
+deliberately left empty by default (explicitly beta/volatile per its own docs) - same treatment
+as the existing generic `openAICompatible` provider.
+
+`modelCapabilities.ts`'s `modelSupportsVision` (added in the earlier vision-pipeline pass) gained
+provider-specific branches for all four (MiniMax-M3/M3.1, Qwen-VL, Kimi K3/K2.5/K2.6/K2.7),
+reusing the same pattern-based, best-effort convention as every other provider - a new vision
+provider in the Model Router's `resolveVisionModel()` and the `browser_screenshot_analyze` tool
+work with these providers automatically, no additional wiring needed.
+
+Also confirmed and documented, not implemented as a fifth provider: **OpenCode Go** is a real
+$10/mo subscription tier reusing OpenCode Zen's exact same gateway protocol under a different,
+subscription-gated base path - a Go subscriber uses the `openCodeZen` provider with their Go URL
+pasted into the endpoint field, rather than Vader building a near-duplicate second provider.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean),
+`npm run compile` (0 errors), a direct sanity check against the compiled output confirming
+correct default settings/model capabilities/vision detection/client-dispatch resolution for all
+four new providers, and `clineRuntimeSmoke.mjs` (14/14, unaffected).
+
 ## Unreleased - Legacy Main Agent runtime removed; Cline is now the only runtime
 
 With the Cline migration complete and stable, the original hand-rolled tool-calling loop

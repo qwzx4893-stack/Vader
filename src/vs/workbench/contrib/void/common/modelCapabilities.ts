@@ -65,6 +65,27 @@ export const defaultProviderSettings = {
 		region: 'us-east-1', // add region setting
 		endpoint: '', // optionally allow overriding default
 	},
+	// Vader addition, production-hardening provider expansion (docs/integrations/providers/).
+	// Real, official, OpenAI-compatible-mode endpoints - `endpoint` defaults to each provider's
+	// international/default region and is user-editable for the mainland-China region variant
+	// (both regions exist and use non-portable, region-issued API keys per this session's
+	// research - see the doc for exact sourcing and confidence level per fact).
+	minimax: { // https://platform.minimax.io/docs/api-reference/text-openai-api
+		apiKey: '',
+		endpoint: 'https://api.minimax.io/v1', // China: https://api.minimax.cn/v1
+	},
+	alibaba: { // Alibaba Cloud Model Studio (DashScope) - https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope
+		apiKey: '',
+		endpoint: 'https://dashscope-intl.aliyuncs.com/compatible-mode/v1', // China: https://dashscope.aliyuncs.com/compatible-mode/v1
+	},
+	moonshot: { // Moonshot AI (Kimi) - https://platform.moonshot.ai/docs/guide/start-using-kimi-api
+		apiKey: '',
+		endpoint: 'https://api.moonshot.ai/v1', // China: https://api.moonshot.cn/v1
+	},
+	openCodeZen: { // https://opencode.ai/docs/zen/ - a pay-as-you-go gateway re-exposing many vendors' models; only the OpenAI-shaped subset of its catalog is reachable through this provider (see doc)
+		apiKey: '',
+		endpoint: 'https://opencode.ai/zen/v1',
+	},
 
 } as const
 
@@ -153,6 +174,21 @@ export const defaultModelsOfProvider = {
 	microsoftAzure: [],
 	awsBedrock: [],
 	liteLLM: [],
+	minimax: [ // https://platform.minimax.io/docs/api-reference/models/openai/list-models
+		'MiniMax-M2',
+		'MiniMax-M2.1',
+	],
+	alibaba: [ // https://www.alibabacloud.com/help/en/model-studio/model-pricing - long-stable model IDs; newer ones can be added by name in Settings
+		'qwen-max',
+		'qwen-plus',
+		'qwen-flash',
+		'qwq-plus',
+	],
+	moonshot: [ // https://platform.kimi.ai/docs/api/list-models
+		'kimi-k2-thinking',
+		'kimi-k2.6',
+	],
+	openCodeZen: [], // beta, volatile catalog re-exposing other vendors' model IDs - add the exact id shown in your Zen console
 
 
 } as const satisfies Record<ProviderName, string[]>
@@ -1263,6 +1299,154 @@ const liteLLMSettings: VoidStaticProviderInfo = { // https://docs.litellm.ai/doc
 }
 
 
+// ---------------- MINIMAX ----------------
+// Vader addition, production-hardening provider expansion. Verified via the official
+// platform.minimax.io docs (via search) + the MiniMax-AI GitHub org - see
+// docs/integrations/providers/minimax.md for the full sourcing and confidence notes (some
+// numbers, especially MiniMax-M3's exact context window, are reported inconsistently across
+// sources as of this writing and should be spot-checked against a live account).
+const minimaxModelOptions = {
+	'MiniMax-M2': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 }, // approximate - check platform.minimax.io/docs/pricing for current rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.1': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+} as const satisfies { [s: string]: VoidStaticModelInfo }
+
+const minimaxSettings: VoidStaticProviderInfo = {
+	modelOptions: minimaxModelOptions,
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	providerReasoningIOSettings: {
+		// reasoning_content field on the hosted OpenAI-compatible API - same convention as deepseek
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
+
+// ---------------- ALIBABA (Qwen via DashScope) ----------------
+// Vader addition, production-hardening provider expansion. Uses DashScope's OpenAI-compatible
+// mode (`/compatible-mode/v1`) - see docs/integrations/providers/alibaba.md. Model IDs below are
+// the long-stable ones (qwen-max/plus/flash, qwq-plus); newer dated snapshots can be added by
+// name in Settings without a code change (modelOptionsFallback covers them).
+const alibabaModelOptions = {
+	'qwen-max': {
+		contextWindow: 32_768,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 1.60, output: 6.40 }, // approximate - check alibabacloud.com/help/en/model-studio/model-pricing for current, region-specific rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'qwen-plus': {
+		contextWindow: 131_072,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.40, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'qwen-flash': {
+		contextWindow: 131_072,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.05, output: 0.40 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+	'qwq-plus': {
+		contextWindow: 131_072,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.40, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+} as const satisfies { [s: string]: VoidStaticModelInfo }
+
+const alibabaSettings: VoidStaticProviderInfo = {
+	modelOptions: alibabaModelOptions,
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	providerReasoningIOSettings: {
+		// reasoning_content field (enable_thinking/thinking_budget go via additionalOpenAIPayload
+		// on the model entry, not modeled generically here since they're per-model, non-standard
+		// extra_body params on top of the OpenAI-compatible payload)
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
+
+// ---------------- MOONSHOT (Kimi) ----------------
+// Vader addition, production-hardening provider expansion - see
+// docs/integrations/providers/moonshot.md. This provider's model catalog churns quickly
+// (the moonshot-v1-* line was reportedly retired in 2026); the two IDs below were the most
+// consistently corroborated at research time. Add newer ones by name in Settings.
+const moonshotModelOptions = {
+	'kimi-k2-thinking': {
+		contextWindow: 262_144,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.60, output: 2.50 }, // approximate - check platform.moonshot.ai for current rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'kimi-k2.6': {
+		contextWindow: 262_144,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.60, output: 2.50 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+	},
+} as const satisfies { [s: string]: VoidStaticModelInfo }
+
+const moonshotSettings: VoidStaticProviderInfo = {
+	modelOptions: moonshotModelOptions,
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	providerReasoningIOSettings: {
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
+
+// ---------------- OPENCODE ZEN ----------------
+// Vader addition, production-hardening provider expansion - see
+// docs/integrations/providers/opencode-zen.md. A pay-as-you-go gateway (opencode.ai/docs/zen)
+// re-exposing many vendors' models; only its OpenAI-shaped chat/completions surface is reached
+// here (the same subset "OpenCode Go" - a subscription-gated slice of the same infrastructure -
+// also uses). The catalog is explicitly beta/volatile, so - like openAICompatible - there is no
+// hardcoded model list; the user adds the exact model id shown in their Zen console.
+const openCodeZenSettings: VoidStaticProviderInfo = {
+	modelOptions: {},
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+	providerReasoningIOSettings: {
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { nameOfFieldInDelta: 'reasoning_content' },
+	},
+}
+
+
 // ---------------- OPENROUTER ----------------
 const openRouterModelOptions_assumingOpenAICompat = {
 	'qwen/qwen3-235b-a22b': {
@@ -1474,6 +1658,11 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	googleVertex: googleVertexSettings,
 	microsoftAzure: microsoftAzureSettings,
 	awsBedrock: awsBedrockSettings,
+
+	minimax: minimaxSettings,
+	alibaba: alibabaSettings,
+	moonshot: moonshotSettings,
+	openCodeZen: openCodeZenSettings,
 } as const
 
 
@@ -1542,9 +1731,22 @@ export const modelSupportsVision = (providerName: ProviderName, modelName: strin
 	if (providerName === 'mistral') {
 		return m.includes('pixtral')
 	}
-	// local/self-hosted runtimes (ollama, vLLM, lmStudio, ...): only well-known open
-	// vision-model families, matched by their standard naming convention
-	return /llava|bakllava|moondream|pixtral|llama3\.2-vision|llama-3\.2-vision|qwen.*-vl|qwen2-vl|qwen2\.5-vl|vl-chat|minicpm-v|cogvlm|phi-3\.5-vision|phi-3-vision/.test(m)
+	if (providerName === 'minimax') {
+		// MiniMax-M3/M3.1(-Flash-Preview) are documented multimodal (text/image/video); M2.x is text-only
+		return /minimax-m3/i.test(m)
+	}
+	if (providerName === 'alibaba') {
+		// the Qwen-VL family - qwen-max/plus/flash/qwq above are text-only
+		return /-vl|vl-/.test(m)
+	}
+	if (providerName === 'moonshot') {
+		// kimi-k3 and the k2.5/k2.6/k2.7 line are documented multimodal; kimi-k2-thinking is not
+		return /kimi-k3|kimi-k2\.[567]/.test(m)
+	}
+	// local/self-hosted runtimes (ollama, vLLM, lmStudio, ...) and volatile-catalog gateways
+	// (openCodeZen): only well-known open vision-model families, matched by their standard
+	// naming convention
+	return /llava|bakllava|moondream|pixtral|llama3\.2-vision|llama-3\.2-vision|qwen.*-vl|qwen2-vl|qwen2\.5-vl|vl-chat|minicpm-v|cogvlm|phi-3\.5-vision|phi-3-vision|kimi-k3|claude-(3|4)|gpt-4o|gemini-(1\.5|2|3)/.test(m)
 }
 
 // non-model settings

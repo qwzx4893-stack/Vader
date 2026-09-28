@@ -167,6 +167,14 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ baseURL: 'https://api.mistral.ai/v1', apiKey: thisConfig.apiKey, ...commonPayloadOpts })
 	}
+	// Vader addition, production-hardening provider expansion - all four are OpenAI-compatible-
+	// mode endpoints with a user-editable region/endpoint setting (see modelCapabilities.ts's
+	// defaultProviderSettings and docs/integrations/providers/ for sourcing).
+	else if (providerName === 'minimax' || providerName === 'alibaba' || providerName === 'moonshot' || providerName === 'openCodeZen') {
+		const thisConfig = settingsOfProvider[providerName]
+		const baseURL = thisConfig.endpoint.replace(/\/+$/, '')
+		return new OpenAI({ baseURL, apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+	}
 
 	else throw new Error(`Vader providerName was invalid: ${providerName}.`)
 }
@@ -945,6 +953,27 @@ export const sendLLMMessageToProviderImplementation = {
 		list: null,
 	},
 	awsBedrock: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null,
+		list: null,
+	},
+
+	minimax: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null,
+		list: null,
+	},
+	alibaba: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null,
+		list: null,
+	},
+	moonshot: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null,
+		list: null,
+	},
+	openCodeZen: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: null,
 		list: null,
