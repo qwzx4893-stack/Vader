@@ -62,6 +62,7 @@ import { ISkillService, SkillRecord } from '../../../../common/skills/skillServi
 import { IMemoryService, MemoryRecord } from '../../../../common/memory/memoryService.js'
 import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestrationService.js'
 import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
+import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -319,6 +320,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IMemoryService: accessor.get(IMemoryService),
 		IAgentOrchestrationService: accessor.get(IAgentOrchestrationService),
 		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
+		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
 
 	} as const
 	return reactAccessor
