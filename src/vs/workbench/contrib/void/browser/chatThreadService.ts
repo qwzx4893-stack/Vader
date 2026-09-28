@@ -11,7 +11,8 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
+import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
 import { getModelCapabilities } from '../common/modelCapabilities.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
@@ -70,6 +71,41 @@ const READONLY_MODE_BLOCKED_BUILTIN_TOOLS = new Set<BuiltinToolName>([
 	'create_persistent_agent', 'remember',
 ])
 
+
+// Vader addition: parses the Verification Agent's <vader_verdict> block (see prompts.ts's
+// verificationAgent_systemMessage) - same tag-extraction convention as compaction/plan
+// parsing elsewhere in this file. Fails safe: if nothing parseable comes back (the model
+// didn't follow the format, errored, or the thread stalled), the verdict is `passed: false`
+// with a blocker finding saying so - an unparseable verdict is never treated as a pass.
+const parseVerificationVerdict = (text: string): VerificationVerdict => {
+	const blockMatch = text.match(/<vader_verdict>([\s\S]*?)<\/vader_verdict>/i)
+	if (!blockMatch) {
+		return { passed: false, findings: [{ severity: 'blocker', description: 'The verification agent did not return a parseable verdict - treat this as unverified, not as passing.' }], summary: 'Verification could not be completed.' }
+	}
+	const block = blockMatch[1]
+	const extract = (tag: string): string => {
+		const m = block.match(new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, 'i'))
+		return m ? m[1].trim() : ''
+	}
+	const passedText = extract('passed').toLowerCase()
+	const findingsText = extract('findings')
+	const findings: VerificationFinding[] = findingsText.split('\n').map((line): VerificationFinding | null => {
+		const m = line.match(/^\s*[-*]?\s*\[(blocker|warning|info)\]\s*(.+)$/i)
+		if (!m) return null
+		const severity = m[1].toLowerCase() as VerificationFindingSeverity
+		const rest = m[2].trim()
+		const locMatch = rest.match(/\(([^()]+)\)\s*$/)
+		const location = locMatch?.[1]
+		return location ? { severity, description: rest.slice(0, locMatch!.index).trim(), location } : { severity, description: rest }
+	}).filter((f): f is VerificationFinding => !!f)
+
+	const hasBlocker = findings.some(f => f.severity === 'blocker')
+	return {
+		passed: passedText === 'true' && !hasBlocker,
+		findings,
+		summary: extract('summary') || '(no summary provided)',
+	}
+}
 
 const findStagingSelectionIndex = (currentSelections: StagingSelectionItem[] | undefined, newSelection: StagingSelectionItem): number | null => {
 	if (!currentSelections) return null
@@ -166,6 +202,13 @@ export type ThreadType = {
 	// Filtered out of the visible thread selector, but not deleted, so its history can
 	// still be inspected by threadId if something needs debugging.
 	isSubagentThread?: boolean;
+
+	// Vader addition: true for a hidden thread spun up for independent verification (see
+	// runVerificationTask). Hard-forces the same read-only enforcement as Gather/Plan mode
+	// (READONLY_MODE_BLOCKED_BUILTIN_TOOLS) regardless of the user's current global chat
+	// mode - a verifier that could edit files to make its own checks pass would defeat the
+	// entire point of it being independent.
+	isVerificationThread?: boolean;
 
 	// Vader addition: the latest structured plan Plan Mode produced for this thread, parsed
 	// from a <vader_plan> block in an assistant message - see _maybeCaptureThreadPlan and
@@ -315,6 +358,10 @@ export interface IChatThreadService {
 	// completion (or until it stalls on a real approval requirement), and returns a
 	// structured summary rather than merging its full message history into the caller.
 	runSubagentTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<SubagentTaskResult>;
+
+	// Vader addition: independent verification - see PlanObject/isVerificationThread and
+	// common/verification/verificationTypes.ts's IVerificationService (the actual caller).
+	runVerificationTask(opts: { objective: string, evidenceText: string, onThreadCreated?: (threadId: string) => void }): Promise<VerificationVerdict>;
 
 	// Vader addition: Plan Mode. See PlanObject and _maybeCaptureThreadPlan above - a plan
 	// is captured automatically from a <vader_plan> block in an assistant message; this only
@@ -772,10 +819,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// see READONLY_MODE_BLOCKED_BUILTIN_TOOLS above for why each tool is listed and
 			// docs/integrations/plan-mode.md for the audit finding this fixes.
 			const currentChatMode = this._settingsService.state.globalSettings.chatMode
-			if (currentChatMode === 'gather' || currentChatMode === 'plan') {
+			const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
+			if (currentChatMode === 'gather' || currentChatMode === 'plan' || isVerificationThread) {
 				const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
 				if (blockedInReadonlyMode) {
-					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${currentChatMode === 'plan' ? 'Plan' : 'Gather'} mode is read-only - this tool could modify the project or run something with side effects. Switch to Agent mode to actually make this change.` })
+					const modeLabel = isVerificationThread ? 'Verification' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
+					this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: opts.unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : ' Switch to Agent mode to actually make this change.'}` })
 					return {}
 				}
 			}
@@ -1097,7 +1146,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// _runToolCall does not need setStreamState({idle}) before it, but it needs it after it. (handles its own setStreamState)
 
 		// above just defines helpers, below starts the actual function
-		const { chatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
+		// Vader addition: a verification thread is forced into 'gather'-equivalent (tools
+		// advertised, none mutating - see prompts.ts's availableTools) regardless of the
+		// user's actual global chat mode, so the model is never even told a mutating tool
+		// exists here, on top of the hard execution-level block in _runToolCall's gate.
+		const isVerificationThread = !!this.state.allThreads[threadId]?.isVerificationThread
+		const { chatMode: globalChatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
+		const chatMode = isVerificationThread ? 'gather' : globalChatMode
 		const { overridesOfModel } = this._settingsService.state
 
 		let nMessagesSent = 0
@@ -2231,6 +2286,38 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const hadError = !!finalStreamState?.error
 
 		return { threadId, conclusion, changedFilePaths, stalledAwaitingApproval, hadError }
+	}
+
+	private _createHiddenVerificationThread(): string {
+		const newThread: ThreadType = { ...newThreadObject(), isSubagentThread: true, isVerificationThread: true, agentId: null }
+		this._setState({ allThreads: { ...this.state.allThreads, [newThread.id]: newThread } }, true)
+		return newThread.id
+	}
+
+	// Vader addition: runs an independent verification pass. See PlanObject's sibling
+	// concept above and common/verification/verificationTypes.ts's IVerificationService,
+	// which is the actual caller of this - VerificationService gathers real evidence (git
+	// diff, diagnostics, build/lint/test results) and passes it here as plain text; this
+	// method's only job is running that judgment in a hard-enforced-read-only hidden thread
+	// and parsing the structured <vader_verdict> block back out.
+	async runVerificationTask({ objective, evidenceText, onThreadCreated }: { objective: string, evidenceText: string, onThreadCreated?: (threadId: string) => void }): Promise<VerificationVerdict> {
+		const threadId = this._createHiddenVerificationThread()
+		onThreadCreated?.(threadId)
+
+		this._addUserCheckpoint({ threadId })
+		const userMessage = verificationAgent_userMessage(objective, evidenceText)
+		const userMessageContent = await chat_userMessageContent(userMessage, [], { directoryStrService: this._directoryStringService, fileService: this._fileService })
+		this._addMessageToThread(threadId, { role: 'user', content: userMessageContent, displayContent: userMessage, selections: null, state: defaultMessageState })
+		this._setThreadState(threadId, { currCheckpointIdx: null })
+
+		await this._runChatAgent({ threadId, ...this._currentModelSelectionProps(threadId) })
+
+		const finalThread = this.state.allThreads[threadId]
+		const messages = finalThread?.messages ?? []
+		const lastAssistant = findLast(messages, m => m.role === 'assistant')
+		const text = (lastAssistant && lastAssistant.role === 'assistant' && lastAssistant.displayContent) || ''
+
+		return parseVerificationVerdict(text)
 	}
 
 	private _setThreadState(threadId: string, state: Partial<ThreadType['state']>, doNotRefreshMountInfo?: boolean): void {

@@ -4,6 +4,7 @@
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { Event } from '../../../../../base/common/event.js';
+import { VerificationVerdict } from '../verification/verificationTypes.js';
 
 // Mirrors chatThreadService.ts's SubagentTaskResult. Not imported directly: common/ code
 // must not depend on browser/ code (the reverse is the normal direction in this codebase),
@@ -100,6 +101,15 @@ export interface IAgentGatewayService {
 	 * this method itself only ever resolves once the task is done.
 	 */
 	runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<IsolatedTaskResult>;
+
+	/**
+	 * Runs an independent verification judgment (see common/verification/) in a hidden,
+	 * hard-enforced-read-only thread - separate from runIsolatedTask because the caller
+	 * here (IVerificationService) supplies pre-gathered evidence text rather than a task
+	 * description, and the result is a structured VerificationVerdict, not a
+	 * conclusion/changedFilePaths summary.
+	 */
+	runVerificationTask(opts: { objective: string, evidenceText: string, onThreadCreated?: (threadId: string) => void }): Promise<VerificationVerdict>;
 }
 
 export const IAgentGatewayService = createDecorator<IAgentGatewayService>('vaderAgentGatewayService');

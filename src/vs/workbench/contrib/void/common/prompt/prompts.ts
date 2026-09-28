@@ -370,6 +370,14 @@ export const builtinTools: {
 		description: `Runs this project's own build/typecheck/lint/test scripts (auto-detected from package.json) and reports which passed or failed, with output. Use this after making a non-trivial change to verify it actually works, instead of just asserting that it does - "agent says done" is not sufficient. If something fails, use the output to fix it, then run this again.`,
 		params: {}
 	},
+	run_verification_agent: {
+		name: 'run_verification_agent',
+		description: `Runs a genuinely independent verification pass on the current changes - a separate, read-only agent (with no memory of implementing the change and no ability to edit anything) judges real evidence (git diff, current diagnostics, and run_verification's own build/lint/test results) against the stated objective, rather than you asserting your own work is correct. If it finds a real problem (a "blocker"), this automatically delegates a repair task and re-verifies, up to a few times, before giving up. Use this for non-trivial or risky changes, once you believe the objective is met - not as a substitute for your own judgment along the way, and not for trivial changes where it would be pure overhead.`,
+		params: {
+			objective: { description: `What the change was supposed to accomplish, stated clearly enough that someone with no other context could judge whether it was met.` },
+			max_iterations: { description: `Optional. Maximum verify-repair-reverify rounds (default 3).` },
+		}
+	},
 
 	read_lint_errors: {
 		name: 'read_lint_errors',
@@ -1292,6 +1300,40 @@ Respond with EXACTLY these tags, each on its own, every tag present even if empt
 <next_steps>What should happen next to continue this task.</next_steps>
 
 Be concrete and specific - file paths, function names, exact decisions - not vague summaries. Omit nothing that the next continuation would need to rediscover by re-reading files or re-running commands it already ran. Do not include anything outside these tags.`.trim()
+
+// ======================================================== verification agent ========================================================================
+// Vader addition: the independent Verification Agent - see chatThreadService.ts's
+// isVerificationThread (hard-enforced read-only, same mechanism as Plan/Gather mode) and
+// verificationService.ts. This agent is deliberately never the same context that made the
+// change - it's a fresh thread given only real, gathered evidence and the stated objective,
+// asked to judge whether the objective was actually met, not asked to trust a self-report.
+
+export const verificationAgent_systemMessage = `
+You are an independent verification agent. You did NOT make the change you're reviewing - you're seeing it fresh, with no memory of implementing it, and no ability to edit anything (every tool that could modify a file, run a command, or take any action with side effects is disabled for you; attempting one will be blocked). Your only job is to judge, from the real evidence given to you, whether the stated objective was actually accomplished.
+
+Be skeptical. "The code looks like it should work" is not verification - look for concrete evidence: does the diff match what the objective asked for? Do the check results (build/typecheck/lint/test) actually pass, or did the evidence say none could be auto-detected (which is NOT the same as passing - say so explicitly if so)? Do current diagnostics show new errors? Is anything in the diff suspicious (a change unrelated to the objective, a removed safety check, a hardcoded value that looks like a workaround)?
+
+You have read-only tools available (read files, search, list directories, read lint errors) if the evidence given to you isn't enough - use them to check the actual current file contents rather than guessing from the diff alone.
+
+Respond with EXACTLY this format, every tag present:
+<vader_verdict>
+<passed>true or false - false if there is even one blocker finding</passed>
+<findings>
+One per line, or "(none)" if there are none. Format: "- [blocker|warning|info] description (file:line if known)". A "blocker" means the objective is not actually met or something is broken; "warning" means it works but has a real quality/risk concern; "info" is a minor note.
+</findings>
+<summary>One or two sentences: does this accomplish the stated objective or not, and why.</summary>
+</vader_verdict>
+
+Do not include anything outside this block except your reasoning, which may come before it.`.trim()
+
+export const verificationAgent_userMessage = (objective: string, evidenceText: string) => `
+Objective to verify: ${objective}
+
+Evidence gathered (real, not self-reported by whoever made the change):
+
+${evidenceText}
+
+Produce your verdict now.`
 
 export const contextCompaction_userMessage = (conversationText: string) => `
 Here is the earlier portion of the conversation to compact:

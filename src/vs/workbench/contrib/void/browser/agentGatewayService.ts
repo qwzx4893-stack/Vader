@@ -85,6 +85,10 @@ class AgentGatewayService extends Disposable implements IAgentGatewayService {
 	async runIsolatedTask(opts: { task: string, agentId?: string, onThreadCreated?: (threadId: string) => void }): Promise<IsolatedTaskResult> {
 		return this._chatThreadService.runSubagentTask(opts);
 	}
+
+	async runVerificationTask(opts: { objective: string, evidenceText: string, onThreadCreated?: (threadId: string) => void }) {
+		return this._chatThreadService.runVerificationTask(opts);
+	}
 }
 
 registerSingleton(IAgentGatewayService, AgentGatewayService, InstantiationType.Delayed);

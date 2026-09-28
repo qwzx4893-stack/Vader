@@ -28,6 +28,7 @@ import { VSBuffer } from '../../../../base/common/buffer.js'
 import { IMemoryService } from '../common/memory/memoryService.js'
 import { ISkillService } from '../common/skills/skillService.js'
 import { IAgentOrchestrationService, ParallelTaskSpec } from './orchestrationService.js'
+import { IVerificationService } from './verificationService.js'
 
 
 // tool use for AI
@@ -168,6 +169,7 @@ export class ToolsService implements IToolsService {
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@ISkillService private readonly skillService: ISkillService,
+		@IVerificationService private readonly verificationService: IVerificationService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -263,6 +265,11 @@ export class ToolsService implements IToolsService {
 			},
 			run_verification: (_params: RawToolParamsObj) => {
 				return {}
+			},
+			run_verification_agent: (params: RawToolParamsObj) => {
+				const objective = validateStr('objective', params.objective)
+				const maxIterations = validateNumber(params.max_iterations, { default: null })
+				return { objective, maxIterations }
 			},
 
 			browser_new_page: () => ({}),
@@ -657,6 +664,10 @@ export class ToolsService implements IToolsService {
 
 				return { result: { checks, detected: true } }
 			},
+			run_verification_agent: async ({ objective, maxIterations }) => {
+				const result = await this.verificationService.runVerifyRepairLoop({ objective, maxIterations: maxIterations ?? undefined })
+				return { result }
+			},
 
 			// ---
 
@@ -886,6 +897,17 @@ export class ToolsService implements IToolsService {
 				const summary = failed.length === 0 ? `All ${result.checks.length} checks passed.` : `${failed.length}/${result.checks.length} checks failed.`
 				const details = failed.map(c => `--- ${c.name} output (tail) ---\n${c.outputTail}`).join('\n\n')
 				return `${summary}\n${lines.join('\n')}${details ? `\n\n${details}` : ''}`
+			},
+			run_verification_agent: (params, result) => {
+				const { finalVerdict, iterations, repairConclusions } = result
+				const header = `${finalVerdict.passed ? 'PASSED' : 'NOT PASSED'} after ${iterations} verification round(s)${repairConclusions.length ? ` (${repairConclusions.length} repair attempt(s))` : ''}.`
+				const findingsStr = finalVerdict.findings.length
+					? finalVerdict.findings.map(f => `- [${f.severity}] ${f.description}${f.location ? ` (${f.location})` : ''}`).join('\n')
+					: '(no findings)'
+				const repairsStr = repairConclusions.length
+					? `\n\nRepair attempts:\n${repairConclusions.map((c, i) => `${i + 1}. ${c}`).join('\n')}`
+					: ''
+				return `${header}\n\n${finalVerdict.summary}\n\nFindings:\n${findingsStr}${repairsStr}`
 			},
 			// ---
 			create_file_or_folder: (params, result) => {

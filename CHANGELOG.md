@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased - Independent Verification Agent + checkpoint/orchestration integration
+
+New `common/verification/` (`IVerificationService`) and a new mechanism in
+`chatThreadService.ts`: `isVerificationThread`, which hard-forces the exact same read-only
+enforcement Plan/Gather mode use (every mutating built-in tool and every MCP tool call
+blocked, regardless of the user's actual global chat mode) onto a hidden verification
+thread. This is what makes verification genuinely independent - not the same agent
+context grading its own work, in a fresh thread that cannot edit anything to make its own
+checks pass. New `run_verification_agent` tool: gathers real evidence (git diff, live
+`IMarkerService` diagnostics, and `run_verification`'s own build/lint/test results -
+explicitly never treating "no checks detected" as a pass), asks the independent verifier
+for a structured `<vader_verdict>` (parsed the same tag-extraction way as compaction/Plan
+Mode), and runs a bounded verify→repair→re-verify loop (delegates a repair subagent task
+for any `blocker` finding, re-verifies, up to 3 rounds by default) - never loops
+unboundedly, and reports honestly if it's still failing after the cap.
+
+Checkpoint/orchestration integration: provenance (which agent/worktree produced which
+changes) was already tracked by Phase 5's `ParallelTaskState`; verification/repair hidden
+threads now checkpoint their edits the same way an interactive turn does; and worktree
+merge safety against unrelated user work turns out to already be a property of git itself
+(a merge that would conflict with uncommitted changes is refused, not silently overwritten -
+this pass's existing conflict handling already covers that). See
+`docs/integrations/verification.md` for what's real and the one stated boundary (verifying
+a worktree's isolated changes before merge isn't implemented - `IMarkerService` can't see a
+separate checkout's files without opening them in this workbench first).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run buildreact` (clean), full
+`npm run compile` (0 errors).
+
 ## Unreleased - Multi-tab browser automation
 
 Removed the single-page limitation: `IBrowserToolMainService` now manages any number of

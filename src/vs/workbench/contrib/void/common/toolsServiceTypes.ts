@@ -46,6 +46,10 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// once (see common/orchestration/) - worktree-isolated tasks can commit real changes.
 	'delegate_parallel_tasks': 'edits',
 	'run_verification': 'terminal',
+	// Vader addition: this can run build/lint/test commands (via run_verification) and
+	// delegate repair subagent tasks that edit files - same 'terminal' tier as
+	// run_verification itself, since that's the actual side-effecting part.
+	'run_verification_agent': 'terminal',
 	'browser_new_page': 'terminal',
 	'browser_switch_page': 'terminal',
 	'browser_close_page': 'terminal',
@@ -86,6 +90,10 @@ export type BuiltinToolCallParams = {
 	// 'terminal' action (same approval bucket as run_command) because that's exactly what
 	// it does under the hood.
 	'run_verification': {},
+	// Vader addition: independent verification with a bounded verify->repair->re-verify
+	// loop - see common/verification/. Distinct from run_verification (which is just the
+	// deterministic build/lint/test step this also uses as part of its evidence).
+	'run_verification_agent': { objective: string, maxIterations: number | null },
 	'find_capability': { query: string },
 	// Vader addition: browser automation, multi-tab. Snapshot/screenshot/console/page-errors/
 	// network-log/list-pages are read-only; navigate/click/type/new-page/switch/close can
@@ -147,6 +155,7 @@ export type BuiltinToolResultType = {
 	'search_skillnet': { results: import('./discovery/discoveryServiceTypes.js').SkillNetSearchResult[] },
 	'fetch_skill_instructions': { content: string | null },
 	'run_verification': { checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean },
+	'run_verification_agent': import('./verification/verificationTypes.js').VerifyRepairLoopResult,
 	'find_capability': { results: import('./capabilities/capabilityBusTypes.js').CapabilityDescriptor[] },
 	'browser_new_page': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_list_pages': { pages: import('./browser/browserToolServiceTypes.js').PageSummary[] },
