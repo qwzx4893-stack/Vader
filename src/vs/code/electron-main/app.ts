@@ -139,6 +139,8 @@ import { IBrowserToolMainService } from '../../workbench/contrib/void/common/bro
 import { BrowserToolMainService } from '../../workbench/contrib/void/electron-main/browserToolMainService.js';
 import { IGitWorktreeMainService } from '../../workbench/contrib/void/common/worktree/gitWorktreeTypes.js';
 import { GitWorktreeMainService } from '../../workbench/contrib/void/electron-main/gitWorktreeMainService.js';
+import { IVisionMainService } from '../../workbench/contrib/void/common/vision/visionQueryTypes.js';
+import { VisionMainService } from '../../workbench/contrib/void/electron-main/visionMainService.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1114,6 +1116,7 @@ export class CodeApplication extends Disposable {
 		services.set(IDiscoveryMainService, new SyncDescriptor(DiscoveryMainService, undefined, false));
 		services.set(IBrowserToolMainService, new SyncDescriptor(BrowserToolMainService, undefined, false));
 		services.set(IGitWorktreeMainService, new SyncDescriptor(GitWorktreeMainService, undefined, false));
+		services.set(IVisionMainService, new SyncDescriptor(VisionMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1274,6 +1277,10 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const gitWorktreeChannel = ProxyChannel.fromService(accessor.get(IGitWorktreeMainService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-worktree', gitWorktreeChannel);
+
+		// Vader added this
+		const visionChannel = ProxyChannel.fromService(accessor.get(IVisionMainService), disposables);
+		mainProcessElectronServer.registerChannel('void-channel-vision', visionChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

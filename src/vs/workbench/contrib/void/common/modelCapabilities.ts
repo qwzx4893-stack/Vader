@@ -1512,6 +1512,41 @@ export const getModelCapabilities = (
 	return { modelName, ...defaultModelOptions, ...overrides, isUnrecognizedModel: true };
 }
 
+// Vader addition, part of the real vision/multimodal pipeline (docs/integrations/model-router.md).
+// Whether a model accepts image input, as a pattern-based, best-effort check over well-known
+// model-name families - there is no per-model "supportsVision" field in this codebase's static
+// model tables (VoidStaticModelInfo above) to read this from honestly, so this function is the
+// single, documented source of truth instead of silently guessing in multiple places. Kept
+// deliberately conservative: an unrecognized/local model name returns false unless it matches an
+// explicit vision-model naming convention, so a non-vision-capable model is never handed an image
+// by mistake (the caller in electron-main/llmMessage/sendLLMMessage.impl.ts's sendVisionQuery
+// re-checks this same function immediately before making the network call, as the last gate
+// before an image ever leaves the app).
+export const modelSupportsVision = (providerName: ProviderName, modelName: string): boolean => {
+	const m = modelName.toLowerCase()
+	if (providerName === 'anthropic') {
+		// every Claude 3+ model accepts images; Claude 1/2 did not and are no longer offered
+		return /claude-(3|4|5|6|7|8|9)/.test(m) || m.includes('claude-3') || m.includes('claude-opus') || m.includes('claude-sonnet') || m.includes('claude-haiku')
+	}
+	if (providerName === 'openAI' || providerName === 'microsoftAzure' || providerName === 'openRouter' || providerName === 'liteLLM' || providerName === 'openAICompatible' || providerName === 'awsBedrock') {
+		// gpt-4o/4.1/4.5/5*, o1/o3/o4 (not the text-only o1-mini early preview), Claude/Gemini
+		// model names also routed through one of these (Bedrock/OpenRouter/OpenAI-compatible
+		// proxies), and anything explicitly marketed as "vision"
+		if (m.includes('gpt-3.5') || m.includes('o1-mini')) return false
+		return /gpt-4o|gpt-4\.1|gpt-4\.5|gpt-5|^gpt-4-vision|4-vision|^o1(?!-mini)|^o3|^o4|claude-(3|4)|gemini-(1\.5|2|3)/.test(m) || m.includes('vision')
+	}
+	if (providerName === 'gemini' || providerName === 'googleVertex') {
+		// Gemini 1.5+/2.0+/2.5+ are natively multimodal; the legacy text-only "gemini-pro" (1.0) is not
+		return /gemini-(1\.5|2|3)/.test(m)
+	}
+	if (providerName === 'mistral') {
+		return m.includes('pixtral')
+	}
+	// local/self-hosted runtimes (ollama, vLLM, lmStudio, ...): only well-known open
+	// vision-model families, matched by their standard naming convention
+	return /llava|bakllava|moondream|pixtral|llama3\.2-vision|llama-3\.2-vision|qwen.*-vl|qwen2-vl|qwen2\.5-vl|vl-chat|minicpm-v|cogvlm|phi-3\.5-vision|phi-3-vision/.test(m)
+}
+
 // non-model settings
 export const getProviderCapabilities = (providerName: ProviderName) => {
 	const { providerReasoningIOSettings } = modelSettingsOfProvider[providerName]

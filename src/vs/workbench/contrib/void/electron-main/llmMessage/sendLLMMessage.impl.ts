@@ -16,7 +16,7 @@ import { GoogleAuth } from 'google-auth-library'
 
 import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, ModelListParams, OllamaModelResponse, OnError, OnFinalMessage, OnText, RawToolCallObj, RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
-import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace } from '../../common/modelCapabilities.js';
+import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace, modelSupportsVision } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
@@ -953,6 +953,100 @@ export const sendLLMMessageToProviderImplementation = {
 } satisfies CallFnOfProvider
 
 
+// ------------ VISION (Vader addition) ------------
+// A deliberately isolated, one-off image+text->text call - see
+// common/vision/visionQueryTypes.ts's doc comment for why this doesn't touch the main
+// sendChat/streaming pipeline or the persisted ChatMessage/LLMChatMessage format. Reuses the
+// exact same per-provider client-construction helpers (newOpenAICompatibleSDK, `new Anthropic`,
+// `new GoogleGenAI`) the real chat paths above use, so there is exactly one place each
+// provider's credentials are turned into a client, not two.
+export const sendVisionQuery = async ({
+	providerName,
+	modelName: modelName_,
+	settingsOfProvider,
+	overridesOfModel,
+	imageBase64,
+	mimeType,
+	prompt,
+}: {
+	providerName: ProviderName,
+	modelName: string,
+	settingsOfProvider: SettingsOfProvider,
+	overridesOfModel: OverridesOfModel | undefined,
+	imageBase64: string,
+	mimeType: 'image/png' | 'image/jpeg',
+	prompt: string,
+}): Promise<string> => {
+
+	// last real gate before an image ever leaves the app - re-checked here independently of
+	// whatever already filtered the caller's model choice (e.g. the Model Router), since this
+	// function is the actual network boundary (AGENTS.md: network calls live in one auditable
+	// main-process place per subsystem).
+	if (!modelSupportsVision(providerName, modelName_)) {
+		throw new Error(`Model "${modelName_}" (${providerName}) is not recognized as vision-capable. Refusing to send image data to it.`)
+	}
+
+	const { modelName } = getModelCapabilities(providerName, modelName_, overridesOfModel)
+
+	if (providerName === 'anthropic') {
+		const thisConfig = settingsOfProvider.anthropic
+		const anthropic = new Anthropic({ apiKey: thisConfig.apiKey, dangerouslyAllowBrowser: true })
+		const response = await anthropic.messages.create({
+			model: modelName,
+			max_tokens: 1024,
+			messages: [{
+				role: 'user',
+				content: [
+					{ type: 'image', source: { type: 'base64', media_type: mimeType, data: imageBase64 } },
+					{ type: 'text', text: prompt },
+				],
+			}],
+		})
+		const textBlock = response.content.find(b => b.type === 'text')
+		if (!textBlock || textBlock.type !== 'text') throw new Error(`Vision query to ${providerName} returned no text.`)
+		return textBlock.text
+	}
+
+	if (providerName === 'gemini') {
+		const thisConfig = settingsOfProvider.gemini
+		const genAI = new GoogleGenAI({ apiKey: thisConfig.apiKey })
+		const response = await genAI.models.generateContent({
+			model: modelName,
+			contents: [{
+				role: 'user',
+				parts: [
+					{ inlineData: { mimeType, data: imageBase64 } },
+					{ text: prompt },
+				],
+			}],
+		})
+		const text = response.text
+		if (!text) throw new Error(`Vision query to ${providerName} returned no text.`)
+		return text
+	}
+
+	// every other provider this codebase supports is reached through the OpenAI-compatible SDK
+	// (openAI, openRouter, ollama, vLLM, lmStudio, liteLLM, openAICompatible, deepseek, groq,
+	// xAI, mistral, microsoftAzure, awsBedrock) - the same helper the real chat path uses, and
+	// the OpenAI Chat Completions image_url content-part format, which every one of these
+	// backends that actually supports vision (gpt-4o, a vision-tuned OpenRouter model, a
+	// llava/qwen-vl model served by Ollama/vLLM/LM Studio, ...) accepts.
+	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider })
+	const response = await openai.chat.completions.create({
+		model: modelName,
+		max_tokens: 1024,
+		messages: [{
+			role: 'user',
+			content: [
+				{ type: 'text', text: prompt },
+				{ type: 'image_url', image_url: { url: `data:${mimeType};base64,${imageBase64}` } },
+			],
+		}],
+	})
+	const text = response.choices[0]?.message?.content
+	if (!text) throw new Error(`Vision query to ${providerName} returned no text.`)
+	return text
+}
 
 
 /*

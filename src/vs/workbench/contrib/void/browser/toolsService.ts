@@ -30,6 +30,8 @@ import { ISkillService } from '../common/skills/skillService.js'
 import { IAgentOrchestrationService, ParallelTaskSpec } from './orchestrationService.js'
 import { IVerificationService } from './verificationService.js'
 import { IUnifiedMarketplaceService } from '../common/marketplace/marketplaceTypes.js'
+import { IModelRouterService } from '../common/modelRouter/modelRouterService.js'
+import { IVisionMainService } from '../common/vision/visionQueryService.js'
 
 
 // tool use for AI
@@ -358,6 +360,11 @@ export class ToolsService implements IToolsService {
 				const pageId = validateOptionalStr('page_id', params.page_id)
 				return { pageId }
 			},
+			browser_screenshot_analyze: (params: RawToolParamsObj) => {
+				const pageId = validateOptionalStr('page_id', params.page_id)
+				const question = validateOptionalStr('question', params.question)
+				return { pageId, question }
+			},
 			browser_console_logs: (params: RawToolParamsObj) => {
 				const pageId = validateOptionalStr('page_id', params.page_id)
 				return { pageId }
@@ -667,6 +674,29 @@ export class ToolsService implements IToolsService {
 				await fileService.writeFile(filePath, VSBuffer.wrap(bytes))
 				return { result: { filePath: filePath.fsPath } }
 			},
+			// Vader addition: the real vision/multimodal pipeline - navigate/click/etc already
+			// exist, this is the missing "reason about what's on screen" step. Resolves a
+			// vision-capable model through the Model Router (never a hardcoded/unauthorized
+			// provider, never a non-vision model - see modelCapabilities.ts's
+			// modelSupportsVision, re-checked again as the actual network gate in
+			// electron-main/llmMessage/sendLLMMessage.impl.ts's sendVisionQuery).
+			browser_screenshot_analyze: async ({ pageId, question }) => {
+				const modelRouterService = instantiationService.invokeFunction(accessor => accessor.get(IModelRouterService))
+				const visionMainService = instantiationService.invokeFunction(accessor => accessor.get(IVisionMainService))
+				const selection = modelRouterService.resolveVisionModel()
+				if (!selection) throw new Error(`No vision-capable model is configured. Configure a vision-capable model (e.g. a Claude 3+, GPT-4o, or Gemini 1.5+ model) in Settings to use browser_screenshot_analyze.`)
+				const base64Png = await this.browserToolService.screenshot(pageId ?? undefined)
+				const description = await visionMainService.query({
+					providerName: selection.providerName,
+					modelName: selection.modelName,
+					settingsOfProvider: voidSettingsService.state.settingsOfProvider,
+					overridesOfModel: voidSettingsService.state.overridesOfModel,
+					imageBase64: base64Png,
+					mimeType: 'image/png',
+					prompt: question || 'Describe what is visible in this screenshot in detail, including layout, visible text, and anything that looks broken or unexpected.',
+				})
+				return { result: { description, modelUsed: `${selection.providerName}/${selection.modelName}` } }
+			},
 			browser_console_logs: async ({ pageId }) => {
 				const logs = await this.browserToolService.consoleLogs(pageId ?? undefined)
 				return { result: { logs } }
@@ -914,6 +944,7 @@ export class ToolsService implements IToolsService {
 			browser_click: (params, result) => stringifyBrowserSnapshot(result),
 			browser_type: (params, result) => stringifyBrowserSnapshot(result),
 			browser_screenshot: (params, result) => `Screenshot saved to ${result.filePath}`,
+			browser_screenshot_analyze: (params, result) => `[Vision: ${result.modelUsed}]\n${result.description}`,
 			browser_console_logs: (params, result) => result.logs.length
 				? result.logs.map(l => `[${l.type}] ${l.text}`).join('\n')
 				: '(no console output)',

@@ -39,6 +39,8 @@ export type ModelCapabilityDescriptor = {
 	supportsReasoning: boolean;
 	supportsFIM: boolean;
 	supportsPromptCaching: boolean;
+	/** whether this model accepts image input - see modelCapabilities.ts's modelSupportsVision for how this is determined (pattern-based, best-effort; there is no per-model field to read this from) */
+	supportsVision: boolean;
 	contextWindow: number;
 	costPerMillionInputTokens: number;
 	costPerMillionOutputTokens: number;
@@ -70,6 +72,15 @@ export interface IModelRouterService {
 	 * ModelSelection | null already has everywhere else in this codebase).
 	 */
 	resolveModel(category: RouterCategory): ModelSelection | null;
+
+	/**
+	 * The best configured, vision-capable model, for the browser-screenshot-analysis flow
+	 * (docs/integrations/model-router.md's Vision section) - scored the same way the 'browser'
+	 * category is, but restricted to listConfiguredModels() entries whose supportsVision is
+	 * true. Returns null if nothing configured actually supports vision (never silently widens
+	 * to a non-vision model or an unconfigured provider).
+	 */
+	resolveVisionModel(): ModelSelection | null;
 }
 
 export const IModelRouterService = createDecorator<IModelRouterService>('vaderModelRouterService');

@@ -6,7 +6,7 @@ import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
-import { getModelCapabilities } from '../modelCapabilities.js';
+import { getModelCapabilities, modelSupportsVision } from '../modelCapabilities.js';
 import { localProviderNames, ModelSelection, ProviderName, providerNames } from '../voidSettingsTypes.js';
 import { IVoidSettingsService } from '../voidSettingsService.js';
 import { IModelRouterService, ModelCapabilityDescriptor, ModelRouterMode, RouterCategory } from './modelRouterTypes.js';
@@ -108,6 +108,7 @@ class ModelRouterService extends Disposable implements IModelRouterService {
 			supportsReasoning: !!caps.reasoningCapabilities,
 			supportsFIM: caps.supportsFIM,
 			supportsPromptCaching: caps.cost.cache_read !== undefined,
+			supportsVision: modelSupportsVision(providerName, modelName),
 			contextWindow: caps.contextWindow,
 			costPerMillionInputTokens: caps.cost.input,
 			costPerMillionOutputTokens: caps.cost.output,
@@ -155,6 +156,14 @@ class ModelRouterService extends Disposable implements IModelRouterService {
 		const override = this.getCategoryOverride(category);
 		if (override) return override;
 		return this._settingsService.state.modelSelectionOfFeature['Chat'];
+	}
+
+	resolveVisionModel(): ModelSelection | null {
+		const visionCapable = this.listConfiguredModels().filter(d => d.supportsVision);
+		if (visionCapable.length === 0) return null;
+		const ranked = [...visionCapable].sort((a, b) => scoreForCategory(b, 'browser') - scoreForCategory(a, 'browser'));
+		const best = ranked[0];
+		return { providerName: best.providerName, modelName: best.modelName };
 	}
 }
 

@@ -119,6 +119,14 @@ export type BuiltinToolCallParams = {
 	'browser_click': { ref: string, pageId: string | null },
 	'browser_type': { ref: string, text: string, submit: boolean, pageId: string | null },
 	'browser_screenshot': { pageId: string | null },
+	// Vader addition, part of the real vision/multimodal pipeline (docs/integrations/model-router.md's
+	// Vision section): takes a screenshot and sends it to a vision-capable configured model
+	// (resolved via IModelRouterService.resolveVisionModel(), never a hardcoded/unauthorized
+	// provider) along with `question`, returning a text description the Main Agent can reason
+	// over - unlike browser_screenshot, which only saves a PNG to disk for a human to look at.
+	// Read-only like every other browser_* inspection tool (no page/OS side effects), so it
+	// carries no approval-gate entry, same as browser_screenshot/browser_snapshot/etc.
+	'browser_screenshot_analyze': { pageId: string | null, question: string | null },
 	'browser_console_logs': { pageId: string | null },
 	'browser_page_errors': { pageId: string | null },
 	'browser_network_log': { pageId: string | null },
@@ -190,6 +198,7 @@ export type BuiltinToolResultType = {
 	'browser_click': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_type': import('./browser/browserToolServiceTypes.js').BrowserSnapshot,
 	'browser_screenshot': { filePath: string },
+	'browser_screenshot_analyze': { description: string, modelUsed: string },
 	'browser_console_logs': { logs: import('./browser/browserToolServiceTypes.js').ConsoleLogEntry[] },
 	'browser_page_errors': { errors: import('./browser/browserToolServiceTypes.js').PageErrorEntry[] },
 	'browser_network_log': { entries: import('./browser/browserToolServiceTypes.js').NetworkEntry[] },

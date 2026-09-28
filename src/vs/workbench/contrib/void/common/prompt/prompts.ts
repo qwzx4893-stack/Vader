@@ -349,6 +349,14 @@ export const builtinTools: {
 		description: `Takes a PNG screenshot of a page for visual inspection/debugging.`,
 		params: { page_id: { description: 'Optional. Which page; omit to use the active page.' } }
 	},
+	browser_screenshot_analyze: {
+		name: 'browser_screenshot_analyze',
+		description: `Takes a screenshot of a page and sends it to a vision-capable model to actually describe what's visible - unlike browser_screenshot, which only saves a PNG to disk, this returns a text description you can reason about directly (layout, rendered content, visual bugs, whether something looks right). Requires a vision-capable model to be configured; fails with a clear error if none is (in which case fall back to browser_screenshot + browser_snapshot).`,
+		params: {
+			page_id: { description: 'Optional. Which page; omit to use the active page.' },
+			question: { description: 'Optional. What to look for or answer about the screenshot (e.g. "Is the login form centered and are there any visual glitches?"). Omit for a general description.' },
+		}
+	},
 	browser_console_logs: {
 		name: 'browser_console_logs',
 		description: `Returns recent browser console messages (log/warn/error) from a page - useful for catching frontend errors a visual check would miss.`,
