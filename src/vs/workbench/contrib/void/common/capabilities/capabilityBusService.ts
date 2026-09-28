@@ -8,6 +8,7 @@ import { IMCPService } from '../mcpService.js';
 import { IAgentsService } from '../agents/agentsService.js';
 import { IDiscoveryMainService } from '../discovery/discoveryService.js';
 import { ISkillService } from '../skills/skillService.js';
+import { IUnifiedMarketplaceService } from '../marketplace/marketplaceTypes.js';
 import { CapabilityDescriptor, ICapabilityBusService } from './capabilityBusTypes.js';
 
 export * from './capabilityBusTypes.js';
@@ -29,6 +30,7 @@ class CapabilityBusService implements ICapabilityBusService {
 		@IAgentsService private readonly _agentsService: IAgentsService,
 		@IDiscoveryMainService private readonly _discoveryService: IDiscoveryMainService,
 		@ISkillService private readonly _skillService: ISkillService,
+		@IUnifiedMarketplaceService private readonly _marketplaceService: IUnifiedMarketplaceService,
 	) { }
 
 	listLocalCapabilities(): CapabilityDescriptor[] {
@@ -76,7 +78,21 @@ class CapabilityBusService implements ICapabilityBusService {
 	}
 
 	async resolve(query: string): Promise<CapabilityDescriptor[]> {
-		const local = this.listLocalCapabilities()
+		// Vader addition: installed/local Unified Capability Marketplace items (extensions,
+		// language servers, debug adapters, formatters, local Jupyter kernels - ecosystems
+		// this bus otherwise has zero coverage of) count as local capabilities too, same as
+		// native tools/MCP tools/agents/skills below.
+		const marketplaceInstalled = await this._marketplaceService.listInstalled().catch(() => []);
+		const marketplaceLocalDescriptors: CapabilityDescriptor[] = marketplaceInstalled.map(item => ({
+			id: `marketplace-installed:${item.providerId}:${item.id}`,
+			source: 'marketplace-installed',
+			name: item.name,
+			description: item.description,
+			trust: item.trust === 'blocked' ? 'untrusted' : 'trusted',
+			available: item.installed || !!item.isLocal,
+		}));
+
+		const local = [...this.listLocalCapabilities(), ...marketplaceLocalDescriptors]
 			.map(c => ({ c, score: scoreMatch(query, `${c.name} ${c.description}`) }))
 			.filter(({ score }) => score > 0)
 			.sort((a, b) => b.score - a.score)
@@ -86,10 +102,26 @@ class CapabilityBusService implements ICapabilityBusService {
 		// nothing local looks relevant (mission: prefer local/trusted before downloading).
 		if (local.length > 0) return local;
 
-		const [mcpResults, skillResults] = await Promise.all([
+		const [mcpResults, skillResults, marketplaceCandidates] = await Promise.all([
 			this._discoveryService.searchMcpRegistry(query),
 			this._discoveryService.searchSkillNet(query),
+			// covers the marketplace-only ecosystems (extensions/LSP/DAP/formatters) that have
+			// no direct call above - MCP/Skills keep their existing direct calls (unchanged
+			// labels/behavior) rather than being rerouted through the marketplace.
+			this._marketplaceService.discoverForCapability(query).catch(() => []),
 		]);
+
+		const marketplaceCandidateDescriptors: CapabilityDescriptor[] = marketplaceCandidates
+			.filter(item => !item.installed && (item.type === 'EXTENSION' || item.type === 'LANGUAGE_SERVER' || item.type === 'DEBUG_ADAPTER' || item.type === 'FORMATTER'))
+			.map(item => ({
+				id: `marketplace-candidate:${item.providerId}:${item.id}`,
+				source: 'marketplace-candidate',
+				name: item.name,
+				description: item.description,
+				trust: 'untrusted',
+				available: false,
+				marketplace: { providerId: item.providerId, itemName: item.name },
+			}));
 
 		const mcpDescriptors: CapabilityDescriptor[] = mcpResults.map(r => ({
 			id: `mcp-registry:${r.name}`,
@@ -109,7 +141,7 @@ class CapabilityBusService implements ICapabilityBusService {
 			available: false,
 		}));
 
-		return [...mcpDescriptors, ...skillDescriptors];
+		return [...mcpDescriptors, ...skillDescriptors, ...marketplaceCandidateDescriptors];
 	}
 }
 

@@ -481,6 +481,15 @@ export const builtinTools: {
 		}
 	},
 
+	install_marketplace_capability: {
+		name: 'install_marketplace_capability',
+		description: `Installs, configures, or connects a capability found via find_capability (a marketplace-candidate result: an extension, MCP server, language server, debug adapter, or formatter you don't have yet). This always requires the user's approval before anything runs - use it right after finding a genuinely relevant candidate, not speculatively, and explain to the user why you want it.`,
+		params: {
+			provider_id: { description: `The exact providerId from the find_capability result's "marketplace" field.` },
+			item_name: { description: `The exact item name from the find_capability result.` },
+		}
+	},
+
 	remember: {
 		name: 'remember',
 		description: `Writes a fact/decision/preference to persistent memory so it's available in every future conversation, not just this one - use it for durable things worth not re-discovering (a project convention, a constraint the user stated, a subtlety about the codebase), not for anything already recoverable by reading the code, and not for anything task-specific that won't matter once this task is done.`,

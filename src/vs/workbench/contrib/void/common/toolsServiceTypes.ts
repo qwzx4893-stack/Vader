@@ -38,6 +38,9 @@ export const approvalTypeOfBuiltinToolName: Partial<{ [T in BuiltinToolName]?: '
 	// feeds its instructions into every future system prompt - a persistent, trust-relevant
 	// action, same tier as remember/create_persistent_agent.
 	'install_skill': 'edits',
+	// Vader addition: installing/configuring a marketplace item can run arbitrary code
+	// (an extension, an MCP server) - same tier as install_skill, never auto-approved.
+	'install_marketplace_capability': 'edits',
 	// Vader addition: delegating a task can itself cause file edits/terminal commands
 	// (via the subagent's own thread, which auto-approves those on itself - see
 	// chatThreadService.ts), so starting a delegation at all goes through 'edits' approval.
@@ -152,6 +155,14 @@ export type BuiltinToolCallParams = {
 	// fetch_skill_instructions, or your own distilled instructions) - see common/skills/.
 	// Installed skills start disabled and 'review_required'; the user enables/trusts them.
 	'install_skill': { name: string, description: string, instructions: string, repositoryUrl: string | null },
+	// Vader addition: the one real action a Main Agent can take on a Unified Capability
+	// Marketplace candidate found via find_capability (source: 'marketplace-candidate') - see
+	// common/marketplace/marketplaceTypes.ts. Always routes through this tool's own approval
+	// gate (see approvalTypeOfBuiltinToolName below) - an agent can never install/configure
+	// anything from the marketplace without going through the same Policy Engine/approval
+	// path as any other mutating tool call, per the mission's "never silently install
+	// arbitrary executable software" requirement.
+	'install_marketplace_capability': { providerId: string, itemName: string },
 }
 
 // RESULT OF TOOL CALL
@@ -203,6 +214,7 @@ export type BuiltinToolResultType = {
 	},
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
 	'install_skill': { skillId: string },
+	'install_marketplace_capability': { itemName: string, providerId: string, actionTaken: string },
 }
 
 

@@ -29,6 +29,7 @@ import { IMemoryService } from '../common/memory/memoryService.js'
 import { ISkillService } from '../common/skills/skillService.js'
 import { IAgentOrchestrationService, ParallelTaskSpec } from './orchestrationService.js'
 import { IVerificationService } from './verificationService.js'
+import { IUnifiedMarketplaceService } from '../common/marketplace/marketplaceTypes.js'
 
 
 // tool use for AI
@@ -477,6 +478,13 @@ export class ToolsService implements IToolsService {
 				return { name, description, instructions, repositoryUrl }
 			},
 
+			install_marketplace_capability: (params: RawToolParamsObj) => {
+				const { provider_id: providerIdUnknown, item_name: itemNameUnknown } = params
+				const providerId = validateStr('provider_id', providerIdUnknown)
+				const itemName = validateStr('item_name', itemNameUnknown)
+				return { providerId, itemName }
+			},
+
 			remember: (params: RawToolParamsObj) => {
 				const { content: contentUnknown, label: labelUnknown, scope: scopeUnknown, agent_name: agentNameUnknown } = params
 				const content = validateStr('content', contentUnknown)
@@ -812,6 +820,16 @@ export class ToolsService implements IToolsService {
 				return { result: { skillId: record.id } }
 			},
 
+			install_marketplace_capability: async ({ providerId, itemName }) => {
+				const marketplaceService = instantiationService.invokeFunction(accessor => accessor.get(IUnifiedMarketplaceService))
+				const { items } = await marketplaceService.search(itemName)
+				const item = items.find(i => i.providerId === providerId && i.name === itemName)
+				if (!item) throw new Error(`Could not find "${itemName}" from provider "${providerId}" in the marketplace - it may no longer be available.`)
+				if (!item.installMethod) throw new Error(`"${item.name}" has no available install/configure action (it may already be installed, or this provider doesn't support that action).`)
+				await marketplaceService.performAction(item.installMethod, item)
+				return { result: { itemName: item.name, providerId: item.providerId, actionTaken: item.installMethod } }
+			},
+
 			remember: async ({ content, label, scope, agentName }) => {
 				if (scope === 'agent') {
 					const agent = agentName ? this.agentsService.state.agents.find(a => a.name === agentName) : undefined
@@ -1018,6 +1036,9 @@ export class ToolsService implements IToolsService {
 			},
 			install_skill: (params, result) => {
 				return `Installed skill "${params.name}" (id=${result.skillId}). It's disabled and marked "review_required" until reviewed and enabled in Settings > Skills.`;
+			},
+			install_marketplace_capability: (params, result) => {
+				return `${result.actionTaken} succeeded for "${result.itemName}" (${result.providerId}).`;
 			},
 			remember: (params, result) => {
 				return `Saved to ${result.scope} memory (id=${result.memoryId}). It will be included in future conversations${result.scope === 'agent' ? ` run as ${params.agentName}` : ' in this workspace'}.`;

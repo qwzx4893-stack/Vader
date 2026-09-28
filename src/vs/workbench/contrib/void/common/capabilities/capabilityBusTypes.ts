@@ -13,7 +13,15 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 // could get) for X," matching the resolution order in the mission: installed native
 // capability -> pinned/cached skill -> SkillNet -> configured MCP -> MCP Registry.
 
-export type CapabilitySource = 'native-tool' | 'mcp-tool' | 'permanent-agent' | 'installed-skill' | 'skillnet' | 'mcp-registry';
+// Vader addition: 'marketplace-installed'/'marketplace-candidate' surface the Unified
+// Capability Marketplace's own ecosystems (extensions, language servers, debug adapters,
+// formatters, Jupyter kernels - see common/marketplace/marketplaceTypes.ts) through this
+// same resolver, alongside the sources that already had direct integrations here
+// (mcp-tool/mcp-registry, installed-skill/skillnet). Those existing sources are left calling
+// their original services directly rather than being rerouted through the marketplace, to
+// avoid changing their established behavior/labels - the marketplace adds ecosystems this
+// bus had no coverage of at all, rather than replacing what it already did.
+export type CapabilitySource = 'native-tool' | 'mcp-tool' | 'permanent-agent' | 'installed-skill' | 'skillnet' | 'mcp-registry' | 'marketplace-installed' | 'marketplace-candidate';
 
 export type CapabilityDescriptor = {
 	readonly id: string;
@@ -24,6 +32,8 @@ export type CapabilityDescriptor = {
 	readonly trust: 'trusted' | 'untrusted';
 	/** can be used right now without any extra setup step */
 	readonly available: boolean;
+	/** set only for source === 'marketplace-candidate' - lets install_marketplace_capability re-resolve the live item rather than trusting a stale snapshot */
+	readonly marketplace?: { providerId: string; itemName: string };
 };
 
 export interface ICapabilityBusService {
