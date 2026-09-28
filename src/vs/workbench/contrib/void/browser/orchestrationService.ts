@@ -43,6 +43,25 @@ class AgentOrchestrationService extends Disposable implements IAgentOrchestratio
 
 	private readonly _cancelledRunIds = new Set<string>();
 
+	// Vader addition, found in a production-hardening audit: _runs/_cancelledRunIds were only
+	// ever appended to, never pruned - a long session doing many delegate_parallel_tasks calls
+	// would retain every run's full task list/diffs/error messages forever. Only finished runs
+	// are ever evicted (a running/pending run is never removed out from under itself), oldest
+	// first, so the Agent Manager UI still shows recent history while bounding memory growth.
+	private static readonly MAX_RETAINED_RUNS = 50;
+	private _pruneOldRuns(): void {
+		const excess = this._runs.length - AgentOrchestrationService.MAX_RETAINED_RUNS;
+		if (excess <= 0) return;
+		let removed = 0;
+		for (let i = 0; i < this._runs.length && removed < excess; i++) {
+			if (this._runs[i].finishedAt === undefined) continue // never evict a run still in progress
+			this._cancelledRunIds.delete(this._runs[i].id)
+			this._runs.splice(i, 1)
+			i--
+			removed++
+		}
+	}
+
 	constructor(
 		@IWorkspaceContextService private readonly _workspaceContextService: IWorkspaceContextService,
 		@IAgentGatewayService private readonly _agentGatewayService: IAgentGatewayService,
@@ -103,6 +122,7 @@ class AgentOrchestrationService extends Disposable implements IAgentOrchestratio
 
 		run.finishedAt = Date.now();
 		if (this._cancelledRunIds.has(run.id)) run.cancelled = true;
+		this._pruneOldRuns();
 		this._fire();
 		return run;
 	}

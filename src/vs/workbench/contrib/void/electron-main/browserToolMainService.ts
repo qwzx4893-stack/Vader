@@ -23,6 +23,14 @@ type Page = import('playwright-core').Page;
 const MAX_CONSOLE_LOGS = 200;
 const MAX_PAGE_ERRORS = 100;
 const MAX_NETWORK_ENTRIES = 100;
+// Vader addition, found in a production-hardening audit: a page closed by the site itself (or a
+// crash) previously stayed in _pages forever - only the explicit closePage() tool call actually
+// deleted an entry. A long session with many short-lived pages (an agent repeatedly
+// navigating/closing) would grow this map, and each entry's console/network log arrays,
+// without bound. Closed entries are kept (browser_list_pages intentionally still shows a page
+// that just crashed/closed, so the agent can see what happened) but capped - oldest closed
+// entries are evicted once there are more than this many.
+const MAX_CLOSED_PAGES_RETAINED = 10;
 
 function findFallbackExecutablePath(): string | undefined {
 	const candidates = isWindows ? [
@@ -115,18 +123,26 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 		});
 		// renderer crash - a distinct failure mode from a deliberate close(), and one that
 		// leaves the Page object unusable for anything further
-		page.on('crash', () => { entry.closed = true; });
+		page.on('crash', () => { entry.closed = true; this._pruneClosedPages(); });
 		page.on('close', () => {
 			entry.closed = true;
 			if (this._activePageId === pageId) {
 				const stillOpen = [...this._pages.entries()].find(([id, e]) => id !== pageId && !e.closed);
 				this._activePageId = stillOpen?.[0];
 			}
+			this._pruneClosedPages();
 		});
 
 		this._pages.set(pageId, entry);
 		this._activePageId = pageId;
 		return pageId;
+	}
+
+	/** keeps only the MAX_CLOSED_PAGES_RETAINED most-recently-closed entries, oldest first evicted - see MAX_CLOSED_PAGES_RETAINED's doc comment */
+	private _pruneClosedPages(): void {
+		const closedIds = [...this._pages.entries()].filter(([, e]) => e.closed).map(([id]) => id);
+		const excess = closedIds.length - MAX_CLOSED_PAGES_RETAINED;
+		for (let i = 0; i < excess; i++) this._pages.delete(closedIds[i]);
 	}
 
 	/** resolves a possibly-omitted pageId to a live PageEntry, auto-creating a first page if none exists yet - this is what keeps every existing single-page tool call (which never passes pageId) working unchanged */
@@ -266,6 +282,18 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 
 	override dispose(): void {
 		super.dispose();
-		void this.closeAll();
+		// Vader note, from a production-hardening audit: IDisposable.dispose() must stay
+		// synchronous, so this can only kick off closeAll()'s graceful async close - if the whole
+		// Electron process exits before that promise settles, the headless Chromium child could
+		// in principle be orphaned. A fully synchronous guarantee (e.g. killing the underlying
+		// child process directly) isn't available here: playwright-core's `Browser` type
+		// returned by `chromium.launch()` doesn't expose the underlying process handle in its
+		// public API (only `BrowserServer`/`ElectronApplication`, from `launchServer()`, do) -
+		// switching to that model to get a process handle is a larger change than this fix
+		// warrants. In practice this is a narrow window: Playwright registers its own
+		// internal exit-tracking for launched browsers, so this only matters for the rarer case
+		// of the whole Electron process exiting abruptly (killed, not quit normally) with a
+		// browser still open.
+		this.closeAll().catch(e => console.error('BrowserToolMainService: error closing browser on dispose:', e));
 	}
 }

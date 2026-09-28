@@ -2110,6 +2110,19 @@ We only need to do it for files that were edited since `from`, ie files between 
 	deleteThread(threadId: string): void {
 		const { allThreads: currentThreads } = this.state
 
+		// Vader addition, found in a production-hardening audit: a tool call still awaiting
+		// approval on this thread would otherwise leave its resolver in _pendingInlineApprovals
+		// forever - nothing can ever call approveLatestToolRequest/rejectLatestToolRequest for a
+		// deleted thread, so the promise _runToolCallInline is awaiting (and the AgentRuntime.run()
+		// call and its event subscription above it) would never settle. Resolving it as
+		// 'rejected' here is the correct default: the thread is gone, so there is no longer any
+		// user who could approve it, and a stuck action must never be silently left running.
+		const pendingInline = this._pendingInlineApprovals.get(threadId)
+		if (pendingInline) {
+			this._pendingInlineApprovals.delete(threadId)
+			pendingInline('rejected')
+		}
+
 		// delete the thread
 		const newThreads = { ...currentThreads };
 		delete newThreads[threadId];

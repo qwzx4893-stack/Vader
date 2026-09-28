@@ -269,7 +269,16 @@ export class MCPChannel implements IServerChannel {
 		// Handle turning on the server
 		if (isOn) {
 			// this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
-			const clientInfo = await this._createClientUnsafe(this.infoOfClientId[serverName].mcpServerEntryJSON, serverName, isOn)
+			// Vader fix, found in a production-hardening audit: this used to call
+			// _createClientUnsafe directly, so a connect failure (bad command, unreachable URL,
+			// wrong credentials, ...) threw all the way out to call()'s generic try/catch, which
+			// only logs it - no onUpdate event ever fired, leaving the renderer's optimistic
+			// "loading" state stuck forever with no way to recover short of a config-file
+			// re-save. _createClient already exists specifically to turn a connect failure into
+			// a real MCPServerError status instead of throwing - use that here too, the same way
+			// _refreshMCPServers already does above.
+			const clientInfo = await this._createClient(this.infoOfClientId[serverName].mcpServerEntryJSON, serverName, isOn)
+			this.infoOfClientId[serverName] = clientInfo
 			this.mcpEmitters.serverEvent.onUpdate.fire({
 				response: {
 					name: serverName,
@@ -281,7 +290,7 @@ export class MCPChannel implements IServerChannel {
 		// Handle turning off the server
 		else {
 			// this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
-			this._closeClient(serverName)
+			await this._closeClient(serverName).catch(err => console.error(`Error closing MCP server "${serverName}":`, err))
 			delete this.infoOfClientId[serverName]._client
 
 			this.mcpEmitters.serverEvent.onUpdate.fire({
