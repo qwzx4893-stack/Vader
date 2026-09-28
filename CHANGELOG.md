@@ -1,5 +1,79 @@
 # Changelog
 
+## Unreleased - Cline is now genuinely installed, default, and executing + Marketplace completion + Vision
+
+Supersedes the "Cline Main Agent Runtime integration (Milestone 1)" entry below, which reported
+`@cline/agents`/`@cline/shared` as declared-but-blocked by the sandbox's install policy. With
+that policy's owner explicitly authorizing the install in this session, `npm install
+@cline/agents@0.0.86 @cline/shared@0.0.86 --save-exact` was retried and **succeeded**. What
+follows is genuinely built and compiling against the real installed package, not the design
+doc alone.
+
+**The `tsconfig.json` `paths` fix**: the real installed `@cline/agents`/`@cline/shared` `.d.ts`
+files use extensionless relative imports (`from "./agent"`), invalid under this project's
+`moduleResolution: "nodenext"` - confirmed a type-checking-only issue (the compiled JS resolves
+fine at runtime; `node -e "import('@cline/shared')..."` succeeds) via `src/tsconfig.json`'s
+`compilerOptions.paths` redirecting both bare specifiers to two new hand-transcribed local
+`.d.ts` shims (`src/typings/cline-{shared,agents}.d.ts`), each documented as needing to stay in
+sync with the pinned version.
+
+**Cline is the real, executing default Main Agent runtime**, not merely selectable:
+`IAgentRuntimeRegistryService`'s `probeClineRuntime()` does a real `AgentRuntime` construction
+check (no more hardcoded status); `chatThreadService.ts`'s `_runChatAgent` dispatches to the new
+`_runChatAgentViaCline` whenever the registry's live selection is `'cline'`, falling back to the
+unchanged legacy loop only on genuine init/compatibility failure or explicit selection - never
+silently on an ordinary task/model/tool error (a Cline-path error surfaces as a normal per-task
+stream error instead). `VaderAgentModel` (`browser/agentRuntime/vaderAgentModel.ts`) bridges
+Cline's `AgentModel` interface to Vader's *existing* `ILLMMessageService`/provider
+infrastructure and `IConvertToLLMMessageService` conversion - Cline never talks to a provider
+Vader didn't already route through. `clineToolAdapter.ts` builds Cline `AgentTool`s from the
+same `availableTools(chatMode, mcpTools)` the legacy prompt uses, so Gather/Plan/Verification
+threads never even see mutating tools under Cline either.
+
+**The mid-batch-approval-resume limitation is fixed and empirically verified, not just
+architecturally claimed.** `chatThreadService.ts`'s tool-call gate was refactored into
+`_evaluateToolCallGate`/`_executeAndRecordToolCall`, shared by the unchanged legacy
+`_runToolCall` and a new `_runToolCallInline` used on the Cline path, which awaits approval
+*inside* the single `AgentTool.execute()` call `AgentRuntime`'s own batch executor is awaiting -
+so the runtime, not Vader, resumes the rest of the batch once approval resolves. A real,
+non-mocked smoke test against the actual installed `@cline/agents`
+(`src/vs/workbench/contrib/void/test/clineRuntimeSmoke.mjs`, 5 tests/14 assertions, all passing)
+specifically exercises this: tool A runs, tool B blocks on an external approval promise, tool C
+is verified *not* to run while B is pending, then runs and completes once B resolves.
+
+**Open VSX** (previously-documented limitation): `product.json`'s `extensionsGallery` now points
+at the real, official Open VSX gallery (`open-vsx.org/vscode/gallery` + `item`/
+`resourceUrlTemplate`/`extensionUrlTemplate`, verified against the Eclipse Open VSX project's own
+wiki) instead of the Microsoft Marketplace - a pure data change, since `IExtensionsWorkbenchService`
+is gallery-endpoint-agnostic.
+
+**MCP one-click configure** (previously "configure" just opened `mcp.json`): `IMCPService` gained
+a real `addOrUpdateServer`/`removeServer` API; the MCP marketplace provider now builds an actual
+runnable `command`/`args`/`env` from the official MCP Registry's own per-package metadata
+(registry type -> npx/uvx/docker runtime convention) and prompts interactively for required
+secrets via `IQuickInputService` - never fabricated - falling back to manual file editing only on
+cancellation or when no real package/remote metadata exists.
+
+**Tree-sitter re-investigated - a correction, not a new finding.** An earlier pass in this same
+overall effort incorrectly stated no tree-sitter runtime exists in this codebase. It does
+(`@vscode/tree-sitter-wasm`, a full parser service under `src/vs/editor/common/services/
+treeSitter/`) - but reading `treeSitterTokenizationFeature.ts` shows it's Microsoft's own
+experimental feature with a hardcoded 4-language allowlist and no runtime extension point (its
+own comment: *"for now they are hard coded in core"*). See `docs/integrations/marketplace.md`'s
+Tree-sitter row for the full, evidenced finding.
+
+**Real vision/multimodal pipeline** (previously a stated gap - see the Model Router entry
+below): a new, isolated image-query capability - `modelCapabilities.ts`'s pattern-based
+`modelSupportsVision`, `IModelRouterService.resolveVisionModel()`, `IVisionMainService`
+(`common/vision/`, `electron-main/visionMainService.ts`) reusing the existing per-provider
+client-construction helpers, and a new `browser_screenshot_analyze` builtin tool that returns a
+real text description of a screenshot from a vision-capable configured model - deliberately kept
+out of the main chat streaming loop and the persisted `ChatMessage`/`LLMChatMessage` format
+(AGENTS.md's "changing this format is a big deal" warning). See
+`docs/integrations/model-router.md`'s new Vision section.
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors) after every change in this entry.
+
 ## Unreleased - Unified Capability Marketplace
 
 New federated marketplace (`common/marketplace/`, `browser/marketplace/`): a normalized
