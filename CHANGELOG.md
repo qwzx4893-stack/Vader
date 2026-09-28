@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased - Production-hardening audit: security fix + resource-lifecycle fixes
+
+A dedicated audit (real code reading, not a generic checklist pass) of resource lifecycle,
+error handling, and dead migration code turned up several genuine defects, the most severe
+being a **real shell-injection vulnerability**: `gitWorktreeMainService.ts` built git commands
+via shell-string interpolation (`exec(\`git ${args}\`)`), and `commitMessage`/`branchName` can
+originate from an LLM tool-call argument (`delegate_parallel_tasks`' task text) that could
+itself be influenced by untrusted content the agent read - a real prompt-injection-to-RCE path.
+Fixed by switching every git invocation to `execFile()` with an argv array (no shell involved at
+all), and verified against a real git repository: a commit message containing `` `$(touch
+/tmp/PWNED)` `` executed under the old code and does not under the fix.
+
+Also fixed: a stuck-forever promise (and the `AgentRuntime.run()` call awaiting it) when a
+thread was deleted while a tool call was still awaiting approval; an MCP server connect failure
+that used to leave the Settings UI's "loading" state stuck forever with no error surfaced;
+unbounded growth of closed browser-tab entries and parallel-orchestration run history over a
+long session (both now capped, oldest evicted first, never evicting anything still in
+progress). See the commit for the full list and what was found-but-intentionally-not-changed
+(a few lower-severity/higher-risk-to-fix items are documented rather than rushed).
+
+Verified: `tsc -p src/tsconfig.json --noEmit` (0 errors), `npm run compile` (0 errors),
+`clineRuntimeSmoke.mjs` (14/14), plus a standalone functional test of the shell-injection fix
+against a real git repo.
+
 ## Unreleased - Provider expansion: MiniMax, Alibaba/Qwen, Moonshot/Kimi, OpenCode Zen
 
 Four new first-class providers, each researched against current (as of this session) official
