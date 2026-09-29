@@ -30,7 +30,13 @@ permissions:
 jobs:
   build:
     name: Build Windows (${{ github.event.inputs.arch || 'x64' }})
-    runs-on: windows-latest
+    # Pinned rather than `windows-latest`: a real run of this workflow found `windows-latest`'s
+    # current image ships a Visual Studio release ("18") that this Node/npm version's bundled
+    # node-gyp doesn't recognize (`gyp ERR! find VS unknown version "undefined"`), so any native
+    # module build (@vscode/deviceid, @vscode/sqlite3, ...) fails outright before anything
+    # Vader-specific is even reached. windows-2022 is GitHub's long-established, still-supported
+    # Windows runner image with a Visual Studio version node-gyp reliably detects.
+    runs-on: windows-2022
     timeout-minutes: 90
     env:
       ARCH: ${{ github.event.inputs.arch || 'x64' }}
