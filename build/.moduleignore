@@ -1,5 +1,27 @@
 # cleanup rules for node modules, .gitignore style
 
+# Vader addition: @cline/agents' own package.json unconditionally depends on @cline/llms
+# (its multi-provider AI-SDK layer), but Vader supplies its own AgentModel and never calls into
+# any of @cline/llms's own built-in providers - verified two ways, not assumed: a static grep for
+# any Vader code requesting these providers by id (zero real matches), and a real Node ESM
+# module-load tracer run against the full, real clineRuntimeSmoke.mjs suite (14 real AgentRuntime
+# scenarios - basic runs, tool execution, cancellation, policy rejection) showing zero loads of
+# any of the packages below across a complete real usage cycle. Confirmed via `npm ls --all` that
+# every one of them is reached ONLY through @cline/agents -> @cline/llms, with no other dependent
+# anywhere in the tree - excluding them can't remove something something else in this repo needs.
+# See docs/integrations/dependency-audit.md for the full account (including the one further step
+# already taken there: dify-ai-provider's own nested vulnerable `undici` was overridden to a safe
+# version, in case this build-time exclusion is ever lifted). Together these are ~90MB of dead
+# weight that was previously copied, filtered, and asar-packed into every single build for
+# nothing - found while investigating why Windows packaging was taking far longer than expected.
+dify-ai-provider/**
+@jerome-benoit/**
+ai-sdk-provider-opencode-sdk/**
+@opentelemetry/**
+@aws-sdk/**
+@langfuse/**
+@ai-sdk/**
+
 # native node modules
 
 nan/**
