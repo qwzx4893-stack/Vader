@@ -3,10 +3,12 @@
  *--------------------------------------------------------------------------------------*/
 
 import type { AgentModel, AgentModelEvent, AgentModelRequest } from '@cline/shared';
+import type { ProviderErrorClass } from '@cline/shared';
 import { ILLMMessageService } from '../../common/sendLLMMessageService.js';
 import { IConvertToLLMMessageService } from '../convertToLLMMessageService.js';
 import { ChatMessage } from '../../common/chatThreadServiceTypes.js';
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel } from '../../common/voidSettingsTypes.js';
+import { classifyProviderError } from '../../common/providerErrorTypes.js';
 
 /**
  * Vader addition, part of the Cline Main Agent Runtime integration (see
@@ -100,8 +102,20 @@ export class VaderAgentModel implements AgentModel {
 				push({ type: 'finish', reason: (toolCalls && toolCalls.length > 0) ? 'tool-calls' : 'stop' });
 				finish();
 			},
-			onError: ({ message }) => {
-				push({ type: 'finish', reason: 'error', error: message });
+			onError: ({ message, fullError }) => {
+				// Vader addition, part of the production-readiness backend-hardening pass: a
+				// normalized error category (see common/providerErrorTypes.ts) both prefixes the
+				// message surfaced to the thread (so RATE_LIMIT/AUTHENTICATION/CONTEXT_LIMIT/etc.
+				// are visibly distinguishable, not just one generic failure string) and maps onto
+				// Cline's own narrower errorClass/errorRetryable protocol fields, which
+				// AgentRuntime's own internal bookkeeping reads. This is informational, not a
+				// second retry loop - every SDK Vader uses already retries 429/5xx/network
+				// failures internally with its own bounded backoff (see providerErrorTypes.ts's
+				// header comment for the verification), so Vader deliberately does not retry again
+				// on top of that.
+				const { category, retryable } = classifyProviderError(message, fullError)
+				const errorClass: ProviderErrorClass = category === 'AUTHENTICATION' ? 'auth' : category === 'CONTEXT_LIMIT' ? 'context_window_exceeded' : 'unknown'
+				push({ type: 'finish', reason: 'error', error: `[${category}] ${message}`, errorClass, errorRetryable: retryable })
 				finish();
 			},
 			onAbort: () => {
