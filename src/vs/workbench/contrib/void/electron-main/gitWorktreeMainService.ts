@@ -10,17 +10,28 @@ import { CreateWorktreeResult, IGitWorktreeMainService, MergeWorktreeResult } fr
 
 const execFile = promisify(_execFile);
 
-// Vader addition, found in a production-hardening security audit: this used to build a shell
-// command string via interpolation (`exec(\`git ${args}\`)`) - a real shell-injection risk,
-// since `commitMessage`/`branchName` can originate from an LLM's tool-call arguments (e.g.
-// delegate_parallel_tasks' task text), which may itself have been influenced by untrusted
-// content the agent read (a classic prompt-injection path). `execFile` passes each argument to
-// the `git` binary directly (execve, no shell), so no argument value - however it's
-// quoted/escaped or what special characters it contains - can ever be interpreted as a second
-// command. Every call site below now passes a real argv array instead of a string.
+// Vader addition, part of the final production-readiness pass's timeout-policy audit: every
+// call here is a local, non-interactive git operation (worktree/branch/commit/merge/diff), never
+// a network operation (no fetch/clone/push) - so it should never legitimately need user input or
+// take long. Without a bound, a hung `git commit` waiting on a GPG pinentry prompt, a blocked
+// pre-commit/post-commit hook, or contention on a stale `.git/index.lock` would await forever,
+// permanently consuming one of orchestrationService.ts's MAX_CONCURRENCY worker slots (a real,
+// reachable way to slowly deadlock the whole parallel-task system, one hung git call at a time).
+// GIT_TERMINAL_PROMPT=0 makes git fail fast instead of blocking on a credential prompt it will
+// never receive an answer to (belt); the explicit timeout is the backstop for every other way a
+// subprocess can hang (suspenders) - 60s is generous for any of the local operations above while
+// still being a real, finite bound instead of none at all.
+const GIT_TIMEOUT_MS = 60_000;
 const git = async (args: string[], cwd: string): Promise<string> => {
-	const { stdout } = await execFile('git', args, { cwd });
-	return stdout.trim();
+	try {
+		const { stdout } = await execFile('git', args, { cwd, timeout: GIT_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+		return stdout.trim();
+	} catch (e) {
+		if (e && typeof e === 'object' && 'killed' in e && (e as { killed?: boolean }).killed && 'signal' in e && (e as { signal?: string }).signal === 'SIGTERM') {
+			throw new Error(`git ${args[0]} timed out after ${GIT_TIMEOUT_MS / 1000}s (it may have been waiting on a prompt, a hook, or a lock file) and was killed.`);
+		}
+		throw e;
+	}
 };
 
 // worktrees live as siblings of the repo, never nested inside it - nesting would put them

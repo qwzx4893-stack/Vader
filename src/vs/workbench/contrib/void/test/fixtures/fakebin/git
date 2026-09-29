@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Vader addition. A fake `git` binary that accepts any arguments and hangs forever without
+# responding - test fixture for timeoutPolicyE2E.mjs's git-subprocess-timeout scenario. Real
+# subprocess, real hang, so the thing actually being proven is that Node's `execFile` `timeout`
+# option (wired in gitWorktreeMainService.ts) really does SIGTERM it, not just that Vader's own
+# code assumes it would.
+echo "fake git pretending to hang (e.g. GPG pinentry, blocked hook, lock contention)..." >&2
+sleep 300

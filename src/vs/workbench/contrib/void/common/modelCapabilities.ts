@@ -177,6 +177,11 @@ export const defaultModelsOfProvider = {
 	minimax: [ // https://platform.minimax.io/docs/api-reference/models/openai/list-models
 		'MiniMax-M2',
 		'MiniMax-M2.1',
+		'MiniMax-M2.1-lightning',
+		'MiniMax-M2.5',
+		'MiniMax-M2.5-highspeed',
+		'MiniMax-M2.7',
+		'MiniMax-M2.7-highspeed',
 	],
 	alibaba: [ // https://www.alibabacloud.com/help/en/model-studio/model-pricing - long-stable model IDs; newer ones can be added by name in Settings
 		'qwen-max',
@@ -185,7 +190,8 @@ export const defaultModelsOfProvider = {
 		'qwq-plus',
 	],
 	moonshot: [ // https://platform.kimi.ai/docs/api/list-models
-		'kimi-k2-thinking',
+		'kimi-k3',
+		'kimi-k2.7-code',
 		'kimi-k2.6',
 	],
 	openCodeZen: [], // beta, volatile catalog re-exposing other vendors' model IDs - add the exact id shown in your Zen console
@@ -1302,9 +1308,21 @@ const liteLLMSettings: VoidStaticProviderInfo = { // https://docs.litellm.ai/doc
 // ---------------- MINIMAX ----------------
 // Vader addition, production-hardening provider expansion. Verified via the official
 // platform.minimax.io docs (via search) + the MiniMax-AI GitHub org - see
-// docs/integrations/providers/minimax.md for the full sourcing and confidence notes (some
-// numbers, especially MiniMax-M3's exact context window, are reported inconsistently across
-// sources as of this writing and should be spot-checked against a live account).
+// docs/integrations/providers/minimax.md for the full sourcing and confidence notes.
+//
+// Re-verified during the final production-readiness pass's provider re-validation: the M2.1/
+// M2.5/M2.7(-highspeed) variants below were confirmed against a real, merged upstream Cline PR
+// (cline/cline#10007) correcting all of them to a shared 204,800-token context window - the
+// original Vader entries only listed M2/M2.1, missing the M2.5/M2.7 line entirely.
+//
+// MiniMax-M3 (a real, released flagship model - 2026-05/06, native multimodal) is DELIBERATELY
+// still not given a static entry: live sources disagree on its context window even now (some
+// report 1,048,576/~1M; at least one tracker reports a widely-used integration's built-in value
+// of 512,000 as an open, acknowledged bug still being corrected upstream as of this writing) -
+// asserting either number here as fact would be a guess dressed up as verified data. The
+// `modelSupportsVision` regex below already recognizes "minimax-m3" by name so a user who adds
+// it manually (Settings > custom model name) still gets correct vision detection; only the
+// context-window/pricing static entry is withheld pending a source that isn't disputed.
 const minimaxModelOptions = {
 	'MiniMax-M2': {
 		contextWindow: 204_800,
@@ -1316,6 +1334,51 @@ const minimaxModelOptions = {
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.1': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.1-lightning': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.5': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 }, // approximate - check platform.minimax.io/docs/pricing for current rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.5-highspeed': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 },
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.7': {
+		contextWindow: 204_800,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.30, output: 1.20 }, // approximate - check platform.minimax.io/docs/pricing for current rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'MiniMax-M2.7-highspeed': {
 		contextWindow: 204_800,
 		reservedOutputTokenSpace: 8_192,
 		cost: { input: 0.30, output: 1.20 },
@@ -1396,18 +1459,35 @@ const alibabaSettings: VoidStaticProviderInfo = {
 
 // ---------------- MOONSHOT (Kimi) ----------------
 // Vader addition, production-hardening provider expansion - see
-// docs/integrations/providers/moonshot.md. This provider's model catalog churns quickly
-// (the moonshot-v1-* line was reportedly retired in 2026); the two IDs below were the most
-// consistently corroborated at research time. Add newer ones by name in Settings.
+// docs/integrations/providers/moonshot.md and docs/integrations/dependency-audit.md's sibling
+// provider re-validation. This provider's model catalog churns quickly - re-verified against
+// live sources during the final production-readiness pass, which found the original
+// `kimi-k2-thinking` entry had gone stale into a genuinely dead model id: the whole original
+// kimi-k2 series (including -thinking) was retired on Moonshot's own direct API on 2026-05-25
+// ("requests to them no longer succeed" per contemporary reporting) - a real defect fixed here,
+// not just documented, since Vader's "moonshot" provider calls platform.moonshot.ai/
+// platform.kimi.ai directly rather than through a proxy that might still serve the old id.
+// Replaced with the three models actually current as of this pass: kimi-k3 (flagship, released
+// 2026-07-16), kimi-k2.7-code (coding-focused), kimi-k2.6 (general-purpose, unchanged from
+// before). Add newer ones by name in Settings.
 const moonshotModelOptions = {
-	'kimi-k2-thinking': {
-		contextWindow: 262_144,
-		reservedOutputTokenSpace: 8_192,
-		cost: { input: 0.60, output: 2.50 }, // approximate - check platform.moonshot.ai for current rates
+	'kimi-k3': {
+		contextWindow: 1_048_576,
+		reservedOutputTokenSpace: 16_384,
+		cost: { input: 3.00, output: 15.00 }, // approximate - check platform.moonshot.ai for current rates
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
+	},
+	'kimi-k2.7-code': {
+		contextWindow: 262_144,
+		reservedOutputTokenSpace: 8_192,
+		cost: { input: 0.95, output: 4.00, cache_read: 0.19 }, // approximate - check platform.moonshot.ai for current rates
+		supportsFIM: false,
+		downloadable: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
 	},
 	'kimi-k2.6': {
 		contextWindow: 262_144,

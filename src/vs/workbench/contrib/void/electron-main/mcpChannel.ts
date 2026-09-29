@@ -161,10 +161,11 @@ export class MCPChannel implements IServerChannel {
 
 	}
 
-	private async _createClientUnsafe(server: MCPConfigFileEntryJSON, serverName: string, isOn: boolean): Promise<ClientInfo> {
+	private async _createClientUnsafe(server: MCPConfigFileEntryJSON, serverName: string, isOn: boolean, onClientCreated?: (client: Client) => void): Promise<ClientInfo> {
 
 		const clientConfig = getClientConfig(serverName)
 		const client = new Client(clientConfig)
+		onClientCreated?.(client)
 		let transport: Transport;
 		let info: MCPServerNonError;
 
@@ -233,12 +234,40 @@ export class MCPChannel implements IServerChannel {
 		return `${Math.random().toString(36).slice(2, 8)}_${base}`;
 	}
 
+	// Vader fix, part of the final production-readiness pass's timeout-policy audit. Neither
+	// `client.connect()`'s transport handshake (for a URL-based server, a real network operation)
+	// nor a stdio server's process spawn has any timeout of its own before the SDK's own
+	// per-request timeout logic even applies (that only covers the "initialize"/listTools
+	// *requests*, once a connection already exists) - so a remote MCP server URL that accepts a
+	// connection but never completes it hangs this call forever. That matters beyond this one
+	// server: `_refreshMCPServers` awaits every server change in one `Promise.all`, so a single
+	// hung server blocks every other server in that same refresh batch too. Bounded here, at the
+	// one choke point every caller (`_refreshMCPServers`, `_toggleMCPServer`) already funnels
+	// through - same "external dependency must never hold up the rest of the system" principle as
+	// the marketplace's own per-provider PROVIDER_SEARCH_TIMEOUT_MS.
+	private static readonly MCP_CONNECT_TIMEOUT_MS = 20_000;
+
 	private async _createClient(serverConfig: MCPConfigFileEntryJSON, serverName: string, isOn = true): Promise<ClientInfo> {
+		let createdClient: Client | undefined
 		try {
-			const c: ClientInfo = await this._createClientUnsafe(serverConfig, serverName, isOn)
+			const c: ClientInfo = await Promise.race([
+				this._createClientUnsafe(serverConfig, serverName, isOn, (client) => { createdClient = client }),
+				new Promise<never>((_, reject) => setTimeout(
+					() => reject(new Error(`Connecting to MCP server "${serverName}" timed out after ${MCPChannel.MCP_CONNECT_TIMEOUT_MS / 1000}s.`)),
+					MCPChannel.MCP_CONNECT_TIMEOUT_MS,
+				)),
+			])
 			return c
 		} catch (err) {
 			console.error(`❌ Failed to connect to server "${serverName}":`, err)
+			// the losing side of the race above isn't cancelled - if the connect attempt is still
+			// in flight (or somehow succeeds later), this closes it rather than leaking a live
+			// process/connection nothing else references anymore. Awaited deliberately (not
+			// fire-and-forget): a caller seeing this function resolve should be able to rely on
+			// the failed attempt's resources already being torn down, not still winding down in
+			// the background after the fact (which, on process shutdown, "fire and forget" could
+			// drop entirely, leaking a real OS process across app restarts).
+			await createdClient?.close().catch(() => { })
 			const fullCommand = !serverConfig.command ? '' : `${serverConfig.command} ${serverConfig.args?.join(' ') || ''}`
 			const c: MCPServerError = { status: 'error', error: err + '', command: fullCommand, }
 			return { mcpServerEntryJSON: serverConfig, mcpServer: c, }
