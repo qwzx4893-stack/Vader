@@ -48,7 +48,10 @@ const TIMEOUT_PATTERNS = /timed? ?out|ETIMEDOUT|deadline exceeded/i;
 const ABORT_PATTERNS = /\babort(ed)?\b|cancell?ed/i;
 const CONTEXT_LIMIT_PATTERNS = /context length|context window|maximum context|too many tokens|context_length_exceeded/i;
 const MODEL_NOT_FOUND_PATTERNS = /model_not_found|model.*(not found|does not exist|unknown model)/i;
-const MALFORMED_PATTERNS = /unexpected token|invalid json|json parse|unexpected end of/i;
+// V8's JSON.parse error wording has changed across Node versions ("Unexpected token X in JSON"
+// vs. newer "Expected property name or '}' in JSON at position N") - matched broadly via "in
+// JSON" plus the common exception name, rather than pinned to one exact historical phrasing.
+const MALFORMED_PATTERNS = /unexpected token|invalid json|json parse|unexpected end of|in json at position|syntaxerror.*json|json.*syntaxerror/i;
 const TOOL_UNSUPPORTED_PATTERNS = /does not support (function|tool) calling|tools? (is|are) not supported/i;
 const VISION_UNSUPPORTED_PATTERNS = /does not support (image|vision)|vision.*not supported|image.*not supported/i;
 
@@ -83,13 +86,25 @@ export function classifyProviderError(message: string, fullError: unknown, opts?
 		if (status >= 500) return { category: 'PROVIDER_UNAVAILABLE', retryable: true };
 	}
 
-	if (CONTEXT_LIMIT_PATTERNS.test(message)) return { category: 'CONTEXT_LIMIT', retryable: false };
-	if (MODEL_NOT_FOUND_PATTERNS.test(message)) return { category: 'MODEL_NOT_FOUND', retryable: false };
-	if (TOOL_UNSUPPORTED_PATTERNS.test(message)) return { category: 'TOOL_UNSUPPORTED', retryable: false };
-	if (VISION_UNSUPPORTED_PATTERNS.test(message)) return { category: 'VISION_UNSUPPORTED', retryable: false };
-	if (MALFORMED_PATTERNS.test(message)) return { category: 'MALFORMED_RESPONSE', retryable: true };
-	if (TIMEOUT_PATTERNS.test(message)) return { category: 'TIMEOUT', retryable: true };
-	if (NETWORK_PATTERNS.test(message)) return { category: 'NETWORK', retryable: true };
+	// A network-level failure (e.g. a torn-down TCP connection, DNS failure) often doesn't carry
+	// its real signal in the top-level `message` string at all - the SDKs Vader uses (`openai`'s
+	// APIConnectionError being the concrete case found in this session's fault-injection testing)
+	// nest the actual OS-level error (`ECONNRESET`, "socket hang up", etc.) under `fullError.cause`.
+	// Build one combined diagnostic string from every place useful text could be, rather than
+	// only the top-level message, so classification doesn't silently miss it.
+	const causeText = typeof fullError === 'object' && fullError !== null
+		? [(fullError as { cause?: { message?: string; code?: string } }).cause?.message, (fullError as { cause?: { code?: string } }).cause?.code, (fullError as { code?: string }).code]
+			.filter((x): x is string => typeof x === 'string').join(' ')
+		: '';
+	const diagnosticText = `${message} ${causeText}`;
+
+	if (CONTEXT_LIMIT_PATTERNS.test(diagnosticText)) return { category: 'CONTEXT_LIMIT', retryable: false };
+	if (MODEL_NOT_FOUND_PATTERNS.test(diagnosticText)) return { category: 'MODEL_NOT_FOUND', retryable: false };
+	if (TOOL_UNSUPPORTED_PATTERNS.test(diagnosticText)) return { category: 'TOOL_UNSUPPORTED', retryable: false };
+	if (VISION_UNSUPPORTED_PATTERNS.test(diagnosticText)) return { category: 'VISION_UNSUPPORTED', retryable: false };
+	if (MALFORMED_PATTERNS.test(diagnosticText)) return { category: 'MALFORMED_RESPONSE', retryable: true };
+	if (TIMEOUT_PATTERNS.test(diagnosticText)) return { category: 'TIMEOUT', retryable: true };
+	if (NETWORK_PATTERNS.test(diagnosticText)) return { category: 'NETWORK', retryable: true };
 
 	return { category: 'UNKNOWN', retryable: false };
 }

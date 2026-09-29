@@ -197,6 +197,13 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 	}
 
 	const openai = await newOpenAICompatibleSDK({ providerName, settingsOfProvider, includeInPayload: additionalOpenAIPayload })
+	// Vader fix, found in the same production-readiness pass as _sendOpenAICompatibleChat's
+	// aborter fix above: this FIM/autocomplete call never wired up _setAborter at all, so a
+	// pending autocomplete request could never actually be cancelled (e.g. on a fast-typing
+	// user moving on before the request resolves) - only ever ending via the SDK's own 10-minute
+	// default timeout.
+	const abortController = new AbortController()
+	_setAborter(() => abortController.abort())
 	openai.completions
 		.create({
 			model: modelName,
@@ -204,7 +211,7 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 			suffix: suffix,
 			stop: stopTokens,
 			max_tokens: 300,
-		})
+		}, { signal: abortController.signal })
 		.then(async response => {
 			const fullText = response.choices[0]?.text
 			onFinalMessage({ fullText, fullReasoning: '', anthropicReasoning: null });
@@ -318,6 +325,19 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		// max_completion_tokens: maxTokens,
 	}
 
+	// Vader fix, found in a production-readiness fault-injection test: _setAborter used to be
+	// wired up only inside the .then(response => ...) callback below, i.e. only after
+	// openai.chat.completions.create()'s underlying fetch had already resolved (received
+	// response headers). A provider that accepts the TCP connection but never sends a response
+	// at all left cancellation completely inert - calling the stored aborter did nothing, since
+	// it was never set, and the request could only ever end via the SDK's own 10-minute default
+	// timeout. Creating the AbortController up front and wiring _setAborter to it immediately
+	// (before the request is even sent), then passing it as the request's own signal, means a
+	// cancellation reaches the in-flight request the same way regardless of whether headers have
+	// arrived yet - verified with productionSimE2E.mjs's 'hang' scenario.
+	const abortController = new AbortController()
+	_setAborter(() => abortController.abort())
+
 	// open source models - manually parse think tokens
 	const { needsManualParse: needsManualReasoningParse, nameOfFieldInDelta: nameOfReasoningFieldInDelta } = providerReasoningIOSettings?.output ?? {}
 	const manuallyParseReasoning = needsManualReasoningParse && canIOReasoning && openSourceThinkTags
@@ -348,9 +368,8 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 	const toolCallsByIndex = new Map<number, { name: string, id: string, paramsStr: string }>()
 
 	openai.chat.completions
-		.create(options)
+		.create(options, { signal: abortController.signal })
 		.then(async response => {
-			_setAborter(() => response.controller.abort())
 			// when receive text
 			for await (const chunk of response) {
 				// message

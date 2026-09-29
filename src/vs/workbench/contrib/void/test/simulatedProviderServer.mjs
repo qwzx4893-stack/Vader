@@ -75,8 +75,20 @@ export function createSimulatedProvider(scenarios = []) {
 			return;
 		}
 		if (scenario.type === 'malformed') {
-			res.writeHead(200, { 'Content-Type': 'application/json' });
-			res.end('{ this is not valid JSON,,,');
+			if (body.stream) {
+				// a genuinely malformed streaming response: valid SSE framing (so the client's
+				// SSE decoder actually attempts to JSON.parse the payload) but broken JSON inside
+				// it, which is what actually reproduces a parse exception - unlike a flat-out
+				// garbage body on a streaming request, which the SSE decoder just fails to
+				// recognize as any event at all and treats as an empty response (a real, distinct
+				// finding from this session - see productionSimE2E.mjs's comment on this).
+				res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
+				res.write('data: { this is not valid JSON,,,\n\n');
+				res.end();
+			} else {
+				res.writeHead(200, { 'Content-Type': 'application/json' });
+				res.end('{ this is not valid JSON,,,');
+			}
 			return;
 		}
 		if (scenario.type === 'http_error') {
