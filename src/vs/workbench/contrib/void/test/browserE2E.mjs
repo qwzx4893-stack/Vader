@@ -105,15 +105,15 @@ async function main() {
 		await svc.closePage(page2.pageId);
 		const list3 = await svc.listPages();
 		check('explicit closePage actually removes the page from the map', !list3.find(p => p.pageId === page2.pageId));
-		// Note: the closed-page RETENTION CAP fixed in this session's audit
-		// (MAX_CLOSED_PAGES_RETAINED, browserToolMainService.ts) only applies to pages closed by
-		// the site itself or a crash (the 'close'/'crash' Playwright events) - explicit
-		// closePage() (exercised above) already deletes its entry immediately by design, so it
-		// doesn't exercise that cap. Triggering a real self-close from page-side JS against a
-		// non-popup top-level page isn't reliably possible from Chromium's own security model
-		// (window.close() is a no-op for a page a script didn't open itself), so the cap itself
-		// remains verified by code review rather than by a live self-closing-page E2E test here -
-		// stated plainly rather than faked with an unreliable trick.
+		// Note: earlier revisions of this test assumed explicit closePage() bypasses the
+		// closed-page retention cap entirely (reasoning that it deletes its own entry
+		// immediately). Direct measurement against real playwright-core showed that's wrong:
+		// Playwright's 'close' event actually fires and resolves *before* the page.close()
+		// promise itself resolves, so the service's own 'close' event handler (which runs
+		// _pruneClosedPages()) always fires first, even for an explicit close - the cap is
+		// exercised on every close, not just crash/self-close. See cacheBoundsE2E.mjs-adjacent
+		// soakE2E.mjs for the real, iteration-based proof that _pages never grows past
+		// (open pages + MAX_CLOSED_PAGES_RETAINED) across many open/close cycles.
 
 	} finally {
 		await svc.closeAll();
