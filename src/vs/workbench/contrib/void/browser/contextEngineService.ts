@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { LRUCache } from '../../../../base/common/map.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { URI } from '../../../../base/common/uri.js';
 import { CancellationToken } from '../../../../base/common/cancellation.js';
@@ -29,6 +30,17 @@ const estimateTokens = (s: string) => Math.ceil(s.length / CHARS_PER_TOKEN_ESTIM
 const MAX_FILES_FOR_SYMBOLS = 12;
 const MAX_SYMBOLS_PER_FILE = 40;
 const MIN_CHARS_WORTH_INCLUDING = 80; // below this, truncating a section isn't useful - drop it instead
+
+// Vader fix, part of the final production-readiness pass's cache-bounding work. These three
+// maps were plain `Map`s keyed by every file URI ever seen across the lifetime of the window
+// (every file ever mentioned/opened in a chat, plus every URI onMarkerChanged ever fired for -
+// which for a large workspace with a project-wide linter is effectively "every file in the
+// repo") - unbounded growth for as long as the window stays open, never evicted even after the
+// file is closed. `LRUCache` (base/common/map.js) is VS Code's own bounded, least-recently-used
+// map - already used elsewhere in this codebase for exactly this shape of problem. 500 is
+// generously larger than any realistic "files touched in one session" working set while still
+// being a real, finite bound instead of none at all.
+const MAX_CACHED_FILES = 500;
 
 const SYMBOL_KIND_LABELS: Record<SymbolKind, string> = {
 	[SymbolKind.File]: 'File', [SymbolKind.Module]: 'Module', [SymbolKind.Namespace]: 'Namespace',
@@ -85,9 +97,9 @@ class ContextEngineService extends Disposable implements IContextEngineService {
 	// keyed by uri.toString(); invalidated by the text model's own versionId, which VS Code
 	// already increments on every edit (including unsaved ones) - a correctness-preserving
 	// incremental cache with no separate file-watcher plumbing needed.
-	private readonly _symbolCacheByUri = new Map<string, { versionId: number; content: string }>();
-	private readonly _diagnosticsCacheByUri = new Map<string, { markerVersion: number; content: string }>();
-	private readonly _markerVersionByUri = new Map<string, number>();
+	private readonly _symbolCacheByUri = new LRUCache<string, { versionId: number; content: string }>(MAX_CACHED_FILES);
+	private readonly _diagnosticsCacheByUri = new LRUCache<string, { markerVersion: number; content: string }>(MAX_CACHED_FILES);
+	private readonly _markerVersionByUri = new LRUCache<string, number>(MAX_CACHED_FILES);
 
 	private readonly _scmService: IVoidSCMService;
 

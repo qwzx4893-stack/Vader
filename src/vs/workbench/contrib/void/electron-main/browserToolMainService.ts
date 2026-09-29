@@ -48,7 +48,24 @@ function findFallbackExecutablePath(): string | undefined {
 		'/usr/bin/chromium-browser',
 		'/usr/bin/microsoft-edge',
 	];
-	return candidates.find(p => existsSync(p));
+	const found = candidates.find(p => existsSync(p));
+	if (found) return found;
+
+	// Vader addition, found while validating this pass's browser E2E tests against a real
+	// sandbox: playwright-core's own bundled-browser auto-download can be pinned to a specific
+	// revision that doesn't match whatever Chromium build a given machine/container/CI image
+	// actually has cached under PLAYWRIGHT_BROWSERS_PATH (e.g. after a playwright-core version
+	// bump, before that environment's browser cache is refreshed to match) - in which case
+	// `chromium.launch()` fails outright even though a perfectly usable Chromium already exists
+	// at that path's own stable `chromium` convention symlink/binary. Falling back to it here is
+	// the same idea as the system-Chrome candidates above, just for this specific, real
+	// environment-provided location.
+	const browsersPath = process.env.PLAYWRIGHT_BROWSERS_PATH
+	if (browsersPath) {
+		const conventionPath = `${browsersPath.replace(/\/+$/, '')}/chromium`
+		if (existsSync(conventionPath)) return conventionPath
+	}
+	return undefined;
 }
 
 type PageEntry = {

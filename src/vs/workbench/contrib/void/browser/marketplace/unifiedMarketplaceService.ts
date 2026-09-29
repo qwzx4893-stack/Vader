@@ -4,6 +4,7 @@
 
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { CancellationTokenSource } from '../../../../../base/common/cancellation.js';
+import { LRUCache } from '../../../../../base/common/map.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
 import {
 	IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceInstallMethod, MarketplaceItem,
@@ -36,11 +37,21 @@ const TYPE_RELEVANCE_WEIGHT: Record<MarketplaceItemType, number> = {
 
 type CacheEntry = { atMs: number; items: MarketplaceItem[] };
 
+// Vader fix, part of the final production-readiness pass's cache-bounding work. This was a
+// plain `Map` keyed by `${providerId}::${query}` for every distinct search string a user ever
+// typed across the marketplace's lifetime - the per-entry TTL (`provider.cacheTtlMs`) only ever
+// made an entry stale, it never removed it, so every unique query (including typo-by-typo
+// incremental-search strings, which this UI issues one per keystroke) accumulated forever.
+// `LRUCache` (base/common/map.js) is VS Code's own bounded LRU map, already used elsewhere in
+// this codebase. 300 comfortably covers realistic incremental-search + provider-count churn in
+// one session while still being an actual bound.
+const MAX_CACHED_SEARCHES = 300;
+
 class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplaceService {
 	readonly _serviceBrand: undefined;
 
 	private readonly _providers = new Map<string, IMarketplaceProvider>();
-	private readonly _cache = new Map<string, CacheEntry>(); // key: `${providerId}::${query}`
+	private readonly _cache = new LRUCache<string, CacheEntry>(MAX_CACHED_SEARCHES); // key: `${providerId}::${query}`
 	private _searchGeneration = 0;
 
 	/** Providers register themselves here at construction (see each providerXyz.ts's registerSingleton side effect + this file's own registration order in void.contribution.ts) - same self-registration pattern this codebase already uses for tool/skill registries. */
