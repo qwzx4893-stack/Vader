@@ -37,7 +37,15 @@ jobs:
     # Vader-specific is even reached. windows-2022 is GitHub's long-established, still-supported
     # Windows runner image with a Visual Studio version node-gyp reliably detects.
     runs-on: windows-2022
-    timeout-minutes: 90
+    # A real dispatch of this workflow found "Package Windows application" (gulp's
+    # vscode-win32-x64-min task) alone taking 40+ minutes on a cold, uncached windows-2022
+    # runner: that single gulp task chains a full mangled recompile, a full re-compile of every
+    # built-in extension, esbuild-based minification, and packaging thousands of files onto
+    # Windows/NTFS (slower per-file than Linux, and typically further slowed by the runner's
+    # real-time antivirus scanning) - all sequentially, with no build cache warm on a first run.
+    # Investigated for an actual hang (a stuck network call, a deadlock) and found none - the
+    # code path here is genuinely this heavy, and 90 minutes was an unrealistic budget for it.
+    timeout-minutes: 150
     env:
       ARCH: ${{ github.event.inputs.arch || 'x64' }}
       NPM_CONFIG_ARCH: ${{ github.event.inputs.arch || 'x64' }}
