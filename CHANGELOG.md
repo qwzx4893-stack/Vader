@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased - Final production-readiness pass: cache bounds, timeouts, dependency audit, provider re-validation
+
+See **`FINAL_PRODUCTION_READINESS_REPORT.md`** for the complete, evidence-tagged account of this
+pass and the mission it closes out - the current, honest answer to "is this ready for daily use."
+Summary: fixed both caches the previous audit (below) had left unbounded
+(`contextEngineService.ts`, `unifiedMarketplaceService.ts`, now using VS Code's own `LRUCache`);
+found and fixed two real unbounded-hang defects of the same family (no timeout on
+`gitWorktreeMainService.ts`'s git subprocess calls or `mcpChannel.ts`'s MCP connect handshake);
+investigated the `@cline/llms`/`dify-ai-provider`/`undici` vulnerability's actual reachability
+(confirmed unreachable via a real module-load tracer, fixed anyway via a safe `overrides` entry);
+corrected two stale provider model-catalog entries (Moonshot's retired `kimi-k2-thinking`,
+MiniMax's incomplete M2.x lineup) against live sources. New real, non-mocked test coverage:
+`browserE2E.mjs`, `cacheBoundsE2E.mjs`, `soakE2E.mjs`, `timeoutPolicyE2E.mjs`,
+`dependencyReachabilityE2E.mjs` - 87/87 passing alongside the full existing suite.
+
 ## Unreleased - Production-hardening audit: security fix + resource-lifecycle fixes
 
 A dedicated audit (real code reading, not a generic checklist pass) of resource lifecycle,
