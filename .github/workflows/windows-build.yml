@@ -25,7 +25,7 @@ on:
       - '.github/workflows/windows-build.yml'
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -111,3 +111,45 @@ jobs:
           name: vader-win32-${{ env.ARCH }}-setup
           path: ${{ steps.locate.outputs.setup_exe }}
           retention-days: 14
+
+      - name: Determine release version
+        id: version
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: |
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          echo "tag=v$($pkg.version)" >> $env:GITHUB_OUTPUT
+
+      # Manual-dispatch only, deliberately: this repo's own build tooling can only produce a
+      # Windows package on a Windows runner (see this workflow's header comment), so a real
+      # GitHub Release with a real installer attached has to be published from here rather than
+      # by a separate process. Gated to workflow_dispatch (not the push trigger above) so a
+      # routine CI build from a path-matching push to main never spams a new release - this step
+      # only runs when someone/something explicitly asks for a release, not on every build.
+      # Idempotent (deletes any prior release/tag of the same name first) so a re-dispatch after
+      # fixing a build failure cleanly replaces a previous, incomplete attempt at the same version
+      # rather than failing on "tag already exists" or leaving stale duplicate releases behind.
+      - name: Publish GitHub Release
+        if: github.event_name == 'workflow_dispatch' && steps.locate.outputs.setup_exe != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.version.outputs.tag }}"
+          $sha = "${{ github.sha }}"
+          $arch = "${{ env.ARCH }}"
+          $notes = @"
+          Vader Windows build ($arch), built from ``main`` @ ``$sha``.
+
+          This is the current Vader Windows release: an **unsigned** build produced by this
+          repository's own Windows CI workflow (``.github/workflows/windows-build.yml``),
+          packaged with Inno Setup. See ``FINAL_PRODUCTION_READINESS_REPORT.md`` in the
+          repository for the full, evidence-tagged account of what has and has not been
+          independently verified in this build - in particular, no interactive (LIVE-UI) or
+          real-model run has been performed against this exact artifact.
+          "@
+          gh release delete $tag --yes --cleanup-tag 2>$null
+          gh release create $tag "${{ steps.locate.outputs.setup_exe }}" `
+            --title "Vader $tag (Windows $arch)" `
+            --notes $notes `
+            --target $sha
