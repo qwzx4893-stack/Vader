@@ -11,6 +11,7 @@ import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { buildMcpServerEnv } from './mcpServerEnv.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js';
 import { MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, RawMCPToolCall, MCPToolErrorResponse, MCPServerEventResponse, MCPToolCallParams, removeMCPToolNamePrefix } from '../common/mcpServiceTypes.js';
@@ -200,10 +201,7 @@ export class MCPChannel implements IServerChannel {
 			transport = new StdioClientTransport({
 				command: server.command,
 				args: server.args,
-				env: {
-					...server.env,
-					...process.env
-				} as Record<string, string>,
+				env: buildMcpServerEnv(server.env),
 			});
 
 			await client.connect(transport)

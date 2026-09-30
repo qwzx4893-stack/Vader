@@ -4,12 +4,34 @@
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
+import { rawSkillInstructionUrls } from '../common/discovery/githubSkillUrl.js';
 
 // Real, live, unauthenticated public APIs - no source code or workspace content is ever
 // sent to either of these, only the search string the user/agent typed.
 const MCP_REGISTRY_BASE_URL = 'https://registry.modelcontextprotocol.io';
 const SKILLNET_BASE_URL = 'http://api-skillnet.openkg.cn';
 const FETCH_TIMEOUT_MS = 10_000;
+// Responses come from third-party servers; never read an unbounded body into memory.
+const MAX_RESPONSE_BYTES = 1024 * 1024;
+
+async function readCapped(res: Response): Promise<string> {
+	if (Number(res.headers.get('content-length') ?? 0) > MAX_RESPONSE_BYTES) throw new Error('response too large');
+	if (!res.body) return '';
+	const reader = res.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let total = 0;
+	for (; ;) {
+		const { done, value } = await reader.read();
+		if (done) break;
+		total += value.byteLength;
+		if (total > MAX_RESPONSE_BYTES) { await reader.cancel(); throw new Error('response too large'); }
+		chunks.push(value);
+	}
+	const all = new Uint8Array(total);
+	let offset = 0;
+	for (const c of chunks) { all.set(c, offset); offset += c.byteLength; }
+	return new TextDecoder().decode(all);
+}
 
 async function fetchJson(url: string): Promise<any> {
 	const controller = new AbortController();
@@ -17,7 +39,7 @@ async function fetchJson(url: string): Promise<any> {
 	try {
 		const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
 		if (!res.ok) throw new Error(`HTTP ${res.status}`);
-		return await res.json();
+		return JSON.parse(await readCapped(res));
 	} finally {
 		clearTimeout(timeoutId);
 	}
@@ -29,7 +51,7 @@ async function fetchText(url: string): Promise<string | null> {
 	try {
 		const res = await fetch(url, { signal: controller.signal });
 		if (!res.ok) return null;
-		return await res.text();
+		return await readCapped(res);
 	} catch {
 		return null;
 	} finally {
@@ -102,15 +124,11 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 	}
 
 	async fetchSkillInstructions(repositoryUrl: string): Promise<string | null> {
-		// Best-effort: only handles github.com repository/tree URLs (what SkillNet indexes),
-		// converting to raw.githubusercontent.com and trying common instruction filenames.
-		const match = repositoryUrl.match(/github\.com\/([^/]+)\/([^/]+)(?:\/tree\/([^/]+)\/(.*))?/);
-		if (!match) return null;
-		const [, owner, repo, branch, subpath] = match;
-		const ref = branch || 'main';
-		const base = subpath ? `${subpath.replace(/\/$/, '')}/` : '';
-		for (const filename of ['SKILL.md', 'skill.md', 'README.md', 'readme.md']) {
-			const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/${ref}/${base}${filename}`;
+		// Best-effort: only plain github.com repository/tree URLs (what SkillNet indexes) are accepted,
+		// see githubSkillUrl.ts, and converted to raw.githubusercontent.com.
+		const urls = rawSkillInstructionUrls(repositoryUrl);
+		if (!urls) return null;
+		for (const rawUrl of urls) {
 			const text = await fetchText(rawUrl);
 			if (text) return text;
 		}
