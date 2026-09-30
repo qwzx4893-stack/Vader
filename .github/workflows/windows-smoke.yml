@@ -1,0 +1,123 @@
+name: Windows Smoke Test
+
+# Installs a published Vader release on a real Windows runner and launches it, to catch
+# "installs fine but the window is blank" failures that a successful build cannot reveal.
+# Driven with Playwright over CDP (Electron apps are browsers to automation, not UIA targets).
+# Manual only; it never builds or publishes anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to install and test'
+        required: true
+        default: 'v1.99.3'
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    name: Install and launch ${{ github.event.inputs.tag }}
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      TAG: ${{ github.event.inputs.tag }}
+      INSTALL_DIR: C:\VaderApp
+    steps:
+      - name: Checkout (test script only)
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Download release installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download $env:TAG --repo ${{ github.repository }} --pattern '*.exe' --dir dl
+          Get-ChildItem dl | Format-Table Name, Length
+
+      - name: Install silently
+        shell: pwsh
+        run: |
+          $setup = (Get-ChildItem dl -Filter *.exe | Select-Object -First 1).FullName
+          $p = Start-Process $setup -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$env:INSTALL_DIR",'/MERGETASKS=!runcode' -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+
+      - name: Inspect installed files
+        id: inspect
+        shell: pwsh
+        run: |
+          Get-ChildItem $env:INSTALL_DIR | Select-Object -First 40 | Format-Table Name, Length
+          $exe = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'unins*' } | Sort-Object Length -Descending | Select-Object -First 1
+          "main executable: $($exe.FullName) ($([math]::Round($exe.Length/1MB,1)) MB)"
+          "exe=$($exe.FullName)" >> $env:GITHUB_OUTPUT
+          $app = Join-Path $env:INSTALL_DIR 'resources\app'
+          "--- product.json identity"
+          $prod = Get-Content (Join-Path $app 'product.json') -Raw | ConvertFrom-Json
+          "nameShort=$($prod.nameShort) applicationName=$($prod.applicationName) dataFolderName=$($prod.dataFolderName) win32AppUserModelId=$($prod.win32AppUserModelId)"
+          "--- expected runtime files"
+          $expected = @(
+            'out\main.js',
+            'out\vs\workbench\workbench.desktop.main.js',
+            'out\vs\workbench\workbench.desktop.main.css',
+            'out\vs\code\electron-sandbox\workbench\workbench.html',
+            'out\vs\workbench\contrib\void\browser\react\out',
+            'node_modules.asar'
+          )
+          foreach ($e in $expected) { $p = Join-Path $app $e; "{0,-70} {1}" -f $e, (Test-Path $p) }
+          "--- native modules present (.node files)"
+          Get-ChildItem $app -Recurse -Filter *.node -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName.Substring($app.Length) }
+
+      - name: Install Playwright (client only, no browser download)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\pw | Out-Null
+          Push-Location $env:RUNNER_TEMP\pw
+          npm init -y | Out-Null
+          $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+          npm install playwright-core@1.52.0 --no-audit --no-fund
+          Pop-Location
+          "PW_CORE=$env:RUNNER_TEMP\pw\node_modules\playwright-core" >> $env:GITHUB_ENV
+
+      - name: Launch - default flags
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        env:
+          VADER_EXE: ${{ steps.inspect.outputs.exe }}
+          RUN_LABEL: default
+          CDP_PORT: '9222'
+          SMOKE_OUT: smoke-out
+        run: node src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+
+      - name: Launch - software rendering (--disable-gpu)
+        if: always()
+        shell: pwsh
+        continue-on-error: true
+        env:
+          VADER_EXE: ${{ steps.inspect.outputs.exe }}
+          RUN_LABEL: disable-gpu
+          EXTRA_ARGS: '--disable-gpu'
+          CDP_PORT: '9223'
+          SMOKE_OUT: smoke-out
+        run: node src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+
+      - name: Upload smoke output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-out
+          path: smoke-out
+          retention-days: 7
+          if-no-files-found: ignore
