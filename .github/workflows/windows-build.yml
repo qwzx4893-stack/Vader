@@ -75,6 +75,9 @@ jobs:
       - name: Build React chat/settings UI
         run: npm run buildreact
 
+      - name: Build Cline agent runtime bundle
+        run: npm run buildcline
+
       - name: Compile
         run: npm run compile
 

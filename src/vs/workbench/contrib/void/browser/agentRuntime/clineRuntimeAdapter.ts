@@ -2,7 +2,8 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import { AgentRuntime, type AgentRuntimeConfig } from '@cline/agents';
+// Not '@cline/agents' directly: the sandboxed renderer cannot resolve bare specifiers (see clineBundle/build.mjs).
+import { AgentRuntime, type AgentRuntimeConfig } from './clineBundle/index.js';
 import type { AgentModel, AgentTool } from '@cline/shared';
 
 // Vader addition, part of the Cline Main Agent Runtime integration (see

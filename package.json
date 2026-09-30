@@ -11,6 +11,7 @@
   "private": true,
   "scripts": {
     "buildreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js && cd ../../../../../../../",
+    "buildcline": "node ./src/vs/workbench/contrib/void/browser/agentRuntime/clineBundle/build.mjs",
     "watchreact": "cd ./src/vs/workbench/contrib/void/browser/react/ && node build.js --watch && cd ../../../../../../../",
     "watchreactd": "deemon npm run watchreact",
     "test": "echo Please run any of the test scripts from the scripts folder.",
