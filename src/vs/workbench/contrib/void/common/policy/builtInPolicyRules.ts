@@ -10,15 +10,30 @@ import { PolicyRule } from './policyServiceTypes.js';
 // permission mode). Everything else is a built-in default that ships enabled but that
 // the user may turn off in settings if it doesn't fit their workflow.
 
+// A token that names something whose recursive deletion/ownership change is never a legitimate
+// agent action: a root, a home directory, a top-level system directory or a drive root. Anchored
+// so `/tmp/x` and `$HOME/project` (a subdirectory) stay allowed. Matched on text where quotes are already stripped.
+const CRITICAL_TARGET = String.raw`(?:/\*?|~/?\*?|\$home/?\*?|/(?:home|users|usr|etc|var|bin|sbin|boot|lib|lib64|root|opt|srv|dev|sys|proc)/?\*?|[a-z]:[\\/]?\*?)(?=\s|$|[;&|)])`;
+const WINDOWS_TARGET = String.raw`(?:[a-z]:[\\/]?\*?|\$home[\\/]?\*?|\$env:(?:userprofile|systemroot|windir|systemdrive|homedrive)[\\/]?\*?|%(?:userprofile|systemroot|windir|systemdrive|homedrive)%[\\/]?\*?|[a-z]:[\\/](?:users|windows|program files(?: \(x86\))?|programdata)[\\/]?\*?)(?=\s|$|[;&|)])`;
+
 export const builtInPolicyRules: PolicyRule[] = [
 	// --- locked hard denies: catastrophic, essentially never a legitimate agent action ---
 	{
 		id: 'vader.deny.destructive-fs',
-		description: 'Blocked: command looks like it would recursively delete a root/home directory or wipe a filesystem/disk.',
+		description: 'Blocked: command looks like it would recursively delete a root, home, system or drive directory, or wipe a filesystem/disk.',
 		effect: 'deny',
 		kinds: ['terminal-command'],
 		commandPatterns: [
-			String.raw`\brm\s+(-[a-zA-Z]*r[a-zA-Z]*f[a-zA-Z]*|-[a-zA-Z]*f[a-zA-Z]*r[a-zA-Z]*)\s+(/|~|\$HOME)(\s|$|/\*)`,
+			// Unix rm with a recursive flag (-r, -rf, -fr, -R, --recursive, flags split apart) aimed at a critical target
+			String.raw`\brm\b(?=[^;&|\n]*\s(?:-[a-z]*r[a-z]*|--recursive)(?=\s|$))[^;&|\n]*?\s(?:--\s+)?` + CRITICAL_TARGET,
+			String.raw`\bfind\s+` + CRITICAL_TARGET + String.raw`\s[^;&|\n]*(?:-delete\b|-exec\s+rm\b)`,
+			String.raw`\b(?:chmod|chown|chgrp)\b(?=[^;&|\n]*\s(?:-[a-z]*r[a-z]*|--recursive)(?=\s|$))[^;&|\n]*?\s` + CRITICAL_TARGET,
+			// PowerShell
+			String.raw`\b(?:remove-item|ri|del|erase|rmdir|rd)\b(?=[^;&|\n]*\s-r(?:e(?:c(?:u(?:r(?:s(?:e)?)?)?)?)?)?(?=\s|$))[^;&|\n]*?\s(?:-(?:literal)?path\s+)?` + WINDOWS_TARGET,
+			// cmd.exe rd/rmdir/del/erase with /s
+			String.raw`\b(?:rd|rmdir|del|erase)\b(?=[^;&|\n]*\s/s(?=\s|$))[^;&|\n]*?\s` + WINDOWS_TARGET,
+			String.raw`\b(?:format-volume|clear-disk|remove-partition|initialize-disk)\b`,
+			String.raw`\brmtree\(\s*(?:/\*?|~/?|\$home/?|[a-z]:[\\/]?)\s*[,)]`,
 			String.raw`\bmkfs(\.\w+)?\b`,
 			String.raw`\bdd\s+[^\n]*\bof=/dev/(sd|nvme|hd|disk|xvd)`,
 			String.raw`>\s*/dev/(sd|nvme|hd|disk|xvd)[a-z0-9]*\b`,
@@ -48,11 +63,16 @@ export const builtInPolicyRules: PolicyRule[] = [
 		kinds: ['file-write', 'file-delete'],
 		pathGlobs: [
 			'/etc/shadow',
+			'/etc/passwd',
 			'/etc/sudoers',
 			'/etc/sudoers.d/**',
+			'/etc/ssh/**',
 			'/boot/**',
-			'C:/Windows/System32/**',
-			'C:/Windows/SysWOW64/**',
+			'/bin/**',
+			'/sbin/**',
+			'/usr/bin/**',
+			'/usr/sbin/**',
+			'C:/Windows/**',
 		],
 		builtIn: true,
 		locked: true,

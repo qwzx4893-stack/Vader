@@ -11,6 +11,7 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { VADER_POLICY_STORAGE_KEY } from '../storageKeys.js';
 import { builtInPolicyRules } from './builtInPolicyRules.js';
+import { normalizeCommandForPolicy } from './commandNormalizer.js';
 import { IPolicyRequest, PolicyMode, PolicyRule, PolicyServiceState, PolicyVerdict, UserPolicyRuleInput } from './policyServiceTypes.js';
 
 export * from './policyServiceTypes.js';
@@ -45,21 +46,24 @@ export interface IPolicyService {
 
 export const IPolicyService = createDecorator<IPolicyService>('vaderPolicyService');
 
-const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
+export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	if (!rule.kinds.includes(req.kind)) return false;
 
 	if (rule.pathGlobs && rule.pathGlobs.length) {
 		const paths = req.filePaths ?? [];
 		if (paths.length === 0) return false;
-		const hit = paths.some(p => rule.pathGlobs!.some(g => matchGlob(g, p.replace(/\\/g, '/'))));
+		// Case-insensitive on every platform: on Windows the file system is, and URI.fsPath lowercases the
+		// drive letter (`c:`), so a case-sensitive `C:/Windows/**` rule never matched any real path.
+		const hit = paths.some(p => rule.pathGlobs!.some(g => matchGlob(g.toLowerCase(), p.replace(/\\/g, '/').toLowerCase())));
 		if (!hit) return false;
 	}
 
 	if (rule.commandPatterns && rule.commandPatterns.length) {
 		const command = req.command ?? '';
 		if (!command) return false;
+		const normalized = normalizeCommandForPolicy(command);
 		const hit = rule.commandPatterns.some(src => {
-			try { return new RegExp(src, 'i').test(command); }
+			try { const re = new RegExp(src, 'i'); return re.test(command) || re.test(normalized); }
 			catch { return false; }
 		});
 		if (!hit) return false;

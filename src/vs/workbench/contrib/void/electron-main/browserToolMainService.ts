@@ -7,6 +7,7 @@ import { randomUUID } from 'crypto';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { isWindows, isMacintosh } from '../../../../base/common/platform.js';
 import { BrowserSnapshot, ConsoleLogEntry, IBrowserToolMainService, NetworkEntry, PageErrorEntry, PageSummary } from '../common/browser/browserToolServiceTypes.js';
+import { assertNavigableUrl } from '../common/browser/browserUrlPolicy.js';
 
 // playwright-core drives an existing browser rather than bundling one, so it needs either a
 // Playwright-managed browser (from `npx playwright install chromium`, respecting
@@ -234,8 +235,9 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 	}
 
 	async navigate(url: string, pageId?: string): Promise<BrowserSnapshot> {
+		const safeUrl = assertNavigableUrl(url);
 		const { id, entry } = await this._resolvePage(pageId);
-		await entry.page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+		await entry.page.goto(safeUrl, { waitUntil: 'domcontentloaded', timeout: 30_000 });
 		return this._computeSnapshot(id, entry.page);
 	}
 
