@@ -487,7 +487,16 @@ class Mangler {
                 edits.push(edit);
             }
         };
+        // Vader fix: only `src/**` output is ever read back from this mangler (see createCompile in
+        // compilation.ts), yet the TS program also contains raw .ts sources and .d.ts files from
+        // node_modules pulled in transitively via type imports (e.g. posthog-node/src/*.ts,
+        // google-auth-library/*.d.ts reached through @cline/*). Computing edits for them is pure
+        // waste at best and crashed real Windows builds with "OVERLAPPING edit" at worst.
+        const isThirdParty = (fileName) => /[\\/]node_modules[\\/]/.test(fileName);
         const appendRename = (newText, loc) => {
+            if (isThirdParty(loc.fileName)) {
+                return;
+            }
             appendEdit(loc.fileName, {
                 newText: (loc.prefixText || '') + newText + (loc.suffixText || ''),
                 offset: loc.textSpan.start,
@@ -496,6 +505,9 @@ class Mangler {
         };
         const renameResults = [];
         const queueRename = (fileName, pos, newName) => {
+            if (isThirdParty(fileName)) {
+                return;
+            }
             renameResults.push(Promise.resolve(this.renameWorkerPool.exec('findRenameLocations', [this.projectPath, fileName, pos]))
                 .then((locations) => ({ newName, locations })));
         };
