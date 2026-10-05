@@ -1425,6 +1425,36 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+
+	// Vader-added tools. These were missing, so any message about them failed to render at all (see GenericToolWrapper).
+	'find_capability': { done: 'Looked for a capability', proposed: 'Look for a capability', running: loadingTitleWrapper('Looking for a capability') },
+	'search_mcp_registry': { done: 'Searched the MCP registry', proposed: 'Search the MCP registry', running: loadingTitleWrapper('Searching the MCP registry') },
+	'search_skillnet': { done: 'Searched SkillNet', proposed: 'Search SkillNet', running: loadingTitleWrapper('Searching SkillNet') },
+	'fetch_skill_instructions': { done: 'Fetched skill instructions', proposed: 'Fetch skill instructions', running: loadingTitleWrapper('Fetching skill instructions') },
+	'browser_new_page': { done: 'Opened browser page', proposed: 'Open browser page', running: loadingTitleWrapper('Opening browser page') },
+	'browser_list_pages': { done: 'Listed browser pages', proposed: 'List browser pages', running: loadingTitleWrapper('Listing browser pages') },
+	'browser_switch_page': { done: 'Switched browser page', proposed: 'Switch browser page', running: loadingTitleWrapper('Switching browser page') },
+	'browser_close_page': { done: 'Closed browser page', proposed: 'Close browser page', running: loadingTitleWrapper('Closing browser page') },
+	'browser_navigate': { done: 'Opened page in browser', proposed: 'Open page in browser', running: loadingTitleWrapper('Opening page in browser') },
+	'browser_reload': { done: 'Reloaded page', proposed: 'Reload page', running: loadingTitleWrapper('Reloading page') },
+	'browser_snapshot': { done: 'Read page', proposed: 'Read page', running: loadingTitleWrapper('Reading page') },
+	'browser_click': { done: 'Clicked in page', proposed: 'Click in page', running: loadingTitleWrapper('Clicking in page') },
+	'browser_type': { done: 'Typed in page', proposed: 'Type in page', running: loadingTitleWrapper('Typing in page') },
+	'browser_screenshot': { done: 'Took screenshot', proposed: 'Take screenshot', running: loadingTitleWrapper('Taking screenshot') },
+	'browser_screenshot_analyze': { done: 'Analyzed screenshot', proposed: 'Analyze screenshot', running: loadingTitleWrapper('Analyzing screenshot') },
+	'browser_console_logs': { done: 'Read browser console', proposed: 'Read browser console', running: loadingTitleWrapper('Reading browser console') },
+	'browser_page_errors': { done: 'Read page errors', proposed: 'Read page errors', running: loadingTitleWrapper('Reading page errors') },
+	'browser_network_log': { done: 'Read network log', proposed: 'Read network log', running: loadingTitleWrapper('Reading network log') },
+	'run_verification': { done: 'Ran project checks', proposed: 'Run project checks', running: loadingTitleWrapper('Running project checks') },
+	'run_verification_agent': { done: 'Verified the work', proposed: 'Verify the work', running: loadingTitleWrapper('Verifying the work') },
+	'create_persistent_agent': { done: 'Created agent', proposed: 'Create agent', running: loadingTitleWrapper('Creating agent') },
+	'install_skill': { done: 'Installed skill', proposed: 'Install skill', running: loadingTitleWrapper('Installing skill') },
+	'install_marketplace_capability': { done: 'Installed capability', proposed: 'Install capability', running: loadingTitleWrapper('Installing capability') },
+	'remember': { done: 'Saved to memory', proposed: 'Save to memory', running: loadingTitleWrapper('Saving to memory') },
+	'delegate_parallel_tasks': { done: 'Ran parallel tasks', proposed: 'Run parallel tasks', running: loadingTitleWrapper('Running parallel tasks') },
+	'delegate_subagent_task': { done: 'Delegated to subagent', proposed: 'Delegate to subagent', running: loadingTitleWrapper('Delegating to subagent') },
+	'delegate_research_task': { done: 'Ran research task', proposed: 'Run research task', running: loadingTitleWrapper('Running research task') },
+	'delegate_browser_task': { done: 'Ran browser task', proposed: 'Run browser task', running: loadingTitleWrapper('Running browser task') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -1568,7 +1598,7 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 	}
 
 	try {
-		return x[toolName]?.() || { desc1: '' }
+		return (x as Record<string, (() => { desc1: React.ReactNode, desc1Info?: string }) | undefined>)[toolName]?.() || { desc1: '' }
 	}
 	catch {
 		return { desc1: '' }
@@ -1922,7 +1952,50 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => React.ReactNode
 
-const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } } = {
+// Vader fix. Only the tools Void shipped had a chat component here; every tool Vader added (browser, subagents, memory,
+// skills, verification, ...) rendered NOTHING - no header, no result and, worse, no Approve/Reject buttons, so an agent that
+// needed approval for one of them waited forever on a request the user could not see (found by a live run). Any tool
+// without a bespoke component now gets this one: title, the parameters (open while approval is pending, so the user sees
+// what they are approving), and the result or error.
+const GenericToolWrapper = ({ toolMessage }: WrapperProps<ToolName>) => {
+	const title = getTitle(toolMessage)
+	const isRejected = toolMessage.type === 'rejected'
+	const isError = toolMessage.type === 'tool_error'
+	const rawParams = (toolMessage.rawParams ?? {}) as Record<string, unknown>
+	const paramsStr = JSON.stringify(rawParams, null, 2)
+	const firstValue = Object.values(rawParams).find(v => typeof v === 'string' && v.length > 0) as string | undefined
+	const desc1 = firstValue ? (firstValue.length > 70 ? firstValue.slice(0, 70) + '…' : firstValue) : ''
+
+	const componentParams: ToolHeaderParams = { title, desc1, isError, icon: null, isRejected }
+	componentParams.desc2 = <CopyButton codeStr={paramsStr} toolTipName={`Copy inputs: ${paramsStr}`} />
+
+	const asCode = (str: string) => <ToolChildrenWrapper>
+		<SmallProseWrapper>
+			<ChatMarkdownRender
+				string={`\`\`\`\n${str.length > 6000 ? str.slice(0, 6000) + '\n… (truncated)' : str}\n\`\`\``}
+				chatMessageLocation={undefined}
+				isApplyEnabled={false}
+				isLinkDetectionEnabled={false}
+			/>
+		</SmallProseWrapper>
+	</ToolChildrenWrapper>
+
+	if (toolMessage.type === 'tool_request') {
+		componentParams.children = asCode(paramsStr)
+		componentParams.isOpen = true
+	}
+	else if (toolMessage.type === 'success' || toolMessage.type === 'rejected') {
+		if (toolMessage.content) { componentParams.children = asCode(String(toolMessage.content)) }
+	}
+	else if (toolMessage.type === 'tool_error') {
+		componentParams.bottomChildren = <BottomChildren title='Error'>
+			<CodeChildren>{String(toolMessage.content ?? toolMessage.result ?? '')}</CodeChildren>
+		</BottomChildren>
+	}
+	return <ToolHeaderWrapper {...componentParams} />
+}
+
+const builtinToolNameToComponent: Partial<{ [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } }> = {
 	'read_file': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
@@ -2549,7 +2622,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 
 		const toolName = chatMessage.name
 		const isBuiltInTool = isABuiltinToolName(toolName)
-		const ToolResultWrapper = isBuiltInTool ? builtinToolNameToComponent[toolName]?.resultWrapper as ResultWrapper<ToolName>
+		const ToolResultWrapper = isBuiltInTool ? (builtinToolNameToComponent[toolName]?.resultWrapper ?? GenericToolWrapper) as ResultWrapper<ToolName>
 			: MCPToolWrapper as ResultWrapper<ToolName>
 
 		if (ToolResultWrapper)

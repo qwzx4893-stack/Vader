@@ -11,11 +11,12 @@ import fs from 'node:fs';
 import { config, runGroup, summarize } from './harness.mjs';
 import { coreScenarios } from './scenarios/core.mjs';
 import { xmlScenarios, unknownModelScenarios } from './scenarios/xml.mjs';
+import { terminalScenarios, browserScenarios, mcpScenarios, agentScenarios } from './scenarios/tools.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
 if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missing or not found: ${config.exe}`); process.exit(2); }
 
-await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: coreScenarios });
+await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: [...coreScenarios, ...agentScenarios, ...browserScenarios, ...mcpScenarios, ...terminalScenarios] });
 await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenarios });
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
 await runPersistenceGroup();

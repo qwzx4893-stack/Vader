@@ -115,6 +115,8 @@ async function runScenario({ group, s, server, ws, app }) {
 		if (!cleanThread && process.env.E2E_DEBUG) { log(`  [debug] attempt ${attempt}: thread has ${tr.length} items: ${JSON.stringify(tr.map(x => x.kind + ':' + x.text.slice(0, 30)))}`); }
 	}
 	if (!cleanThread) { log('  (warning: could not get an empty chat thread for this scenario)'); }
+	// every scenario starts in Agent mode unless it says otherwise
+	if ((await ui.getMode(page)) !== (s.mode ?? 'Agent')) { await ui.setMode(page, s.mode ?? 'Agent').catch(() => { }); }
 
 	const problemsBefore = app.problems.length;
 	const t = {
@@ -124,6 +126,8 @@ async function runScenario({ group, s, server, ws, app }) {
 		useFim: (fn) => server.setFim(fn),
 		send: (text) => ui.sendMessage(page, text),
 		idle: (opts) => ui.waitForIdle(page, opts),
+		runUntilIdle: (opts) => ui.runUntilIdle(page, opts),
+		setMode: (m) => ui.setMode(page, m),
 		approve: () => ui.approve(page), reject: () => ui.reject(page), waitApproval: (ms) => ui.waitForApproval(page, ms),
 		transcript: () => ui.transcript(page),
 		read: (rel) => fs.readFileSync(path.join(ws, ...rel.split('/')), 'utf8'),

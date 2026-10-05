@@ -34,7 +34,10 @@ export async function launchApp(opts) {
 	];
 	if (opts.workspace) { args.push(opts.workspace); }
 	const out = [];
-	const child = spawn(opts.exe, args, { env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1', ...(opts.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
+	// a throwaway home directory: the app keeps part of its state in ~/.vader-editor (e.g. mcp.json) and a test must not touch the real one
+	const home = opts.home ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-home-'));
+	const homeEnv = process.platform === 'win32' ? { USERPROFILE: home, HOMEDRIVE: path.parse(home).root.replace(/\\$/, ''), HOMEPATH: home.slice(path.parse(home).root.length - 1) } : { HOME: home };
+	const child = spawn(opts.exe, args, { env: { ...process.env, ELECTRON_ENABLE_LOGGING: '1', ...homeEnv, ...(opts.env ?? {}) }, stdio: ['ignore', 'pipe', 'pipe'] });
 	child.stdout.on('data', d => out.push(String(d)));
 	child.stderr.on('data', d => out.push(String(d)));
 	let exited = null;
@@ -62,7 +65,7 @@ export async function launchApp(opts) {
 	page.on('console', m => { if (m.type() === 'error') { problems.push(`console.error: ${m.text().slice(0, 400)}`); } });
 
 	return {
-		page, browser, port, userDataDir, extensionsDir, problems,
+		page, browser, port, userDataDir, extensionsDir, home, problems,
 		mainOutput: () => out.join(''),
 		exited: () => exited,
 		/** Closes the window the way a user does (so the app flushes its state to disk), then falls back to killing it. */

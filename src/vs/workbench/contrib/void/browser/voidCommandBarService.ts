@@ -32,7 +32,7 @@ import { IVoidModelService } from '../common/voidModelService.js';
 
 
 export * from './voidCommandBarServiceTypes.js';
-import { IVoidCommandBarService, CommandBarStateType } from './voidCommandBarServiceTypes.js';
+import { IVoidCommandBarService, CommandBarStateType, VoidCommandBarProps } from './voidCommandBarServiceTypes.js';
 
 const defaultState: NonNullable<CommandBarStateType> = {
 	sortedDiffZoneIds: [],
@@ -458,10 +458,7 @@ export class VoidCommandBarService extends Disposable implements IVoidCommandBar
 registerSingleton(IVoidCommandBarService, VoidCommandBarService, InstantiationType.Delayed); // delayed is needed here :(
 
 
-export type VoidCommandBarProps = {
-	uri: URI | null;
-	editor: ICodeEditor;
-}
+// VoidCommandBarProps lives in voidCommandBarServiceTypes.ts (re-exported above)
 
 
 

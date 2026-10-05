@@ -11,6 +11,7 @@
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { URI } from '../../../../base/common/uri.js';
 import { Event } from '../../../../base/common/event.js';
+import type { ICodeEditor } from '../../../../editor/browser/editorBrowser.js';
 
 export interface IVoidCommandBarService {
 	readonly _serviceBrand: undefined;
@@ -44,4 +45,9 @@ export type CommandBarStateType = undefined | {
 	isStreaming: boolean; // is any diffZone streaming in this URI
 
 	diffIdx: number | null; // must refresh whenever sortedDiffIds does so it's valid
+}
+
+export type VoidCommandBarProps = {
+	uri: URI | null;
+	editor: ICodeEditor;
 }

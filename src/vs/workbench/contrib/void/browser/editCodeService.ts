@@ -1124,8 +1124,11 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		return
 	}
 
-	public async callBeforeApplyOrEdit(givenURI: URI | 'current') {
-		const uri = this._uriOfGivenURI(givenURI)
+	public async callBeforeApplyOrEdit(given: URI | 'current' | CallBeforeStartApplyingOpts) {
+		// Vader fix. Quick Edit (Ctrl+K) passes its options object here, but only a URI or 'current' was handled, so the
+		// object was treated as a URI and initializing/saving the model failed silently ("An unknown error occurred" in
+		// the console) before every Quick Edit. _getURIBeforeStartApplying already knew how to resolve those options.
+		const uri = (given === 'current' || URI.isUri(given)) ? this._uriOfGivenURI(given) : this._getURIBeforeStartApplying(given)
 		if (!uri) return
 		await this._voidModelService.initializeModel(uri)
 		await this._voidModelService.saveModel(uri) // save the URI

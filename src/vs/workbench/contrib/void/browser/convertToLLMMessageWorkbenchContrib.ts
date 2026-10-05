@@ -7,6 +7,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
+import { IFileService, FileChangeType } from '../../../../platform/files/common/files.js';
 import { IVoidModelService } from '../common/voidModelService.js';
 
 class ConvertContribWorkbenchContribution extends Disposable implements IWorkbenchContribution {
@@ -16,6 +17,7 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 	constructor(
 		@IVoidModelService private readonly voidModelService: IVoidModelService,
 		@IWorkspaceContextService private readonly workspaceContext: IWorkspaceContextService,
+		@IFileService private readonly fileService: IFileService,
 	) {
 		super()
 
@@ -32,6 +34,17 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 			[...e.changed, ...e.added].forEach(w => { initializeURI(w.uri) })
 		}))
 		this.workspaceContext.getWorkspace().folders.forEach(w => { initializeURI(w.uri) })
+
+		// a rules file the user creates AFTER the folder was opened has no model yet (the first attempt failed
+		// because the file did not exist), so pick it up when it appears
+		this._register(this.fileService.onDidFilesChange(e => {
+			for (const folder of this.workspaceContext.getWorkspace().folders) {
+				for (const filename of ['.vaderrules', '.voidrules']) {
+					const uri = URI.joinPath(folder.uri, filename)
+					if (e.contains(uri, FileChangeType.ADDED)) { this.voidModelService.initializeModel(uri) }
+				}
+			}
+		}))
 	}
 }
 

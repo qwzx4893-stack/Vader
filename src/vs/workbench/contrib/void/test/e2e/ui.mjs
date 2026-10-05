@@ -120,3 +120,33 @@ export async function dismissNotifications(page) {
 export async function toastTexts(page) {
 	return page.evaluate(() => [...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(e => e.textContent.trim()));
 }
+
+/** Switch the chat mode dropdown (Normal chat / Gather / Plan / Agent). */
+export async function setMode(page, mode) {
+	const current = page.locator('span.void-truncate.void-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first();
+	await current.click();
+	await sleep(300);
+	await page.locator('span').filter({ hasText: new RegExp(`^${mode}$`) }).last().click();
+	await sleep(400);
+}
+
+/** Keeps approving tool requests until the agent is idle. Returns how many approvals it gave. */
+export async function runUntilIdle(page, { timeout = 90_000, approveEach = true } = {}) {
+	const t0 = Date.now();
+	let approvals = 0, idleSince = 0;
+	while (Date.now() - t0 < timeout) {
+		if (await approvalPending(page)) {
+			idleSince = 0;
+			if (approveEach) { await approve(page); approvals++; await sleep(500); } else { return { approvals, idle: false, pending: true }; }
+			continue;
+		}
+		if (await isRunning(page)) { idleSince = 0; } else if (!idleSince) { idleSince = Date.now(); } else if (Date.now() - idleSince >= 1500) { return { approvals, idle: true }; }
+		await sleep(200);
+	}
+	return { approvals, idle: false };
+}
+
+export async function getMode(page) {
+	const t = await page.locator('span.void-truncate.void-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first().textContent().catch(() => null);
+	return t?.trim() ?? null;
+}
