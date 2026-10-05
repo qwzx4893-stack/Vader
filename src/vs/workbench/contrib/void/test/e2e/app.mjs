@@ -70,13 +70,19 @@ export async function launchApp(opts) {
 		exited: () => exited,
 		/** Closes the window the way a user does (so the app flushes its state to disk), then falls back to killing it. */
 		async closeGracefully(timeoutMs = 25_000) {
-			try {
-				await page.keyboard.press('F1');
-				await page.waitForSelector('.quick-input-widget', { state: 'visible', timeout: 5000 });
-				await page.keyboard.type('Close Window');
-				await sleep(600);
-				await page.keyboard.press('Enter');
-			} catch { /* fall through to the hard close */ }
+			// the real keyboard shortcut for Close Window (Ctrl+Shift+W); the palette entry is the fallback
+			try { await page.keyboard.press('Control+Shift+W'); } catch { /* fall through to the hard close */ }
+			const quick = Date.now() + 6_000;
+			while (Date.now() < quick && !exited) { await sleep(300); }
+			if (!exited) {
+				try {
+					await page.keyboard.press('F1');
+					await page.waitForSelector('.quick-input-widget', { state: 'visible', timeout: 5000 });
+					await page.keyboard.type('Close Window');
+					await sleep(600);
+					await page.keyboard.press('Enter');
+				} catch { /* fall through to the hard close */ }
+			}
 			const end = Date.now() + timeoutMs;
 			while (Date.now() < end && !exited) { await sleep(300); }
 			if (!exited) {
