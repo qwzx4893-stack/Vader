@@ -8,11 +8,17 @@ name: Windows E2E
 # Manual only; never builds or publishes anything.
 
 on:
+  # Dispatching by name only works once this file is on the default branch; until then a push that touches it
+  # (on the validation branch only) starts the same run against that branch's latest successful Windows Build.
+  push:
+    branches: [upgrade/vscode-1.136.2]
+    paths: ['.github/workflows/windows-e2e.yml']
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'Windows Build run id whose installer artifact to test'
-        required: true
+        description: 'Windows Build run id whose installer artifact to test (empty = latest successful build of this branch)'
+        required: false
+        default: ''
       real_llm:
         description: 'Also run the suite against a real small model served by Ollama'
         required: false
@@ -28,11 +34,13 @@ permissions:
 
 jobs:
   e2e:
-    name: E2E on build run ${{ github.event.inputs.run_id }}
+    name: E2E on ${{ github.event.inputs.run_id && format('build run {0}', github.event.inputs.run_id) || 'the latest build of this branch' }}
     runs-on: windows-2022
     timeout-minutes: 90
     env:
       RUN_ID: ${{ github.event.inputs.run_id }}
+      REAL_LLM: ${{ github.event.inputs.real_llm || 'true' }}
+      REAL_LLM_MODEL_NAME: ${{ github.event.inputs.real_llm_model || 'qwen2.5:1.5b' }}
       INSTALL_DIR: C:\VaderApp
     steps:
       - name: Checkout (test sources only)
@@ -53,6 +61,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if (-not $env:RUN_ID) {
+            $env:RUN_ID = gh run list --repo ${{ github.repository }} --workflow windows-build.yml --branch '${{ github.ref_name }}' --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+            "using build run $env:RUN_ID"
+          }
           gh run download $env:RUN_ID --repo ${{ github.repository }} --name vader-win32-x64-setup --dir dl
           $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
           $p = Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$env:INSTALL_DIR",'/MERGETASKS=!runcode' -Wait -PassThru
@@ -92,7 +104,7 @@ jobs:
         run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
 
       - name: Start Ollama and pull the model
-        if: ${{ always() && github.event.inputs.real_llm == 'true' }}
+        if: ${{ always() && env.REAL_LLM == 'true' }}
         id: ollama
         shell: pwsh
         continue-on-error: true
@@ -102,18 +114,18 @@ jobs:
           $env:OLLAMA_HOST = '127.0.0.1:11434'
           Start-Process -FilePath .\ollama\ollama.exe -ArgumentList 'serve' -RedirectStandardOutput ollama.log -RedirectStandardError ollama.err.log -WindowStyle Hidden
           for ($i = 0; $i -lt 30; $i++) { try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Null; break } catch { Start-Sleep 2 } }
-          .\ollama\ollama.exe pull "${{ github.event.inputs.real_llm_model }}"
+          .\ollama\ollama.exe pull "$env:REAL_LLM_MODEL_NAME"
           "--- model smoke (direct, bypassing Vader)"
-          $body = @{ model = '${{ github.event.inputs.real_llm_model }}'; messages = @(@{ role = 'user'; content = 'Say PONG' }); stream = $false } | ConvertTo-Json -Depth 5
+          $body = @{ model = $env:REAL_LLM_MODEL_NAME; messages = @(@{ role = 'user'; content = 'Say PONG' }); stream = $false } | ConvertTo-Json -Depth 5
           (Invoke-RestMethod -Method Post -Uri http://127.0.0.1:11434/v1/chat/completions -ContentType 'application/json' -Body $body).choices[0].message.content
 
       - name: Run the suite against the real model
-        if: ${{ always() && github.event.inputs.real_llm == 'true' && steps.ollama.outcome == 'success' }}
+        if: ${{ always() && env.REAL_LLM == 'true' && steps.ollama.outcome == 'success' }}
         shell: pwsh
         env:
           E2E_OUT: e2e-out-real
           E2E_ONLY: 'real-llm'
-          REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model }}
+          REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model || 'qwen2.5:1.5b' }}
           REAL_LLM_BASEURL: http://127.0.0.1:11434/v1
           E2E_SCENARIO_TIMEOUT: '900000'
         run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
