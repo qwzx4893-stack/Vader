@@ -11,8 +11,17 @@ export const CHAT_INPUT = 'textarea[placeholder^="@ to mention"]';
 const TID = (id) => `[data-testid="${id}"]`;
 
 export async function isOnboarding(page) {
-	// scoped to Vader's own UI: VS Code's Welcome page also has a 'Get Started' heading
-	return (await page.locator('.void-scope').getByText('Get Started', { exact: true }).count()) > 0;
+	// The onboarding is a full-screen overlay that stays in the DOM after setup and is only faded out (opacity 0, no pointer
+	// events); VS Code's own Welcome page also has 'Get Started' text. So: is Vader's overlay present AND not faded out?
+	const el = page.locator('.void-scope').getByText('Welcome to Vader', { exact: true }).first();
+	if (!(await el.count())) { return false; }
+	return await el.evaluate(node => {
+		for (let e = node; e; e = e.parentElement) {
+			const s = getComputedStyle(e);
+			if (s.position === 'fixed' && s.zIndex === '99999') { return Number(s.opacity) > 0.5 && s.pointerEvents !== 'none'; }
+		}
+		return false;
+	}).catch(() => false);
 }
 
 /** First-run flow, exactly as a new user sees it: Welcome -> Add a Provider (OpenAI-Compatible) -> model -> done. */
