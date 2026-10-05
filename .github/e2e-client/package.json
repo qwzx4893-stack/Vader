@@ -1,0 +1,9 @@
+{
+	"name": "vader-e2e-client",
+	"version": "0.0.0",
+	"private": true,
+	"description": "Playwright client used by the Windows E2E and smoke workflows to drive the installed app. Pinned and locked so CI installs exactly what was reviewed (npm ci --ignore-scripts).",
+	"dependencies": {
+		"playwright-core": "1.52.0"
+	}
+}

@@ -1,0 +1,22 @@
+# Secret scan configuration (gitleaks). Findings that are not Vader secrets are allow-listed here, each group with its reason, so a
+# real leak stands out. Everything under src/vs/workbench/contrib/void/ other than test files is NOT allow-listed.
+title = "Vader gitleaks config"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "VS Code's own test fixtures, extension manifests (public client ids / telemetry instrumentation keys, which are not secrets) and build pipeline samples"
+paths = [
+  '''^extensions/.*package\.json$''',
+  '''^build/azure-pipelines/''',
+  '''^src/vs/.*/test/''',
+  '''^src/vs/.*\.test\.ts$''',
+  '''^src/vs/platform/agentHost/''',
+]
+
+[[allowlists]]
+description = "Vader's own test files: fake provider keys such as sk-live-test-1234 that the local stub servers check for"
+paths = [
+  '''^src/vs/workbench/contrib/void/test/''',
+]

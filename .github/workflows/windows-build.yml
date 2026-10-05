@@ -78,7 +78,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       - name: Install extension dependencies
         run: node build/npm/postinstall.ts

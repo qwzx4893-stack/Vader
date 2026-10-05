@@ -47,3 +47,19 @@ Local runs (this environment cannot download scanner binaries from GitHub releas
 The guarantee that matters is enforced instead: `shippedAdvisoriesE2E.mjs` audits the production tree minus what the installer excludes and **fails the build on any high or critical advisory that would ship**, unless it carries a written exception in `build/advisory-exceptions.json` (an exception that stops applying is itself a failure). At the time of writing the list of exceptions is empty.
 
 Moderate advisories that remain in shipped code: `uuid` 3.x inside `@microsoft/dev-tunnels-connections` (the bounds check only matters when a caller passes its own buffer; the remote-tunnels feature is not part of Vader) and a few low advisories in the AI SDK telemetry packages used by `@cline/llms`.
+
+
+## First hosted run (commit `baf57bd`, all six jobs)
+
+| Scanner | Result | Disposition |
+|---|---|---|
+| CodeQL `security-extended` | **0 findings** over 169 TypeScript + 8 JavaScript files | nothing to fix |
+| Semgrep (security rules, Vader code) | **0 findings** | nothing to fix |
+| zizmor | 0 high, 0 medium, 7 low (`adhoc-packages`: `npm install` outside a lockfile in the Windows E2E/smoke workflows) | fixed: the Playwright client is now `.github/e2e-client` (package + lock) installed with `npm ci --ignore-scripts`; the MCP fixture install and the Windows build use `--ignore-scripts` / `npm ci` |
+| gitleaks (whole history) | 31, none a secret: VS Code extension manifests (public client ids, telemetry keys), VS Code test fixtures, a regex that *detects* private keys, and three fake provider keys in Vader's own stub-server tests | `.gitleaks.toml` allow-lists exactly those paths with reasons; the rest of `void/` is not exempt |
+| OSV (`package-lock.json`) | 23 advisory groups: `braces`, `micromatch`, `decode-uri-component`, `postcss`, `esbuild` (build tooling: gulp watchers, `next`) and `adm-zip` | none is in the production tree except `adm-zip`/`foundry-local-sdk`, which `build/.moduleignore` keeps out of the installer; `shippedAdvisoriesE2E` fails if that ever stops being true |
+| Electronegativity | 3 global warnings (no CSP, no navigation limits, no permission handler) and 1 note (`openExternal`) | false positives for VS Code's window code, which the scanner cannot see: the workbench HTML carries a CSP, `app.ts` sets permission request/check handlers, `will-navigate`/`setWindowOpenHandler` guards exist in `browserView.ts` and `webPageLoader.ts`; the `openExternal` call is VS Code's own, URL-validated link opening |
+
+## Install scripts and signatures
+- `package-lock.json`: every package resolves to `https://registry.npmjs.org` with an integrity hash (checked by script; nothing from git, tarball URLs or other hosts except the in-repo SAP stub).
+- 31 packages run install scripts. All are native-module builds or prebuilt downloads of VS Code's own dependencies; `foundry-local-sdk` downloads binaries but is excluded from the installer. `npm audit signatures` could not be run from the sandbox (key endpoint blocked); run it in CI when the registry keys are reachable.

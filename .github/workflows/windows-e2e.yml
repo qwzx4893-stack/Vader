@@ -52,6 +52,7 @@ jobs:
         with:
           persist-credentials: false
           sparse-checkout: |
+            .github/e2e-client
             src/vs/workbench/contrib/void/test
             .github/e2e-only.txt
             package.json
@@ -93,7 +94,7 @@ jobs:
           New-Item -ItemType Directory -Force $env:RUNNER_TEMP\mcp | Out-Null
           Push-Location $env:RUNNER_TEMP\mcp
           npm init -y | Out-Null
-          npm install "@modelcontextprotocol/sdk@$sdk" "zod@$zod" --no-audit --no-fund
+          npm install "@modelcontextprotocol/sdk@$sdk" "zod@$zod" --ignore-scripts --no-audit --no-fund
           Pop-Location
           Copy-Item src\vs\workbench\contrib\void\test\fixtures\fixtureMcpServer.mjs $env:RUNNER_TEMP\mcp\
           "E2E_MCP_FIXTURE=$env:RUNNER_TEMP\mcp\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
@@ -106,10 +107,10 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force $env:RUNNER_TEMP\pw | Out-Null
+          Copy-Item .github\e2e-client\package.json, .github\e2e-client\package-lock.json $env:RUNNER_TEMP\pw\
           Push-Location $env:RUNNER_TEMP\pw
-          npm init -y | Out-Null
           $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
-          npm install playwright-core@1.52.0 --no-audit --no-fund
+          npm ci --ignore-scripts --no-audit --no-fund
           Pop-Location
           "PW_CORE=$env:RUNNER_TEMP\pw\node_modules\playwright-core" >> $env:GITHUB_ENV
           git config --global user.email e2e@example.com
