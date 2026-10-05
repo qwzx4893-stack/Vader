@@ -11,7 +11,7 @@ import { ProxyChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js';
 import { IVoidSCMService } from '../common/voidSCMTypes.js';
 import { IToolsService } from './toolsService.js';
-import { IAgentGatewayService } from './agentGatewayService.js';
+import { IAgentGatewayService } from '../common/agentGateway/agentGatewayTypes.js';
 import { IVerificationService, VerificationEvidence, VerifyRepairLoopResult, VerificationVerdict } from '../common/verification/verificationTypes.js';
 
 export * from '../common/verification/verificationTypes.js';

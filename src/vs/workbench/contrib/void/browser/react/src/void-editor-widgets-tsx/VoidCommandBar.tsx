@@ -10,7 +10,7 @@ import '../styles.css'
 import { useCallback, useEffect, useState, useRef } from 'react';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg, rejectBg, rejectBorder } from '../../../../common/helpers/colors.js';
-import { VoidCommandBarProps } from '../../../voidCommandBarService.js';
+import { VoidCommandBarProps } from '../../../voidCommandBarServiceTypes.js';
 import { Check, EllipsisVertical, Menu, MoveDown, MoveLeft, MoveRight, MoveUp, X } from 'lucide-react';
 import {
 	VOID_GOTO_NEXT_DIFF_ACTION_ID,

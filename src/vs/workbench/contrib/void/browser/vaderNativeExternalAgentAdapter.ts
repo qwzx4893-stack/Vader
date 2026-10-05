@@ -7,7 +7,7 @@ import { Emitter, Event } from '../../../../base/common/event.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ExternalAgentCapabilities, ExternalAgentEvent, IExternalAgentAdapter, IExternalAgentAdapterRegistry, IExternalAgentSession } from '../common/externalAgent/externalAgentAdapterRegistry.js';
-import { IAgentGatewayService } from './agentGatewayService.js';
+import { IAgentGatewayService } from '../common/agentGateway/agentGatewayTypes.js';
 
 /**
  * The one reference adapter this pass ships: a REAL, working implementation of the

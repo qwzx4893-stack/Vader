@@ -105,7 +105,6 @@ jobs:
       - name: Launch - default flags
         if: always()
         shell: pwsh
-        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: default
@@ -116,7 +115,6 @@ jobs:
       - name: Launch - software rendering (--disable-gpu)
         if: always()
         shell: pwsh
-        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: disable-gpu

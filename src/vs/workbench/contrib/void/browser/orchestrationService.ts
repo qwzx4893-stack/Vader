@@ -8,10 +8,10 @@ import { generateUuid } from '../../../../base/common/uuid.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IAgentOrchestrationService, ParallelRunState, ParallelTaskSpec, ParallelTaskState } from '../common/orchestration/orchestrationTypes.js';
-import { IAgentGatewayService } from './agentGatewayService.js';
+import { IAgentGatewayService } from '../common/agentGateway/agentGatewayTypes.js';
 import { IGitWorktreeMainService } from '../common/worktree/gitWorktreeService.js';
 import { IAgentsService } from '../common/agents/agentsService.js';
-import { IVerificationService } from './verificationService.js';
+import { IVerificationService } from '../common/verification/verificationTypes.js';
 
 export * from '../common/orchestration/orchestrationTypes.js';
 
