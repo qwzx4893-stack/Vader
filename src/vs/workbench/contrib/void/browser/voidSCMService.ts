@@ -127,7 +127,7 @@ class GenerateCommitMessageService extends Disposable implements IGenerateCommit
 	}
 
 	private gitRepoInfo() {
-		const repo = Array.from(this.scmService.repositories || []).find((r: any) => r.provider.contextValue === 'git')
+		const repo = Array.from(this.scmService.repositories || []).find(r => r.provider.providerId === 'git')
 		if (!repo) { throw new Error('No git repository found') }
 		if (!repo.provider.rootUri?.fsPath) { throw new Error('No git repository root path found') }
 		return { path: repo.provider.rootUri.fsPath, repo }

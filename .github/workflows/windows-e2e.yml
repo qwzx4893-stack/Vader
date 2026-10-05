@@ -1,0 +1,122 @@
+name: Windows E2E
+
+# Installs the Windows installer produced by a Windows Build run and drives the REAL app through its UI with the
+# end-to-end suite (src/vs/workbench/contrib/void/test/e2e): chat, every agent tool (terminal, browser, MCP, edits),
+# Quick Edit / Apply / Autocomplete / commit messages, ordinary editor use, restart persistence.
+# The model is a protocol-faithful stand-in server (validated against the official `openai` SDK by ci.yml), so the run is
+# deterministic. With `real_llm` it additionally runs a small REAL model (Ollama) through the same app.
+# Manual only; never builds or publishes anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Windows Build run id whose installer artifact to test'
+        required: true
+      real_llm:
+        description: 'Also run the suite against a real small model served by Ollama'
+        required: false
+        default: 'true'
+      real_llm_model:
+        description: 'Ollama model for the real-model run'
+        required: false
+        default: 'qwen2.5:1.5b'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  e2e:
+    name: E2E on build run ${{ github.event.inputs.run_id }}
+    runs-on: windows-2022
+    timeout-minutes: 90
+    env:
+      RUN_ID: ${{ github.event.inputs.run_id }}
+      INSTALL_DIR: C:\VaderApp
+    steps:
+      - name: Checkout (test sources only)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: |
+            src/vs/workbench/contrib/void/test
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Download and install the installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download $env:RUN_ID --repo ${{ github.repository }} --name vader-win32-x64-setup --dir dl
+          $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
+          $p = Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$env:INSTALL_DIR",'/MERGETASKS=!runcode' -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          $main = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'unins*' } | Sort-Object Length -Descending | Select-Object -First 1
+          "VADER_EXE=$($main.FullName)" >> $env:GITHUB_ENV
+
+      - name: Install Playwright (client only) and git identity
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\pw | Out-Null
+          Push-Location $env:RUNNER_TEMP\pw
+          npm init -y | Out-Null
+          $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+          npm install playwright-core@1.52.0 --no-audit --no-fund
+          Pop-Location
+          "PW_CORE=$env:RUNNER_TEMP\pw\node_modules\playwright-core" >> $env:GITHUB_ENV
+          git config --global user.email e2e@example.com
+          git config --global user.name e2e
+
+      - name: Run the end-to-end suite (scripted model)
+        shell: pwsh
+        env:
+          E2E_OUT: e2e-out
+          E2E_PRISTINE: '1'
+          E2E_SCENARIO_TIMEOUT: '150000'
+        run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+
+      - name: Start Ollama and pull the model
+        if: ${{ always() && github.event.inputs.real_llm == 'true' }}
+        id: ollama
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Invoke-WebRequest https://github.com/ollama/ollama/releases/latest/download/ollama-windows-amd64.zip -OutFile ollama.zip
+          Expand-Archive ollama.zip -DestinationPath ollama
+          $env:OLLAMA_HOST = '127.0.0.1:11434'
+          Start-Process -FilePath .\ollama\ollama.exe -ArgumentList 'serve' -RedirectStandardOutput ollama.log -RedirectStandardError ollama.err.log -WindowStyle Hidden
+          for ($i = 0; $i -lt 30; $i++) { try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Null; break } catch { Start-Sleep 2 } }
+          .\ollama\ollama.exe pull "${{ github.event.inputs.real_llm_model }}"
+          "--- model smoke (direct, bypassing Vader)"
+          $body = @{ model = '${{ github.event.inputs.real_llm_model }}'; messages = @(@{ role = 'user'; content = 'Say PONG' }); stream = $false } | ConvertTo-Json -Depth 5
+          (Invoke-RestMethod -Method Post -Uri http://127.0.0.1:11434/v1/chat/completions -ContentType 'application/json' -Body $body).choices[0].message.content
+
+      - name: Run the suite against the real model
+        if: ${{ always() && github.event.inputs.real_llm == 'true' && steps.ollama.outcome == 'success' }}
+        shell: pwsh
+        env:
+          E2E_OUT: e2e-out-real
+          E2E_ONLY: 'real-llm'
+          REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model }}
+          REAL_LLM_BASEURL: http://127.0.0.1:11434/v1
+          E2E_SCENARIO_TIMEOUT: '900000'
+        run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-out
+          path: |
+            e2e-out
+            e2e-out-real
+            ollama.err.log
+          retention-days: 7
+          if-no-files-found: ignore

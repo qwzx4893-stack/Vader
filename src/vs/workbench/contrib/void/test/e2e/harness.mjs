@@ -71,7 +71,7 @@ export async function runGroup(group) {
 		app = await launchApp({ exe: config.exe, workspace: ws, userDataDir: group.userDataDir, extraArgs: config.extraArgs, label: group.name });
 		const { page } = app;
 		await sleep(1500);
-		if (await ui.isOnboarding(page)) { await ui.completeOnboarding(page, { baseURL: server.url, model: group.model }); }
+		if (await ui.isOnboarding(page)) { await ui.completeOnboarding(page, { baseURL: group.baseURL ?? server.url, apiKey: group.apiKey, model: group.model }); }
 		await sleep(800);
 
 		for (const s of selected) {
