@@ -9,6 +9,7 @@ import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './voidSettingsTypes.js';
 import { OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
+import { CloudListedProviderName, CloudListState, cloudListedProviderNames } from './cloudModelListTypes.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 
@@ -67,6 +68,12 @@ export interface IRefreshModelService {
 	startRefreshingModels: (providerName: RefreshableProviderName, options: { enableProviderOnSuccess: boolean, doNotFire: boolean }) => void;
 	onDidChangeState: Event<RefreshableProviderName>;
 	state: RefreshModelStateOfProvider;
+
+	/** hosted providers: did the entered key work, and how many models does it offer */
+	readonly cloudState: Record<CloudListedProviderName, CloudListState>;
+	readonly onDidChangeCloudState: Event<CloudListedProviderName>;
+	/** asks the provider which models the current key can use and applies the answer (called automatically when a key changes) */
+	refreshCloudModels(providerName: CloudListedProviderName): Promise<void>;
 }
 
 export const IRefreshModelService = createDecorator<IRefreshModelService>('RefreshModelService');
@@ -77,6 +84,10 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 
 	private readonly _onDidChangeState = new Emitter<RefreshableProviderName>();
 	readonly onDidChangeState: Event<RefreshableProviderName> = this._onDidChangeState.event; // this is primarily for use in react, so react can listen + update on state changes
+
+	private readonly _onDidChangeCloudState = new Emitter<CloudListedProviderName>();
+	readonly onDidChangeCloudState: Event<CloudListedProviderName> = this._onDidChangeCloudState.event;
+	readonly cloudState = Object.fromEntries(cloudListedProviderNames.map(p => [p, { status: 'idle' } as CloudListState])) as Record<CloudListedProviderName, CloudListState>
 
 
 	constructor(
@@ -138,6 +149,38 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 			)
 		})
 
+		// Hosted providers: whenever a key (or endpoint) is typed in, ask the provider what it offers. Typing fires many changes,
+		// so each provider waits for a short pause first; a result that arrives after the key changed again is ignored.
+		voidSettingsService.waitForInitState.then(() => {
+			const credentialsOf = (p: CloudListedProviderName) => {
+				const s = voidSettingsService.state.settingsOfProvider[p] as { apiKey?: string, endpoint?: string }
+				return JSON.stringify([s.apiKey ?? '', s.endpoint ?? ''])
+			}
+			const hasKey = (p: CloudListedProviderName) => !!((voidSettingsService.state.settingsOfProvider[p] as { apiKey?: string }).apiKey ?? '').trim()
+			const lastSeen = {} as Record<CloudListedProviderName, string>
+			const timers = {} as Record<CloudListedProviderName, ReturnType<typeof setTimeout> | undefined>
+			for (const p of cloudListedProviderNames) {
+				lastSeen[p] = credentialsOf(p)
+				// at startup, refresh providers that already have a key (unless the user turned automatic refreshing off)
+				if (hasKey(p) && voidSettingsService.state.globalSettings.autoRefreshModels) { setTimeout(() => this.refreshCloudModels(p), 1500) }
+			}
+			this._register(voidSettingsService.onDidChangeState(() => {
+				for (const p of cloudListedProviderNames) {
+					const now = credentialsOf(p)
+					if (now === lastSeen[p]) continue
+					lastSeen[p] = now
+					clearTimeout(timers[p])
+					if (!hasKey(p)) {
+						// key removed: forget the live list and show the built-in defaults again
+						this._setCloudState(p, { status: 'idle' })
+						if (voidSettingsService.state.settingsOfProvider[p].models.some(m => m.type === 'autodetected')) voidSettingsService.restoreDefaultModels(p)
+						continue
+					}
+					timers[p] = setTimeout(() => this.refreshCloudModels(p), 800)
+				}
+			}))
+		})
+
 	}
 
 	state: RefreshModelStateOfProvider = {
@@ -191,6 +234,34 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 		})
 
 
+	}
+
+	private _setCloudState(providerName: CloudListedProviderName, state: CloudListState) {
+		this.cloudState[providerName] = state
+		this._onDidChangeCloudState.fire(providerName)
+	}
+
+	private readonly _cloudRequestId: Partial<Record<CloudListedProviderName, number>> = {}
+
+	refreshCloudModels = async (providerName: CloudListedProviderName): Promise<void> => {
+		const requestId = (this._cloudRequestId[providerName] ?? 0) + 1
+		this._cloudRequestId[providerName] = requestId
+		const credentials = () => { const s = this.voidSettingsService.state.settingsOfProvider[providerName] as { apiKey?: string, endpoint?: string }; return JSON.stringify([s.apiKey ?? '', s.endpoint ?? '']) }
+		const before = credentials()
+
+		this._setCloudState(providerName, { status: 'loading' })
+		const result = await this.llmMessageService.cloudModelList(providerName)
+
+		// a newer request, or a different key typed meanwhile: this answer is about something else now
+		if (this._cloudRequestId[providerName] !== requestId || credentials() !== before) return
+
+		if (result.ok) {
+			this.voidSettingsService.setLiveModels(providerName, result.models)
+			this._setCloudState(providerName, { status: 'ok', count: result.models.length })
+		}
+		else {
+			this._setCloudState(providerName, { status: 'error', reason: result.reason, message: result.message })
+		}
 	}
 
 	_clearAllTimeouts() {

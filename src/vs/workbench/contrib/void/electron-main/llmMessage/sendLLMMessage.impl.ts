@@ -54,6 +54,13 @@ type SendFIMParams_Internal = InternalCommonMessageParams & { messages: LLMFIMMe
 export type ListParams_Internal<ModelResponse> = ModelListParams<ModelResponse>
 
 
+// Values that end up inside a host name or URL path (a region, an Azure resource, a GCP project) come from settings; refuse
+// anything that is not a plain label so a stray or tampered setting cannot redirect a request - and the API key with it - elsewhere.
+const assertUrlLabel = (value: string, what: string, pattern: RegExp = /^[a-z0-9][a-z0-9-]{0,62}$/i) => {
+	if (!pattern.test(value)) throw new Error(`Invalid ${what} "${value.slice(0, 40)}": use only letters, digits and "-".`)
+	return value
+}
+
 const invalidApiKeyMessage = (providerName: ProviderName) => `Invalid ${displayInfoOfProviderName(providerName).title} API key.`
 
 // ------------ OPENAI-COMPATIBLE (HELPERS) ------------
@@ -109,7 +116,9 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 	else if (providerName === 'googleVertex') {
 		// https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
 		const thisConfig = settingsOfProvider[providerName]
-		const baseURL = `https://${thisConfig.region}-aiplatform.googleapis.com/v1/projects/${thisConfig.project}/locations/${thisConfig.region}/endpoints/${'openapi'}`
+		const region = assertUrlLabel(thisConfig.region, 'Google Vertex region')
+		const project = assertUrlLabel(thisConfig.project, 'Google Cloud project id', /^[a-z][a-z0-9-:.]{3,60}$/i)
+		const baseURL = `https://${region}-aiplatform.googleapis.com/v1/projects/${project}/locations/${region}/endpoints/${'openapi'}`
 		const apiKey = await getGoogleApiKey()
 		return new OpenAI({ baseURL: baseURL, apiKey: apiKey, ...commonPayloadOpts })
 	}
@@ -117,28 +126,27 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		// https://learn.microsoft.com/en-us/rest/api/aifoundry/model-inference/get-chat-completions/get-chat-completions?view=rest-aifoundry-model-inference-2024-05-01-preview&tabs=HTTP
 		//  https://github.com/openai/openai-node?tab=readme-ov-file#microsoft-azure-openai
 		const thisConfig = settingsOfProvider[providerName]
-		const endpoint = `https://${thisConfig.project}.openai.azure.com/`;
-		const apiVersion = thisConfig.azureApiVersion ?? '2024-04-01-preview';
+		const endpoint = `https://${assertUrlLabel(thisConfig.project, 'Azure resource name')}.openai.azure.com/`;
+		const apiVersion = thisConfig.azureApiVersion || '2025-04-01-preview';
 		const options = { endpoint, apiKey: thisConfig.apiKey, apiVersion };
 		return new AzureOpenAI({ ...options, ...commonPayloadOpts });
 	}
 	else if (providerName === 'awsBedrock') {
 		/**
-		  * We treat Bedrock as *OpenAI-compatible only through a proxy*:
+		  * Amazon Bedrock serves the OpenAI Chat Completions format natively, at
+		  *   https://bedrock-runtime.<region>.amazonaws.com/openai/v1/chat/completions
+		  * authenticated with a Bedrock API key sent as a bearer token (the same endpoint the LiteLLM project uses for its
+		  * "bedrock/chat_completions/" route). It covers the model families AWS exposes there (gpt-oss, Grok and newer GPT models);
+		  * other Bedrock models (Claude, Llama, ...) are only on the Converse API, which needs a gateway.
+		  * An `endpoint` override keeps working for people who front Bedrock with LiteLLM or Bedrock-Access-Gateway:
 		  *   • LiteLLM default → http://localhost:4000/v1
 		  *   • Bedrock-Access-Gateway → https://<api-id>.execute-api.<region>.amazonaws.com/openai/
-		  *
-		  * The native Bedrock runtime endpoint
-		  *   https://bedrock-runtime.<region>.amazonaws.com
-		  * is **NOT** OpenAI-compatible, so we do *not* fall back to it here.
 		  */
-		const { endpoint, apiKey } = settingsOfProvider.awsBedrock
+		const { endpoint, apiKey, region } = settingsOfProvider.awsBedrock
 
-		// ① use the user-supplied proxy if present
-		// ② otherwise default to local LiteLLM
-		let baseURL = endpoint || 'http://localhost:4000/v1'
+		let baseURL = endpoint || `https://bedrock-runtime.${assertUrlLabel(region, 'AWS region')}.amazonaws.com/openai/v1`
 
-		// Normalize: make sure we end with “/v1”
+		// Normalize: make sure we end with "/v1"
 		if (!baseURL.endsWith('/v1'))
 			baseURL = baseURL.replace(/\/+$/, '') + '/v1'
 

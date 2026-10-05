@@ -14,6 +14,8 @@ import { Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IVoidSettingsService } from './voidSettingsService.js';
 import { IMCPService } from './mcpService.js';
+import { CloudModelListResult } from './cloudModelListTypes.js';
+import { ProviderName } from './voidSettingsTypes.js';
 
 // calls channel to implement features
 export const ILLMMessageService = createDecorator<ILLMMessageService>('llmMessageService');
@@ -24,6 +26,8 @@ export interface ILLMMessageService {
 	abort: (requestId: string) => void;
 	ollamaList: (params: ServiceModelListParams<OllamaModelResponse>) => void;
 	openAICompatibleList: (params: ServiceModelListParams<OpenaiCompatibleModelResponse>) => void;
+	/** which models the given hosted provider's API key can use; never throws */
+	cloudModelList: (providerName: ProviderName) => Promise<CloudModelListResult>;
 }
 
 
@@ -180,6 +184,15 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 			settingsOfProvider,
 			requestId: requestId_,
 		} satisfies MainModelListParams<OpenaiCompatibleModelResponse>)
+	}
+
+	cloudModelList = async (providerName: ProviderName): Promise<CloudModelListResult> => {
+		const { settingsOfProvider } = this.voidSettingsService.state
+		try {
+			return await this.channel.call<CloudModelListResult>('cloudModelList', { providerName, settingsOfProvider })
+		} catch {
+			return { ok: false, reason: 'network', message: 'Could not ask the provider for its models.' }
+		}
 	}
 
 	private _clearChannelHooks(requestId: string) {

@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from '../../../../base/common/event.js';
+import { isCloudListedProvider } from './cloudModelListTypes.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IEncryptionService } from '../../../../platform/encryption/common/encryptionService.js';
@@ -72,6 +73,10 @@ export interface IVoidSettingsService {
 	resetState(): Promise<void>;
 
 	setAutodetectedModels(providerName: ProviderName, modelNames: string[], logging: object): void;
+	/** a hosted provider answered "these are the models this key can use": show exactly those (plus models the user added by hand) */
+	setLiveModels(providerName: ProviderName, modelNames: string[]): void;
+	/** forget a hosted provider's live list (e.g. its key was removed) and go back to the built-in defaults */
+	restoreDefaultModels(providerName: ProviderName): void;
 	toggleModelHidden(providerName: ProviderName, modelName: string): void;
 	addModel(providerName: ProviderName, modelName: string): void;
 	deleteModel(providerName: ProviderName, modelName: string): boolean;
@@ -127,6 +132,8 @@ const _stateWithMergedDefaultModels = (state: VoidSettingsState): VoidSettingsSt
 	for (const providerName of providerNames) {
 		const defaultModels = defaultSettingsOfProvider[providerName]?.models ?? []
 		const currentModels = newSettingsOfProvider[providerName]?.models ?? []
+		// a hosted provider that has a live list (what its key can use) is not topped up with built-in defaults: the live list is the truth
+		if (isCloudListedProvider(providerName) && currentModels.some(m => m.type === 'autodetected')) continue
 		const defaultModelNames = defaultModels.map(m => m.modelName)
 		const newModels = _modelsWithSwappedInNewModels({ existingModels: currentModels, models: defaultModelNames, type: 'default' })
 		newSettingsOfProvider = {
@@ -515,6 +522,23 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 			this._metricsService.capture('Autodetect Models', { providerName, newModels: newModels, ...logging })
 		}
 	}
+	setLiveModels(providerName: ProviderName, liveModelNames: string[]) {
+		const { models } = this.state.settingsOfProvider[providerName]
+		const live = new Set(liveModelNames)
+		// live models replace the autodetected ones; built-in defaults the key cannot use are dropped; models the user added stay
+		const withLive = _modelsWithSwappedInNewModels({ existingModels: models, models: liveModelNames, type: 'autodetected' })
+		const newModels = withLive.filter(m => m.type !== 'default' || live.has(m.modelName))
+		this.setSettingOfProvider(providerName, 'models', newModels)
+		this._metricsService.capture('Live Models', { providerName, count: liveModelNames.length })
+	}
+
+	restoreDefaultModels(providerName: ProviderName) {
+		const { models } = this.state.settingsOfProvider[providerName]
+		const withoutLive = models.filter(m => m.type !== 'autodetected')
+		const defaultNames = (defaultSettingsOfProvider[providerName]?.models ?? []).map(m => m.modelName)
+		this.setSettingOfProvider(providerName, 'models', _modelsWithSwappedInNewModels({ existingModels: withoutLive, models: defaultNames, type: 'default' }))
+	}
+
 	toggleModelHidden(providerName: ProviderName, modelName: string) {
 
 

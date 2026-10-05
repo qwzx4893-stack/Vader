@@ -14,6 +14,7 @@ import { xmlScenarios, unknownModelScenarios } from './scenarios/xml.mjs';
 import { terminalScenarios, browserScenarios, mcpScenarios, agentScenarios } from './scenarios/tools.mjs';
 import { editorScenarios, autocompleteScenarios } from './scenarios/editor.mjs';
 import { generalScenarios } from './scenarios/general.mjs';
+import { providerScenarios } from './scenarios/providers.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
@@ -22,6 +23,7 @@ if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missin
 await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: [...coreScenarios, ...agentScenarios, ...browserScenarios, ...mcpScenarios, ...terminalScenarios, ...editorScenarios, ...generalScenarios] });
 await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenarios });
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
+await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();
 

@@ -32,3 +32,68 @@ Existing providers (Anthropic, OpenAI, Gemini, OpenRouter, Mistral, Ollama, vLLM
 - **OpenCode Go**: confirmed real (a $10/mo subscription tier reusing the same OpenCode Zen gateway infrastructure under a different, subscription-gated base path, `opencode.ai/zen/go/v1/...`), but not implemented as a fifth, separate provider - it is the same protocol as OpenCode Zen through a different URL a subscribed user would type into the `endpoint` field of the `openCodeZen` provider. Building a dedicated "Go" provider entry would duplicate `openCodeZen`'s code for zero functional gain.
 - **A universal Anthropic-shaped/Gemini-shaped path through OpenCode Zen**: per its own docs, Zen proxies Anthropic and Gemini models through those vendors' *native* wire formats (`/v1/messages`, `/v1/models/<id>`), not a flattened OpenAI shape. Vader's `openCodeZen` provider only reaches the OpenAI-shaped subset of Zen's catalog (the same subset most of Zen's own listed models - including Chinese-lab models - actually use). Reaching Zen's Anthropic/Gemini-native models would need per-family request shaping specific to this one gateway, a larger scope than this pass's budget covers; documented here as a stated, precise gap rather than silently mishandled.
 - **A hand-built "Provider Registry" abstraction layer**: see above - the existing `newOpenAICompatibleSDK`/`sendLLMMessageToProviderImplementation` split already *is* the registry/adapter split the mission asked for; adding a second one on top would be pure indirection.
+
+---
+
+# Provider verification against independent sources (2026-10-05)
+
+An earlier pass above said the pre-existing providers were "found accurate". A second, stricter pass compared **every hosted provider's endpoint, authentication, wiring and model facts** with two independent open-source projects, and found that statement was too generous: several things were stale or wrong. This section records what was checked, against what, what changed, and what could **not** be verified.
+
+## Sources used (and why)
+
+Provider documentation hosts (platform.openai.com, docs.anthropic.com, ai.google.dev, ...) are blocked from the build/test sandbox, so the references are the code and catalogs of widely used open-source projects that integrate every one of these APIs and are kept current by their communities:
+
+| Source | Used for | Pinned at |
+|---|---|---|
+| [BerriAI/litellm](https://github.com/BerriAI/litellm) - `litellm/llms/*` (endpoints, auth, request shaping) and `model_prices_and_context_window_backup.json` (model ids, context windows, tool/vision/reasoning support, prices, deprecation dates) | Base URLs, auth headers, which models exist and what they support | commit `a99bccace`, 2026-10-05 |
+| [sst/opencode](https://github.com/sst/opencode) - `packages/web/src/content/docs/zen.mdx` | OpenCode Zen endpoint and which of its models use which wire format; independent confirmation that the current model ids exist | HEAD of 2026-10-05 |
+| Earlier research notes in this folder (`minimax.md`, `alibaba.md`, `moonshot.md`, `opencode-zen.md`) | China-region endpoints, per-vendor details | see each file |
+
+Agreement between LiteLLM and OpenCode's independently maintained tables on the newest model ids (e.g. `gpt-6.1-sol`, `claude-fable-5-1`, `qwen3.8-max`) is the strongest evidence available here that those ids are real. It is **not** the same as calling each provider's API.
+
+## Endpoint and wiring audit
+
+| Provider | Vader talks to | Verdict |
+|---|---|---|
+| OpenAI | SDK default (`api.openai.com/v1`) | correct |
+| Anthropic | SDK default (`api.anthropic.com`), `x-api-key` + `anthropic-version` | correct |
+| Gemini | `@google/genai` SDK | correct |
+| xAI | `https://api.x.ai/v1` | correct (LiteLLM: `api.x.ai` + `/v1`) |
+| Groq | `https://api.groq.com/openai/v1` | correct |
+| Mistral | `https://api.mistral.ai/v1` (+ Mistral SDK for FIM) | correct |
+| DeepSeek | `https://api.deepseek.com/v1` | correct (LiteLLM uses `/beta` only for FIM/prefix completion) |
+| OpenRouter | `https://openrouter.ai/api/v1` | correct |
+| Moonshot | `https://api.moonshot.ai/v1` | correct |
+| Alibaba (DashScope) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | correct (China endpoint listed in LiteLLM) |
+| MiniMax | `https://api.minimax.io/v1` | correct; **China endpoint is disputed** - LiteLLM (today) says `api.minimaxi.com`, earlier research here found `api.minimax.cn` with `minimaxi.com` redirecting to it. Not changed; both are user-typed, and the discrepancy is recorded in `minimax.md` |
+| OpenCode Zen | `https://opencode.ai/zen/v1` | correct host; only its `/chat/completions` models are reachable (unchanged, documented) |
+| Google Vertex | `https://{region}-aiplatform.googleapis.com/v1/projects/{project}/locations/{region}/endpoints/openapi` | correct URL. Default region was `us-west2`; changed to `us-central1` (LiteLLM's default; where Gemini models are served) |
+| Azure OpenAI | `AzureOpenAI` SDK, `https://{resource}.openai.azure.com/` | URL correct. **Default `api-version` was `2024-05-01-preview`** (too old for the newest models); changed to `2025-04-01-preview`. Existing saved values are not touched |
+| AWS Bedrock | was: a LiteLLM/gateway proxy only | **Wrong.** Bedrock serves OpenAI Chat Completions natively at `https://bedrock-runtime.{region}.amazonaws.com/openai/v1/chat/completions` with a Bedrock API key as a bearer token (LiteLLM's `bedrock/chat_completions/` route). Vader now defaults to that (gpt-oss, Grok and newer GPT models); the `Endpoint` field remains for proxy users, and the help text says which models need a gateway |
+
+Hardening found on the way: a region / Azure resource name / GCP project from settings was pasted straight into a host name. They are now validated as plain labels first (`assertUrlLabel`), so a stray or tampered setting cannot send a request - and the API key with it - to another host.
+
+## Model lists: three real problems fixed
+
+1. **Stale defaults.** Anthropic offered `claude-opus-4-0`/`3.5` names, OpenAI no GPT-5/6, Gemini a retired `2.5-pro-exp-03-25`, xAI only Grok 2/3, Groq a retired Qwen QwQ, and `gpt-4.1-nano`/`o4-mini` are deprecated on 2026-10-23. Defaults are now generated from the catalog (`build/lib/vader/genProviderModelData.py` -> `common/providerModelData.ts`).
+2. **Wrong numbers.** `o3` was recorded with a 1,047,576-token window (real: 200,000), so prompts were sized for a context it does not have.
+3. **New models were treated as unknown.** Any model id the table did not list (every Claude 5, GPT-5.x/6.x, Gemini 3.x, Grok 4.x...) fell to the "unrecognised" default: 32k window and *XML-in-prompt tools instead of native tool calling*. Name-family fallbacks now map unlisted ids to the right family while the name sent to the API stays exactly what was chosen.
+4. **Kimi, MiniMax and Qwen had no native tool calling configured** (every entry lacked `specialToolFormat`), so they silently used the slower, less reliable XML path although all three document OpenAI-style function calling. Fixed.
+5. Claude models that only support adaptive thinking (Claude 5 family, Opus 4.8) are no longer offered the legacy `budget_tokens` slider, which they reject.
+
+## Live model lists ("the models your key provides")
+
+Once a key (or endpoint) is typed in, Vader asks that provider which models the key can use and shows exactly those, replacing the built-in defaults the key cannot use (models you added by hand stay). The settings page shows the result next to the key: *checking*, *key works - N models available*, *the provider rejected this key*, or *could not reach the provider - showing the built-in list meanwhile* (with Retry). Removing the key restores the defaults.
+
+- Implementation: `electron-main/llmMessage/modelListing.ts` (the only place that makes these requests), IPC command `cloudModelList`, `RefreshModelService.refreshCloudModels`, `VoidSettingsService.setLiveModels / restoreDefaultModels`.
+- Endpoints: OpenAI `GET /v1/models`; Anthropic `GET /v1/models` (`x-api-key`, `anthropic-version`); Gemini `GET /v1beta/models` (key in `x-goog-api-key`, never in the URL); Mistral, Groq, xAI, DeepSeek, OpenRouter, Moonshot, MiniMax, Alibaba, OpenCode Zen: OpenAI-shaped `GET .../models`. Azure, Vertex and Bedrock are deployment/account-scoped and keep manual model entry.
+- Non-chat models (embeddings, speech, image, moderation, guard...) are filtered out; OpenRouter's several-hundred-model catalog is reduced to text-output + tool-calling models, newest first; at most 300 are kept.
+- Safety: https only (plain http only to a loopback address), 15 s timeout, 8 MB cap, **redirects refused** (the key never follows a redirect), model ids restricted to a plain character set (they end up in menus and prompts), and the key is never included in a result or message - provider error bodies, which can echo it, are not passed on.
+- Not done automatically at startup when the user turned automatic model refreshing off; typing a key always checks it.
+- Tests: `test/cloudModelListE2E.mjs` (33 checks, each failure path; three mutations verified to fail it), `test/providerCatalogE2E.mjs` (41 checks: every default is recognised with the right tool format, family fallbacks, reviewed endpoint list), and the real-app scenarios in `test/e2e/scenarios/providers.mjs`.
+
+## What could not be verified here
+
+- No hosted provider could be called (egress blocked), so **no key was tested against a real provider**. The listing code is verified against each provider's documented response format by local servers, and the `/models` paths are the standard documented ones, but a quirk of a real provider's answer (an extra field, a different error code for a bad key) would only show with a real key. The failure modes are designed to degrade to the built-in list.
+- Model facts come from the LiteLLM catalog; the catalog itself can lag a brand-new release by days. Unlisted models still work through the family fallbacks and the live list.
+- Alibaba/Moonshot/MiniMax/OpenCode `/models` support is assumed from their OpenAI-compatible mode; if one of them has no such route the status line says so and the built-in list is kept.

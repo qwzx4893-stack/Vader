@@ -7,7 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
+import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
@@ -25,6 +25,7 @@ import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
+import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
 
 type Tab =
 	| 'models'
@@ -693,6 +694,26 @@ const ProviderSetting = ({ providerName, settingName, subTextMd }: { providerNam
 // }
 
 
+// Vader addition: tells the user whether the key they typed works and how many models it unlocks (live list from the provider)
+const CloudModelListStatus = ({ providerName }: { providerName: ProviderName }) => {
+	const accessor = useAccessor()
+	const refreshModelService = accessor.get('IRefreshModelService')
+	const cloudState = useCloudModelListState()
+	if (!isCloudListedProvider(providerName)) return null
+	const st = cloudState[providerName]
+	if (st.status === 'idle') return null
+
+	return <div className='py-1 px-3 text-sm flex items-center gap-2' data-testid='vader-cloud-models-status' data-status={st.status}>
+		{st.status === 'loading' && <><Loader2 className='size-3 animate-spin' /><span className='opacity-70'>Checking the key with the provider...</span></>}
+		{st.status === 'ok' && <><Check className='size-3 text-green-500' /><span className='opacity-80'>Key works - {st.count} model{st.count === 1 ? '' : 's'} available to you.</span></>}
+		{st.status === 'error' && <>
+			<X className='size-3 text-red-500' />
+			<span className='opacity-80'>{st.message}{st.reason === 'unauthorized' ? '' : ' Showing the built-in list meanwhile.'}</span>
+			<button className='underline opacity-70 hover:opacity-100' onClick={() => refreshModelService.refreshCloudModels(providerName)}>Retry</button>
+		</>}
+	</div>
+}
+
 export const SettingsForProvider = ({ providerName, showProviderTitle, showProviderSuggestions }: { providerName: ProviderName, showProviderTitle: boolean, showProviderSuggestions: boolean }) => {
 	const voidSettingsState = useSettingsState()
 
@@ -735,6 +756,8 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 						: <ChatMarkdownRender string={subTextMdOfProviderName(providerName)} chatMessageLocation={undefined} />}
 				/>
 			})}
+
+			<CloudModelListStatus providerName={providerName} />
 
 			{showProviderSuggestions && needsModel ?
 				providerName === 'ollama' ?

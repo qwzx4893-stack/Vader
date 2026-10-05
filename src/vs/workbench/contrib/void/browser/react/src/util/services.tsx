@@ -20,6 +20,7 @@ import { IHoverService } from '../../../../../../../platform/hover/browser/hover
 import { IThemeService } from '../../../../../../../platform/theme/common/themeService.js';
 import { ILLMMessageService } from '../../../../common/sendLLMMessageService.js';
 import { IRefreshModelService } from '../../../../../../../workbench/contrib/void/common/refreshModelService.js';
+import { CloudListedProviderName, CloudListState } from '../../../../common/cloudModelListTypes.js';
 import { IVoidSettingsService } from '../../../../../../../workbench/contrib/void/common/voidSettingsService.js';
 import { IExtensionTransferService } from '../../../../../../../workbench/contrib/void/browser/extensionTransferService.js'
 
@@ -80,6 +81,8 @@ let settingsState: VoidSettingsState
 const settingsStateListeners: Set<(s: VoidSettingsState) => void> = new Set()
 
 let refreshModelState: RefreshModelStateOfProvider
+let cloudModelListState: Record<CloudListedProviderName, CloudListState>
+const cloudModelListStateListeners: Set<(s: Record<CloudListedProviderName, CloudListState>) => void> = new Set()
 const refreshModelStateListeners: Set<(s: RefreshModelStateOfProvider) => void> = new Set()
 const refreshModelProviderListeners: Set<(p: RefreshableProviderName, s: RefreshModelStateOfProvider) => void> = new Set()
 
@@ -172,6 +175,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 			refreshModelState = refreshModelService.state
 			refreshModelStateListeners.forEach(l => l(refreshModelState))
 			refreshModelProviderListeners.forEach(l => l(providerName, refreshModelState)) // no state
+		})
+	)
+
+	cloudModelListState = { ...refreshModelService.cloudState }
+	disposables.push(
+		refreshModelService.onDidChangeCloudState(() => {
+			cloudModelListState = { ...refreshModelService.cloudState }
+			cloudModelListStateListeners.forEach(l => l(cloudModelListState))
 		})
 	)
 
@@ -408,6 +419,16 @@ export const useFullChatThreadsStreamState = () => {
 }
 
 
+
+export const useCloudModelListState = () => {
+	const [s, ss] = useState(cloudModelListState)
+	useEffect(() => {
+		ss(cloudModelListState)
+		cloudModelListStateListeners.add(ss)
+		return () => { cloudModelListStateListeners.delete(ss) }
+	}, [ss])
+	return s
+}
 
 export const useRefreshModelState = () => {
 	const [s, ss] = useState(refreshModelState)

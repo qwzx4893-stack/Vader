@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { FeatureName, ModelSelectionOptions, OverridesOfModel, ProviderName } from './voidSettingsTypes.js';
+import { curatedModelFacts, curatedModelNames } from './providerModelData.js';
 
 
 
@@ -52,13 +53,13 @@ export const defaultProviderSettings = {
 		endpoint: '',
 	},
 	googleVertex: { // google https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library
-		region: 'us-west2',
+		region: 'us-central1', // Vertex's primary region, where every Gemini model is available
 		project: '',
 	},
 	microsoftAzure: { // microsoft Azure Foundry
 		project: '', // really 'resource'
 		apiKey: '',
-		azureApiVersion: '2024-05-01-preview',
+		azureApiVersion: '2025-04-01-preview',
 	},
 	awsBedrock: {
 		apiKey: '',
@@ -72,7 +73,7 @@ export const defaultProviderSettings = {
 	// research - see the doc for exact sourcing and confidence level per fact).
 	minimax: { // https://platform.minimax.io/docs/api-reference/text-openai-api
 		apiKey: '',
-		endpoint: 'https://api.minimax.io/v1', // China: https://api.minimax.cn/v1
+		endpoint: 'https://api.minimax.io/v1', // China: https://api.minimax.cn/v1 (LiteLLM still lists api.minimaxi.com; earlier research found it redirects here - see docs/integrations/providers/minimax.md)
 	},
 	alibaba: { // Alibaba Cloud Model Studio (DashScope) - https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope
 		apiKey: '',
@@ -93,102 +94,36 @@ export const defaultProviderSettings = {
 
 
 export const defaultModelsOfProvider = {
-	openAI: [ // https://platform.openai.com/docs/models/gp
-		'gpt-4.1',
-		'gpt-4.1-mini',
-		'gpt-4.1-nano',
-		'o3',
-		'o4-mini',
-		// 'o1',
-		// 'o1-mini',
-		// 'gpt-4o',
-		// 'gpt-4o-mini',
-	],
-	anthropic: [ // https://docs.anthropic.com/en/docs/about-claude/models
-		'claude-opus-4-0',
-		'claude-sonnet-4-0',
-		'claude-3-7-sonnet-latest',
-		'claude-3-5-sonnet-latest',
-		'claude-3-5-haiku-latest',
-		'claude-3-opus-latest',
-	],
-	xAI: [ // https://docs.x.ai/docs/models?cluster=us-east-1
-		'grok-2',
-		'grok-3',
-		'grok-3-mini',
-		'grok-3-fast',
-		'grok-3-mini-fast'
-	],
-	gemini: [ // https://ai.google.dev/gemini-api/docs/models/gemini
-		'gemini-2.5-pro-exp-03-25',
-		'gemini-2.5-flash-preview-04-17',
-		'gemini-2.0-flash',
-		'gemini-2.0-flash-lite',
-		'gemini-2.5-pro-preview-05-06',
-	],
-	deepseek: [ // https://api-docs.deepseek.com/quick_start/pricing
-		'deepseek-chat',
-		'deepseek-reasoner',
-	],
+	openAI: [...curatedModelNames.openAI], // https://platform.openai.com/docs/models - facts in providerModelData.ts
+	anthropic: [...curatedModelNames.anthropic], // https://docs.anthropic.com/en/docs/about-claude/models
+	xAI: [...curatedModelNames.xAI], // https://docs.x.ai/docs/models
+	gemini: [...curatedModelNames.gemini], // https://ai.google.dev/gemini-api/docs/models
+	deepseek: [...curatedModelNames.deepseek], // https://api-docs.deepseek.com/quick_start/pricing
 	ollama: [ // autodetected
 	],
 	vLLM: [ // autodetected
 	],
 	lmStudio: [], // autodetected
 
-	openRouter: [ // https://openrouter.ai/models
-		// 'anthropic/claude-3.7-sonnet:thinking',
-		'anthropic/claude-opus-4',
-		'anthropic/claude-sonnet-4',
-		'qwen/qwen3-235b-a22b',
-		'anthropic/claude-3.7-sonnet',
-		'anthropic/claude-3.5-sonnet',
-		'deepseek/deepseek-r1',
-		'deepseek/deepseek-r1-zero:free',
-		'mistralai/devstral-small:free'
-		// 'openrouter/quasar-alpha',
-		// 'google/gemini-2.5-pro-preview-03-25',
-		// 'mistralai/codestral-2501',
-		// 'qwen/qwen-2.5-coder-32b-instruct',
-		// 'mistralai/mistral-small-3.1-24b-instruct:free',
-		// 'google/gemini-2.0-flash-lite-preview-02-05:free',
-		// 'google/gemini-2.0-pro-exp-02-05:free',
-		// 'google/gemini-2.0-flash-exp:free',
-	],
-	groq: [ // https://console.groq.com/docs/models
-		'qwen-qwq-32b',
-		'llama-3.3-70b-versatile',
-		'llama-3.1-8b-instant',
-		// 'qwen-2.5-coder-32b', // preview mode (experimental)
-	],
-	mistral: [ // https://docs.mistral.ai/getting-started/models/models_overview/
-		'codestral-latest',
-		'devstral-small-latest',
-		'mistral-large-latest',
-		'mistral-medium-latest',
-		'ministral-3b-latest',
-		'ministral-8b-latest',
-	],
+	openRouter: [...curatedModelNames.openRouter], // https://openrouter.ai/models - the full catalog is fetched live once a key is entered
+	groq: [...curatedModelNames.groq], // https://console.groq.com/docs/models
+	mistral: [...curatedModelNames.mistral], // https://docs.mistral.ai/getting-started/models/models_overview/
 	openAICompatible: [], // fallback
 	googleVertex: [],
 	microsoftAzure: [],
 	awsBedrock: [],
 	liteLLM: [],
 	minimax: [ // https://platform.minimax.io/docs/api-reference/models/openai/list-models
-		'MiniMax-M2',
-		'MiniMax-M2.1',
-		'MiniMax-M2.1-lightning',
-		'MiniMax-M2.5',
-		'MiniMax-M2.5-highspeed',
+		...curatedModelNames.minimax,
 		'MiniMax-M2.7',
 		'MiniMax-M2.7-highspeed',
+		'MiniMax-M2.5',
+		'MiniMax-M2.5-highspeed',
+		'MiniMax-M2.1',
+		'MiniMax-M2.1-lightning',
+		'MiniMax-M2',
 	],
-	alibaba: [ // https://www.alibabacloud.com/help/en/model-studio/model-pricing - long-stable model IDs; newer ones can be added by name in Settings
-		'qwen-max',
-		'qwen-plus',
-		'qwen-flash',
-		'qwq-plus',
-	],
+	alibaba: [...curatedModelNames.alibaba], // https://www.alibabacloud.com/help/en/model-studio/model-pricing
 	moonshot: [ // https://platform.kimi.ai/docs/api/list-models
 		'kimi-k3',
 		'kimi-k2.7-code',
@@ -292,6 +227,46 @@ const defaultModelOptions = {
 	supportsFIM: false,
 	reasoningCapabilities: false,
 } as const satisfies VoidStaticModelInfo
+
+
+// ---------------- models offered by default (facts: providerModelData.ts, generated from the LiteLLM catalog) ----------------
+type CuratedFacts = typeof curatedModelFacts[string][string]
+const _fromFacts = (f: CuratedFacts, o: { supportsSystemMessage: VoidStaticModelInfo['supportsSystemMessage'], toolFormat: VoidStaticModelInfo['specialToolFormat'], reasoningCapabilities: VoidStaticModelInfo['reasoningCapabilities'], supportsFIM?: boolean }): VoidStaticModelInfo => ({
+	contextWindow: f.ctx,
+	reservedOutputTokenSpace: Math.min(f.out, 32_768), // the catalog's max output is a hard limit; reserving that much of the window for every reply would waste it
+	cost: { ...f.cost },
+	downloadable: false,
+	supportsFIM: o.supportsFIM ?? false,
+	supportsSystemMessage: o.supportsSystemMessage,
+	specialToolFormat: f.tools ? o.toolFormat : undefined, // a model without native tool calling gets the XML-in-prompt path
+	reasoningCapabilities: o.reasoningCapabilities,
+})
+const _factsOf = (provider: string, build: (name: string, f: CuratedFacts) => VoidStaticModelInfo): { [name: string]: VoidStaticModelInfo } =>
+	Object.fromEntries(Object.entries(curatedModelFacts[provider] ?? {}).map(([name, f]) => [name, build(name, f)]))
+
+const _effortSlider = (f: CuratedFacts): VoidStaticModelInfo['reasoningCapabilities'] => !f.reasoning ? false
+	: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: false, reasoningSlider: { type: 'effort_slider', values: ['low', 'medium', 'high'], default: 'medium' } }
+
+const generatedAnthropicOptions = _factsOf('anthropic', (_n, f) => _fromFacts(f, {
+	supportsSystemMessage: 'separated', toolFormat: 'anthropic-style',
+	// adaptive-only models (Claude 5 family, Opus 4.8) reject the budget_tokens parameter and think on their own, so no slider is offered for them
+	reasoningCapabilities: !f.reasoning || f.adaptive ? false
+		: { supportsReasoning: true, canTurnOffReasoning: true, canIOReasoning: true, reasoningReservedOutputTokenSpace: 8192, reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 } },
+}))
+const generatedOpenAIOptions = _factsOf('openAI', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'developer-role', toolFormat: 'openai-style', reasoningCapabilities: _effortSlider(f) }))
+const generatedXAIOptions = _factsOf('xAI', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false })) // grok 4 reasons by itself and takes no effort parameter
+const generatedGeminiOptions = _factsOf('gemini', (n, f) => _fromFacts(f, {
+	supportsSystemMessage: 'separated', toolFormat: 'gemini-style',
+	// only the 2.5 family is known to take thinkingBudget; newer ones think on their own
+	reasoningCapabilities: f.reasoning && n.includes('2.5') ? { supportsReasoning: true, canTurnOffReasoning: n !== 'gemini-2.5-pro', canIOReasoning: false, reasoningSlider: { type: 'budget_slider', min: 1024, max: 8192, default: 1024 }, reasoningReservedOutputTokenSpace: 8192 } : false,
+}))
+const generatedDeepseekOptions = _factsOf('deepseek', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
+const generatedMistralOptions = _factsOf('mistral', (n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false, supportsFIM: n.startsWith('codestral') }))
+const generatedGroqOptions = _factsOf('groq', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
+const generatedMoonshotOptions = _factsOf('moonshot', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
+const generatedMinimaxOptions = _factsOf('minimax', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
+const generatedAlibabaOptions = _factsOf('alibaba', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
+const generatedOpenRouterOptions = _factsOf('openRouter', (_n, f) => _fromFacts(f, { supportsSystemMessage: 'system-role', toolFormat: 'openai-style', reasoningCapabilities: false }))
 
 // TODO!!! double check all context sizes below
 // TODO!!! add openrouter common models
@@ -1331,6 +1306,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.1': {
@@ -1340,6 +1316,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.1-lightning': {
@@ -1349,6 +1326,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.5': {
@@ -1358,6 +1336,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.5-highspeed': {
@@ -1367,6 +1346,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.7': {
@@ -1376,6 +1356,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'MiniMax-M2.7-highspeed': {
@@ -1385,6 +1366,7 @@ const minimaxModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
@@ -1413,6 +1395,7 @@ const alibabaModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: false,
 	},
 	'qwen-plus': {
@@ -1422,6 +1405,7 @@ const alibabaModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: false,
 	},
 	'qwen-flash': {
@@ -1431,6 +1415,7 @@ const alibabaModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: false,
 	},
 	'qwq-plus': {
@@ -1440,6 +1425,7 @@ const alibabaModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
@@ -1478,6 +1464,7 @@ const moonshotModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true },
 	},
 	'kimi-k2.7-code': {
@@ -1487,6 +1474,7 @@ const moonshotModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: false,
 	},
 	'kimi-k2.6': {
@@ -1496,6 +1484,7 @@ const moonshotModelOptions = {
 		supportsFIM: false,
 		downloadable: false,
 		supportsSystemMessage: 'system-role',
+		specialToolFormat: 'openai-style', // native function calling (all three vendors document it) - without this, models fall back to XML-in-prompt tools
 		reasoningCapabilities: false,
 	},
 } as const satisfies { [s: string]: VoidStaticModelInfo }
@@ -1715,22 +1704,87 @@ const openRouterSettings: VoidStaticProviderInfo = {
 
 // ---------------- model settings of everything above ----------------
 
+// ---------------- model families: names newer than the table still get the right capabilities ----------------
+// A model id the tables do not list (a brand-new release, or one only the live /models call returned) must not fall to the
+// "unrecognised" default (32k window, XML tools). These map a name to the closest listed model of the same family; the model
+// name that is sent to the API stays exactly what the user picked.
+const _augment = (
+	base: VoidStaticProviderInfo,
+	generated: { [name: string]: VoidStaticModelInfo },
+	family: (lowerName: string) => string | null,
+	precedence: 'generated' | 'base' = 'generated',
+): VoidStaticProviderInfo => ({
+	...base,
+	modelOptions: precedence === 'generated' ? { ...base.modelOptions, ...generated } : { ...generated, ...base.modelOptions },
+	modelOptionsFallback: (modelName) => {
+		const key = family(modelName.toLowerCase())
+		if (key && generated[key]) { return { ...generated[key], modelName, recognizedModelName: key } }
+		return base.modelOptionsFallback(modelName)
+	},
+})
+
+export const familyOfAnthropicModel = (n: string): string | null => {
+	if (!n.includes('claude')) return null
+	if (/fable|mythos|claude-(opus|sonnet|haiku)-5/.test(n)) return 'claude-sonnet-5-5'
+	if (/opus-4[-.][6-9]/.test(n)) return 'claude-opus-4-8'
+	if (/haiku-4[-.]5/.test(n)) return 'claude-haiku-4-5'
+	if (/(sonnet|opus)-4[-.][5-9]/.test(n)) return 'claude-sonnet-4-6'
+	return null
+}
+const familyOfOpenAIModel = (n: string): string | null => {
+	if (/^gpt-6/.test(n)) return 'gpt-6-luna'
+	if (/^(gpt-5|chatgpt-)/.test(n)) return 'gpt-5.4-mini'
+	if (/^o[3-9](-|$)/.test(n)) return 'o3'
+	return null
+}
+const familyOfXAIModel = (n: string): string | null => /grok-code/.test(n) ? 'grok-code-fast-1' : /grok-[4-9]/.test(n) ? 'grok-4.7' : null
+const familyOfGeminiModel = (n: string): string | null => {
+	if (!n.includes('gemini')) return null
+	const flash = n.includes('flash') || n.includes('lite')
+	if (/gemini-([3-9]|flash-latest|pro-latest)/.test(n)) return flash ? 'gemini-3.8-flash' : 'gemini-3.1-pro-preview'
+	if (n.includes('2.5') || n.includes('2-5')) return n.includes('lite') ? 'gemini-2.5-flash-lite' : flash ? 'gemini-2.5-flash' : 'gemini-2.5-pro'
+	return null
+}
+const familyOfDeepseekModel = (n: string): string | null => /v4/.test(n) ? 'deepseek-v4-flash' : null
+const familyOfMistralModel = (n: string): string | null => {
+	if (n.includes('codestral')) return 'codestral-latest'
+	if (n.includes('devstral')) return 'devstral-latest'
+	if (n.includes('magistral')) return 'magistral-medium-latest'
+	if (n.includes('ministral')) return 'ministral-8b-latest'
+	if (/mistral|pixtral/.test(n)) return 'mistral-large-latest'
+	return null
+}
+const familyOfGroqModel = (n: string): string | null => /gpt-oss-20b/.test(n) ? 'openai/gpt-oss-20b' : /gpt-oss/.test(n) ? 'openai/gpt-oss-120b' : /qwen3/.test(n) ? 'qwen/qwen3.8-27b' : null
+const familyOfOpenRouterModel = (n: string): string | null => {
+	if (n.startsWith('anthropic/')) {
+		const k = familyOfAnthropicModel(n.slice('anthropic/'.length).replace(/\./g, '-'))
+		return k === 'claude-sonnet-5-5' ? 'anthropic/claude-sonnet-5.5' : k === 'claude-opus-4-8' ? 'anthropic/claude-opus-5.5' : k === 'claude-haiku-4-5' ? 'anthropic/claude-haiku-4.5' : k === 'claude-sonnet-4-6' ? 'anthropic/claude-sonnet-5.5' : null
+	}
+	if (/^openai\/gpt-[56]/.test(n)) return 'openai/gpt-5.5'
+	if (/^google\/gemini-[3-9]/.test(n)) return n.includes('pro') ? 'google/gemini-3.1-pro-preview' : 'google/gemini-3.8-flash'
+	if (/^x-ai\/grok-[4-9]/.test(n)) return 'x-ai/grok-4.7'
+	if (/^deepseek\/deepseek-v4/.test(n)) return 'deepseek/deepseek-v4-pro'
+	if (/^moonshotai\/kimi-k[3-9]/.test(n)) return 'moonshotai/kimi-k3'
+	if (/^qwen\/qwen3\.[5-9]/.test(n)) return 'qwen/qwen3.8-max'
+	return null
+}
+
 const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
-	openAI: openAISettings,
-	anthropic: anthropicSettings,
-	xAI: xAISettings,
-	gemini: geminiSettings,
+	openAI: _augment(openAISettings, generatedOpenAIOptions, familyOfOpenAIModel),
+	anthropic: _augment(anthropicSettings, generatedAnthropicOptions, familyOfAnthropicModel),
+	xAI: _augment(xAISettings, generatedXAIOptions, familyOfXAIModel),
+	gemini: _augment(geminiSettings, generatedGeminiOptions, familyOfGeminiModel),
 
 	// open source models
-	deepseek: deepseekSettings,
-	groq: groqSettings,
+	deepseek: _augment(deepseekSettings, generatedDeepseekOptions, familyOfDeepseekModel),
+	groq: _augment(groqSettings, generatedGroqOptions, familyOfGroqModel),
 
 	// open source models + providers (mixture of everything)
-	openRouter: openRouterSettings,
+	openRouter: _augment(openRouterSettings, generatedOpenRouterOptions, familyOfOpenRouterModel),
 	vLLM: vLLMSettings,
 	ollama: ollamaSettings,
 	openAICompatible: openaiCompatible,
-	mistral: mistralSettings,
+	mistral: _augment(mistralSettings, generatedMistralOptions, familyOfMistralModel),
 
 	liteLLM: liteLLMSettings,
 	lmStudio: lmStudioSettings,
@@ -1739,9 +1793,9 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	microsoftAzure: microsoftAzureSettings,
 	awsBedrock: awsBedrockSettings,
 
-	minimax: minimaxSettings,
-	alibaba: alibabaSettings,
-	moonshot: moonshotSettings,
+	minimax: _augment(minimaxSettings, generatedMinimaxOptions, () => null, 'base'),
+	alibaba: _augment(alibabaSettings, generatedAlibabaOptions, () => null, 'base'),
+	moonshot: _augment(moonshotSettings, generatedMoonshotOptions, () => null, 'base'),
 	openCodeZen: openCodeZenSettings,
 } as const
 

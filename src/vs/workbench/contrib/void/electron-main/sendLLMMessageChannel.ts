@@ -12,6 +12,7 @@ import { EventLLMMessageOnTextParams, EventLLMMessageOnErrorParams, EventLLMMess
 import { sendLLMMessage } from './llmMessage/sendLLMMessage.js'
 import { IMetricsService } from '../common/metricsService.js';
 import { sendLLMMessageToProviderImplementation } from './llmMessage/sendLLMMessage.impl.js';
+import { listCloudModels } from './llmMessage/modelListing.js';
 
 // NODE IMPLEMENTATION - calls actual sendLLMMessage() and returns listeners to it
 
@@ -79,6 +80,10 @@ export class LLMMessageChannel implements IServerChannel {
 			}
 			else if (command === 'openAICompatibleList') {
 				this._callOpenAICompatibleList(params)
+			}
+			else if (command === 'cloudModelList') {
+				// the one call that returns a value: which models this provider's API key can use (see modelListing.ts)
+				return await listCloudModels(params.providerName, params.settingsOfProvider)
 			}
 			else {
 				throw new Error(`Vader sendLLM: command "${command}" not recognized.`)

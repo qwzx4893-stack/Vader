@@ -99,6 +99,8 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 	let currentResponder = responder ?? (() => ({ text: 'OK' }));
 	let currentFim = fimResponder ?? (() => '');
 	const requests = []; // { path, body, ctx?, at }
+	const modelListRequests = []; // GET .../models calls: { path, auth }
+	let currentModelsHandler = null; // ({path, auth}) => ({status?, body})
 	const rand = mulberry32(seed);
 	const sockets = new Set();
 
@@ -156,6 +158,13 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 	const server = createServer((req, res) => {
 		const url = (req.url ?? '').split('?')[0];
 		if (req.method === 'GET' && url.endsWith('/models')) {
+			modelListRequests.push({ path: url, auth: req.headers.authorization ?? '' });
+			if (currentModelsHandler) {
+				const r = currentModelsHandler({ path: url, auth: req.headers.authorization ?? '' });
+				res.writeHead(r.status ?? 200, { 'Content-Type': 'application/json' });
+				res.end(JSON.stringify(r.body ?? {}));
+				return;
+			}
 			res.writeHead(200, { 'Content-Type': 'application/json' });
 			res.end(JSON.stringify({ object: 'list', data: modelIds.map(id => ({ id, object: 'model', created: 0, owned_by: 'vader-test' })) }));
 			return;
@@ -210,7 +219,9 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 				chatRequests: () => requests.filter(r => r.path.endsWith('/chat/completions')),
 				setResponder: (fn) => { currentResponder = fn; },
 				setFim: (fn) => { currentFim = fn; },
-				reset: () => { requests.length = 0; },
+				modelListRequests,
+				setModelsHandler: (fn) => { currentModelsHandler = fn; },
+				reset: () => { requests.length = 0; modelListRequests.length = 0; currentModelsHandler = null; },
 				close: () => new Promise(r => { for (const s of sockets) { s.destroy(); } server.close(() => r()); }),
 			});
 		});

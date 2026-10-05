@@ -135,7 +135,7 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'openAICompatible') return `Use any provider that's OpenAI-compatible (use this for llama.cpp and more).`
 	if (providerName === 'googleVertex') return 'You must authenticate before using Vertex with Vader. Read more about endpoints [here](https://cloud.google.com/vertex-ai/generative-ai/docs/multimodal/call-vertex-using-openai-library), and regions [here](https://cloud.google.com/vertex-ai/docs/general/locations#available-regions).'
 	if (providerName === 'microsoftAzure') return 'Read more about endpoints [here](https://learn.microsoft.com/en-us/rest/api/aifoundry/model-inference/get-chat-completions/get-chat-completions?view=rest-aifoundry-model-inference-2024-05-01-preview&tabs=HTTP), and get your API key [here](https://learn.microsoft.com/en-us/azure/search/search-security-api-keys?tabs=rest-use%2Cportal-find%2Cportal-query#find-existing-keys).'
-	if (providerName === 'awsBedrock') return 'Connect via a LiteLLM proxy or the AWS [Bedrock-Access-Gateway](https://github.com/aws-samples/bedrock-access-gateway). LiteLLM Bedrock setup docs are [here](https://docs.litellm.ai/docs/providers/bedrock).'
+	if (providerName === 'awsBedrock') return 'Paste a [Bedrock API key](https://docs.aws.amazon.com/bedrock/latest/userguide/api-keys.html) and pick the region: Vader talks to Bedrock directly for the model families AWS serves in OpenAI format (gpt-oss, Grok and newer GPT models - add the model id by name). For other Bedrock models (Claude, Llama...) put a LiteLLM proxy or the AWS [Bedrock-Access-Gateway](https://github.com/aws-samples/bedrock-access-gateway) in the Endpoint field.'
 	if (providerName === 'ollama') return 'Read more about custom [Endpoints here](https://github.com/ollama/ollama/blob/main/docs/faq.md#how-can-i-expose-ollama-on-my-network).'
 	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
 	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
@@ -171,8 +171,12 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 											providerName === 'mistral' ? 'api-key...' :
 												providerName === 'googleVertex' ? 'AIzaSy...' :
 													providerName === 'microsoftAzure' ? 'key-...' :
-														providerName === 'awsBedrock' ? 'key-...' :
-															'',
+														providerName === 'awsBedrock' ? 'ABSK... (Bedrock API key)' :
+															providerName === 'alibaba' ? 'sk-key...' :
+																providerName === 'moonshot' ? 'sk-key...' :
+																	providerName === 'minimax' ? 'key...' :
+																		providerName === 'openCodeZen' ? 'key...' :
+																			'',
 
 			isPasswordField: true,
 		}
@@ -186,16 +190,21 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 							providerName === 'googleVertex' ? 'baseURL' :
 								providerName === 'microsoftAzure' ? 'baseURL' :
 									providerName === 'liteLLM' ? 'baseURL' :
-										providerName === 'awsBedrock' ? 'Endpoint' :
-											'(never)',
+										providerName === 'awsBedrock' ? 'Endpoint (optional proxy)' :
+											providerName === 'minimax' || providerName === 'alibaba' || providerName === 'moonshot' || providerName === 'openCodeZen' ? 'Endpoint' :
+												'(never)',
 
 			placeholder: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
 				: providerName === 'vLLM' ? defaultProviderSettings.vLLM.endpoint
 					: providerName === 'openAICompatible' ? 'https://my-website.com/v1'
 						: providerName === 'lmStudio' ? defaultProviderSettings.lmStudio.endpoint
 							: providerName === 'liteLLM' ? 'http://localhost:4000'
-								: providerName === 'awsBedrock' ? 'http://localhost:4000/v1'
-									: '(never)',
+								: providerName === 'awsBedrock' ? 'leave empty for Bedrock directly'
+									: providerName === 'minimax' ? defaultProviderSettings.minimax.endpoint
+										: providerName === 'alibaba' ? defaultProviderSettings.alibaba.endpoint
+											: providerName === 'moonshot' ? defaultProviderSettings.moonshot.endpoint
+												: providerName === 'openCodeZen' ? defaultProviderSettings.openCodeZen.endpoint
+													: '(never)',
 
 
 		}
