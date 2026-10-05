@@ -78,7 +78,9 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: npm ci
+        # `npm install`, not `npm ci`: build/npm/postinstall.ts re-runs the same npm command in every sub-package (extensions/, build/...), and
+        # `npm ci` there fails on this tree (verified on the runner). Both honour package-lock.json; the shipped-advisory gate checks the result.
+        run: npm install
 
       - name: Install extension dependencies
         run: node build/npm/postinstall.ts
