@@ -89,29 +89,36 @@ openai on developer system message - https://cdn.openai.com/spec/model-spec-2024
 */
 
 
-const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOrOpenAILLMMessage[] => {
+export const prepareMessages_openai_tools = (messages: SimpleLLMMessage[]): AnthropicOrOpenAILLMMessage[] => {
 
 	const newMessages: OpenAILLMChatMessage[] = [];
+
+	// Vader fix. A model turn can make several tool calls: [assistant, tool A, tool B]. Each call has to be listed in
+	// that assistant message's tool_calls, because a `tool` message whose tool_call_id the assistant never made is
+	// rejected by OpenAI-compatible APIs (HTTP 400). The old code only looked at the message directly before each tool
+	// message, so only the first call ever got attached (and then B pointed at the previous tool message instead).
+	let assistantOfThisRun: (OpenAILLMChatMessage & { role: 'assistant' }) | undefined
 
 	for (let i = 0; i < messages.length; i += 1) {
 		const currMsg = messages[i]
 
 		if (currMsg.role !== 'tool') {
 			newMessages.push(currMsg)
+			assistantOfThisRun = currMsg.role === 'assistant' ? (currMsg as OpenAILLMChatMessage & { role: 'assistant' }) : undefined
 			continue
 		}
 
-		// edit previous assistant message to have called the tool
-		const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
-		if (prevMsg?.role === 'assistant') {
-			prevMsg.tool_calls = [{
+		// edit the assistant message to have called the tool
+		if (assistantOfThisRun) {
+			const calls = assistantOfThisRun.tool_calls ?? (assistantOfThisRun.tool_calls = [])
+			calls.push({
 				type: 'function',
 				id: currMsg.id,
 				function: {
 					name: currMsg.name,
 					arguments: JSON.stringify(currMsg.rawParams)
 				}
-			}]
+			})
 		}
 
 		// add the tool
@@ -158,61 +165,69 @@ user: ...content, result(id, content)
 
 type AnthropicOrOpenAILLMMessage = AnthropicLLMChatMessage | OpenAILLMChatMessage
 
-const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsAnthropicReasoning: boolean): AnthropicOrOpenAILLMMessage[] => {
-	const newMessages: (AnthropicLLMChatMessage | (SimpleLLMMessage & { role: 'tool' }))[] = messages;
+export const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], supportsAnthropicReasoning: boolean): AnthropicOrOpenAILLMMessage[] => {
+	const out: AnthropicLLMChatMessage[] = []
+
+	// Vader fix, same defect as the OpenAI converter: several tool calls in one turn. Anthropic requires every tool_use
+	// block of an assistant message to be answered by a tool_result in the NEXT user message, so all calls attach to
+	// the same assistant message and all their results go into one user message.
+	let assistantOfThisRun: (AnthropicLLMChatMessage & { role: 'assistant' }) | undefined
+	let resultsOfThisRun: Extract<AnthropicLLMChatMessage, { role: 'user' }> | undefined
 
 	for (let i = 0; i < messages.length; i += 1) {
 		const currMsg = messages[i]
 
 		// add anthropic reasoning
 		if (currMsg.role === 'assistant') {
+			let msg: AnthropicLLMChatMessage & { role: 'assistant' }
 			if (currMsg.anthropicReasoning && supportsAnthropicReasoning) {
 				const content = currMsg.content
-				newMessages[i] = {
+				msg = {
 					role: 'assistant',
 					content: content ? [...currMsg.anthropicReasoning, { type: 'text' as const, text: content }] : currMsg.anthropicReasoning
 				}
 			}
 			else {
-				newMessages[i] = {
+				msg = {
 					role: 'assistant',
 					content: currMsg.content,
 					// strip away anthropicReasoning
 				}
 			}
+			out.push(msg)
+			assistantOfThisRun = msg
+			resultsOfThisRun = undefined
 			continue
 		}
 
 		if (currMsg.role === 'user') {
-			newMessages[i] = {
-				role: 'user',
-				content: currMsg.content,
-			}
+			out.push({ role: 'user', content: currMsg.content })
+			assistantOfThisRun = undefined
+			resultsOfThisRun = undefined
 			continue
 		}
 
 		if (currMsg.role === 'tool') {
-			// add anthropic tools
-			const prevMsg = 0 <= i - 1 && i - 1 <= newMessages.length ? newMessages[i - 1] : undefined
-
 			// make it so the assistant called the tool
-			if (prevMsg?.role === 'assistant') {
-				if (typeof prevMsg.content === 'string') prevMsg.content = [{ type: 'text', text: prevMsg.content }]
-				prevMsg.content.push({ type: 'tool_use', id: currMsg.id, name: currMsg.name, input: currMsg.rawParams })
+			if (assistantOfThisRun) {
+				if (typeof assistantOfThisRun.content === 'string') assistantOfThisRun.content = [{ type: 'text', text: assistantOfThisRun.content }]
+				assistantOfThisRun.content.push({ type: 'tool_use', id: currMsg.id, name: currMsg.name, input: currMsg.rawParams })
 			}
 
-			// turn each tool into a user message with tool results at the end
-			newMessages[i] = {
-				role: 'user',
-				content: [{ type: 'tool_result', tool_use_id: currMsg.id, content: currMsg.content }]
+			// the results of one turn's tool calls share one user message
+			const result = { type: 'tool_result' as const, tool_use_id: currMsg.id, content: currMsg.content }
+			if (resultsOfThisRun && Array.isArray(resultsOfThisRun.content)) {
+				resultsOfThisRun.content.push(result)
+			} else {
+				resultsOfThisRun = { role: 'user', content: [result] }
+				out.push(resultsOfThisRun)
 			}
 			continue
 		}
 
 	}
 
-	// we just removed the tools
-	return newMessages as AnthropicLLMChatMessage[]
+	return out
 }
 
 

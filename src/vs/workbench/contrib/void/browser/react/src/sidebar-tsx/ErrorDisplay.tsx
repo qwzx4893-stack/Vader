@@ -28,7 +28,7 @@ export const ErrorDisplay = ({
 	const message = message_ + ''
 
 	return (
-		<div className={`rounded-lg border border-red-200 bg-red-50 p-4 overflow-auto`}>
+		<div className={`rounded-lg border border-red-200 bg-red-50 p-4 overflow-auto`} data-testid='vader-error'>
 			{/* Header */}
 			<div className='flex items-start justify-between'>
 				<div className='flex gap-3'>

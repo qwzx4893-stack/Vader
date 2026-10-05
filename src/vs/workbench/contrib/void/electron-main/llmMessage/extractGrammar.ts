@@ -211,6 +211,13 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 		n += 1
 		if (n > 10) return getAnswer() // just for good measure as this code is early
 
+		// Vader fix. The end of the call was taken as the LAST closing tag in the text (so parameter values may contain
+		// that text), which meant a model that wrote a second call after the first made the second call's parameters
+		// overwrite the first's: the wrong call ran (found by a live run - with two read_file calls the second file was read
+		// and the first silently dropped). Once a parameter has closed and the tool's own closing tag comes next, this call
+		// is complete; whatever follows (another call, extra text) is not part of it.
+		if (latestMatchedOpenParam !== null && new RegExp(`^\\s*</${toolName}>`).test(pm.value())) return getAnswer()
+
 		// find the param name opening tag
 		let matchedOpenParam: null | ToolParamName<T> = null
 		for (const paramName of allowedParams) {

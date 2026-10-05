@@ -20,7 +20,7 @@ import { ICommandService } from '../../../../platform/commands/common/commands.j
 import { VOID_TOGGLE_SETTINGS_ACTION_ID } from './voidSettingsPane.js';
 import { VOID_CTRL_L_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
-import { IChatThreadService } from './chatThreadService.js';
+import { IChatThreadService, awaitMounted } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 
 // ---------- Register commands and keybindings ----------
@@ -169,7 +169,7 @@ registerAction2(class extends Action2 {
 		const oldThreadId = chatThreadsService.state.currentThreadId
 		const oldThread = chatThreadsService.state.allThreads[oldThreadId]
 
-		const oldUI = await oldThread?.state.mountedInfo?.whenMounted
+		const oldUI = await awaitMounted(oldThread?.state.mountedInfo?.whenMounted, 250) // only needed to carry a half-typed draft over; never make the click feel dead
 
 		const oldSelns = oldThread?.state.stagingSelections
 		const oldVal = oldUI?.textAreaRef?.current?.value
@@ -183,7 +183,7 @@ registerAction2(class extends Action2 {
 		const newThreadId = chatThreadsService.state.currentThreadId
 		const newThread = chatThreadsService.state.allThreads[newThreadId]
 
-		const newUI = await newThread?.state.mountedInfo?.whenMounted
+		const newUI = await awaitMounted(newThread?.state.mountedInfo?.whenMounted, 250)
 		chatThreadsService.setCurrentThreadState({ stagingSelections: oldSelns, })
 		if (newUI?.textAreaRef?.current && oldVal) newUI.textAreaRef.current.value = oldVal
 

@@ -345,6 +345,14 @@ const newThreadObject = () => {
 
 
 
+// Vader fix. A thread's mount info (see _setState) is replaced by a fresh pending promise on every state change, and that
+// promise only resolves when the chat view re-renders afterwards. If no render follows it stays pending forever; the
+// "New Chat" action awaited it before doing anything, so after some replies (found by a live run: any reply containing
+// inline code) clicking "+" silently did nothing. Waits on it are therefore bounded.
+export const MOUNT_WAIT_TIMEOUT_MS = 1500
+export const awaitMounted = <T>(whenMounted: Promise<T> | undefined, timeoutMs: number = MOUNT_WAIT_TIMEOUT_MS): Promise<T | undefined> =>
+	whenMounted ? Promise.race([whenMounted, new Promise<undefined>(res => setTimeout(() => res(undefined), timeoutMs))]) : Promise.resolve(undefined)
+
 export interface IChatThreadService {
 	readonly _serviceBrand: undefined;
 
@@ -505,7 +513,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const threadId = this.state.currentThreadId
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
-		const s = await thread.state.mountedInfo?.whenMounted
+		const s = await awaitMounted(thread.state.mountedInfo?.whenMounted)
 		if (!this.isCurrentlyFocusingMessage()) {
 			s?.textAreaRef.current?.focus()
 		}
@@ -514,7 +522,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const threadId = this.state.currentThreadId
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
-		const s = await thread.state.mountedInfo?.whenMounted
+		const s = await awaitMounted(thread.state.mountedInfo?.whenMounted)
 		if (!this.isCurrentlyFocusingMessage()) {
 			s?.textAreaRef.current?.blur()
 		}
@@ -685,6 +693,22 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const lastMsg = messages[messages.length - 1]
 		if (!lastMsg) return false
 
+		// Vader fix. A model turn can contain several tool calls, each with its own thread message. Replacing "the
+		// latest tool message" made each result overwrite its neighbour's, so only one of N calls survived in the thread
+		// (found by a live run: the first call vanished and the history sent back to the provider had one call). Match
+		// the message by tool-call id within the trailing run of tool messages; if this call has no message yet, it is
+		// appended by the caller. Calls with no id keep the old "latest tool message" behaviour.
+		if (tool.id) {
+			for (let i = messages.length - 1; i >= 0; i--) {
+				const m = messages[i]
+				if (m.role !== 'tool') break
+				if (m.type !== 'invalid_params' && m.id === tool.id) {
+					this._editMessageInThread(threadId, i, tool)
+					return true
+				}
+			}
+			return false
+		}
 		if (lastMsg.role === 'tool' && lastMsg.type !== 'invalid_params') {
 			this._editMessageInThread(threadId, messages.length - 1, tool)
 			return true
@@ -778,6 +802,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	async abortRunning(threadId: string) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
+		this._bumpToolQueueEpoch(threadId) // tool calls of this turn that are still waiting for their turn must not start
 
 		// add assistant message
 		if (this.streamState[threadId]?.isRunning === 'LLM') {
@@ -1028,7 +1053,36 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// approval does not resume the rest of that batch after approval").
 	private _pendingInlineApprovals = new Map<string, (decision: 'approved' | 'rejected') => void>();
 
-	private _runToolCallInline = async (
+	// Vader fix. @cline/agents may call execute() for every tool call of a model turn at the same moment. Everything below
+	// assumes one tool call at a time per thread: a single approval resolver (a second concurrent approval overwrote the
+	// first, whose promise then never settled - the thread hung forever), a single stream state, and thread messages
+	// that are updated in place. Calls of one thread therefore run strictly one after another, in the order the model
+	// emitted them (which is also the only order that is safe for edits to the same file or for terminal commands).
+	// Stopping the agent or deleting the thread bumps the epoch so calls still waiting their turn are dropped.
+	private readonly _toolQueueTail = new Map<string, Promise<void>>()
+	private readonly _toolQueueEpoch = new Map<string, number>()
+	private _bumpToolQueueEpoch(threadId: string) { this._toolQueueEpoch.set(threadId, (this._toolQueueEpoch.get(threadId) ?? 0) + 1) }
+
+	private _runToolCallInline = (
+		threadId: string,
+		toolName: ToolName,
+		toolId: string,
+		mcpServerName: string | undefined,
+		unvalidatedToolParams: RawToolParamsObj,
+	): Promise<{ resultStr: string, isError: boolean }> => {
+		const epoch = this._toolQueueEpoch.get(threadId) ?? 0
+		const previous = this._toolQueueTail.get(threadId) ?? Promise.resolve()
+		const run = previous.then(async () => {
+			if ((this._toolQueueEpoch.get(threadId) ?? 0) !== epoch) {
+				return { resultStr: this.toolErrMsgs.interrupted, isError: true }
+			}
+			return this._runToolCallInlineNow(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams)
+		})
+		this._toolQueueTail.set(threadId, run.then(() => undefined, () => undefined))
+		return run
+	}
+
+	private _runToolCallInlineNow = async (
 		threadId: string,
 		toolName: ToolName,
 		toolId: string,
@@ -2117,6 +2171,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		// call and its event subscription above it) would never settle. Resolving it as
 		// 'rejected' here is the correct default: the thread is gone, so there is no longer any
 		// user who could approve it, and a stuck action must never be silently left running.
+		this._bumpToolQueueEpoch(threadId)
 		const pendingInline = this._pendingInlineApprovals.get(threadId)
 		if (pendingInline) {
 			this._pendingInlineApprovals.delete(threadId)

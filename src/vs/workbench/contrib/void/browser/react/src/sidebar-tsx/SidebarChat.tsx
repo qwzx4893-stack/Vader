@@ -423,6 +423,7 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 
 	return <button
 		type='button'
+		data-testid='vader-send'
 		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
 			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
 			${className}
@@ -438,6 +439,7 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
+		data-testid='vader-stop'
 		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
 			bg-white
 			${className}
@@ -821,7 +823,7 @@ const ToolHeaderWrapper = ({
 		} : {}}
 	>{desc1}</span>
 
-	return (<div className=''>
+	return (<div className='' data-testid='vader-tool'>
 		<div className={`w-full border border-void-border-3 rounded px-2 py-1 bg-void-bg-3 overflow-hidden ${className}`}>
 			{/* header */}
 			<div className={`select-none flex items-center min-h-[24px]`}>
@@ -1092,7 +1094,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	if (mode === 'display') {
 		chatbubbleContents = <>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
-			<span className='px-0.5'>{chatMessage.displayContent}</span>
+			<span className='px-0.5' data-testid='vader-user-text'>{chatMessage.displayContent}</span>
 		</>
 	}
 	else if (mode === 'edit') {
@@ -1362,7 +1364,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 
 		{/* assistant message */}
 		{chatMessage.displayContent &&
-			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`} data-testid='vader-assistant-text'>
 				<ProseWrapper>
 					<ChatMarkdownRender
 						string={chatMessage.displayContent || ''}
@@ -1599,6 +1601,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 
 	const approveButton = (
 		<button
+			data-testid='vader-tool-approve'
 			onClick={onAccept}
 			className={`
                 px-2 py-1
@@ -1615,6 +1618,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 
 	const cancelButton = (
 		<button
+			data-testid='vader-tool-reject'
 			onClick={onReject}
 			className={`
                 px-2 py-1

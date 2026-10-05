@@ -1778,7 +1778,15 @@ export const getModelCapabilities = (
 		return { ...result, ...overrides, modelName: result.modelName, isUnrecognizedModel: false };
 	}
 
-	return { modelName, ...defaultModelOptions, ...overrides, isUnrecognizedModel: true };
+	// Vader fix. A model name we do not recognise (a local model called "my-model", a fine-tune, a LiteLLM alias...)
+	// used to get a 4k context window. Vader's agent prompt (tool descriptions, policy, instructions) is far larger than
+	// that, so it was trimmed down to almost nothing - found by a live run: the model was offered only the first few
+	// read-only tools, cut off mid-sentence, and could not edit files or run commands at all. 32k matches what every
+	// recognised open-source family above is configured with. Ollama stays at 4k because that is its real default
+	// num_ctx; if a server's real window is smaller the provider reports a context-length error, which is visible
+	// and fixable in settings, unlike a silently crippled prompt.
+	const contextWindow = providerName === 'ollama' ? defaultModelOptions.contextWindow : 32_000
+	return { modelName, ...defaultModelOptions, contextWindow, ...overrides, isUnrecognizedModel: true };
 }
 
 // Vader addition, part of the real vision/multimodal pipeline (docs/integrations/model-router.md).
