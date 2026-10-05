@@ -149,6 +149,15 @@ function dumpLogs() {
 		if (hits.length) { console.log(`--- ${path.relative(userData, f)} (${hits.length} notable line(s))`); hits.forEach(l => console.log('  ' + l.slice(0, 300))); }
 		fs.copyFileSync(f, path.join(outDir, path.relative(userData, f).replace(/[\\/]/g, '__')));
 	}
+	// A crash in the main process or a utility process (agent host, shared process, ...) does not blank the window, so
+	// the renderer checks cannot see it. Treat these as failures unless explicitly listed as known noise.
+	const fatal = /Uncaught Exception|ERR_MODULE_NOT_FOUND|Cannot find (package|module)|\[uncaught exception in main\]/;
+	const fatalLines = new Set();
+	const scan = (line) => { if (fatal.test(line) && !knownNoise.some(re => re.test(line))) { fatalLines.add(line.replace(/^\S+\s+\S+\s+/, '').slice(0, 220)); } };
+	for (const f of files) { fs.readFileSync(f, 'utf8').split(/\r?\n/).forEach(scan); }
+	mainOut.join('').split(/\r?\n/).forEach(scan);
+	check('no uncaught exceptions / missing modules in main & utility process logs', fatalLines.size === 0, `${fatalLines.size} distinct`);
+	[...fatalLines].slice(0, 10).forEach(l => console.log('  fatal log line:', l));
 	console.log('--- main process stdout/stderr (notable lines)');
 	mainOut.join('').split(/\r?\n/).filter(l => interesting.test(l)).slice(0, 40).forEach(l => console.log('  ' + l.slice(0, 300)));
 	fs.writeFileSync(path.join(outDir, 'main-output.txt'), mainOut.join(''));

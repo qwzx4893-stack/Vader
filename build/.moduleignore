@@ -15,10 +15,15 @@
 # weight that was previously copied, filtered, and asar-packed into every single build for
 # nothing - found while investigating why Windows packaging was taking far longer than expected.
 dify-ai-provider/**
-# Vader: the GitHub Copilot runtime and SDK are compile-time dependencies of VS Code's own agent-host
-# code, which Vader keeps disabled (chat.disableAIFeatures) and does not redistribute.
+# Vader: the GitHub Copilot CLI runtime and its per-platform binaries (the bulk of the weight) are not
+# redistributed. The small pure-JS @github/copilot-sdk stays: VS Code's agent-host utility process imports
+# it statically at startup, so removing it makes that process crash on every launch (found in a live
+# Windows smoke run). Without the CLI the host just idles; Vader does not create Copilot sessions.
 @github/copilot/**
-@github/copilot-*/**
+@github/copilot-darwin-*/**
+@github/copilot-linux-*/**
+@github/copilot-linuxmusl-*/**
+@github/copilot-win32-*/**
 @jerome-benoit/**
 ai-sdk-provider-opencode-sdk/**
 @opentelemetry/**
