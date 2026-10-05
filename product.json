@@ -122,9 +122,6 @@
 		"https://github.com/qwzx4893-stack/Vader",
 		"https://ollama.com"
 	],
-	"configurationDefaults": {
-		"chat.disableAIFeatures": true
-	},
 	"defaultChatAgent": {
 		"extensionId": "vader.disabled.chat",
 		"chatExtensionId": "vader.disabled.chat-agent",

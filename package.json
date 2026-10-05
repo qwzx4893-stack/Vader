@@ -151,7 +151,7 @@
 		"chrome-remote-interface": "^0.33.0",
 		"cross-spawn": "^7.0.6",
 		"detect-libc": "^2.1.2",
-		"diff": "^7.0.0",
+		"diff": "^9.0.0",
 		"eslint-plugin-react": "^7.37.5",
 		"foundry-local-sdk": "1.2.3",
 		"google-auth-library": "^9.15.1",

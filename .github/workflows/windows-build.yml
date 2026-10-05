@@ -29,8 +29,10 @@ on:
       - 'build/gulpfile.vscode.win32.js'
       - '.github/workflows/windows-build.yml'
 
+# Least privilege: the build only reads the repository. Publishing a release is a separate job that alone
+# holds `contents: write`, and it only runs when a release is explicitly requested.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   build:
@@ -54,20 +56,22 @@ jobs:
     env:
       ARCH: ${{ github.event.inputs.arch || 'x64' }}
       NPM_CONFIG_ARCH: ${{ github.event.inputs.arch || 'x64' }}
+      # Empty unless the repository defines it; only used to decide whether the signing step runs.
+      WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
       # No secrets are embedded here: this produces an unsigned build. A real release
       # pipeline would add code-signing via a separate, secret-backed step - do not add
       # signing credentials to this workflow file directly.
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
 
       - name: Setup Python (for native module builds)
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
 
@@ -134,9 +138,27 @@ jobs:
             echo "setup_exe=$($setup.FullName)" >> $env:GITHUB_OUTPUT
           }
 
+      # Optional code signing. Skipped (the installer stays unsigned) unless the repository defines both secrets
+      # WINDOWS_CERT_PFX_BASE64 (the .pfx, base64) and WINDOWS_CERT_PASSWORD. NOT exercised yet: no certificate has been
+      # provided, so this step has only ever been skipped. signtool.exe is already on PATH (see the step above).
+      - name: Sign installer (only when a certificate is configured)
+        if: steps.locate.outputs.setup_exe != '' && env.WINDOWS_CERT_PFX_BASE64 != ''
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
+          try {
+            signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd sha256 /tr http://timestamp.digicert.com /td sha256 "${{ steps.locate.outputs.setup_exe }}"
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed ($LASTEXITCODE)" }
+            signtool verify /pa "${{ steps.locate.outputs.setup_exe }}"
+            if ($LASTEXITCODE -ne 0) { throw "signature did not verify ($LASTEXITCODE)" }
+          } finally { Remove-Item $pfx -Force -ErrorAction SilentlyContinue }
+
       - name: Upload unpacked application
         if: steps.locate.outputs.app_dir != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: vader-win32-${{ env.ARCH }}-unpacked
           path: ${{ steps.locate.outputs.app_dir }}
@@ -144,50 +166,46 @@ jobs:
 
       - name: Upload installer
         if: steps.locate.outputs.setup_exe != ''
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: vader-win32-${{ env.ARCH }}-setup
           path: ${{ steps.locate.outputs.setup_exe }}
           retention-days: 14
 
-      - name: Determine release version
-        id: version
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
-        shell: pwsh
-        run: |
-          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
-          echo "tag=v$($pkg.version)" >> $env:GITHUB_OUTPUT
+  # Only runs for an explicit release request, and is the only place with write access to repository contents.
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      ARCH: ${{ github.event.inputs.arch || 'x64' }}
+    steps:
+      - name: Checkout (package.json only)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          sparse-checkout: package.json
+          sparse-checkout-cone-mode: false
 
-      # Manual-dispatch only, deliberately: this repo's own build tooling can only produce a
-      # Windows package on a Windows runner (see this workflow's header comment), so a real
-      # GitHub Release with a real installer attached has to be published from here rather than
-      # by a separate process. Gated to workflow_dispatch (not the push trigger above) so a
-      # routine CI build from a path-matching push to main never spams a new release - this step
-      # only runs when someone/something explicitly asks for a release, not on every build.
-      # Idempotent (deletes any prior release/tag of the same name first) so a re-dispatch after
-      # fixing a build failure cleanly replaces a previous, incomplete attempt at the same version
-      # rather than failing on "tag already exists" or leaving stale duplicate releases behind.
+      - name: Download installer built by this run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: vader-win32-${{ env.ARCH }}-setup
+          path: dist
+
+      # Idempotent (deletes any prior release/tag of the same name first) so a re-dispatch after fixing a build
+      # failure cleanly replaces an incomplete attempt at the same version.
       - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true' && steps.locate.outputs.setup_exe != ''
-        shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $tag = "${{ steps.version.outputs.tag }}"
-          $sha = "${{ github.sha }}"
-          $arch = "${{ env.ARCH }}"
-          $notes = @"
-          Vader Windows build ($arch), built from ``main`` @ ``$sha``.
+          tag="v$(node -p "require('./package.json').version")"
+          setup="$(ls dist/*.exe | head -n 1)"
+          notes="Vader Windows build ($ARCH), built from commit ${GITHUB_SHA}.
 
-          This is the current Vader Windows release: an **unsigned** build produced by this
-          repository's own Windows CI workflow (``.github/workflows/windows-build.yml``),
-          packaged with Inno Setup. See ``FINAL_PRODUCTION_READINESS_REPORT.md`` in the
-          repository for the full, evidence-tagged account of what has and has not been
-          independently verified in this build - in particular, no interactive (LIVE-UI) or
-          real-model run has been performed against this exact artifact.
-          "@
-          gh release delete $tag --yes --cleanup-tag 2>$null
-          gh release create $tag "${{ steps.locate.outputs.setup_exe }}" `
-            --title "Vader $tag (Windows $arch)" `
-            --notes $notes `
-            --target $sha
+          An installer produced by this repository's own Windows CI workflow (.github/workflows/windows-build.yml),
+          packaged with Inno Setup. It is unsigned unless the repository has code-signing secrets configured."
+          gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$tag" "$setup" --title "Vader $tag (Windows $ARCH)" --notes "$notes" --target "$GITHUB_SHA"

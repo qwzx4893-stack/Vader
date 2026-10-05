@@ -25,6 +25,11 @@ dify-ai-provider/**
 @github/copilot-linuxmusl-*/**
 @github/copilot-win32-*/**
 @jerome-benoit/**
+# Only the excluded SAP AI provider pulls these in (they carry several of the build's high-severity advisories:
+# node-forge via jks-js, and the SAP SDK's HTTP stack). Nothing that is loaded at runtime requires them.
+@sap-ai-sdk/**
+@sap-cloud-sdk/**
+jks-js/**
 ai-sdk-provider-opencode-sdk/**
 @opentelemetry/**
 @aws-sdk/**

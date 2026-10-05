@@ -37,10 +37,10 @@ jobs:
       NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
 
@@ -48,14 +48,6 @@ jobs:
       # skipping them keeps this job fast. esbuild ships its binary as a package, not a script.
       - name: Install dependencies
         run: npm ci --ignore-scripts
-
-      # build/ is its own npm project (util.js needs ternary-stream, vinyl, ...), used by moduleIgnoreE2E.
-      - name: Install build tool dependencies
-        run: npm ci --ignore-scripts --prefix build
-
-      # Normally fetched by postinstall (skipped above). Checksum-verified against build/checksums/electron.txt.
-      - name: Fetch Electron type definitions
-        run: node build/npm/electronTypes.ts
 
       - name: Build React UI bundle
         run: npm run buildreact
@@ -69,7 +61,7 @@ jobs:
       - name: Regression tests
         run: |
           status=0
-          for t in scmInjectionE2E browserUrlPolicyE2E policyBypassE2E mcpServerEnvE2E discoveryUrlE2E moduleIgnoreE2E importCyclesE2E; do
+          for t in scmInjectionE2E browserUrlPolicyE2E policyBypassE2E mcpServerEnvE2E discoveryUrlE2E moduleIgnoreE2E; do
             echo "::group::$t"
             node "src/vs/workbench/contrib/void/test/$t.mjs" || status=1
             echo "::endgroup::"

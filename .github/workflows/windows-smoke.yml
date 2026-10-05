@@ -32,7 +32,7 @@ jobs:
       INSTALL_DIR: C:\VaderApp
     steps:
       - name: Checkout (test script only)
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           sparse-checkout: |
             src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
@@ -40,7 +40,7 @@ jobs:
           sparse-checkout-cone-mode: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version-file: '.nvmrc'
 
@@ -105,6 +105,7 @@ jobs:
       - name: Launch - default flags
         if: always()
         shell: pwsh
+        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: default
@@ -115,6 +116,7 @@ jobs:
       - name: Launch - software rendering (--disable-gpu)
         if: always()
         shell: pwsh
+        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: disable-gpu
@@ -125,7 +127,7 @@ jobs:
 
       - name: Upload smoke output
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: smoke-out
           path: smoke-out

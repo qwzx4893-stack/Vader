@@ -4,6 +4,9 @@
  *--------------------------------------------------------------------------------------*/
 
 
+// Vader defaults (turns VS Code's built-in AI features off) - first, so it is in place before settings are read
+import './vaderDefaults.js'
+
 // register inline diffs
 import './editCodeService.js'
 
