@@ -74,6 +74,15 @@ jobs:
           git config --global user.email e2e@example.com
           git config --global user.name e2e
 
+      - name: Probe the SkillNet endpoint over https and http (informational)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          foreach ($u in 'https://api-skillnet.openkg.cn/', 'http://api-skillnet.openkg.cn/') {
+            try { $r = Invoke-WebRequest $u -UseBasicParsing -TimeoutSec 30 -MaximumRedirection 0 -ErrorAction Stop; "$u -> $($r.StatusCode)" }
+            catch { "$u -> $($_.Exception.Message)" }
+          }
+
       - name: Run the end-to-end suite (scripted model)
         shell: pwsh
         env:
