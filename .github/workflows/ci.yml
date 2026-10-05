@@ -71,7 +71,7 @@ jobs:
       - name: Regression tests
         run: |
           status=0
-          for t in scmInjectionE2E browserUrlPolicyE2E policyBypassE2E mcpServerEnvE2E discoveryUrlE2E moduleIgnoreE2E importCyclesE2E xmlToolParserE2E convertMessagesE2E reactTypecheckE2E providerCatalogE2E cloudModelListE2E searchRegexGuardE2E; do
+          for t in scmInjectionE2E browserUrlPolicyE2E policyBypassE2E mcpServerEnvE2E discoveryUrlE2E moduleIgnoreE2E importCyclesE2E xmlToolParserE2E convertMessagesE2E reactTypecheckE2E providerCatalogE2E cloudModelListE2E searchRegexGuardE2E providerSdkE2E browserPrivacyArgsE2E unconnectedModulesE2E; do
             echo "::group::$t"
             node "src/vs/workbench/contrib/void/test/$t.mjs" || status=1
             echo "::endgroup::"

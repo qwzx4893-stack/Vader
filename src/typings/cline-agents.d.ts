@@ -1,6 +1,6 @@
 // Vader addition, part of the Cline Main Agent Runtime integration (see
 // docs/integrations/agent-runtime.md and src/typings/cline-shared.d.ts's doc comment for why
-// this shim exists - @cline/agents@0.0.86's own dist/index.d.ts also uses an extensionless
+// this shim exists - @cline/agents@0.0.90's own dist/index.d.ts also uses an extensionless
 // relative import (`from "./agent-runtime"`), on top of re-exporting types from the broken
 // @cline/shared surface). Transcribed directly from the actual installed
 // `node_modules/@cline/agents/dist/agent-runtime.d.ts` in this same session. Runtime behavior

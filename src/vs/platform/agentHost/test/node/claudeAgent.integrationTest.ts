@@ -162,9 +162,11 @@ function makeMessage(model: string): Anthropic.Message {
 		stop_sequence: null,
 		stop_details: null,
 		container: null,
+		diagnostics: null,
 		usage: {
 			input_tokens: 1,
 			output_tokens: 1,
+			output_tokens_details: null,
 			cache_creation: null,
 			cache_creation_input_tokens: null,
 			cache_read_input_tokens: null,
@@ -194,6 +196,7 @@ function makeCannedStream(model: string): Anthropic.MessageStreamEvent[] {
 		usage: {
 			input_tokens: 1,
 			output_tokens: 1,
+			output_tokens_details: null,
 			cache_creation_input_tokens: null,
 			cache_read_input_tokens: null,
 			server_tool_use: null,
@@ -248,6 +251,8 @@ function makeResultSuccess(sessionId: string): SDKResultSuccess {
 			input_tokens: 0,
 			iterations: [],
 			output_tokens: 0,
+			output_tokens_details: { thinking_tokens: 0 },
+			fallback_credit: { status: { type: 'not_applied', reason: 'not_enabled' } },
 			server_tool_use: { web_fetch_requests: 0, web_search_requests: 0 },
 			service_tier: 'standard',
 			speed: 'standard',

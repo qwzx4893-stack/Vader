@@ -41,7 +41,7 @@ export type AgentRuntimeHealth = {
 	status: AgentRuntimeHealthStatus;
 	/** human-readable detail - e.g. "dependency @cline/agents is not installed in this environment" */
 	detail: string;
-	/** version string of the underlying runtime, when known (e.g. "@cline/agents@0.0.86") */
+	/** version string of the underlying runtime, when known (e.g. "@cline/agents@0.0.90") */
 	version?: string;
 	checkedAt: string;
 };

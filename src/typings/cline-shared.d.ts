@@ -1,5 +1,5 @@
 // Vader addition, part of the Cline Main Agent Runtime integration (see
-// docs/integrations/agent-runtime.md). @cline/shared@0.0.86's own shipped .d.ts files use
+// docs/integrations/agent-runtime.md). @cline/shared@0.0.90's own shipped .d.ts files use
 // extensionless relative import specifiers (e.g. `from "./agent"` instead of
 // `from "./agent.js"`), which is invalid under this project's `moduleResolution: "nodenext"`
 // (verified directly: `node_modules/@cline/shared/dist/index.d.ts`'s own
@@ -106,6 +106,8 @@ export interface AgentTool<TInput = unknown, TOutput = unknown> extends AgentToo
 	timeoutMs?: number;
 	retryable?: boolean;
 	maxRetries?: number;
+	/** Core may cache oversized output for bounded model recovery. Original output is retained. */
+	resultPolicy?: "cache-oversized";
 	execute: (input: TInput, context: AgentToolContext) => Promise<TOutput> | TOutput;
 }
 export interface AgentModelRequest {
@@ -115,7 +117,7 @@ export interface AgentModelRequest {
 	signal?: AbortSignal;
 	options?: Record<string, unknown>;
 }
-export type AgentModelFinishReason = "stop" | "tool-calls" | "max-tokens" | "aborted" | "error";
+export type AgentModelFinishReason = "stop" | "tool-calls" | "max-tokens" | "content-filter" | "aborted" | "error";
 export type ProviderErrorClass = "context_window_exceeded" | "auth" | "unknown";
 export type AgentModelEvent =
 	| { type: "text-delta"; text: string }

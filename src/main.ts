@@ -152,6 +152,17 @@ if (process.platform === 'win32' || process.platform === 'linux') {
 }
 
 // Load our code once ready
+// Vader: Electron's spell checker downloads its Hunspell dictionary from redirector.gvt1.com (Google) the first time a text field is
+// used - found with the net-log privacy test. Spell checking is switched off for every session, so no dictionary is ever fetched.
+app.on('session-created', session => {
+	try {
+		session.setSpellCheckerEnabled(false);
+		session.setSpellCheckerLanguages([]);
+		// belt and braces: if anything still asks for a dictionary, the request goes nowhere (the discard port on this machine)
+		session.setSpellCheckerDictionaryDownloadURL('http://127.0.0.1:9/dictionaries/');
+	} catch { /* an older Electron without the API: the net-log test would catch the request */ }
+});
+
 app.once('ready', function () {
 	if (args['trace']) {
 		let traceOptions: Electron.TraceConfig | Electron.TraceCategoriesAndOptions;
@@ -340,8 +351,17 @@ function configureCommandlineSwitchesSync(cliArgs: NativeParsedArgs) {
 	// Following features are disabled from the runtime:
 	// `CalculateNativeWinOcclusion` - Disable native window occlusion tracker (https://groups.google.com/a/chromium.org/g/embedder-dev/c/ZF3uHHyWLKw/m/VDN2hDXMAAAJ)
 	const featuresToDisable =
-		`CalculateNativeWinOcclusion,${app.commandLine.getSwitchValue('disable-features')}`;
+		`CalculateNativeWinOcclusion,OptimizationHints,OptimizationGuideModelDownloading,MediaRouter,AutofillServerCommunication,CertificateTransparencyComponentUpdater,Translate,InterestFeedContentSuggestions,${app.commandLine.getSwitchValue('disable-features')}`;
 	app.commandLine.appendSwitch('disable-features', featuresToDisable);
+
+	// Vader: Chromium phones home on its own - the component updater (redirector.gvt1.com), connectivity / field-trial checks
+	// (www.google.com) and push registration (android.clients.google.com) were all seen leaving a freshly started Vader. An editor that
+	// runs an AI agent over a user's code must not contact Google (or anyone) the user did not configure, so every background
+	// network feature of Chromium is switched off. test/e2e/scenarios/privacy.mjs records every request the app makes (Chromium
+	// net-log) and fails when one goes anywhere unexpected.
+	for (const vaderPrivacySwitch of ['disable-background-networking', 'disable-component-update', 'disable-domain-reliability', 'disable-client-side-phishing-detection', 'disable-sync', 'no-pings', 'disable-default-apps', 'disable-gcm-registration']) {
+		app.commandLine.appendSwitch(vaderPrivacySwitch);
+	}
 
 	// Blink features to configure.
 	// `FontMatchingCTMigration` - Siwtch font matching on macOS to Appkit (Refs https://github.com/microsoft/vscode/issues/224496#issuecomment-2270418470).

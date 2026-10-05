@@ -16,6 +16,7 @@ import { editorScenarios, autocompleteScenarios } from './scenarios/editor.mjs';
 import { generalScenarios } from './scenarios/general.mjs';
 import { providerScenarios } from './scenarios/providers.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
+import { runPrivacyGroup } from './scenarios/privacy.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
 if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missing or not found: ${config.exe}`); process.exit(2); }
@@ -26,6 +27,7 @@ await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unkn
 await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();
+await runPrivacyGroup();
 
 if (process.env.REAL_LLM_MODEL) {
 	await runGroup({ name: 'real-llm', model: process.env.REAL_LLM_MODEL, baseURL: process.env.REAL_LLM_BASEURL || 'http://localhost:11434/v1', apiKey: 'ollama', scenarios: realLlmScenarios });

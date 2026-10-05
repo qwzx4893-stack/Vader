@@ -77,10 +77,13 @@ const parseHeadersJSON = (s: string | undefined): Record<string, string | null |
 }
 
 const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includeInPayload }: { settingsOfProvider: SettingsOfProvider, providerName: ProviderName, includeInPayload?: { [s: string]: any } }) => {
-	const commonPayloadOpts: ClientOptions = {
+	// NOTE: `includeInPayload` (reasoning effort / budget, provider-specific extras) used to be spread in here, i.e. into the
+	// SDK's *client* options, where unknown keys are silently ignored - so none of it ever reached the request. It is part of the
+	// request body and is now added where the request is built (see _sendOpenAICompatibleChat / _sendOpenAICompatibleFIM).
+	void includeInPayload
+	const commonPayloadOpts = {
 		dangerouslyAllowBrowser: true,
-		...includeInPayload,
-	}
+	} satisfies ClientOptions
 	if (providerName === 'openAI') {
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ apiKey: thisConfig.apiKey, ...commonPayloadOpts })
@@ -219,6 +222,7 @@ const _sendOpenAICompatibleFIM = async ({ messages: { prefix, suffix, stopTokens
 			suffix: suffix,
 			stop: stopTokens,
 			max_tokens: 300,
+			...additionalOpenAIPayload,
 		}, { signal: abortController.signal })
 		.then(async response => {
 			const fullText = response.choices[0]?.text
@@ -329,7 +333,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		messages: messages as any,
 		stream: true,
 		...nativeToolsObj,
-		...additionalOpenAIPayload
+		...includeInPayload, // reasoning effort / budget for this model + the model's additional payload
 		// max_completion_tokens: maxTokens,
 	}
 
@@ -846,7 +850,9 @@ const sendGeminiChat = async ({
 				// tool call(s)
 				const functionCalls = chunk.functionCalls
 				if (functionCalls && functionCalls.length > 0) {
-					allFunctionCalls = functionCalls // Gemini sends each turn's function calls in full (not deltas), so just keep the latest
+					// a function call arrives whole (never as deltas), but several calls of one turn can be spread over several stream
+					// chunks: collect them all (this used to keep only the last chunk's calls, silently dropping the others)
+					allFunctionCalls.push(...functionCalls)
 					const functionCall = functionCalls[0] // first call only, for the live-progress display below
 					toolName = functionCall.name ?? ''
 					toolId = functionCall.id ?? ''

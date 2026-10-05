@@ -64,8 +64,8 @@ const voidRoot = path.join(repo, 'src/vs/workbench/contrib/void');
 const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory()
 	? (['node_modules', 'test', 'out', 'src', 'src2', 'electron-main', 'node'].includes(e.name) ? [] : walk(path.join(d, e.name)))
 	: [path.join(d, e.name)]);
-// Known dead code that registers but is not wired in (also unreachable before the upgrade).
-const knownUnwired = new Set(['browser/_dummyContrib.ts', 'browser/_markerCheckService.ts', 'browser/contextGatheringService.ts', 'browser/vaderNativeExternalAgentAdapter.ts']);
+// Nothing is exempt any more: the dead modules were deleted and the external-agent adapter is imported by void.contribution.ts.
+const knownUnwired = new Set();
 const unreached = walk(voidRoot)
 	.filter(f => /\.ts$/.test(f))
 	.filter(f => /registerSingleton\(|registerAction2\(|registerWorkbenchContribution2?\(|Registry\.as/.test(fs.readFileSync(f, 'utf8')))

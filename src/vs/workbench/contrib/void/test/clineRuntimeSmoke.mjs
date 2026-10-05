@@ -162,7 +162,7 @@ async function test5_toolRejection() {
 }
 
 async function main() {
-	console.log(`Testing real, installed @cline/agents AgentRuntime (version pinned in package.json: 0.0.86)\n`);
+	console.log(`Testing real, installed @cline/agents AgentRuntime (version pinned in package.json: 0.0.90)\n`);
 	await test1_basicRun();
 	await test2_singleToolCall();
 	await test3_midBatchApprovalResume();

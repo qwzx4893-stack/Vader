@@ -12,7 +12,6 @@ import { StorageTarget, StorageScope } from '../../../../platform/storage/common
 import { IApplicationStorageMainService } from '../../../../platform/storage/electron-main/storageMainService.js';
 
 import { IMetricsService } from '../common/metricsService.js';
-import { PostHog } from 'posthog-node'
 import { OPT_OUT_KEY } from '../common/storageKeys.js';
 
 
@@ -44,7 +43,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 	// kept intact so this can be wired to Vader's own (self-hosted or none)
 	// analytics endpoint later without touching call sites. No network client
 	// is constructed, so no telemetry request is ever made.
-	private readonly client: Pick<PostHog, 'optOut' | 'optIn' | 'identify' | 'capture'> = {
+	private readonly client: { optOut(): Promise<void>; optIn(): Promise<void>; identify(...args: unknown[]): void; capture(...args: unknown[]): void } = {
 		optOut: async () => { },
 		optIn: async () => { },
 		identify: () => { },

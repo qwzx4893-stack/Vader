@@ -13,8 +13,8 @@ import type { AgentModel, AgentTool } from '@cline/shared';
 // also the compatibility contract the hand-transcribed `src/typings/cline-{agents,shared}.d.ts`
 // shims were written against - keep in sync with `test/checkClineTypingsVersion.mjs`, which
 // fails loudly if the installed packages ever drift from what's declared here.
-export const CLINE_AGENTS_VERSION = '0.0.86';
-export const CLINE_SHARED_VERSION = '0.0.86';
+export const CLINE_AGENTS_VERSION = '0.0.90';
+export const CLINE_SHARED_VERSION = '0.0.90';
 
 /**
  * Lightweight, synchronous-ish health probe: constructs a throwaway `AgentRuntime` with a

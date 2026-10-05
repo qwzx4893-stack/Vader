@@ -1,0 +1,9 @@
+{
+	"name": "@jerome-benoit/sap-ai-provider",
+	"version": "4.8.0",
+	"description": "Vader stand-in for the SAP AI Core provider that @cline/llms imports statically. Vader does not offer SAP AI Core; the real package drags in the SAP cloud SDK and its vulnerable dependency chain (jks-js -> node-forge, ...), none of which Vader uses. See docs/integrations/security-scan.md.",
+	"license": "Apache-2.0",
+	"type": "module",
+	"main": "./index.js",
+	"exports": { ".": "./index.js" }
+}

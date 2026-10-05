@@ -7,6 +7,7 @@ import { SendLLMMessageParams, OnText, OnFinalMessage, OnError } from '../../com
 import { IMetricsService } from '../../common/metricsService.js';
 import { displayInfoOfProviderName } from '../../common/voidSettingsTypes.js';
 import { sendLLMMessageToProviderImplementation } from './sendLLMMessage.impl.js';
+import { collectSecrets, redactError, redactString } from './redactSecrets.js';
 
 
 export const sendLLMMessage = async ({
@@ -72,8 +73,12 @@ export const sendLLMMessage = async ({
 		onFinalMessage_(params)
 	}
 
+	const secrets = collectSecrets(settingsOfProvider[providerName])
 	const onError: OnError = ({ message: errorMessage, fullError }) => {
 		if (_didAbort) return
+		// a rejected key is often quoted back by the provider: strip every configured secret from the error before it goes anywhere
+		errorMessage = redactString(errorMessage, secrets)
+		fullError = redactError(fullError, secrets)
 		console.error('sendLLMMessage onError:', errorMessage)
 
 		// handle failed to fetch errors, which give 0 information by design

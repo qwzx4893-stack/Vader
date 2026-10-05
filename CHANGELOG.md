@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased - Whole-project re-scan: privacy, unconnected parts, dependency age
+
+- **Network privacy.** Electron and the agent's Playwright Chromium no longer contact Google on their own (spell-check dictionary,
+  autofill crowdsourcing, network-time, component/CT updates, optimisation hints). Measured with Chromium's net-log; two residual
+  contacts that need a profile preference are documented with reasons in `docs/integrations/privacy.md`.
+  New test `browserPrivacyArgsE2E.mjs` fails if Playwright adds a feature the copied `--disable-features` list lacks.
+- **Parts that were not connected.** The reference external-agent adapter registered itself but nothing imported it - now loaded by
+  `void.contribution.ts`. Five dead modules (`_dummyContrib`, `_markerCheckService`, `aiRegexService`, `contextGatheringService`,
+  `directoryStrTypes`) and three unreferenced upstream GitHub composite actions were deleted. New test `unconnectedModulesE2E.mjs`
+  builds the real module graphs and fails on any registering module nobody loads or any module nobody imports.
+- **Dependencies.** `@cline/agents` / `@cline/shared` 0.0.86 -> 0.0.90 (typings shim updated, runtime smoke + browser bundle tests pass);
+  unused `posthog-node` removed (telemetry was already hard-disabled); Electron 42.11.10.
+- **Scans.** Full-repo Semgrep triaged (Vader-owned findings are style rules or guarded dispatch; upstream ones are not shipped or are
+  public client ids), lockfile lint (all `https://registry.npmjs.org` with integrity), install-script inventory, retire.js (only
+  build-time `next` bundles, not shipped).
+
 ## Unreleased - Final production-readiness pass: cache bounds, timeouts, dependency audit, provider re-validation
 
 See **`FINAL_PRODUCTION_READINESS_REPORT.md`** for the complete, evidence-tagged account of this

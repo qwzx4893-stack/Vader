@@ -77,6 +77,27 @@ type PageEntry = {
 	closed: boolean;
 };
 
+// Playwright's own `--disable-features` list (playwright-core chromiumSwitches.ts). Chromium honours only the LAST `--disable-features`
+// switch, ours comes last and so replaces Playwright's: it must repeat every feature Playwright turns off. browserPrivacyArgsE2E.mjs
+// fails when the installed Playwright disables a feature this list lacks.
+const PLAYWRIGHT_DISABLED_FEATURES = [
+	'AvoidUnnecessaryBeforeUnloadCheckSync', 'DestroyProfileOnBrowserClose', 'DialMediaRouteProvider', 'GlobalMediaControls', 'HttpsUpgrades',
+	'LensOverlay', 'MediaRouter', 'PaintHolding', 'ThirdPartyStoragePartitioning', 'BlockOriginHeaderModificationOnRedirect', 'Translate',
+	'AutoDeElevate', 'OptimizationHints', 'msForceBrowserSignIn', 'msEdgeUpdateLaunchServicesPreferredVersion',
+]
+// Chromium features that talk to Google without the user asking: autofill crowdsourcing, network time, CT list updates, model downloads
+const PRIVACY_DISABLED_FEATURES = ['AutofillServerCommunication', 'NetworkTimeServiceQuerying', 'CertificateTransparencyComponentUpdater', 'OptimizationGuideModelDownloading', 'InterestFeedContentSuggestions']
+
+const BROWSER_PRIVACY_ARGS = [
+	// Chromium's own services are pointed at a port nothing listens on, so they cannot reach Google.
+	'--google-base-url=http://127.0.0.1:9', '--gaia-url=http://127.0.0.1:9', '--lso-url=http://127.0.0.1:9', '--google-apis-url=http://127.0.0.1:9',
+	'--oauth-account-manager-url=http://127.0.0.1:9', '--gcm-checkin-url=http://127.0.0.1:9/checkin', '--gcm-registration-url=http://127.0.0.1:9/register',
+	'--gcm-mcs-endpoint=127.0.0.1:9', '--variations-server-url=http://127.0.0.1:9', '--component-updater=url-source=http://127.0.0.1:9',
+	'--autofill-server-url=http://127.0.0.1:9',
+	`--disable-features=${[...PLAYWRIGHT_DISABLED_FEATURES, ...PRIVACY_DISABLED_FEATURES].join(',')}`,
+	'--disable-sync', '--no-pings', '--disable-domain-reliability', '--disable-spell-checking', '--no-first-run', '--safebrowsing-disable-auto-update',
+]
+
 export class BrowserToolMainService extends Disposable implements IBrowserToolMainService {
 	_serviceBrand: undefined;
 
@@ -96,14 +117,14 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 
 		let launchError: unknown;
 		try {
-			this._browser = await this._playwright.chromium.launch({ headless: true });
+			this._browser = await this._playwright.chromium.launch({ headless: true, args: BROWSER_PRIVACY_ARGS });
 		} catch (e) {
 			launchError = e;
 			const executablePath = findFallbackExecutablePath();
 			if (!executablePath) {
 				throw new Error(`Could not launch a browser. Run "npx playwright install chromium" once, or install Google Chrome/Microsoft Edge. (${launchError instanceof Error ? launchError.message : String(launchError)})`);
 			}
-			this._browser = await this._playwright.chromium.launch({ headless: true, executablePath });
+			this._browser = await this._playwright.chromium.launch({ headless: true, executablePath, args: BROWSER_PRIVACY_ARGS });
 		}
 
 		// the whole browser process dying (crash, killed) should not leave stale page

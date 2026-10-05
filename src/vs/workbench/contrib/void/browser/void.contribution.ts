@@ -21,10 +21,6 @@ import './quickEditActions.js'
 // register Autocomplete
 import './autocompleteService.js'
 
-// register Context services
-// import './contextGatheringService.js'
-// import './contextUserChangesService.js'
-
 // settings pane
 import './voidSettingsPane.js'
 
@@ -121,6 +117,9 @@ import './marketplace/providers/extensionGalleryProvider.js'
 import './marketplace/providers/skillMarketplaceProvider.js'
 import './marketplace/providers/mcpMarketplaceProvider.js'
 import './marketplace/providers/acpAgentMarketplaceProvider.js'
+// The reference external-agent adapter registers itself with the registry the ACP provider above lists from
+// (docs/integrations/external-agent-adapter.md); without this import it was never registered.
+import './vaderNativeExternalAgentAdapter.js'
 import './marketplace/providers/languageAndDebugMarketplaceProviders.js'
 import './marketplace/providers/localToolingMarketplaceProviders.js'
 import './marketplace/marketplaceViewPane.js'

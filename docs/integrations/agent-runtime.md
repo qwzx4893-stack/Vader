@@ -6,7 +6,7 @@
 
 Cline is Vader's Main Agent runtime - not a selectable option alongside something else. There is no legacy loop left to fall back to; a Cline failure surfaces as a clear per-task error (`_runChatAgentImpl`'s upfront `IAgentRuntimeRegistryService.getHealth()` check, plus the `_runChatAgent` wrapper's catch), never a silent switch to different execution logic.
 
-`@cline/agents`/`@cline/shared`, version `0.0.86` exact-pinned, are real, installed dependencies (Apache-2.0, verified against the npm registry directly and the actual installed `.d.ts` files - not assumed from training data).
+`@cline/agents`/`@cline/shared`, version `0.0.90` exact-pinned, are real, installed dependencies (Apache-2.0, verified against the npm registry directly and the actual installed `.d.ts` files - not assumed from training data).
 
 ## Why `@cline/agents`, not `@cline/core` or `@cline/sdk`
 
