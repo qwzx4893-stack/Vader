@@ -1,4 +1,5 @@
 import { CancellationToken } from '../../../../base/common/cancellation.js'
+import { compileModelRegex, MAX_LINE_CHARS } from '../common/helpers/safeRegex.js';
 import { URI } from '../../../../base/common/uri.js'
 import { IFileService } from '../../../../platform/files/common/files.js'
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js'
@@ -602,11 +603,16 @@ export class ToolsService implements IToolsService {
 				const contents = model.getValue(EndOfLinePreference.LF);
 				const contentOfLine = contents.split('\n');
 				const totalLines = contentOfLine.length;
-				const regex = isRegex ? new RegExp(query) : null;
+				let regex: RegExp | null = null
+				if (isRegex) {
+					const compiled = compileModelRegex(query)
+					if (!compiled.ok) { throw new Error(compiled.reason) } // reported back to the model, which can retry with a simpler pattern
+					regex = compiled.regex
+				}
 				const lines: number[] = []
 				for (let i = 0; i < totalLines; i++) {
 					const line = contentOfLine[i];
-					if ((isRegex && regex!.test(line)) || (!isRegex && line.includes(query))) {
+					if ((isRegex && regex!.test(line.length > MAX_LINE_CHARS ? line.slice(0, MAX_LINE_CHARS) : line)) || (!isRegex && line.includes(query))) {
 						const matchLine = i + 1;
 						lines.push(matchLine);
 					}

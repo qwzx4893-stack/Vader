@@ -314,3 +314,11 @@ koffi/**
 # in websocket's browser.js inside a try/catch with a globalThis fallback,
 # so it is unnecessary in the browsers/runtimes VS Code supports.
 es5-ext/**
+
+# Voice dictation (foundry-local-sdk) is not part of Vader: its voice endpoint is removed from product.json, and the code that
+# loads it does so lazily (await import('foundry-local-sdk') in localTranscriptionService.ts). It is the only user of adm-zip,
+# which has high-severity advisories (4 GB allocation from a crafted ZIP, extraction following symlinks). node-forge was only
+# reachable through the excluded SAP provider chain (jks-js) and has a signature-verification advisory.
+foundry-local-sdk/**
+adm-zip/**
+node-forge/**

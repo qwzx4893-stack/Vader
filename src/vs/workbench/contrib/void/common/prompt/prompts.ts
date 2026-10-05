@@ -604,7 +604,7 @@ export const reParsedToolXMLString = (toolName: ToolName, toolParams: RawToolPar
 	return `\
     <${toolName}>${!params ? '' : `\n${params}`}
     </${toolName}>`
-		.replace('\t', '  ')
+		.replace(/\t/g, '  ')
 }
 
 /* We expect tools to come at the end - not a hard limit, but that's just how we process them, and the flow makes more sense that way. */
@@ -763,7 +763,7 @@ ${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`)
 	const fullSystemMsgStr = ansStrs
 		.join('\n\n\n')
 		.trim()
-		.replace('\t', '  ')
+		.replace(/\t/g, '  ')
 
 	return fullSystemMsgStr
 

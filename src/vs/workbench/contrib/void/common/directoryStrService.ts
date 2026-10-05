@@ -427,9 +427,10 @@ class DirectoryStrService extends Disposable implements IDirectoryStrService {
 			wasCutOff = initialCutOff;
 		}
 
-		let c = content.substring(0, MAX_DIRSTR_CHARS_TOTAL_TOOL)
-		c = `Directory of ${uri.fsPath}:\n${content}`
-		if (wasCutOff) c = `${c}\n...Result was truncated...`
+		// the limit used to be computed and then ignored (the untruncated listing was returned), so a huge folder could flood the context
+		const limited = content.length > MAX_DIRSTR_CHARS_TOTAL_TOOL
+		let c = `Directory of ${uri.fsPath}:\n${limited ? content.substring(0, MAX_DIRSTR_CHARS_TOTAL_TOOL) : content}`
+		if (wasCutOff || limited) c = `${c}\n...Result was truncated...`
 
 		return c
 	}

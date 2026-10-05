@@ -64,6 +64,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
 
       - name: Setup Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
@@ -91,7 +93,7 @@ jobs:
         run: npm run compile-client
 
       - name: Fetch Electron
-        run: node build/lib/electron.ts ${{ env.ARCH }}
+        run: node build/lib/electron.ts $env:ARCH
 
       # The packaging task strips/inspects Authenticode signatures on bundled native files with
       # signtool.exe (Windows SDK). It is installed on the runner but not on PATH.
@@ -105,7 +107,7 @@ jobs:
           $signtool.DirectoryName >> $env:GITHUB_PATH
 
       - name: Package Windows application
-        run: npm run gulp vscode-win32-${{ env.ARCH }}-min
+        run: npm run gulp vscode-win32-%ARCH%-min
         shell: cmd
 
       # Catches the "installed app dies at startup with ERR_MODULE_NOT_FOUND" class of bug on the
@@ -114,7 +116,7 @@ jobs:
         run: node src/vs/workbench/contrib/void/test/packagedImportsE2E.mjs out-vscode-min
 
       - name: Build Inno Setup updater icon
-        run: npm run gulp vscode-win32-${{ env.ARCH }}-inno-updater
+        run: npm run gulp vscode-win32-%ARCH%-inno-updater
         shell: cmd
 
       - name: Install Inno Setup
@@ -122,7 +124,7 @@ jobs:
         shell: cmd
 
       - name: Build installer
-        run: npm run gulp vscode-win32-${{ env.ARCH }}-user-setup
+        run: npm run gulp vscode-win32-%ARCH%-user-setup
         shell: cmd
 
       - name: Locate build output
@@ -145,14 +147,15 @@ jobs:
         if: steps.locate.outputs.setup_exe != '' && env.WINDOWS_CERT_PFX_BASE64 != ''
         shell: pwsh
         env:
+          SETUP_EXE: ${{ steps.locate.outputs.setup_exe }}
           WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
         run: |
           $pfx = Join-Path $env:RUNNER_TEMP 'codesign.pfx'
           [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:WINDOWS_CERT_PFX_BASE64))
           try {
-            signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd sha256 /tr http://timestamp.digicert.com /td sha256 "${{ steps.locate.outputs.setup_exe }}"
+            signtool sign /f $pfx /p $env:WINDOWS_CERT_PASSWORD /fd sha256 /tr http://timestamp.digicert.com /td sha256 $env:SETUP_EXE
             if ($LASTEXITCODE -ne 0) { throw "signtool sign failed ($LASTEXITCODE)" }
-            signtool verify /pa "${{ steps.locate.outputs.setup_exe }}"
+            signtool verify /pa $env:SETUP_EXE
             if ($LASTEXITCODE -ne 0) { throw "signature did not verify ($LASTEXITCODE)" }
           } finally { Remove-Item $pfx -Force -ErrorAction SilentlyContinue }
 
@@ -186,6 +189,7 @@ jobs:
       - name: Checkout (package.json only)
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           sparse-checkout: package.json
           sparse-checkout-cone-mode: false
 

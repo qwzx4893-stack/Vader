@@ -50,6 +50,7 @@ jobs:
       - name: Checkout (test sources only)
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          persist-credentials: false
           sparse-checkout: |
             src/vs/workbench/contrib/void/test
             .github/e2e-only.txt
@@ -66,12 +67,14 @@ jobs:
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_BRANCH: ${{ github.ref_name }}
         run: |
           if (-not $env:RUN_ID) {
-            $env:RUN_ID = gh run list --repo ${{ github.repository }} --workflow windows-build.yml --branch '${{ github.ref_name }}' --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+            $env:RUN_ID = gh run list --repo $env:GH_REPO --workflow windows-build.yml --branch $env:GH_BRANCH --status success --limit 1 --json databaseId --jq '.[0].databaseId'
             "using build run $env:RUN_ID"
           }
-          gh run download $env:RUN_ID --repo ${{ github.repository }} --name vader-win32-x64-setup --dir dl
+          gh run download $env:RUN_ID --repo $env:GH_REPO --name vader-win32-x64-setup --dir dl
           $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
           $p = Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$env:INSTALL_DIR",'/MERGETASKS=!runcode' -Wait -PassThru
           "installer exit code: $($p.ExitCode)"
@@ -81,6 +84,8 @@ jobs:
 
       - name: Install the MCP SDK next to a copy of the MCP fixture server
         shell: pwsh
+        env:
+          ONLY_INPUT: ${{ github.event.inputs.only }}
         run: |
           # the sparse checkout has no node_modules; the fixture needs the same SDK versions the app uses
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
@@ -94,7 +99,7 @@ jobs:
           "E2E_MCP_FIXTURE=$env:RUNNER_TEMP\mcp\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
           # fast iteration: a regex in .github/e2e-only.txt limits the scripted run (empty = everything)
           $only = (Get-Content .github/e2e-only.txt -Raw -ErrorAction SilentlyContinue)
-          if ("${{ github.event.inputs.only }}") { $only = "${{ github.event.inputs.only }}" }
+          if ($env:ONLY_INPUT) { $only = $env:ONLY_INPUT }
           if ($only) { "E2E_ONLY=$($only.Trim())" >> $env:GITHUB_ENV; "restricting the scripted run to: $($only.Trim())" }
 
       - name: Install Playwright (client only) and git identity

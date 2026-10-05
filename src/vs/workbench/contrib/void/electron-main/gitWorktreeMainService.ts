@@ -39,7 +39,7 @@ const git = async (args: string[], cwd: string): Promise<string> => {
 // status, anything scanning the workspace), defeating the point of isolating them
 const worktreesRootFor = (repoPath: string) => path.join(path.dirname(repoPath), '.vader-worktrees');
 
-const sanitizeForPath = (branchName: string) => branchName.replace(/[^a-zA-Z0-9_.-]/g, '-');
+const sanitizeForPath = (branchName: string) => branchName.replace(/[^a-zA-Z0-9_.-]/g, '-').replace(/^\.+/, '-') || 'branch'; // a leading dot would let '..' point at the parent directory
 
 export class GitWorktreeMainService implements IGitWorktreeMainService {
 	readonly _serviceBrand: undefined;
