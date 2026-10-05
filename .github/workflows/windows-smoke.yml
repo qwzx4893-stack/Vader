@@ -9,20 +9,26 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to install and test'
-        required: true
+        description: 'Release tag to install and test (ignored when run_id is set)'
+        required: false
         default: 'v1.99.3'
+      run_id:
+        description: 'Instead of a release: Windows Build run id whose installer artifact to test (validation builds)'
+        required: false
+        default: ''
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   smoke:
-    name: Install and launch ${{ github.event.inputs.tag }}
+    name: Install and launch ${{ github.event.inputs.run_id && format('build run {0}', github.event.inputs.run_id) || github.event.inputs.tag }}
     runs-on: windows-2022
     timeout-minutes: 30
     env:
       TAG: ${{ github.event.inputs.tag }}
+      RUN_ID: ${{ github.event.inputs.run_id }}
       INSTALL_DIR: C:\VaderApp
     steps:
       - name: Checkout (test script only)
@@ -38,12 +44,18 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
-      - name: Download release installer
+      - name: Download installer (release asset, or artifact of a build run)
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download $env:TAG --repo ${{ github.repository }} --pattern '*.exe' --dir dl
+          if ($env:RUN_ID) {
+            gh run download $env:RUN_ID --repo ${{ github.repository }} --name vader-win32-x64-setup --dir dl
+          } else {
+            gh release download $env:TAG --repo ${{ github.repository }} --pattern '*.exe' --dir dl
+          }
+          $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
+          if ($exe -and $exe.DirectoryName -ne (Resolve-Path dl).Path) { Move-Item $exe.FullName dl }
           Get-ChildItem dl | Format-Table Name, Length
 
       - name: Install silently

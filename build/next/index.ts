@@ -7,6 +7,7 @@ import * as esbuild from 'esbuild';
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
+import { isBuiltin } from 'module';
 
 import glob from 'glob';
 import gulpWatch from '../lib/watch/index.ts';
@@ -602,6 +603,58 @@ function inlineMinimistPlugin(): esbuild.Plugin {
 	};
 }
 
+/**
+ * Vader addition. The packaged app resolves bare specifiers from `node_modules.asar` through a
+ * resolve hook that `bootstrap-esm` registers at runtime. Static `import 'pkg'` statements in the
+ * entry bundle are linked BEFORE that hook is registered, so any package left external here makes the
+ * app die at startup with ERR_MODULE_NOT_FOUND. Vader's main-process SDKs (LLM providers, MCP) are
+ * therefore bundled into the entry (together with their own dependency closure); everything else
+ * stays external exactly as with `packages: 'external'`.
+ */
+const VADER_BUNDLED_PACKAGES = [
+	'@anthropic-ai/sdk',
+	'@google/genai',
+	'@mistralai/mistralai',
+	'@modelcontextprotocol/sdk',
+	'google-auth-library',
+	'ollama',
+	'openai',
+];
+
+function vaderBundledPackagesPlugin(): esbuild.Plugin {
+	const isBundledName = (spec: string) => VADER_BUNDLED_PACKAGES.some(name => spec === name || spec.startsWith(name + '/'));
+	const inNodeModules = (file: string | undefined) => !!file && /[\\/]node_modules[\\/]/.test(file);
+	return {
+		name: 'vader-bundled-packages',
+		setup(build) {
+			build.onResolve({ filter: /^[^./]/ }, async args => {
+				if (args.pluginData?.vaderResolving || args.kind === 'entry-point' || path.isAbsolute(args.path)) {
+					return undefined;
+				}
+				// CommonJS packages pulled into the ESM bundle call a bundler-generated `__require`, which throws
+				// for Node built-ins because ESM has no `require`. Serve those calls from a tiny bundled
+				// module instead (the bundle itself must NOT define a global `require`).
+				if (isBuiltin(args.path) && args.kind === 'require-call') {
+					return { path: args.path, namespace: 'vader-builtin' };
+				}
+				if (isBuiltin(args.path) || args.path === 'electron' || args.path.startsWith('electron/')) {
+					return { path: args.path, external: true };
+				}
+				if (inNodeModules(args.importer) || isBundledName(args.path)) {
+					const resolved = await build.resolve(args.path, { kind: args.kind, resolveDir: args.resolveDir, importer: args.importer, namespace: args.namespace, pluginData: { vaderResolving: true } });
+					// Optional dependencies (loaded inside try/catch) that are not installed stay external.
+					return resolved.errors.length > 0 ? { path: args.path, external: true } : resolved;
+				}
+				return { path: args.path, external: true };
+			});
+			build.onLoad({ filter: /.*/, namespace: 'vader-builtin' }, args => ({
+				contents: `module.exports = process.getBuiltinModule(${JSON.stringify(args.path)});`,
+				loader: 'js',
+			}));
+		},
+	};
+}
+
 function cssExternalPlugin(): esbuild.Plugin {
 	// Mark CSS imports as external so they stay as import statements
 	// The CSS files are copied separately and loaded by the browser at runtime
@@ -778,6 +831,7 @@ ${tslib}`,
 		const plugins: esbuild.Plugin[] = bundleCssEntryPoints.has(entryPoint) ? [] : [cssExternalPlugin()];
 		// Add content mapper plugin to inject product config and builtin extensions
 		plugins.push(contentMapperPlugin);
+		plugins.push(vaderBundledPackagesPlugin());
 		if (doNls) {
 			plugins.unshift(nlsPlugin({
 				baseDir: path.join(REPO_ROOT, SRC_DIR),
@@ -800,7 +854,8 @@ ${tslib}`,
 			format: 'esm',
 			platform: 'neutral',
 			target: ['es2024'],
-			packages: 'external',
+			conditions: ['node'],
+			mainFields: ['module', 'main'],
 			sourcemap: 'linked',
 			sourcesContent: true,
 			minify: doMinify,
@@ -837,7 +892,7 @@ ${tslib}`,
 
 		const outPath = path.join(REPO_ROOT, outDir, `${entry}.js`);
 
-		const bootstrapPlugins: esbuild.Plugin[] = [inlineMinimistPlugin(), contentMapperPlugin];
+		const bootstrapPlugins: esbuild.Plugin[] = [inlineMinimistPlugin(), contentMapperPlugin, vaderBundledPackagesPlugin()];
 		if (doNls) {
 			bootstrapPlugins.unshift(nlsPlugin({
 				baseDir: path.join(REPO_ROOT, SRC_DIR),
@@ -852,7 +907,8 @@ ${tslib}`,
 			format: 'esm',
 			platform: 'node',
 			target: ['es2024'],
-			packages: 'external',
+			conditions: ['node'],
+			mainFields: ['module', 'main'],
 			sourcemap: 'linked',
 			sourcesContent: true,
 			minify: doMinify,

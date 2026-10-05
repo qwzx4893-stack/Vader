@@ -89,9 +89,25 @@ jobs:
       - name: Fetch Electron
         run: node build/lib/electron.ts ${{ env.ARCH }}
 
+      # The packaging task strips/inspects Authenticode signatures on bundled native files with
+      # signtool.exe (Windows SDK). It is installed on the runner but not on PATH.
+      - name: Put signtool on PATH
+        shell: pwsh
+        run: |
+          $signtool = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin' -Recurse -Filter signtool.exe |
+            Where-Object { $_.FullName -match '\\x64\\' } | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe not found in the Windows SDK' }
+          "signtool: $($signtool.FullName)"
+          $signtool.DirectoryName >> $env:GITHUB_PATH
+
       - name: Package Windows application
         run: npm run gulp vscode-win32-${{ env.ARCH }}-min
         shell: cmd
+
+      # Catches the "installed app dies at startup with ERR_MODULE_NOT_FOUND" class of bug on the
+      # real bundles, before an installer is even built.
+      - name: Check main-process bundles import only resolvable packages
+        run: node src/vs/workbench/contrib/void/test/packagedImportsE2E.mjs out-vscode-min
 
       - name: Build Inno Setup updater icon
         run: npm run gulp vscode-win32-${{ env.ARCH }}-inno-updater
