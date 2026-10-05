@@ -46,7 +46,7 @@ export async function runPersistenceGroup() {
 		server.reset();
 		app = await launchApp({ exe: config.exe, workspace: ws, userDataDir, extensionsDir, extraArgs: config.extraArgs });
 		await sleep(2500);
-		check('second run does NOT show the onboarding again', !(await ui.isOnboarding(app.page)), (await app.page.locator('.void-scope').first().innerText().catch(() => '')).slice(0, 200));
+		check('second run does NOT show the onboarding again', !(await ui.isOnboarding(app.page)), await app.page.locator('.void-scope').getByText('Get Started', { exact: true }).first().evaluate(e => `${document.querySelectorAll('.void-scope').length} scopes; context: ${(e.closest('[class*="void-"]')?.parentElement?.parentElement?.innerText ?? e.innerText).replace(/\s+/g, ' ').slice(0, 220)}`).catch(() => 'no Get Started text'));
 		const hasChat = await app.page.locator(ui.CHAT_INPUT).count();
 		check('the chat is ready without any setup', hasChat > 0);
 		// the previous conversation is in the thread list

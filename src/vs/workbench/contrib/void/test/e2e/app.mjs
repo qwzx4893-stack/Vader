@@ -79,6 +79,11 @@ export async function launchApp(opts) {
 			} catch { /* fall through to the hard close */ }
 			const end = Date.now() + timeoutMs;
 			while (Date.now() < end && !exited) { await sleep(300); }
+			if (!exited) {
+				// say what the window looked like, so a CI log is enough to see why it did not quit
+				const state = await page.evaluate(() => ({ title: document.title, dialogs: [...document.querySelectorAll('.monaco-dialog-box, .quick-input-widget, .notifications-toasts .notification-list-item')].filter(e => e.offsetParent).map(e => e.innerText.replace(/\s+/g, ' ').slice(0, 160)) })).catch(e => ({ unreachable: String(e).slice(0, 100) }));
+				console.log(`  [diag] app still running ${timeoutMs} ms after Close Window: ${JSON.stringify(state)}`);
+			}
 			const graceful = !!exited;
 			await this.close();
 			return graceful;

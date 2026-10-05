@@ -108,7 +108,7 @@ export const terminalScenarios = [
 		fn: async (t) => {
 			t.use(seq([
 				{ toolCalls: [{ name: 'open_persistent_terminal', args: {} }] },
-				(c) => { const id = /(?:ID|id)[^\w]*([\w-]+)/.exec(c.lastToolResult ?? '')?.[1] ?? (c.lastToolResult ?? '').trim(); return { toolCalls: [{ name: 'run_persistent_command', args: { command: `node -e "console.log('PERSIST_'+(2+3))"`, persistent_terminal_id: id } }] }; },
+				(c) => { const id = /persistentTerminalId="([^"]+)"/.exec(c.lastToolResult ?? '')?.[1] ?? 'NOT-PARSED'; return { toolCalls: [{ name: 'run_persistent_command', args: { command: `node -e "console.log('PERSIST_'+(2+3))"`, persistent_terminal_id: id } }] }; },
 				{ text: 'Used the terminal.' },
 			]));
 			await t.send('open a persistent terminal and print something');
@@ -197,7 +197,7 @@ export const mcpScenarios = [
 		fn: async (t) => {
 			const cfgDir = path.join(t.app.home, '.vader-editor');
 			fs.mkdirSync(cfgDir, { recursive: true });
-			const server = path.resolve(here, '../../fixtures/fixtureMcpServer.mjs');
+			const server = process.env.E2E_MCP_FIXTURE || path.resolve(here, '../../fixtures/fixtureMcpServer.mjs'); // CI machines without a full checkout point this at a copy next to an installed SDK
 			fs.writeFileSync(path.join(cfgDir, 'mcp.json'), JSON.stringify({ mcpServers: { fixture: { command: process.execPath, args: [server] } } }, null, 2));
 			const find = (c) => c.tools.map(x => x.function?.name).find(n => /echo/i.test(n ?? ''));
 			t.use((c) => { const n = find(c); return n ? (c.toolResults.length ? { text: `MCP said: ${c.lastToolResult}` } : { toolCalls: [{ name: n, args: { text: 'hello mcp' } }] }) : { text: 'NO-ECHO-TOOL-YET' }; });

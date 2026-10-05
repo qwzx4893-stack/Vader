@@ -52,6 +52,8 @@ jobs:
         with:
           sparse-checkout: |
             src/vs/workbench/contrib/void/test
+            .github/e2e-only.txt
+            package.json
             .nvmrc
           sparse-checkout-cone-mode: false
 
@@ -76,6 +78,24 @@ jobs:
           if ($p.ExitCode -ne 0) { exit 1 }
           $main = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'unins*' } | Sort-Object Length -Descending | Select-Object -First 1
           "VADER_EXE=$($main.FullName)" >> $env:GITHUB_ENV
+
+      - name: Install the MCP SDK next to a copy of the MCP fixture server
+        shell: pwsh
+        run: |
+          # the sparse checkout has no node_modules; the fixture needs the same SDK versions the app uses
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $sdk = $pkg.dependencies.'@modelcontextprotocol/sdk'; $zod = $pkg.dependencies.zod
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\mcp | Out-Null
+          Push-Location $env:RUNNER_TEMP\mcp
+          npm init -y | Out-Null
+          npm install "@modelcontextprotocol/sdk@$sdk" "zod@$zod" --no-audit --no-fund
+          Pop-Location
+          Copy-Item src\vs\workbench\contrib\void\test\fixtures\fixtureMcpServer.mjs $env:RUNNER_TEMP\mcp\
+          "E2E_MCP_FIXTURE=$env:RUNNER_TEMP\mcp\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
+          # fast iteration: a regex in .github/e2e-only.txt limits the scripted run (empty = everything)
+          $only = (Get-Content .github/e2e-only.txt -Raw -ErrorAction SilentlyContinue)
+          if ("${{ github.event.inputs.only }}") { $only = "${{ github.event.inputs.only }}" }
+          if ($only) { "E2E_ONLY=$($only.Trim())" >> $env:GITHUB_ENV; "restricting the scripted run to: $($only.Trim())" }
 
       - name: Install Playwright (client only) and git identity
         shell: pwsh
@@ -103,7 +123,6 @@ jobs:
         shell: pwsh
         env:
           E2E_OUT: e2e-out
-          E2E_ONLY: ${{ github.event.inputs.only }}
           E2E_PRISTINE: '1'
           E2E_SCENARIO_TIMEOUT: '150000'
         run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
