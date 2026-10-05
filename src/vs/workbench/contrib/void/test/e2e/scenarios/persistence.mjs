@@ -41,12 +41,12 @@ export async function runPersistenceGroup() {
 		check('a conversation took place', before.some(x => x.includes('remember: blue')), JSON.stringify(before));
 		await sleep(1500); // let the thread be written out
 		const graceful = await app.closeGracefully();
-		check('the app exits cleanly when the window is closed', graceful);
+		check('the app exits cleanly when the window is closed', graceful, `exit=${JSON.stringify(app.exited())} log tail: ${app.mainOutput().split(/\r?\n/).filter(l => !/DEP0040|trace-deprecation/.test(l)).slice(-6).join(' | ').slice(0, 500)}`);
 
 		server.reset();
 		app = await launchApp({ exe: config.exe, workspace: ws, userDataDir, extensionsDir, extraArgs: config.extraArgs });
 		await sleep(2500);
-		check('second run does NOT show the onboarding again', !(await ui.isOnboarding(app.page)));
+		check('second run does NOT show the onboarding again', !(await ui.isOnboarding(app.page)), (await app.page.locator('.void-scope').first().innerText().catch(() => '')).slice(0, 200));
 		const hasChat = await app.page.locator(ui.CHAT_INPUT).count();
 		check('the chat is ready without any setup', hasChat > 0);
 		// the previous conversation is in the thread list

@@ -121,6 +121,8 @@ async function runScenario({ group, s, server, ws, app }) {
 	const problemsBefore = app.problems.length;
 	const t = {
 		page, app, server, ws, dir,
+		/** Informational: logged and kept in the results, but never fails the scenario (for behaviour that depends on a real, unscripted model). */
+		info(name, ok, detail = '') { rec.checks.push({ name: `[info] ${name}`, ok: true, detail: `${ok ? 'yes' : 'no'} ${String(detail).slice(0, 300)}` }); log(`  INFO ${ok ? 'yes' : 'no '}: ${name}${detail ? ` - ${String(detail).slice(0, 200)}` : ''}`); return !!ok; },
 		check(name, ok, detail = '') { rec.checks.push({ name, ok: !!ok, detail: String(detail).slice(0, 400) }); log(`  ${ok ? 'PASS' : 'FAIL'}: ${name}${detail && !ok ? ` - ${String(detail).slice(0, 300)}` : ''}`); if (!ok) { rec.status = 'fail'; } return !!ok; },
 		use: (responder) => server.setResponder(responder),
 		useFim: (fn) => server.setFim(fn),
@@ -155,6 +157,7 @@ async function runScenario({ group, s, server, ws, app }) {
 	rec.ms = Date.now() - t0;
 	if (rec.status === 'fail') {
 		await t.shot('failure');
+		await logFailureDiagnostics({ ui, page, server, app, problemsBefore, log });
 		try {
 			fs.writeFileSync(path.join(dir, 'transcript.json'), JSON.stringify(await ui.transcript(page).catch(() => []), null, 2));
 			fs.writeFileSync(path.join(dir, 'model-requests.json'), JSON.stringify(server.requests.map(r => ({ path: r.path, step: r.step, messages: r.body?.messages?.map(m => ({ role: m.role, content: String(typeof m.content === 'string' ? m.content : JSON.stringify(m.content)).slice(0, 1500), tool_calls: m.tool_calls })), tools: r.body?.tools?.map(x => x.function?.name) })), null, 2));
@@ -177,4 +180,17 @@ export function summarize() {
 	for (const r of results.filter(r => r.status === 'fail')) { log(`  FAILED: [${r.group}] ${r.name}${r.error ? ` - ${r.error.split('\n')[0].slice(0, 200)}` : ''}`); }
 	for (const r of results.filter(r => r.status === 'skip')) { log(`  SKIPPED: [${r.group}] ${r.name} - ${r.error}`); }
 	return fail === 0;
+}
+
+/** Printed into the console log so a failure on a CI machine can be understood without downloading artifacts. */
+export async function logFailureDiagnostics({ ui, page, server, app, problemsBefore = 0, log = console.log }) {
+	try {
+		const tr = await ui.transcript(page).catch(() => []);
+		log(`  [diag] model requests: ${server?.requests?.map(r => r.path.split('/').slice(-2).join('/')).join(', ') || '(none)'}`);
+		log(`  [diag] chat transcript: ${JSON.stringify(tr.map(x => `${x.kind}:${String(x.text).replace(/\s+/g, ' ').slice(0, 90)}`)).slice(0, 700)}`);
+		const probs = app.problems.slice(problemsBefore);
+		if (probs.length) { log(`  [diag] renderer problems (${probs.length}): ${probs.slice(0, 6).map(p => p.slice(0, 220)).join(' || ')}`); }
+		const main = app.mainOutput().split(/\r?\n/).filter(l => /error|exception|ERR_|fail|mcp|spawn/i.test(l) && !/DEP0040|trace-deprecation/.test(l)).slice(-8);
+		if (main.length) { log(`  [diag] app log: ${main.map(l => l.slice(0, 220)).join(' || ')}`); }
+	} catch (e) { log(`  [diag] could not collect diagnostics: ${String(e).slice(0, 120)}`); }
 }

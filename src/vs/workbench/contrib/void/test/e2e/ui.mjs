@@ -11,7 +11,8 @@ export const CHAT_INPUT = 'textarea[placeholder^="@ to mention"]';
 const TID = (id) => `[data-testid="${id}"]`;
 
 export async function isOnboarding(page) {
-	return (await page.getByText('Get Started', { exact: true }).count()) > 0;
+	// scoped to Vader's own UI: VS Code's Welcome page also has a 'Get Started' heading
+	return (await page.locator('.void-scope').getByText('Get Started', { exact: true }).count()) > 0;
 }
 
 /** First-run flow, exactly as a new user sees it: Welcome -> Add a Provider (OpenAI-Compatible) -> model -> done. */

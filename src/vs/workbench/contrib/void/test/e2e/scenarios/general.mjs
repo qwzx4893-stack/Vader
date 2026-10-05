@@ -49,13 +49,16 @@ export const generalScenarios = [
 	{
 		name: 'general: the command palette offers the Vader commands',
 		fn: async (t) => {
-			await t.page.keyboard.press('F1');
-			await t.page.waitForSelector('.quick-input-widget', { state: 'visible' });
-			await t.page.keyboard.type('Vader:');
-			await t.sleep(900);
-			const list = norm(await t.page.locator('.quick-input-list').innerText());
-			for (const c of ['Quick Edit', 'Open Sidebar', 'Generate Commit Message', 'Open Settings']) { t.check(`"Vader: ${c}" is listed`, list.includes(c), list.slice(0, 200)); }
-			await t.page.keyboard.press('Escape');
+			// one query per command: the palette list is virtualised, so on a small window not every match is rendered at once
+			for (const c of ['Quick Edit', 'Open Sidebar', 'Generate Commit Message', 'Open Settings']) {
+				await t.page.keyboard.press('F1');
+				await t.page.waitForSelector('.quick-input-widget', { state: 'visible' });
+				await t.page.keyboard.type(`Vader: ${c}`);
+				await t.sleep(700);
+				const list = norm(await t.page.locator('.quick-input-list').innerText());
+				t.check(`"Vader: ${c}" is listed`, list.includes(c), list.slice(0, 200));
+				await t.page.keyboard.press('Escape');
+			}
 		},
 	},
 	{

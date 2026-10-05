@@ -23,6 +23,10 @@ on:
         description: 'Also run the suite against a real small model served by Ollama'
         required: false
         default: 'true'
+      only:
+        description: 'Regex over "<group> <scenario>" to run only some scenarios (empty = all)'
+        required: false
+        default: ''
       real_llm_model:
         description: 'Ollama model for the real-model run'
         required: false
@@ -99,6 +103,7 @@ jobs:
         shell: pwsh
         env:
           E2E_OUT: e2e-out
+          E2E_ONLY: ${{ github.event.inputs.only }}
           E2E_PRISTINE: '1'
           E2E_SCENARIO_TIMEOUT: '150000'
         run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
@@ -128,7 +133,18 @@ jobs:
           REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model || 'qwen2.5:1.5b' }}
           REAL_LLM_BASEURL: http://127.0.0.1:11434/v1
           E2E_SCENARIO_TIMEOUT: '900000'
-        run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+        run: |
+          # a server started in an earlier step may not survive it: make sure Ollama is answering right before the suite
+          try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Null; "ollama is up" }
+          catch {
+            "ollama is down - restarting"
+            Start-Process -FilePath .\ollama\ollama.exe -ArgumentList 'serve' -RedirectStandardOutput ollama2.log -RedirectStandardError ollama2.err.log -WindowStyle Hidden
+            for ($i = 0; $i -lt 30; $i++) { try { Invoke-RestMethod http://127.0.0.1:11434/api/version | Out-Null; break } catch { Start-Sleep 2 } }
+          }
+          "--- direct request through the same base URL the app will use"
+          $body = @{ model = $env:REAL_LLM_MODEL; messages = @(@{ role = 'user'; content = 'Say PONG' }); stream = $false } | ConvertTo-Json -Depth 5
+          (Invoke-RestMethod -Method Post -Uri "$env:REAL_LLM_BASEURL/chat/completions" -ContentType 'application/json' -Headers @{ Authorization = 'Bearer ollama' } -Body $body).choices[0].message.content
+          node src/vs/workbench/contrib/void/test/e2e/suite.mjs
 
       - name: Upload results
         if: always()
@@ -139,5 +155,6 @@ jobs:
             e2e-out
             e2e-out-real
             ollama.err.log
+            ollama2.err.log
           retention-days: 7
           if-no-files-found: ignore
