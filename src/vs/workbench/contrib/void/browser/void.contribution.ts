@@ -104,6 +104,10 @@ import '../common/browser/browserToolService.js'
 
 // Vader agent platform: Agent Gateway seam (see ARCHITECTURE.md)
 import './agentGatewayService.js'
+// These two register services but are otherwise only reached through modules that now import their
+// ids from the *Types files (to avoid import cycles), so they must be imported for their registration.
+import './verificationService.js'
+import './voidCommandBarService.js'
 
 // Vader agent platform: Main Agent Runtime health/selection (see docs/integrations/agent-runtime.md)
 import './agentRuntime/agentRuntimeRegistryService.js'

@@ -124,5 +124,61 @@
 	],
 	"configurationDefaults": {
 		"chat.disableAIFeatures": true
-	}
+	},
+	"defaultChatAgent": {
+		"extensionId": "vader.disabled.chat",
+		"chatExtensionId": "vader.disabled.chat-agent",
+		"chatExtensionOutputId": "vader.disabled.output",
+		"chatExtensionOutputExtensionStateCommand": "vader.disabled.outputState",
+		"documentationUrl": "",
+		"skusDocumentationUrl": "",
+		"optimizeUsageDocumentationUrl": "",
+		"publicCodeMatchesUrl": "",
+		"managePlanUrl": "",
+		"upgradePlanUrl": "",
+		"signUpUrl": "",
+		"termsStatementUrl": "",
+		"privacyStatementUrl": "",
+		"provider": {
+			"default": {
+				"id": "vader.disabled-default",
+				"name": "Vader (disabled)"
+			},
+			"enterprise": {
+				"id": "vader.disabled-enterprise",
+				"name": "Vader (disabled)"
+			},
+			"google": {
+				"id": "vader.disabled-google",
+				"name": "Vader (disabled)"
+			},
+			"apple": {
+				"id": "vader.disabled-apple",
+				"name": "Vader (disabled)"
+			},
+			"microsoft": {
+				"id": "vader.disabled-microsoft",
+				"name": "Vader (disabled)"
+			}
+		},
+		"providerExtensionId": "vader.disabled.provider",
+		"providerUriSetting": "vader.disabled.providerUri",
+		"providerScopes": [],
+		"entitlementUrl": "",
+		"entitlementSignupLimitedUrl": "",
+		"tokenEntitlementUrl": "",
+		"mcpRegistryDataUrl": "",
+		"managedSettingsUrl": "",
+		"chatQuotaExceededContext": "vader.disabled.chatQuotaExceeded",
+		"completionsQuotaExceededContext": "vader.disabled.completionsQuotaExceeded",
+		"walkthroughCommand": "vader.disabled.walkthrough",
+		"completionsMenuCommand": "vader.disabled.completionsMenu",
+		"chatRefreshTokenCommand": "vader.disabled.refreshToken",
+		"generateCommitMessageCommand": "vader.disabled.generateCommitMessage",
+		"resolveMergeConflictsCommand": "vader.disabled.resolveMergeConflicts",
+		"completionsAdvancedSetting": "vader.disabled.completionsAdvanced",
+		"completionsEnablementSetting": "vader.disabled.completionsEnablement",
+		"nextEditSuggestionsSetting": "vader.disabled.nextEditSuggestions"
+	},
+	"builtInExtensionsEnabledWithAutoUpdates": []
 }

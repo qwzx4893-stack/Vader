@@ -9,7 +9,8 @@
 // UI Automation), and reports - in the job log, since artifact downloads are not always reachable -
 // whether the workbench actually rendered, plus every renderer error and the tail of the app's own logs.
 //
-// Env: VADER_EXE (required), RUN_LABEL, EXTRA_ARGS, CDP_PORT, SMOKE_OUT, PW_CORE (playwright-core path)
+// Env: VADER_EXE (required), RUN_LABEL, EXTRA_ARGS, CDP_PORT, SMOKE_OUT, PW_CORE (playwright-core path),
+//      SMOKE_IGNORE (extra regex of renderer messages to treat as known noise)
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
@@ -45,6 +46,11 @@ child.stderr.on('data', d => mainOut.push(String(d)));
 let exited = null;
 child.on('exit', (code, sig) => { exited = { code, sig }; });
 
+// Messages that are known to be harmless. Each is still printed (as "known noise"), just not counted as a failure.
+//  - zod 4 probes for JIT support with `try { Function('') } catch {}`; Trusted Types blocks it, zod falls back.
+//  - a fresh profile has no extensions folder yet.
+const knownNoise = [/This document requires 'TrustedScript' assignment/, /Unable to resolve nonexistent file '[^']*[\\/]extensions'/];
+if (process.env.SMOKE_IGNORE) { knownNoise.push(new RegExp(process.env.SMOKE_IGNORE)); }
 const rendererProblems = [];
 function watchPage(page) {
 	page.on('console', m => { if (m.type() === 'error' && !/^Request Autofill\./.test(m.text())) { rendererProblems.push(`console.error: ${short(m.text())}`); } });
@@ -123,7 +129,9 @@ async function main() {
 	}
 
 	await sleep(3000);
-	const uniqueProblems = [...new Set(rendererProblems)];
+	const allProblems = [...new Set(rendererProblems)];
+	const uniqueProblems = allProblems.filter(p => !knownNoise.some(re => re.test(p)));
+	allProblems.filter(p => !uniqueProblems.includes(p)).forEach(p => console.log('  known noise (ignored):', p.slice(0, 160)));
 	check('no renderer errors / failed requests after attach', uniqueProblems.length === 0, `${uniqueProblems.length} problem(s)`);
 	uniqueProblems.slice(0, 30).forEach(p => console.log('  renderer problem:', p));
 	await browser.close().catch(() => { });

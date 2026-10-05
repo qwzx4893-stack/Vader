@@ -401,7 +401,7 @@ import './contrib/welcomeViews/common/viewsWelcome.contribution.js';
 import './contrib/welcomeViews/common/newFile.contribution.js';
 
 // Welcome Onboarding
-import './contrib/welcomeOnboarding/browser/welcomeOnboarding.contribution.js';
+import './contrib/void/browser/vaderOnboardingService.js'; // Vader: inert stand-in for upstream's Copilot sign-in onboarding (needs product.defaultChatAgent)
 
 // Onboarding (scenario engine)
 import './contrib/onboarding/browser/onboarding.contribution.js';

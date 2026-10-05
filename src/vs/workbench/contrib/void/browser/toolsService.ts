@@ -181,7 +181,6 @@ export class ToolsService implements IToolsService {
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@ISkillService private readonly skillService: ISkillService,
-		@IVerificationService private readonly verificationService: IVerificationService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
 
@@ -728,7 +727,11 @@ export class ToolsService implements IToolsService {
 				return { result }
 			},
 			run_verification_agent: async ({ objective, maxIterations }) => {
-				const result = await this.verificationService.runVerifyRepairLoop({ objective, maxIterations: maxIterations ?? undefined })
+				// Resolved at call time, not injected: IVerificationService depends on IToolsService, and an injected
+				// edge here made ToolsService -> Verification -> (Gateway -> ChatThread ->) ToolsService a cycle that
+				// the instantiation service rejects, which left the whole chat view unable to start.
+				const verificationService = instantiationService.invokeFunction(accessor => accessor.get(IVerificationService))
+				const result = await verificationService.runVerifyRepairLoop({ objective, maxIterations: maxIterations ?? undefined })
 				return { result }
 			},
 
