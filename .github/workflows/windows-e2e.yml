@@ -12,7 +12,7 @@ on:
   # (on the validation branch only) starts the same run against that branch's latest successful Windows Build.
   push:
     branches: [upgrade/vscode-1.136.2]
-    paths: ['.github/workflows/windows-e2e.yml']
+    paths: ['.github/workflows/windows-e2e.yml', '.github/e2e-only.txt', 'src/vs/workbench/contrib/void/test/e2e/**']
   workflow_dispatch:
     inputs:
       run_id:
