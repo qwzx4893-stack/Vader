@@ -1,10 +1,9 @@
 {
 	"nameShort": "Vader",
 	"nameLong": "Vader",
-	"vaderVersion": "0.1.0",
-	"vaderRelease": "0001",
 	"applicationName": "vader",
 	"dataFolderName": ".vader-editor",
+	"sharedDataFolderName": ".vader-editor-shared",
 	"win32MutexName": "vadereditor",
 	"licenseName": "MIT",
 	"licenseUrl": "https://github.com/qwzx4893-stack/Vader/blob/main/LICENSE.txt",
@@ -30,17 +29,100 @@
 	"linuxIconName": "vader-editor",
 	"licenseFileName": "LICENSE.txt",
 	"reportIssueUrl": "https://github.com/qwzx4893-stack/Vader/issues/new",
-	"nodejsRepository": "https://nodejs.org",
+	"nodejsArtifactFeed": "",
+	"electronArtifactFeed": "",
 	"urlProtocol": "vader",
+	"agentsTelemetryAppName": "agents",
+	"builtInExtensions": [],
+	"onboardingKeymaps": [
+		{
+			"id": "vscode",
+			"label": "VS Code",
+			"description": "Default keyboard mapping"
+		},
+		{
+			"id": "sublime",
+			"label": "Sublime Text",
+			"extensionId": "ms-vscode.sublime-keybindings",
+			"description": "Keyboard mapping from Sublime Text"
+		},
+		{
+			"id": "intellij",
+			"label": "IntelliJ / JetBrains",
+			"extensionId": "k--kato.intellij-idea-keybindings",
+			"description": "Keyboard mapping from IntelliJ IDEA"
+		},
+		{
+			"id": "vim",
+			"label": "Vim",
+			"extensionId": "vscodevim.vim",
+			"description": "Vim modal editing"
+		},
+		{
+			"id": "eclipse",
+			"label": "Eclipse",
+			"extensionId": "alphabotsec.vscode-eclipse-keybindings",
+			"description": "Keyboard mapping from Eclipse"
+		},
+		{
+			"id": "notepadpp",
+			"label": "Notepad++",
+			"extensionId": "ms-vscode.notepadplusplus-keybindings",
+			"description": "Keyboard mapping from Notepad++"
+		}
+	],
+	"onboardingThemes": [
+		{
+			"id": "dark-2026",
+			"label": "Dark 2026",
+			"themeId": "Dark 2026",
+			"type": "dark"
+		},
+		{
+			"id": "hc-dark",
+			"label": "Dark High Contrast",
+			"themeId": "Default High Contrast",
+			"type": "hcDark"
+		},
+		{
+			"id": "solarized-dark",
+			"label": "Solarized Dark",
+			"themeId": "Solarized Dark",
+			"type": "dark"
+		},
+		{
+			"id": "light-2026",
+			"label": "Light 2026",
+			"themeId": "Light 2026",
+			"type": "light"
+		},
+		{
+			"id": "hc-light",
+			"label": "Light High Contrast",
+			"themeId": "Default High Contrast Light",
+			"type": "hcLight"
+		},
+		{
+			"id": "solarized-light",
+			"label": "Solarized Light",
+			"themeId": "Solarized Light",
+			"type": "light"
+		}
+	],
+	"sessionsWindowAllowedExtensions": [],
 	"extensionsGallery": {
 		"serviceUrl": "https://open-vsx.org/vscode/gallery",
 		"itemUrl": "https://open-vsx.org/vscode/item",
 		"resourceUrlTemplate": "https://open-vsx.org/vscode/unpkg/{publisher}/{name}/{version}/{path}",
 		"extensionUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest"
 	},
-	"builtInExtensions": [],
+	"vaderRelease": "0001",
+	"vaderVersion": "0.1.0",
 	"linkProtectionTrustedDomains": [
 		"https://github.com/qwzx4893-stack/Vader",
 		"https://ollama.com"
-	]
+	],
+	"configurationDefaults": {
+		"chat.disableAIFeatures": true
+	}
 }

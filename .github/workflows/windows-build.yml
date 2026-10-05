@@ -15,6 +15,11 @@ on:
         default: 'x64'
         type: choice
         options: [x64, arm64]
+      publish:
+        description: 'Publish a GitHub Release from this build (leave off for branch validation builds)'
+        required: true
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths:
@@ -70,7 +75,7 @@ jobs:
         run: npm install
 
       - name: Install extension dependencies
-        run: node build/npm/postinstall.js
+        run: node build/npm/postinstall.ts
 
       - name: Build React chat/settings UI
         run: npm run buildreact
@@ -79,17 +84,17 @@ jobs:
         run: npm run buildcline
 
       - name: Compile
-        run: npm run compile
+        run: npm run compile-client
 
       - name: Fetch Electron
-        run: node build/lib/electron.js ${{ env.ARCH }}
+        run: node build/lib/electron.ts ${{ env.ARCH }}
 
       - name: Package Windows application
-        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-min
+        run: npm run gulp vscode-win32-${{ env.ARCH }}-min
         shell: cmd
 
       - name: Build Inno Setup updater icon
-        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-inno-updater
+        run: npm run gulp vscode-win32-${{ env.ARCH }}-inno-updater
         shell: cmd
 
       - name: Install Inno Setup
@@ -97,7 +102,7 @@ jobs:
         shell: cmd
 
       - name: Build installer
-        run: node_modules\.bin\gulp vscode-win32-${{ env.ARCH }}-user-setup
+        run: npm run gulp vscode-win32-${{ env.ARCH }}-user-setup
         shell: cmd
 
       - name: Locate build output
@@ -131,7 +136,7 @@ jobs:
 
       - name: Determine release version
         id: version
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
         shell: pwsh
         run: |
           $pkg = Get-Content package.json -Raw | ConvertFrom-Json
@@ -147,7 +152,7 @@ jobs:
       # fixing a build failure cleanly replaces a previous, incomplete attempt at the same version
       # rather than failing on "tag already exists" or leaving stale duplicate releases behind.
       - name: Publish GitHub Release
-        if: github.event_name == 'workflow_dispatch' && steps.locate.outputs.setup_exe != ''
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true' && steps.locate.outputs.setup_exe != ''
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}

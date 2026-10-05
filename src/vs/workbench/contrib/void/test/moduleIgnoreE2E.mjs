@@ -16,12 +16,13 @@
 
 import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../../../..');
-const util = require(path.join(repoRoot, 'build/lib/util.js'));
-const Vinyl = require('vinyl');
+// build/lib/util.ts is TypeScript that Node 24 runs directly; its own dependencies live in build/node_modules.
+const util = await import(pathToFileURL(path.join(repoRoot, 'build/lib/util.ts')).href);
+const Vinyl = createRequire(path.join(repoRoot, 'build/package.json'))('vinyl');
 
 let passed = 0, failed = 0;
 function check(name, cond, detail) {

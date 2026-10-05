@@ -7,19 +7,28 @@
 		"noImplicitReturns": true,
 		"noImplicitOverride": true,
 		"noUnusedLocals": true,
+		"noUncheckedSideEffectImports": true,
 		"allowUnreachableCode": false,
 		"strict": true,
 		"exactOptionalPropertyTypes": false,
 		"useUnknownInCatchVariables": false,
 		"forceConsistentCasingInFileNames": true,
-		"target": "es2022",
+		"target": "ES2024",
 		"useDefineForClassFields": false,
+		"paths": {
+			"electron": [
+				"../.build/typings/electron.d.ts"
+			],
+			"electron/*": [
+				"../.build/typings/electron.d.ts"
+			]
+		},
 		"lib": [
-			"ES2022",
+			"ES2024",
+			"ESNext.Disposable",
 			"DOM",
 			"DOM.Iterable",
 			"WebWorker.ImportScripts"
-		],
-		"allowSyntheticDefaultImports": true
+		]
 	}
 }
