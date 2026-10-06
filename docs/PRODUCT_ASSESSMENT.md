@@ -16,7 +16,7 @@ comparison sites for competitors, so read competitor rows as indicative); **[not
 | Built-in tools | 37: files, search, terminal and persistent terminals, browser (Playwright, 15 tools), verification, MCP/skill discovery, agents and sub-agents **[measured]** |
 | Providers | hosted and local providers, curated model lists that turn into live lists when a key works; real-SDK wire tests 45/45 **[measured]** |
 | Agent features | hard policy engine with non-disableable rules, permanent agents, sub-agent delegation, plan mode, checkpoints, verification pipeline, memory/compaction, model router, marketplace (extensions, MCP, SkillNet, ACP adapter) **[measured: exist and are tested at the feature level; depth per `docs/integrations/*`]** |
-| Tests | 33 Node-level test files and a real-app suite of 9 scenario groups (about 51 scenarios, 172 checks) that drives the packaged Windows app, including a run against a real (small) local model **[measured]** |
+| Tests | 34 Node-level test files and a real-app suite of 9 scenario groups (about 51 scenarios, 172 checks) that drives the packaged Windows app, including a run against a real (small) local model **[measured]** |
 | Security | CodeQL 0, Semgrep 0, zizmor 0 high/medium, shipped-dependency gate, secrets history scan triaged **[measured]** |
 | Privacy | Electron and agent browser contact no Google host on their own except two documented residuals **[measured]** |
 | CI | Security Scan, CI, Windows Build, Windows E2E, Windows Smoke all green on the latest commit **[measured]** |

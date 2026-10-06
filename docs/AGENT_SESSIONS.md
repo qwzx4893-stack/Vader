@@ -34,6 +34,23 @@ local model. The numbers for real small models are in `docs/QUALITY_COMPARISON.m
 | 43 tools (about 27 KB of schema) are offered on every turn | **kept, with a budget**: the tools are cached by providers that cache prefixes, and browser/delegation/marketplace tools are used directly by agent-mode scenarios, so hiding them behind a lookup step would change behaviour, not only cost. What is enforced is that the list cannot grow unnoticed | `providerSdkE2E`: tool list stays at or under 30,000 bytes (27,225 today) |
 | The terminal result of a command is trimmed by inactivity (8 s), not by completion | documented limit of the terminal tool, unchanged | tool description tells the model |
 
+## Session 4: attacking the file tools as a hostile or confused model
+
+The same method pointed at security: what could a prompt-injected model do with the *file* tools alone (the terminal is a separate,
+already gated path)? Each row was reproduced first, then fixed, then pinned by a test that uses the real rules and real symbolic links
+(`symlinkPolicyE2E`, 63 checks) and, for the first two, a real-app scenario (`core` group).
+
+| Finding | Severity | Fix |
+|---|---|---|
+| A path through a symbolic link inside the workspace (`docs/credentials`, `docs` linking to `~/.aws`) matched none of the secret-file rules, so the file was read with no question asked | high | every file path is also resolved to where it really points (`IFileService.realpath`; a path that does not exist yet is resolved through its nearest existing ancestor, since the ancestor can be the link) and the rules see both forms |
+| `..` segments were never collapsed (`<workspace>/src/../../../../etc/sudoers.d/x` is not `/etc/sudoers.d/**` to a glob), so the **locked** system-file deny could be walked around | high | dot segments are collapsed before matching; the real-app scenario shows no approval prompt and no file created |
+| Nothing asked before the agent wrote a file that runs code later: `.vscode/tasks.json` (runs on folder open), `.vscode/settings.json`, `.git/hooks/*`, `.husky/*`, `.envrc`, devcontainer and MCP config, shell startup files, the workspace `.vaderrules`. With edits auto-approved, a prompt-injected model got code execution without ever calling a terminal tool | high | new built-in ask rule `vader.ask.autorun-config` (the user can switch it off in settings; autonomous agents never bypass it) |
+| Credential files the secret rule did not know: `.git-credentials`, `gh`/`gcloud`/`azure` config, `.gnupg`, `.pgpass`, `.pypirc`, `*.tfvars`, keystores, `secrets.*` | medium | added to `vader.ask.secrets-and-keys` |
+| A permanent agent with a filesystem scope could not touch **any** file, in scope or not (the check denied unconditionally): the feature was unusable, and failed closed so it was not exploitable | functional bug | real glob matching: relative globs against each workspace folder, absolute globs as written, every path (as written and resolved) must be in scope; `agentScope.ts` |
+
+What is **not** closed by this: a hostile *terminal* command can still reach anything the user's account can (the terminal rules are
+pattern-based and the hard denies are the catastrophic cases); the answer to that is the approval prompt, which is on by default.
+
 ## Reading the result honestly
 
 - All of the above was found by one agent on three tasks. A small local model will hit different problems (it never called an

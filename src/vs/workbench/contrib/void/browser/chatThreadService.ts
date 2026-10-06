@@ -48,6 +48,7 @@ import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
+import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 
 
@@ -855,17 +856,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// every tool call goes through, used by _runToolCallInline below (used by
 	// _resumeToolRequestAfterRestart's one-off preapproved re-execution too, via
 	// _executeAndRecordToolCall directly). There is exactly one implementation of this gate.
-	private _evaluateToolCallGate = (
+	private _evaluateToolCallGate = async (
 		threadId: string,
 		toolName: ToolName,
 		toolId: string,
 		mcpServerName: string | undefined,
 		unvalidatedToolParams: RawToolParamsObj,
-	):
+	): Promise<
 		| { kind: 'invalid_params' }
 		| { kind: 'rejected', validatedParams: ToolCallParams<ToolName> }
 		| { kind: 'needs_approval', validatedParams: ToolCallParams<ToolName> }
-		| { kind: 'approved', validatedParams: ToolCallParams<ToolName> } => {
+		| { kind: 'approved', validatedParams: ToolCallParams<ToolName> }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
 		let toolParams: ToolCallParams<ToolName>
@@ -925,9 +926,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// model was told, and regardless of the user's auto-approve settings. A 'deny'
 		// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
 		// verdict forces an approval prompt even if this tool category is auto-approved.
-		const policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+		let policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+		// A path can reach a protected file through a symbolic link (`docs/credentials` where `docs` links to ~/.aws), so the rules and the
+		// agent scope see the path as written AND where it really points (realPaths.ts).
+		const realpathOf = (u: URI) => this._fileService.realpath(u)
+		if (policyReq?.filePaths) { policyReq = { ...policyReq, filePaths: await withResolvedPaths(realpathOf, policyReq.filePaths) } }
 		if (runningAgent && policyReq?.filePaths) {
-			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths)
+			const roots = this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
+			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths, await withResolvedPaths(realpathOf, roots))
 			if (scopeVerdict.kind === 'deny') {
 				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${scopeVerdict.reason}` })
 				return { kind: 'rejected', validatedParams: toolParams }
@@ -1092,7 +1098,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		unvalidatedToolParams: RawToolParamsObj,
 	): Promise<{ resultStr: string, isError: boolean }> => {
 
-		const gateResult = this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams)
+		const gateResult = await this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams)
 
 		if (gateResult.kind === 'invalid_params') {
 			return { resultStr: 'Tool call had invalid parameters and was not executed.', isError: true }

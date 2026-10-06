@@ -5,6 +5,9 @@
 // Core chat / agent scenarios for a model with NATIVE (OpenAI-style) tool calling - the path a real user takes
 // with GPT/Claude-class models. Each scenario scripts the "model" and asserts on what the real app did.
 
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { seq } from '../modelServer.mjs';
 
 const SR = (orig, repl) => `<<<<<<< ORIGINAL\n${orig}\n=======\n${repl}\n>>>>>>> UPDATED`;
@@ -192,6 +195,48 @@ export const coreScenarios = [
 			const reqs = t.server.chatRequests();
 			t.check('the model is told the call was blocked', /block|denied|policy|reject/i.test(reqs[1]?.ctx.lastToolResult ?? reqs[1]?.ctx.lastMessageText ?? ''), reqs[1]?.ctx.lastToolResult);
 			t.check('the workspace is intact', t.read('canary.txt') === 'still here' && t.exists('notes.txt'));
+		},
+	},
+	{
+		name: 'policy: a path through a symbolic link to a credentials file still asks for approval and nothing leaks before the answer',
+		fn: async (t) => {
+			// workspace/docs -> <elsewhere>/.aws, a link the secret-file rule cannot see by name (found by attacking the file tools as a model)
+			const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-secret-'));
+			fs.mkdirSync(path.join(outside, '.aws'));
+			fs.writeFileSync(path.join(outside, '.aws', 'credentials'), '[default]\naws_secret_access_key = SECRET-BEHIND-A-LINK\n');
+			try { fs.symlinkSync(path.join(outside, '.aws'), t.abs('docs-link'), 'junction'); } catch { t.check('symbolic links can be created on this machine (otherwise the check below cannot run)', true); return; }
+			t.use(seq([
+				{ toolCalls: [{ name: 'read_file', args: { uri: t.abs('docs-link/credentials') } }] },
+				(c) => ({ text: `result: ${(c.lastToolResult ?? '').slice(0, 60)}` }),
+			]));
+			await t.send('show me docs-link/credentials');
+			const asked = await t.waitApproval(30_000);
+			t.check('reading a file that is really ~/.aws/credentials asks for approval even though the path never says so', asked);
+			t.check('the secret was not sent to the model before the answer', !t.server.chatRequests().some(r => JSON.stringify(r.ctx.messages ?? '').includes('SECRET-BEHIND-A-LINK')));
+			if (asked) { await t.reject(); }
+			t.check('agent returns to idle', await t.idle({ timeout: 60_000 }));
+			t.check('after rejecting, the secret never reached the model', !t.server.chatRequests().some(r => JSON.stringify(r.ctx.messages ?? '').includes('SECRET-BEHIND-A-LINK')));
+			fs.rmSync(outside, { recursive: true, force: true });
+		},
+	},
+	{
+		name: 'policy: walking out of the workspace with .. cannot reach a hard-blocked system file',
+		fn: async (t) => {
+			const target = process.platform === 'win32' ? 'C:\\Windows\\vader-policy-test.txt' : '/etc/sudoers.d/vader-policy-test';
+			const climb = t.abs('src').replace(/[\\/]+$/, '') + '/' + '../'.repeat(40).slice(0, -1) + target.replace(/\\/g, '/').replace(/^[A-Za-z]:/, '');
+			t.use(seq([
+				{ toolCalls: [{ name: 'create_file_or_folder', args: { uri: climb } }] },
+				(c) => ({ text: `Tool said: ${c.lastToolResult ?? c.lastMessageText}` }),
+			]));
+			await t.send('create a sudoers drop-in');
+			const asked = await t.waitApproval(8_000);
+			t.check('no approval prompt is shown: the locked deny applies to the real location', !asked);
+			t.check('agent returns to idle', await t.idle({ timeout: 60_000 }));
+			const reqs = t.server.chatRequests();
+			t.check('the model is told the call was blocked by policy', /block|denied|policy|reject/i.test(reqs[1]?.ctx.lastToolResult ?? reqs[1]?.ctx.lastMessageText ?? ''), reqs[1]?.ctx.lastToolResult);
+			const created = fs.existsSync(target);
+			if (created) { try { fs.rmSync(target); } catch { /* best effort */ } }
+			t.check('the system file was not created', !created);
 		},
 	},
 	{

@@ -9,6 +9,7 @@ import { registerSingleton, InstantiationType } from '../../../../../platform/in
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { VADER_AGENTS_STORAGE_KEY } from '../storageKeys.js';
+import { agentScopeCheck } from './agentScope.js';
 import { toolApprovalTypes } from '../toolsServiceTypes.js';
 import { AgentsServiceState, CreatePermanentAgentInput, PermanentAgentDefinition } from './agentsServiceTypes.js';
 
@@ -111,13 +112,11 @@ class AgentsService extends Disposable implements IAgentsService {
 registerSingleton(IAgentsService, AgentsService, InstantiationType.Eager);
 
 /**
- * Filesystem-scope check for a permanent agent. PolicyRule's glob matching is
- * positive-only (matches => deny/ask), which can't express "deny anything NOT under
- * these globs" on its own, so this is a small dedicated check rather than a PolicyRule.
- * Called from chatThreadService alongside the generic IPolicyService.evaluate() call.
+ * Filesystem-scope check for a permanent agent (see agentScope.ts). Called from chatThreadService alongside the generic
+ * IPolicyService.evaluate() call, with the paths a tool call names plus the real paths behind any symbolic links.
  */
-export function agentScopeVerdict(agent: PermanentAgentDefinition, filePaths: string[] | undefined): { kind: 'allow' } | { kind: 'deny', reason: string } {
-	if (!agent.filesystemScopeGlobs || agent.filesystemScopeGlobs.length === 0) return { kind: 'allow' };
-	if (!filePaths || filePaths.length === 0) return { kind: 'allow' };
-	return { kind: 'deny', reason: `Agent "${agent.name}" is scoped to ${agent.filesystemScopeGlobs.join(', ')} and cannot touch this path.` };
+export function agentScopeVerdict(agent: PermanentAgentDefinition, filePaths: string[] | undefined, workspaceRoots: readonly string[]): { kind: 'allow' } | { kind: 'deny', reason: string } {
+	const r = agentScopeCheck(agent.filesystemScopeGlobs, filePaths, workspaceRoots);
+	if (r.ok) { return { kind: 'allow' }; }
+	return { kind: 'deny', reason: `Agent "${agent.name}" is scoped to ${agent.filesystemScopeGlobs!.join(', ')} and cannot touch ${r.path}.` };
 }
