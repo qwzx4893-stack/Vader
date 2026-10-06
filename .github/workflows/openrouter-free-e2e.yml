@@ -89,7 +89,7 @@ jobs:
           npm init -y | Out-Null
           npm install "@modelcontextprotocol/sdk@$sdk" "zod@$zod" --ignore-scripts --no-audit --no-fund
           Pop-Location
-          Copy-Item src\vs\workbench\contrib\void\test\fixtures\fixtureMcpServer.mjs $env:RUNNER_TEMP\mcp\
+          Copy-Item src\vs\workbench\contrib\vader\test\fixtures\fixtureMcpServer.mjs $env:RUNNER_TEMP\mcp\
           "E2E_MCP_FIXTURE=$env:RUNNER_TEMP\mcp\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
           # fast iteration: a regex in .github/e2e-only.txt limits the scripted run (empty = everything)
           $only = (Get-Content .github/e2e-only.txt -Raw -ErrorAction SilentlyContinue)

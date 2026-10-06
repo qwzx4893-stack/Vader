@@ -86,7 +86,7 @@ jobs:
             'out\vs\workbench\workbench.desktop.main.js',
             'out\vs\workbench\workbench.desktop.main.css',
             'out\vs\code\electron-sandbox\workbench\workbench.html',
-            'out\vs\workbench\contrib\void\browser\react\out',
+            'out\vs\workbench\contrib\vader\browser\react\out',
             'node_modules.asar'
           )
           foreach ($e in $expected) { $p = Join-Path $app $e; "{0,-70} {1}" -f $e, (Test-Path $p) }

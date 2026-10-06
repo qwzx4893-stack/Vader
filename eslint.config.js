@@ -132,7 +132,7 @@ export default defineConfig(
 					]
 				}
 			],
-			// Vader - this should only apply to workbench/void/
+			// Vader - this should only apply to workbench/vader/
 			// 'header/header': [
 			// 	2,
 			// 	'block',
