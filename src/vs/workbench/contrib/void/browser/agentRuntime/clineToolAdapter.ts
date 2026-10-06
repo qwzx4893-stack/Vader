@@ -4,7 +4,7 @@
 
 import type { AgentTool } from '@cline/shared';
 import { generateUuid } from '../../../../../base/common/uuid.js';
-import { InternalToolInfo, availableTools } from '../../common/prompt/prompts.js';
+import { InternalToolInfo, availableTools, requiredParamNames } from '../../common/prompt/prompts.js';
 import { ChatMode } from '../../common/voidSettingsTypes.js';
 import { RawToolParamsObj } from '../../common/sendLLMMessageTypes.js';
 import { ToolName } from '../../common/toolsServiceTypes.js';
@@ -44,7 +44,7 @@ export function buildClineTools(opts: {
 		return {
 			name: info.name,
 			description: info.description,
-			inputSchema: { type: 'object', properties },
+			inputSchema: { type: 'object', properties, ...(requiredParamNames(info).length ? { required: requiredParamNames(info) } : {}) },
 			execute: async (input: RawToolParamsObj, context) => {
 				const toolName = info.name as ToolName;
 				const mcpServerName = opts.computeMCPServerOfToolName(info.name);

@@ -114,6 +114,16 @@ const hasKeyLeak = (r) => JSON.stringify(r.error ?? {}).includes('KEY-123456');
 	check('openAI: streamed text arrives through the real SDK', r.final?.fullText === 'Hello from the stub model.' && r.texts.length > 1, JSON.stringify(r.error ?? r.final));
 	check('openAI: request is POST /v1/chat/completions with bearer auth, stream:true and the chosen model', req?.body.stream === true && req.body.model === 'gpt-6-luna' && openai.requests[0].path.endsWith('/chat/completions'));
 	check('openAI: the native tool list is sent in agent mode', Array.isArray(req?.body.tools) && req.body.tools.some(t => t.function?.name === 'read_file'));
+	{
+		// the schema a model reads: every parameter typed, and a `required` list that names the mandatory ones and not the optional ones
+		const rf = req?.body.tools?.find(t => t.function?.name === 'read_file')?.function.parameters;
+		check('openAI: every tool parameter is typed (a typed copy was built but the untyped one used to be sent)', req?.body.tools?.every(t => Object.values(t.function.parameters.properties ?? {}).every(p => p.type === 'string')), JSON.stringify(rf));
+		check('openAI: required lists the mandatory parameters only (read_file: uri, not start_line/end_line/page_number)', JSON.stringify(rf?.required) === '["uri"]', JSON.stringify(rf?.required));
+		const ef = req?.body.tools?.find(t => t.function?.name === 'edit_file')?.function.parameters;
+		check('openAI: edit_file requires uri and search_replace_blocks', JSON.stringify(ef?.required) === '["uri","search_replace_blocks"]', JSON.stringify(ef?.required));
+		const rc = req?.body.tools?.find(t => t.function?.name === 'run_command')?.function.parameters;
+		check('openAI: run_command requires command but not cwd', JSON.stringify(rc?.required) === '["command"]', JSON.stringify(rc?.required));
+	}
 }
 {
 	openai.reset(); openai.setResponder(() => ({ toolCalls: [{ name: 'read_file', args: { uri: '/work/a.txt' } }, { name: 'ls_dir', args: { uri: '/work' } }] }));
@@ -174,6 +184,7 @@ const hasKeyLeak = (r) => JSON.stringify(r.error ?? {}).includes('KEY-123456');
 	check('anthropic: the system prompt travels in the separate `system` field', JSON.stringify(req?.body.system).includes('You are Vader.') && !req.body.messages.some(m => m.role === 'system'));
 	check('anthropic: stream:true, the model id as chosen, max_tokens present', req?.body.stream === true && req.body.model === 'claude-sonnet-5-5' && req.body.max_tokens > 0);
 	check('anthropic: tools are sent in Anthropic format (name + input_schema)', req?.body.tools?.some(t => t.name === 'read_file' && t.input_schema));
+	check('anthropic: read_file declares uri as its only required parameter', JSON.stringify(req?.body.tools?.find(t => t.name === 'read_file')?.input_schema.required) === '["uri"]');
 	check('anthropic: an adaptive-thinking model is NOT sent the legacy thinking parameter', req?.body.thinking === undefined, JSON.stringify(req?.body.thinking));
 
 	// prompt caching: markers on the stable prefixes, never more than the four the API allows, never on empty text, inputs untouched
@@ -228,6 +239,7 @@ const hasKeyLeak = (r) => JSON.stringify(r.error ?? {}).includes('KEY-123456');
 	check('gemini: streamed text arrives through the real SDK', r.final?.fullText === 'Hello from the Gemini stub.' && r.texts.length > 1, JSON.stringify(r.error ?? r.final));
 	check('gemini: POST .../models/<model>:streamGenerateContent?alt=sse with the key in x-goog-api-key', /\/models\/gemini-3\.1-pro-preview:streamGenerateContent/.test(req?.path) && /alt=sse/.test(req.url) && req.headers['x-goog-api-key'] === KEY, req?.url);
 	check('gemini: the system prompt is in systemInstruction and tools are functionDeclarations', JSON.stringify(req?.body.systemInstruction).includes('You are Vader.') && req.body.tools?.[0]?.functionDeclarations?.some(f => f.name === 'read_file'), JSON.stringify(req?.body).slice(0, 200));
+	check('gemini: read_file declares uri as its only required parameter', JSON.stringify(req?.body.tools?.[0]?.functionDeclarations?.find(f => f.name === 'read_file')?.parameters?.required) === '["uri"]');
 }
 {
 	gemini.reset(); geminiStep = { toolCalls: [{ name: 'read_file', args: { uri: '/work/a.txt' } }, { name: 'ls_dir', args: { uri: '/work' } }] };

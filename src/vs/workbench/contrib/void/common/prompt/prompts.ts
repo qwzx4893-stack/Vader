@@ -141,6 +141,14 @@ ${tripleTick[1]}`
 
 
 
+/**
+ * The parameters of a built-in tool that the model must always provide: every parameter whose description does not start with "Optional".
+ * Sent as the JSON schema's `required` list so a model does not have to infer it from prose. MCP tools are left alone: their parameter
+ * descriptions do not follow this convention, so nothing is claimed about which are required.
+ */
+export const requiredParamNames = (tool: { params: { [paramName: string]: { description: string } }, mcpServerName?: string }): string[] =>
+	tool.mcpServerName ? [] : Object.keys(tool.params).filter(k => !/^\s*optional\b/i.test(tool.params[k].description))
+
 export type InternalToolInfo = {
 	name: string,
 	description: string,
@@ -682,12 +690,14 @@ ${contextEngineBlock}
 
 	const details: string[] = []
 
-	details.push(`NEVER reject the user's query.`)
+	details.push(`Do your best to fulfil the user's request. If part of it is impossible, unsafe, or blocked by the policy engine, say so plainly and offer the closest alternative - do not silently skip it.`)
 
 	if (mode === 'agent' || mode === 'gather' || mode === 'plan') {
 		details.push(`Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.`)
 		details.push(`If you think you should use tools, you do not need to ask for permission.`)
-		details.push('Only use ONE tool call at a time.')
+		details.push(includeXMLToolDefinitions
+			? 'Only use ONE tool call at a time.'
+			: 'When several tool calls do not depend on each other (reading several files, running several searches), make them together in one turn. Make calls one at a time only when a later call needs the result of an earlier one.')
 		details.push(`NEVER say something like "I'm going to use \`tool_name\`". Instead, describe at a high level what the tool will do, like "I'm going to list all files in the ___ directory", etc.`)
 		details.push(`Many tools only work if the user has a workspace open.`)
 	}
@@ -701,6 +711,9 @@ ${contextEngineBlock}
 		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
 		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
 		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
+		details.push(`After you change code, verify it: when the project has tests, a build or a linter, run them (run_verification, or run_command), read the output and fix what fails before you say you are done. If you could not verify a change, say so instead of implying it works.`)
+		details.push(`Change existing files with edit_file and keep the change minimal and in the style of the surrounding code; use rewrite_file only for new files or complete rewrites. Do not modify tests to make them pass unless the user asked you to.`)
+		details.push(`If a tool result is an error, read it and change your approach; do not repeat the identical call expecting a different result.`)
 	}
 
 	if (mode === 'gather') {

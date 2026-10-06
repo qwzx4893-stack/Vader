@@ -19,7 +19,7 @@ import { AnthropicLLMChatMessage, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMe
 import { ChatMode, displayInfoOfProviderName, ModelSelectionOptions, OverridesOfModel, ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
 import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities, defaultProviderSettings, getReservedOutputTokenSpace, modelSupportsVision } from '../../common/modelCapabilities.js';
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
-import { availableTools, InternalToolInfo } from '../../common/prompt/prompts.js';
+import { availableTools, InternalToolInfo, requiredParamNames } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 
 const getGoogleApiKey = async () => {
@@ -250,9 +250,10 @@ const toOpenAICompatibleTool = (toolInfo: InternalToolInfo) => {
 			description: description,
 			parameters: {
 				type: 'object',
-				properties: params,
-				// required: Object.keys(params), // in strict mode, all params are required and additionalProperties is false
-				// additionalProperties: false,
+				// the typed copy: `properties: params` sent every parameter without a `type`, although the typed copy above was built for exactly this
+				properties: paramsWithType,
+				...(requiredParamNames(toolInfo).length ? { required: requiredParamNames(toolInfo) } : {}),
+				// additionalProperties: false, // only valid together with strict mode, where every parameter must be required
 			},
 		}
 	} satisfies OpenAI.Chat.Completions.ChatCompletionTool
@@ -491,7 +492,7 @@ const toAnthropicTool = (toolInfo: InternalToolInfo) => {
 		input_schema: {
 			type: 'object',
 			properties: paramsWithType,
-			// required: Object.keys(params),
+			...(requiredParamNames(toolInfo).length ? { required: requiredParamNames(toolInfo) } : {}),
 		},
 	} satisfies Anthropic.Messages.Tool
 }
@@ -753,7 +754,8 @@ const toGeminiFunctionDecl = (toolInfo: InternalToolInfo) => {
 					description: value.description
 				};
 				return acc;
-			}, {} as Record<string, Schema>)
+			}, {} as Record<string, Schema>),
+			...(requiredParamNames(toolInfo).length ? { required: requiredParamNames(toolInfo) } : {}),
 		}
 	} satisfies FunctionDeclaration
 }

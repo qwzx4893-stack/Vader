@@ -65,7 +65,18 @@ export const idOfPersistentTerminalName = (name: string) => {
 	return null
 }
 
-export class TerminalToolService extends Disposable implements ITerminalToolService {
+export // A terminal that can never start (the pty host is not running, node-pty failed to load, /dev/pts is unavailable in a container...) used to leave
+// the agent on "Running terminal" forever: the awaits below had no limit, only the command itself had an inactivity timeout. The model got no answer and
+// the user got no explanation. Starting a terminal is now bounded and fails with a message the model can relay.
+const TERMINAL_START_TIMEOUT_MS = 20_000
+const startingTerminalFailed = (what: string) => new Error(`The terminal could not be started (${what} did not finish within ${TERMINAL_START_TIMEOUT_MS / 1000} seconds). Commands cannot be run in this environment right now; tell the user and continue without running commands if you can.`)
+const withStartTimeout = <T>(promise: Promise<T>, what: string): Promise<T> => {
+	let timer: ReturnType<typeof setTimeout>
+	const timeout = new Promise<never>((_, reject) => { timer = setTimeout(() => reject(startingTerminalFailed(what)), TERMINAL_START_TIMEOUT_MS) })
+	return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
+class TerminalToolService extends Disposable implements ITerminalToolService {
 	readonly _serviceBrand: undefined;
 
 	private persistentTerminalInstanceOfId: Record<string, ITerminalInstance> = {}
@@ -141,7 +152,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 			skipContributedProfileCheck: true,
 		};
 
-		const terminal = await this.terminalService.createTerminal(options)
+		const terminal = await withStartTimeout(this.terminalService.createTerminal(options), 'creating the terminal')
 
 		// // when a new terminal is created, there is an initial command that gets run which is empty, wait for it to end before returning
 		// const disposables: IDisposable[] = []
@@ -259,7 +270,7 @@ export class TerminalToolService extends Disposable implements ITerminalToolServ
 	}
 
 	runCommand: ITerminalToolService['runCommand'] = async (command, params) => {
-		await this.terminalService.whenConnected;
+		await withStartTimeout(this.terminalService.whenConnected, 'the terminal host connecting')
 
 		const { type } = params
 		const isPersistent = type === 'persistent'
