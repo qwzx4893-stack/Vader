@@ -81,8 +81,20 @@ It now audits the production dependencies of all 36 shipped lockfiles, **at ever
 | `which-pm`, `find-yarn-workspace-root` (-> YAML parser, micromatch, braces) | npm extension | merge-key CPU use, brace-nesting stack exhaustion, both reachable from files in the opened workspace; `braces` has no patched release at all | replaced by ~50 lines in `preferred-pm.ts`; `npmExtensionPreferredPmE2E` checks real layouts and hostile inputs (merge-key bomb, 50,000 nested braces, 2 MB manifest) |
 | `Object` hook tables | `sendLLMMessageService`, `consistentItemService` | Semgrep dynamic-dispatch pattern | prototype-less tables, so ids like `constructor` cannot resolve to inherited members |
 
-Still reported by `npm audit` on the **root development tree** (33 packages): the gulp 4 chain (`glob-watcher`, `chokidar`, `anymatch`, `micromatch`, `braces`,
-`findup-sync`, `liftoff`, `gulp-sourcemaps`...), `tailwindcss` 3, `mocha`, `nodemon`, `ts-morph`, `next` and `@vscode/component-explorer-cli`. They are
-build and test tooling that only ever sees files from this repository. `braces`, `micromatch` and `fast-glob` have **no patched release** to move to; the
-rest need major upgrades of VS Code's own build (gulp 5, tailwind 4), which are upstream decisions. None of them is in the installer: the shipped
-`node_modules.asar` was checked and contains none of these packages, and the gate above fails if any advisory reaches a production tree.
+## Third pass: VS Code's own build and test tooling (every lockfile at zero)
+
+The 33 advisories that remained in the root development tree, and those in `build/` and `test/`, were cleared too, so `shippedAdvisoriesE2E` now audits all **58 lockfiles in the repository, development dependencies included**, and requires zero. How, by cause:
+
+| Cause | What was done |
+|---|---|
+| `braces` (every released version, stack exhaustion on deeply nested braces; upstream has no fix) under micromatch, chokidar, fast-glob, tailwind, mocha, nodemon, ts-morph, gulp | `build/stubs/braces` = upstream 3.0.3 plus a nesting-depth limit, versioned 3.0.4 so it falls outside the advisory range; the whole tree resolves to it (override). `bracesPatchE2E` shows the overflow on stock 3.0.3, the clean rejection on the patched copy, and 15,000 generated patterns giving identical results in both |
+| `extract-zip` (all versions, symlink path traversal) in `build/` | `build/stubs/extract-zip` 2.0.2: a symlink entry that points outside the extraction directory aborts the extraction |
+| `sprintf-js` (all versions, unbounded width/precision) | `build/stubs/sprintf-js` 1.1.4: width and precision capped at 10000 |
+| `decode-uri-component` (fixed only in an ESM-only 0.5.0, but its consumers use `require`) | `build/stubs/decode-uri-component`: the fixed 0.5.0 as CommonJS |
+| `buildToolPatchesE2E` | hostile and ordinary input for the last three, including a zip crafted with a symlink entry |
+| gulp 4 chain (`glob-watcher`, `findup-sync`, `matchdep`, micromatch 3, chokidar 2) | overrides to `glob-watcher` 6, `findup-sync` 5 and micromatch 4: `gulp --tasks-simple` and real compile tasks run unchanged. (Gulp 5 was *not* adopted: it reads files as UTF-8 by default and would corrupt the binary assets VS Code's packaging copies) |
+| `postcss-selector-parser`, `js-yaml` 3 (via istanbul), esbuild in tsup, mocha, nodemon | overrides or upgrades; the React bundles rebuild byte-for-byte except a newer esbuild helper |
+| `node-forge` in `extensions/vscode-api-tests` (all versions) | that VS Code API-test extension's proxy certificate test, which Vader does not run, was removed together with the dependency |
+| everything else | `npm audit fix` per lockfile |
+
+The packages above are forks only in the sense of carrying one reviewed change each, with the upstream license and a `PATCH.md`; none of them is in the installer.

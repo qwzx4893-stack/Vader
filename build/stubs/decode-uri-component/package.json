@@ -1,0 +1,10 @@
+{
+  "name": "decode-uri-component",
+  "version": "0.5.0",
+  "description": "decode-uri-component 0.5.0 as CommonJS (the published 0.5.0 is ESM-only). Fixes GHSA-vcc3-ghjq-m6fr. Vader build tooling only.",
+  "license": "MIT",
+  "main": "index.js",
+  "engines": {
+    "node": ">=14.16"
+  }
+}

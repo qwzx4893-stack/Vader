@@ -1,0 +1,7 @@
+{
+  "name": "sprintf-js",
+  "license": "BSD-3-Clause",
+  "main": "src/sprintf.js",
+  "version": "1.1.4",
+  "description": "sprintf-js 1.1.3 with width and precision capped at 10000 (upstream has published no fix for the unbounded-precision advisory). Vader build tooling only."
+}

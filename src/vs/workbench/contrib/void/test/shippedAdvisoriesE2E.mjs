@@ -3,7 +3,8 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-// Gate: nothing with a known advisory of ANY severity may be in what Vader ships.
+// Gate: nothing with a known advisory of ANY severity may be in what Vader ships - and, since the build-tooling pass, nor in the development trees
+// (gulp, tailwind, mocha, the build/ and test/ packages): every lockfile in the repository is audited with its development dependencies too.
 //
 // `npm audit` reports every package in the repository, including build tooling (gulp, mocha, tailwind...) that never reaches
 // a user. What matters is the runtime (production) dependency tree minus what the installer leaves out (build/.moduleignore).
@@ -74,6 +75,32 @@ check('no known advisory (any severity) in what ships, excluded packages and doc
 for (const ex of exceptions) {
 	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
 }
+
+// ---- the development trees: build tooling and tests. Several of their advisories have no upstream fix (braces, extract-zip, sprintf-js, node-forge...), so
+// Vader patches or replaces those packages (build/stubs, package.json overrides). Everything must be at zero here; an exception needs a written reason.
+const allLockDirs = [];
+const findLocks = (dir, depth) => {
+	if (depth > 3) { return; }
+	for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
+		if (!e.isDirectory() || ['node_modules', '.git', 'out', '.build', 'stubs', 'dist'].includes(e.name)) { continue; }
+		const rel = dir === '.' ? e.name : `${dir}/${e.name}`;
+		if (fs.existsSync(path.join(root, rel, 'package-lock.json'))) { allLockDirs.push(rel); }
+		findLocks(rel, depth + 1);
+	}
+};
+if (fs.existsSync(path.join(root, 'package-lock.json'))) { allLockDirs.push('.'); }
+for (const top of ['build', 'test', 'extensions', 'remote']) { if (fs.existsSync(path.join(root, top))) { if (fs.existsSync(path.join(root, top, 'package-lock.json'))) { allLockDirs.push(top); } findLocks(top, 0); } }
+const devFindings = [];
+for (const dir of allLockDirs) {
+	const cwd = path.join(root, dir);
+	let a; try { a = JSON.parse(execFileSync('npm', ['audit', '--json', '--package-lock-only'], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })); } catch (e) { a = JSON.parse(e.stdout || '{}'); }
+	for (const [name, v] of Object.entries(a.vulnerabilities ?? {})) {
+		if (exceptions.some(x => x.package === name && (x.in ?? '.') === dir)) { continue; }
+		devFindings.push(`${dir}: ${v.severity} ${name} ${v.range}`);
+	}
+}
+console.log(`audited ${allLockDirs.length} lockfiles including development dependencies`);
+check('every lockfile in the repository, development dependencies included, is free of known advisories', devFindings.length === 0, '\n  ' + devFindings.join('\n  '));
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
