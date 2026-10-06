@@ -34,7 +34,7 @@ await runPersistenceGroup();
 await runPrivacyGroup();
 
 if (process.env.REAL_LLM_MODEL) {
-	await runGroup({ name: 'real-llm', model: process.env.REAL_LLM_MODEL, baseURL: process.env.REAL_LLM_BASEURL || 'http://localhost:11434/v1', apiKey: 'ollama', scenarios: [...realLlmScenarios, ...realLlmTaskScenarios] });
+	await runGroup({ name: 'real-llm', model: process.env.REAL_LLM_MODEL, baseURL: process.env.REAL_LLM_BASEURL || 'http://localhost:11434/v1', apiKey: process.env.REAL_LLM_API_KEY || 'ollama', scenarios: [...realLlmScenarios, ...realLlmTaskScenarios] });
 }
 
 const ok = summarize();

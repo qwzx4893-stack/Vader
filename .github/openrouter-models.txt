@@ -1,0 +1,3 @@
+# Optional: one OpenRouter model id per line (each MUST end in ":free"; the workflow refuses anything whose price is not zero).
+# Empty (comments only) = the workflow picks the free tool-calling models with the largest context itself.
+# Editing this file on the validation branch starts the run.

@@ -1,0 +1,164 @@
+name: OpenRouter free-model E2E
+
+# Drives the REAL installed app (same installer as Windows E2E) through the `real-llm` group (coding tasks graded by the files on disk,
+# agent-tool use, pass@k / pass^k) with hosted FREE models from OpenRouter. Money cannot be spent by this workflow:
+#   - only models whose id ends in ":free" AND whose listed prompt and completion price are both exactly zero are ever called (checked below
+#     against OpenRouter's own model list; anything else is refused before a single request is sent);
+#   - the key is a repository secret (OPENROUTER_API_KEY), never in the repository, and Actions masks it in logs.
+# Free models are rate limited (about 20 requests/minute) and models come and go, so expect 429s and missing models: the run reports them, it does not hide them.
+# Manual / push-triggered only; never builds or publishes anything.
+
+on:
+  push:
+    branches: [upgrade/vscode-1.136.2]
+    paths: ['.github/workflows/openrouter-free-e2e.yml', '.github/openrouter-models.txt']
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Windows Build run id whose installer artifact to test (empty = latest successful build of this branch)'
+        required: false
+        default: ''
+      models:
+        description: 'Comma separated OpenRouter model ids ending in :free (empty = pick automatically)'
+        required: false
+        default: ''
+      max_models:
+        description: 'How many models to run when picking automatically'
+        required: false
+        default: '3'
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  e2e:
+    name: Free OpenRouter models through the real app
+    runs-on: windows-2022
+    timeout-minutes: 120
+    env:
+      RUN_ID: ${{ github.event.inputs.run_id }}
+      INSTALL_DIR: C:\VaderApp
+    steps:
+      - name: Checkout (test sources only)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/e2e-client
+            .github/openrouter-models.txt
+            src/vs/workbench/contrib/void/test
+            package.json
+            .nvmrc
+          sparse-checkout-cone-mode: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Download and install the installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          GH_BRANCH: ${{ github.ref_name }}
+        run: |
+          if (-not $env:RUN_ID) {
+            $env:RUN_ID = gh run list --repo $env:GH_REPO --workflow windows-build.yml --branch $env:GH_BRANCH --status success --limit 1 --json databaseId --jq '.[0].databaseId'
+            "using build run $env:RUN_ID"
+          }
+          gh run download $env:RUN_ID --repo $env:GH_REPO --name vader-win32-x64-setup --dir dl
+          $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
+          $p = Start-Process $exe.FullName -ArgumentList '/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/SP-',"/DIR=$env:INSTALL_DIR",'/MERGETASKS=!runcode' -Wait -PassThru
+          "installer exit code: $($p.ExitCode)"
+          if ($p.ExitCode -ne 0) { exit 1 }
+          $main = Get-ChildItem $env:INSTALL_DIR -Filter *.exe | Where-Object { $_.Name -notlike 'unins*' } | Sort-Object Length -Descending | Select-Object -First 1
+          "VADER_EXE=$($main.FullName)" >> $env:GITHUB_ENV
+
+      - name: Install the MCP SDK next to a copy of the MCP fixture server
+        shell: pwsh
+        env:
+          ONLY_INPUT: ''
+        run: |
+          # the sparse checkout has no node_modules; the fixture needs the same SDK versions the app uses
+          $pkg = Get-Content package.json -Raw | ConvertFrom-Json
+          $sdk = $pkg.dependencies.'@modelcontextprotocol/sdk'; $zod = $pkg.dependencies.zod
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\mcp | Out-Null
+          Push-Location $env:RUNNER_TEMP\mcp
+          npm init -y | Out-Null
+          npm install "@modelcontextprotocol/sdk@$sdk" "zod@$zod" --ignore-scripts --no-audit --no-fund
+          Pop-Location
+          Copy-Item src\vs\workbench\contrib\void\test\fixtures\fixtureMcpServer.mjs $env:RUNNER_TEMP\mcp\
+          "E2E_MCP_FIXTURE=$env:RUNNER_TEMP\mcp\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
+          # fast iteration: a regex in .github/e2e-only.txt limits the scripted run (empty = everything)
+          $only = (Get-Content .github/e2e-only.txt -Raw -ErrorAction SilentlyContinue)
+          if ($env:ONLY_INPUT) { $only = $env:ONLY_INPUT }
+          if ($only) { "E2E_ONLY=$($only.Trim())" >> $env:GITHUB_ENV; "restricting the scripted run to: $($only.Trim())" }
+
+      - name: Install Playwright (client only) and git identity
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force $env:RUNNER_TEMP\pw | Out-Null
+          Copy-Item .github\e2e-client\package.json, .github\e2e-client\package-lock.json $env:RUNNER_TEMP\pw\
+          Push-Location $env:RUNNER_TEMP\pw
+          $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = '1'
+          npm ci --ignore-scripts --no-audit --no-fund
+          Pop-Location
+          "PW_CORE=$env:RUNNER_TEMP\pw\node_modules\playwright-core" >> $env:GITHUB_ENV
+          git config --global user.email e2e@example.com
+          git config --global user.name e2e
+
+      - name: Pick the free models (verified against OpenRouter's own price list)
+        id: pick
+        shell: pwsh
+        env:
+          MODELS_INPUT: ${{ github.event.inputs.models }}
+          MAX_MODELS: ${{ github.event.inputs.max_models || '3' }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          if (-not $env:OPENROUTER_API_KEY) { "::error::The repository secret OPENROUTER_API_KEY is not set (Settings > Secrets and variables > Actions)."; exit 1 }
+          $list = (Invoke-RestMethod https://openrouter.ai/api/v1/models).data
+          $free = $list | Where-Object { $_.id -like '*:free' -and [decimal]$_.pricing.prompt -eq 0 -and [decimal]$_.pricing.completion -eq 0 }
+          "free models listed: $(@($free).Count)"
+          $wanted = @()
+          if ($env:MODELS_INPUT) { $wanted = $env:MODELS_INPUT -split '[,\s]+' | Where-Object { $_ } }
+          elseif (Test-Path .github/openrouter-models.txt) { $wanted = Get-Content .github/openrouter-models.txt | Where-Object { $_ -and -not $_.StartsWith('#') } | ForEach-Object { $_.Trim() } }
+          if (@($wanted).Count -gt 0) {
+            $chosen = @()
+            foreach ($w in $wanted) { if ($free.id -contains $w) { $chosen += $w } else { "::warning::refusing $w : not a model listed as free (id must end in :free and both prices must be 0)" } }
+          } else {
+            $chosen = @($free | Where-Object { $_.supported_parameters -contains 'tools' } | Sort-Object { [int]$_.context_length } -Descending | Select-Object -First ([int]$env:MAX_MODELS) | ForEach-Object { $_.id })
+          }
+          if (@($chosen).Count -eq 0) { "::error::no free model to run"; exit 1 }
+          "models: $($chosen -join ', ')"
+          "MODELS=$($chosen -join ',')" >> $env:GITHUB_ENV
+
+      - name: Run the real-model group on each free model
+        shell: pwsh
+        continue-on-error: true
+        env:
+          REAL_LLM_BASEURL: https://openrouter.ai/api/v1
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          E2E_ONLY: 'real-llm'
+          E2E_SCENARIO_TIMEOUT: '900000'
+        run: |
+          foreach ($m in ($env:MODELS -split ',')) {
+            $safe = ($m -replace '[^A-Za-z0-9]+','_')
+            "=================== $m"
+            $env:REAL_LLM_MODEL = $m
+            $env:E2E_OUT = "e2e-out-$safe"
+            $env:E2E_PRISTINE = '1'
+            node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+            "exit code for ${m}: $LASTEXITCODE"
+            Start-Sleep 20
+          }
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-out-openrouter
+          path: e2e-out-*
+          retention-days: 7
+          if-no-files-found: ignore
