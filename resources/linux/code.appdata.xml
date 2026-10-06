@@ -4,15 +4,15 @@
 	<metadata_license>@@LICENSE@@</metadata_license>
 	<project_license>@@LICENSE@@</project_license>
 	<name>@@NAME_LONG@@</name>
-	<url type="homepage">https://code.visualstudio.com</url>
-	<summary>Visual Studio Code. Code editing. Redefined.</summary>
+	<url type="homepage">https://github.com/qwzx4893-stack/Vader</url>
+	<summary>Vader. The AI-native IDE for agents you can trust.</summary>
 	<description>
-		<p>Visual Studio Code is a new choice of tool that combines the simplicity of a code editor with what developers need for the core edit-build-debug cycle. See https://code.visualstudio.com/docs/setup/linux for installation instructions and FAQ.</p>
+		<p>Vader is an AI-native IDE with a real coding agent (files, terminal, browser, MCP, sub-agents), a hard policy engine that sits in front of every action, and a privacy-first design with no telemetry. Bring your own model: cloud providers or local ones such as Ollama. See https://github.com/qwzx4893-stack/Vader for downloads and documentation.</p>
 	</description>
 	<screenshots>
 		<screenshot type="default">
-			<image>https://code.visualstudio.com/home/home-screenshot-linux-lg.png</image>
-			<caption>Editing TypeScript and searching for extensions</caption>
+			<image>https://raw.githubusercontent.com/qwzx4893-stack/Vader/main/docs/assets/banner.jpg</image>
+			<caption>Vader is what you need</caption>
 		</screenshot>
 	</screenshots>
 </component>

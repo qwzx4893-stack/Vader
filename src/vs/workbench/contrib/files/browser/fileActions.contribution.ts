@@ -679,12 +679,12 @@ for (const menuId of [MenuId.EmptyEditorGroupContext, MenuId.EditorTabsBarContex
 // File menu
 
 
-// Void added this:
+// Vader added this:
 MenuRegistry.appendMenuItem(MenuId.MenubarFileMenu, {
 	group: '0_void',
 	command: {
 		id: VOID_OPEN_SETTINGS_ACTION_ID,
-		title: nls.localize({ key: 'openVoid', comment: ['&& denotes a mnemonic'] }, "&&Open Void Settings"),
+		title: nls.localize({ key: 'openVoid', comment: ['&& denotes a mnemonic'] }, "&&Open Vader Settings"),
 	},
 	order: 1
 });

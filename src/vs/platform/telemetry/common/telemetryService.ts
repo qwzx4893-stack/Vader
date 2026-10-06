@@ -270,14 +270,14 @@ export class TelemetryService implements ITelemetryService {
 }
 
 function getTelemetryLevelSettingDescription(): string {
-	const telemetryText = localize('telemetry.telemetryLevelMd', "The default telemetry setting for VS Code (Microsoft). {0} recommends keeping this off.", product.nameLong);
+	const telemetryText = localize('telemetry.telemetryLevelMd', "The default telemetry setting for Vader (Microsoft). {0} recommends keeping this off.", product.nameLong);
 	// const externalLinksStatement = !product.privacyStatementUrl ?
 	// 	localize("telemetry.docsStatement", "Read more about the [data we collect]({0}).", 'https://aka.ms/vscode-telemetry') :
 	// 	localize("telemetry.docsAndPrivacyStatement", "Read more about the [data we collect]({0}) and our [privacy statement]({1}).", 'https://aka.ms/vscode-telemetry', product.privacyStatementUrl);
 	const restartString = !isWeb ? localize('telemetry.restart', 'Microsoft says \"Some third party extensions might not respect this setting. Consult the specific extension\'s documentation to be sure. A full restart of the application is necessary for crash reporting changes to take effect.\"') : '';
 
 
-	// Void removed these
+	// Vader removed these
 	// const crashReportsHeader = localize('telemetry.crashReports', "Crash Reports");
 	// const errorsHeader = localize('telemetry.errors', "Error Telemetry");
 	// const usageHeader = localize('telemetry.usage', "Usage Data");
@@ -298,7 +298,7 @@ ${telemetryText}
 
 ${restartString}
 
-Void separately records basic usage like the number of messages people are sending. If you'd like to disable Void metrics, you may do so in Void's Settings.
+Vader separately records basic usage like the number of messages people are sending. If you'd like to disable Vader metrics, you may do so in Vader's Settings.
 `;
 
 	return telemetryDescription;

@@ -75,7 +75,7 @@ type ChatBackgroundTypeItem = IQuickPickItem & ({
 const chatBackgroundTypeItems: ChatBackgroundTypeItem[] = [{
 	kind: 'codicons',
 	label: localize('chat.agentSessions.backgroundType.codicons.label', "Codicons"),
-	detail: localize('chat.agentSessions.backgroundType.codicons.detail', "Use a theme-aware pattern of built-in VS Code icons."),
+	detail: localize('chat.agentSessions.backgroundType.codicons.detail', "Use a theme-aware pattern of built-in Vader icons."),
 }, {
 	kind: 'image',
 	label: localize('chat.agentSessions.backgroundType.image.label', "Image..."),

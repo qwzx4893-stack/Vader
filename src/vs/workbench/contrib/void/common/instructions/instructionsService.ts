@@ -2,7 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-// Vader's layered instruction system. Void originally concatenated two sources (a global
+// Vader's layered instruction system. Vader originally concatenated two sources (a global
 // "AI Instructions" setting and a .voidrules workspace file) directly into the system
 // prompt with no structure. This service formalizes that into named, ordered layers with
 // a fixed precedence - system invariants and the policy summary are always first (most

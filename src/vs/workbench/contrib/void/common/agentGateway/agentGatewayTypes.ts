@@ -20,7 +20,7 @@ export type IsolatedTaskResult = {
 
 // Normalized run phase for a task, independent of whichever runtime is behind the Gateway.
 // This is deliberately a smaller vocabulary than chatThreadService's own IsRunningType /
-// ThreadStreamState (which also carries Void-loop-specific fields like raw tool-call
+// ThreadStreamState (which also carries Vader-loop-specific fields like raw tool-call
 // parsing state) - callers that only need "what's happening right now" for a task use this
 // instead of learning the underlying runtime's state shape.
 export type AgentRunPhase =
@@ -50,7 +50,7 @@ export type AgentExecutionMetadata = {
 /**
  * The Vader Agent Gateway: a stable seam between callers (the UI, tools, future
  * integrations) and whichever agent execution loop actually runs a task. Today that loop
- * is Void's own chatThreadService, extended with the Policy Engine, agent scoping, and
+ * is Vader's own chatThreadService, extended with the Policy Engine, agent scoping, and
  * multi-tool-call-per-turn support (see ARCHITECTURE.md's "Agent runtime" section for why
  * a wholesale swap for an external runtime like Cline/Kilo/OpenHands/Zed was evaluated and
  * rejected as an architectural mismatch, in favor of fixing the loop in place and putting

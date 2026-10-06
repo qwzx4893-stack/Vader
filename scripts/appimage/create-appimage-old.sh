@@ -3,21 +3,21 @@ set -e  # Exit on error
 set -x  # Print commands as they are executed
 
 # Configuration
-APP_NAME="void"
+APP_NAME="vader"
 APP_VERSION="1.0.0"
 ARCH="x86_64"
 
 export ARCH
 
-# Check if void binary exists in current directory
-if [ ! -f "./void" ]; then
-    echo "Error: void binary not found in current directory"
+# Check if vader binary exists in current directory
+if [ ! -f "./vader" ]; then
+    echo "Error: vader binary not found in current directory"
     exit 1
 fi
 
 # Check if icon exists
-if [ ! -f "./void.png" ]; then
-    echo "Error: void.png icon not found in current directory"
+if [ ! -f "./vader.png" ]; then
+    echo "Error: vader.png icon not found in current directory"
     exit 1
 fi
 
@@ -35,15 +35,15 @@ mkdir -pv "$APP_DIR/usr/share/icons/hicolor/256x256/apps"
 # Exclude create-appimage.sh and appimagetool-x86_64.AppImage from being copied
 echo "Copying files excluding create-appimage.sh and appimagetool-x86_64.AppImage..."
 
-cp -v ./void "$APP_DIR/usr/bin/"
+cp -v ./vader "$APP_DIR/usr/bin/"
 
 # Copy the icon to required locations
-cp -v ./void.png "$APP_DIR/void.png"
-cp -v ./void.png "$APP_DIR/usr/share/icons/hicolor/256x256/apps/void.png"
+cp -v ./vader.png "$APP_DIR/vader.png"
+cp -v ./vader.png "$APP_DIR/usr/share/icons/hicolor/256x256/apps/vader.png"
 
 # Copy dependencies with error checking
 echo "Copying dependencies..."
-for lib in $(ldd ./void | grep "=> /" | awk '{print $3}'); do
+for lib in $(ldd ./vader | grep "=> /" | awk '{print $3}'); do
     if [ -f "$lib" ]; then
         cp -v "$lib" "$APP_DIR/usr/lib/" || echo "Failed to copy $lib"
     else
@@ -56,11 +56,11 @@ echo "Creating desktop file..."
 if ! cat > "$APP_DIR/$APP_NAME.desktop" <<EOF
 [Desktop Entry]
 Name=$APP_NAME
-Exec=void
-Icon=void
+Exec=vader
+Icon=vader
 Type=Application
 Categories=Utility;
-Comment=Void Linux Application
+Comment=Vader Linux Application
 EOF
 then
     echo "Error creating desktop file"
@@ -79,7 +79,7 @@ if ! cat > "$APP_DIR/AppRun" <<EOF
 #!/bin/bash
 cd "\$(dirname "\$0")/usr/bin"
 export LD_LIBRARY_PATH="\$APPDIR/usr/lib:\$LD_LIBRARY_PATH"
-exec ./void "\$@"
+exec ./vader "\$@"
 EOF
 then
     echo "Error creating AppRun"

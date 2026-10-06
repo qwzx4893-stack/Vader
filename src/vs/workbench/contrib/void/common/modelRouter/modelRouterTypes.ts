@@ -6,7 +6,7 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 import { Event } from '../../../../../base/common/event.js';
 import { ModelSelection, ProviderName } from '../voidSettingsTypes.js';
 
-// Router categories beyond Void's original five Settings-configurable features
+// Router categories beyond Vader's original five Settings-configurable features
 // (Chat/Ctrl+K/Autocomplete/Apply/SCM, which keep their own dedicated dropdowns and storage
 // unchanged - see voidSettingsTypes.ts's featureNames). These five are the ones the
 // mission's Model Router section names that don't already have a place to live:
@@ -66,7 +66,7 @@ export interface IModelRouterService {
 	 * Resolve the model to use for a router category under the current mode.
 	 * - MANUAL: the category's override if set, else the Chat feature's own model selection.
 	 * - AUTO: the best configured model for this category by capability (never a provider
-	 *   with no real credentials, even if Void has static info about it) - see
+	 *   with no real credentials, even if Vader has static info about it) - see
 	 *   modelRouterService.ts's _autoSelect for the exact preference order per category.
 	 * Returns null only when nothing at all is configured (same "no model available" meaning
 	 * ModelSelection | null already has everywhere else in this codebase).

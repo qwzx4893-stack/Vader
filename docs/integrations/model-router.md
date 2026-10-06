@@ -2,9 +2,9 @@
 
 **Contract:** `IModelRouterService` in `common/modelRouter/modelRouterTypes.ts`. **Implementation:** `common/modelRouter/modelRouterService.ts`. **Settings UI:** `ModelRouterSection` in `void-settings-tsx/Settings.tsx`.
 
-## Why this exists alongside Void's original per-feature settings
+## Why this exists alongside the original per-feature settings
 
-Void already lets the user pick a model per feature (`voidSettingsTypes.ts`'s `featureNames`: Chat, Ctrl+K, Autocomplete, Apply, SCM) - each with its own Settings dropdown and its own persisted `ModelSelection`. That's untouched. The Model Router adds routing for work that doesn't have (and, for now, doesn't need) its own dedicated Settings dropdown: subagent delegation, read-only research subagents, browser-automation turns, and context-compaction's own summarization call - see `RouterCategory` in `modelRouterTypes.ts`. Expanding `featureNames` itself to cover these was considered and rejected for this pass: it's a persisted-settings-shape change with a much wider blast radius (every Settings dropdown, onboarding, `ModelSelectionOfFeature`'s storage shape) for categories that, unlike Chat/Autocomplete, most users will never want to configure individually - AUTO mode existing at all is precisely what makes that unnecessary.
+The original code already lets the user pick a model per feature (`voidSettingsTypes.ts`'s `featureNames`: Chat, Ctrl+K, Autocomplete, Apply, SCM) - each with its own Settings dropdown and its own persisted `ModelSelection`. That's untouched. The Model Router adds routing for work that doesn't have (and, for now, doesn't need) its own dedicated Settings dropdown: subagent delegation, read-only research subagents, browser-automation turns, and context-compaction's own summarization call - see `RouterCategory` in `modelRouterTypes.ts`. Expanding `featureNames` itself to cover these was considered and rejected for this pass: it's a persisted-settings-shape change with a much wider blast radius (every Settings dropdown, onboarding, `ModelSelectionOfFeature`'s storage shape) for categories that, unlike Chat/Autocomplete, most users will never want to configure individually - AUTO mode existing at all is precisely what makes that unnecessary.
 
 ## AUTO vs MANUAL
 

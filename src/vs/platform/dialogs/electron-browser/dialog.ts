@@ -20,7 +20,7 @@ export function createNativeAboutDialogDetails(productService: IProductService, 
 
 	const getDetails = (useAgo: boolean): string => {
 		return localize({ key: 'aboutDetail', comment: ['Electron, Chromium, Node.js and V8 are product names that need no translation'] },
-			"VSCode Version: {0}\nVader Version: {1}\nCommit: {2}\nDate: {3}\nElectron: {4}\nElectronBuildId: {5}\nChromium: {6}\nNode.js: {7}\nV8: {8}\nOS: {9}",
+			"Vader Version: {0}\nVader Version: {1}\nCommit: {2}\nDate: {3}\nElectron: {4}\nElectronBuildId: {5}\nChromium: {6}\nNode.js: {7}\nV8: {8}\nOS: {9}",
 			version,
 			productService.vaderVersion || 'Unknown',
 			productService.commit || 'Unknown',

@@ -6,7 +6,7 @@
 
 A later revision of this project's own build brief asked, bluntly, whether the primary agent loop should be replaced with a runtime from Cline, Kilo Code, OpenHands, or Zed, citing "single tool call per model turn" as evidence the existing loop was a structural constraint. That evidence was real (see `CHANGELOG.md`'s multi-tool-call entry - it's fixed now), but the conclusion drawn from it wasn't: none of those four are a clean transplant.
 
-- **Cline and Kilo Code** are VS Code *extensions*. Their agent loop runs in the extension-host process and is written against `vscode.*` extension APIs and their own webview UI. Moving that loop into Void's native workbench doesn't give you "a modern runtime behind a clean interface" - it gives you an extension pretending to be part of the editor, which is exactly the "Cline running inside Void" outcome this project's own brief separately names as something to avoid.
+- **Cline and Kilo Code** are VS Code *extensions*. Their agent loop runs in the extension-host process and is written against `vscode.*` extension APIs and their own webview UI. Moving that loop into Vader's native workbench doesn't give you "a modern runtime behind a clean interface" - it gives you an extension pretending to be part of the editor, which is exactly the "Cline running inside Vader" outcome this project's own brief separately names as something to avoid.
 - **OpenHands' agent SDK** is Python-first.
 - **Zed's agent** is Rust, built directly against Zed's own GPUI toolkit. There's no TypeScript surface to embed.
 
@@ -18,7 +18,7 @@ The concrete defect behind "single tool call per turn" was in `electron-main/llm
 
 ## The Gateway itself
 
-`IAgentGatewayService` (`common/agentGateway/agentGatewayTypes.ts`) sits between a caller and whichever loop actually executes a task. It exists so that *if* a suitable external runtime appears later, or if Vader outgrows the Void-derived loop for other reasons, swapping it is "write a new class implementing this interface, change one `registerSingleton` call" rather than "rewrite the UI."
+`IAgentGatewayService` (`common/agentGateway/agentGatewayTypes.ts`) sits between a caller and whichever loop actually executes a task. It exists so that *if* a suitable external runtime appears later, or if Vader outgrows the inherited loop for other reasons, swapping it is "write a new class implementing this interface, change one `registerSingleton` call" rather than "rewrite the UI."
 
 **This is now the real primary path the chat UI uses to execute a task**, not just the subagent-delegation call site. `SidebarChat.tsx`'s send/edit/abort/approve/reject/dismiss-error actions all call the Gateway:
 
@@ -27,10 +27,10 @@ The concrete defect behind "single tool call per turn" was in `electron-main/llm
 - `cancelTask(threadId)` - abort whatever's running (was `abortRunning`)
 - `approveToolRequest(threadId)` / `rejectToolRequest(threadId)` - resolve a pending tool approval (was `approveLatestToolRequest`/`rejectLatestToolRequest`)
 - `dismissError(threadId)` - clear a surfaced run error (was `dismissStreamError`)
-- `getExecutionState(threadId)` / `getExecutionMetadata(threadId)` - a normalized `AgentExecutionState`/`AgentExecutionMetadata` projection over the underlying loop's own state, for callers that want "what's happening right now" without learning `ThreadStreamState`'s Void-loop-specific shape
+- `getExecutionState(threadId)` / `getExecutionMetadata(threadId)` - a normalized `AgentExecutionState`/`AgentExecutionMetadata` projection over the underlying loop's own state, for callers that want "what's happening right now" without learning `ThreadStreamState`'s original-loop-specific shape
 - `onDidChangeExecutionState` - fires when that normalized state changes
 - `runIsolatedTask` - unchanged, still backs `delegate_subagent_task`
 
 **What deliberately still reads `IChatThreadService` directly**: rendering the conversation itself - persisted messages, checkpoints, the thread list, staging selections, codespan links (`SidebarThreadSelector.tsx`, `Settings.tsx`, `ChatMarkdownRender.tsx`, `inputs.tsx`, and the read side of `SidebarChat.tsx` via the existing `useChatThreadsState`/`useChatThreadsStreamState` hooks in `services.tsx`). That's inherent to *displaying* a thread's history, not to *executing* a task, and duplicating it behind the Gateway would mean either re-exposing `ThreadStreamState` verbatim (defeating the point of a normalized contract) or building a second live-state bus that mirrors the first one field-for-field for no behavioral gain. The boundary drawn here is deliberate: the Gateway owns starting/continuing/cancelling/approving execution and the runtime-independent "what phase is this task in" question; `IChatThreadService` remains the owner of persisted thread data and its own live-render event, exactly as `ARCHITECTURE.md`'s subsystem table describes.
 
-The Gateway's `AgentExecutionState`/`AgentExecutionMetadata` types are intentionally a smaller vocabulary than `ThreadStreamState`/`ThreadType` - they drop Void-loop-specific fields (raw in-progress tool-call parsing state, the `interrupt` promise) that only make sense to the current implementation, keeping the contract itself swap-safe.
+The Gateway's `AgentExecutionState`/`AgentExecutionMetadata` types are intentionally a smaller vocabulary than `ThreadStreamState`/`ThreadType` - they drop original-loop-specific fields (raw in-progress tool-call parsing state, the `interrupt` promise) that only make sense to the current implementation, keeping the contract itself swap-safe.

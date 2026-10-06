@@ -1,6 +1,6 @@
 # Model Providers
 
-Vader inherits Void's provider layer unchanged (`src/vs/workbench/contrib/void/common/sendLLMMessageService.ts`, `electron-main/llmMessage/sendLLMMessage.impl.ts`). This document describes what's actually implemented, not an aspirational list.
+Vader inherits its provider layer unchanged (`src/vs/workbench/contrib/void/common/sendLLMMessageService.ts`, `electron-main/llmMessage/sendLLMMessage.impl.ts`). This document describes what's actually implemented, not an aspirational list.
 
 ## Supported providers
 
@@ -35,7 +35,7 @@ Five independently-configurable model slots: Chat, Ctrl+K (quick edit), Autocomp
 
 ## API key storage
 
-Provider API keys are encrypted at rest via `IEncryptionService` (OS keychain/`safeStorage`-backed) before being written to storage - not plaintext. This is inherited from Void unchanged. One caveat, also inherited: MCP server configuration (`mcp.json`, including any `env`/`headers` used for auth) is stored in plaintext, not through this encryption path - be mindful of putting long-lived secrets directly in `mcp.json` versus a server that reads them from its own environment.
+Provider API keys are encrypted at rest via `IEncryptionService` (OS keychain/`safeStorage`-backed) before being written to storage - not plaintext. This is inherited unchanged. One caveat, also inherited: MCP server configuration (`mcp.json`, including any `env`/`headers` used for auth) is stored in plaintext, not through this encryption path - be mindful of putting long-lived secrets directly in `mcp.json` versus a server that reads them from its own environment.
 
 ## Known limitations (as of this build)
 

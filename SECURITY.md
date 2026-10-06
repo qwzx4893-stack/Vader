@@ -2,7 +2,17 @@
 
 ## Reporting a vulnerability
 
-Open an issue at [qwzx4893-stack/Vader](https://github.com/qwzx4893-stack/Vader/issues). For a vulnerability in the underlying VS Code or Void code this project builds on, consider also checking whether it's already known upstream (Void is deprecated and no longer accepting reports; VS Code's own security process is at microsoft/vscode).
+Please report vulnerabilities **privately**: open the repository's **Security** tab and choose **Report a vulnerability** ([direct link](https://github.com/qwzx4893-stack/Vader/security/advisories/new)). Do not open a public issue for a vulnerability.
+
+Include what you found, how to reproduce it (a minimal workspace or prompt is ideal), and the Vader version from `Help: About`. You can expect an acknowledgement within a few days. Fixes land with a regression test, and are listed in [`CHANGELOG.md`](./CHANGELOG.md) once users can update.
+
+Supported versions: the latest release and the `main` branch.
+
+For a vulnerability in the underlying upstream code this project builds on, consider also checking whether it is already known upstream.
+
+## What is already checked automatically
+
+Every push runs CodeQL, Semgrep, secret scanning and a dependency audit that requires zero known advisories in all lockfiles ([Security Scan](./.github/workflows/security-scan.yml), [CI](./.github/workflows/ci.yml)). `docs/AGENT_SESSIONS.md` lists the vulnerabilities found by attacking the agent's file tools as a hostile model, and how each was closed.
 
 ## What the Policy Engine does and doesn't protect against
 
@@ -18,7 +28,7 @@ MCP servers themselves are configured by the user (`mcp.json`) and are not sandb
 
 ## Secrets
 
-Provider API keys are encrypted at rest via the OS keychain (`IEncryptionService`), inherited from Void unchanged. `mcp.json` (including any credentials an MCP server needs, e.g. in `env`/`headers`) is stored in plaintext, also inherited from Void - be mindful of what you put there directly versus having the server read it from its own environment. Anonymous usage telemetry, which upstream Void sent to its own analytics service by default, is hard-disabled in this fork (see `electron-main/metricsMainService.ts`) - no telemetry request is made regardless of the local opt-out flag's value.
+Provider API keys are encrypted at rest via the OS keychain (`IEncryptionService`), inherited unchanged. `mcp.json` (including any credentials an MCP server needs, e.g. in `env`/`headers`) is stored in plaintext, also inherited - be mindful of what you put there directly versus having the server read it from its own environment. Anonymous usage telemetry, which the upstream project sent to its own analytics service by default, is hard-disabled in this fork (see `electron-main/metricsMainService.ts`) - no telemetry request is made regardless of the local opt-out flag's value.
 
 ## Browser automation
 

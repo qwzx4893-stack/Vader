@@ -4,14 +4,14 @@ Written 2026-10-06. Everything below was computed the same way for every project
 reading each project's own source (mechanisms), plus real-app tests for Vader's agent behaviour. No API key was used or needed.
 
 **Scope of the comparison.** Open-source projects only, because only their code can be measured: Cline (`sdk/`, `apps/`), Roo Code (`src`, `webview-ui/src`,
-`packages`), Continue (`core`, `gui/src`, `extensions/vscode/src`), opencode (`packages/*`), Void (Vader's origin, `src/vs/workbench/contrib/void`, which is
+`packages`), Continue (`core`, `gui/src`, `extensions/vscode/src`), opencode (`packages/*`), the original base (Vader's origin, `src/vs/workbench/contrib/void`, which is
 the same folder as Vader's). Test files, generated files, `node_modules` and bundles are excluded everywhere. Closed-source products (Cursor, Windsurf,
 Copilot, Claude Code) cannot be measured this way; for them see `PRODUCT_ASSESSMENT.md` (public information only).
-Roo Code's last commit is from May 2026 and Void's from June 2026, so both are quiet; the others were measured on commits from the last three months.
+Roo Code's last commit is from May 2026 and the original base's from June 2026, so both are quiet; the others were measured on commits from the last three months.
 
 ## 1. Code quality (measured)
 
-| Measure | Vader | Void | Cline | Roo Code | Continue | opencode |
+| Measure | Vader | Original base | Cline | Roo Code | Continue | opencode |
 |---|---|---|---|---|---|---|
 | Source files (non-test) | 156 | 95 | 2303 | 895 | 1083 | 1542 |
 | Lines of code (non-comment) | 28,694 | 22,391 | 421,906 | 115,884 | 136,587 | 298,568 |
@@ -35,11 +35,11 @@ Roo Code's last commit is from May 2026 and Void's from June 2026, so both are q
 
 How to read it:
 - **Size is not comparable one to one**: Vader's folder is the agent layer (about 29k lines) on top of VS Code; Cline, opencode and Roo Code contain whole applications. Ratios and densities are the fair columns.
-- **Complexity**: Vader's mean (2.78) and share of very complex functions (0.5% above 25) are better than Cline, Roo Code and Void, and close to Continue and opencode. No project is clearly excellent; the spread is small.
+- **Complexity**: Vader's mean (2.78) and share of very complex functions (0.5% above 25) are better than Cline, Roo Code and the original base, and close to Continue and opencode. No project is clearly excellent; the spread is small.
 - **Type safety**: Vader uses about 3.3 explicit `any` per 1000 lines, better than Roo Code (4.8) and Continue (7.9), worse than Cline (1.0) and opencode (0.65). It has the fewest suppression comments of all (0.07).
 - **Duplication**: Vader 0.42%, the lowest; Cline 7.5% is the highest.
-- **Security rules**: with the same Semgrep community security rules, Vader sits at 1.08 findings per 1000 lines, level with Cline (1.07), Void and Continue, and far below Roo Code (5.9). The findings that remain were reviewed one by one: guarded dynamic dispatch, regexes built from fixed tag names, and build scripts.
-- **Tests**: Vader's test code is 0.17 lines per source line, the lowest of the projects that have tests (Continue 0.30, opencode 0.54, Cline 0.64, Roo Code 1.23); Void has none. Vader's tests are mostly end-to-end runs of the real app (about 60 scenarios and 33 Node-level suites), which cover more behaviour per line than unit tests, but the ratio is still the weakest figure in this table.
+- **Security rules**: with the same Semgrep community security rules, Vader sits at 1.08 findings per 1000 lines, level with Cline (1.07), the original base and Continue, and far below Roo Code (5.9). The findings that remain were reviewed one by one: guarded dynamic dispatch, regexes built from fixed tag names, and build scripts.
+- **Tests**: Vader's test code is 0.17 lines per source line, the lowest of the projects that have tests (Continue 0.30, opencode 0.54, Cline 0.64, Roo Code 1.23); the original base has none. Vader's tests are mostly end-to-end runs of the real app (about 60 scenarios and 33 Node-level suites), which cover more behaviour per line than unit tests, but the ratio is still the weakest figure in this table.
 - **Process**: Vader had no dependency-update bot and no CODEOWNERS, which every active peer has; both were added (`.github/dependabot.yml`, `.github/CODEOWNERS`). It has fewer CI workflows (5) than the larger projects (18 to 31), and is one of only two (with Roo Code) that run CodeQL.
 - **A known measurement artefact**: lizard reports one 2,456-line "function" in `SidebarChat.tsx`. It is a parsing artefact (the file's many React components lumped together), but the real fact behind it stands: that file is about 2,600 lines and is the largest in Vader, and splitting it is the single best maintainability refactor on the list.
 
@@ -48,7 +48,7 @@ How to read it:
 A mechanism counts as present when its characteristic code exists in non-test source (keyword search, so a hit shows presence, not quality; the number
 is files and scales with project size).
 
-| Mechanism (files containing it) | Vader | Void | Cline | Roo Code | Continue | opencode |
+| Mechanism (files containing it) | Vader | Original base | Cline | Roo Code | Continue | opencode |
 |---|---|---|---|---|---|---|
 | malformed tool-argument handling | yes (4) | yes (2) | yes (31) | yes (16) | yes (6) | yes (13) |
 | repeated-call / loop detection | yes (1) | no (0) | yes (34) | yes (39) | no (0) | yes (70) |

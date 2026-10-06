@@ -1,1 +1,8 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability (private)
+    url: https://github.com/qwzx4893-stack/Vader/security/advisories/new
+    about: Please report vulnerabilities privately, not as a public issue.
+  - name: Documentation
+    url: https://github.com/qwzx4893-stack/Vader/tree/main/docs
+    about: Architecture, providers, privacy and per-subsystem guides.

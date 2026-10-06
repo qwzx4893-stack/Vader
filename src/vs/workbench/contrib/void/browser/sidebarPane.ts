@@ -98,7 +98,7 @@ class SidebarViewPane extends ViewPane {
 // ---------- Register viewpane inside the void container ----------
 
 // const voidThemeIcon = Codicon.symbolObject;
-// const voidViewIcon = registerIcon('void-view-icon', voidThemeIcon, localize('voidViewIcon', 'View icon of the Void chat view.'));
+// const voidViewIcon = registerIcon('void-view-icon', voidThemeIcon, localize('voidViewIcon', 'View icon of the Vader chat view.'));
 
 // called VIEWLET_ID in other places for some reason
 export const VOID_VIEW_CONTAINER_ID = 'workbench.view.void'

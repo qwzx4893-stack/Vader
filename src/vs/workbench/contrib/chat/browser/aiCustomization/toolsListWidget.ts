@@ -561,7 +561,7 @@ export class ToolsListWidget extends Disposable {
 		const installed = model.filter(vm => vm.toolSet.source.type === 'extension');
 		this._renderToolSection(
 			localize('builtInToolsSection', "Built-in Tools"),
-			localize('builtInToolsSectionDescription', "Tools provided by the active agent and VS Code."),
+			localize('builtInToolsSectionDescription', "Tools provided by the active agent and Vader."),
 			localize('builtInToolsSectionEmpty', "No built-in tool sets are available."),
 			builtIn,
 			query,

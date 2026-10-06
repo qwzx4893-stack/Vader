@@ -49,10 +49,10 @@ export default defineConfig(
 		},
 		rules: {
 			'constructor-super': 'warn',
-			'curly': 'off', // <-- Void
+			'curly': 'off', // <-- Vader
 			'eqeqeq': 'warn',
 			'prefer-const': [
-				'off', // <-- Void
+				'off', // <-- Vader
 				{
 					'destructuring': 'all'
 				}
@@ -92,7 +92,7 @@ export default defineConfig(
 			'local/code-parameter-properties-must-have-explicit-accessibility': 'warn',
 			'local/code-no-nls-in-standalone-editor': 'warn',
 			'local/code-no-potentially-unsafe-disposables': 'warn',
-			'local/code-no-dangerous-type-assertions': 'off', // Void warn -> off
+			'local/code-no-dangerous-type-assertions': 'off', // Vader warn -> off
 			'local/code-no-any-casts': 'off',
 			'local/code-no-standalone-editor': 'warn',
 			'local/code-no-unexternalized-strings': 'warn',
@@ -132,7 +132,7 @@ export default defineConfig(
 					]
 				}
 			],
-			// Void - this should only apply to workbench/void/
+			// Vader - this should only apply to workbench/void/
 			// 'header/header': [
 			// 	2,
 			// 	'block',

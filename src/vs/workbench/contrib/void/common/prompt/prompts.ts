@@ -1325,7 +1325,7 @@ ${log}`.trim()
 // ======================================================== context compaction ========================================================================
 // Vader addition: structured context compaction - see chatThreadService.ts's
 // _maybeCompactThread and chatThreadServiceTypes.ts's CompactedSummaryEntry. Turns a run of
-// older messages into a structured summary instead of Void's original fallback (blind
+// older messages into a structured summary instead of Vader's original fallback (blind
 // per-message character truncation in convertToLLMMessageService.ts's prepareMessages,
 // which still exists as the final safety net for whatever compaction doesn't catch in time).
 

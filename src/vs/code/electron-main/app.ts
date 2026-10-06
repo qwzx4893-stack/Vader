@@ -1320,7 +1320,7 @@ export class CodeApplication extends Disposable {
 			services.set(ITelemetryService, NullTelemetryService);
 		}
 
-		// Void main process services (required for services with a channel for comm between browser and electron-main (node))
+		// Vader main process services (required for services with a channel for comm between browser and electron-main (node))
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
 		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
 		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
@@ -1493,7 +1493,7 @@ export class CodeApplication extends Disposable {
 		mainProcessElectronServer.registerChannel('logger', loggerChannel);
 		sharedProcessClient.then(client => client.registerChannel('logger', loggerChannel));
 
-		// Void - use loggerChannel as reference
+		// Vader - use loggerChannel as reference
 		const metricsChannel = ProxyChannel.fromService(accessor.get(IMetricsService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-metrics', metricsChannel);
 
@@ -1503,11 +1503,11 @@ export class CodeApplication extends Disposable {
 		const sendLLMMessageChannel = new LLMMessageChannel(accessor.get(IMetricsService));
 		mainProcessElectronServer.registerChannel('void-channel-llmMessage', sendLLMMessageChannel);
 
-		// Void added this
+		// Vader added this
 		const voidSCMChannel = ProxyChannel.fromService(accessor.get(IVoidSCMService), disposables);
 		mainProcessElectronServer.registerChannel('void-channel-scm', voidSCMChannel);
 
-		// Void added this
+		// Vader added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
 

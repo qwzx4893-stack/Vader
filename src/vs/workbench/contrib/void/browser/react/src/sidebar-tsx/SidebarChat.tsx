@@ -1952,7 +1952,7 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 type ResultWrapper<T extends ToolName> = (props: WrapperProps<T>) => React.ReactNode
 
-// Vader fix. Only the tools Void shipped had a chat component here; every tool Vader added (browser, subagents, memory,
+// Vader fix. Only the tools Vader shipped had a chat component here; every tool Vader added (browser, subagents, memory,
 // skills, verification, ...) rendered NOTHING - no header, no result and, worse, no Approve/Reject buttons, so an agent that
 // needed approval for one of them waited forever on a request the user could not see (found by a live run). Any tool
 // without a bespoke component now gets this one: title, the parameters (open while approval is pending, so the user sees

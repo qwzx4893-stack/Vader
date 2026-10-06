@@ -34,7 +34,7 @@ const osInfo = _getOSInfo()
 export class MetricsMainService extends Disposable implements IMetricsService {
 	_serviceBrand: undefined;
 
-	// Vader note: upstream Void reported anonymous usage metrics to Void's own
+	// Vader note: upstream Vader reported anonymous usage metrics to Vader's own
 	// PostHog project (opt-out, on by default) using a key hardcoded for that
 	// product. Routing Vader users' data into a third party's analytics account
 	// under a different product's name is both a privacy problem and not ours

@@ -53,7 +53,7 @@ import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsServic
 
 
 // Vader addition: tools blocked outright in 'gather' and 'plan' chat modes - hard
-// enforcement, not the prompt-only "you're in gather mode, please don't edit" Void shipped
+// enforcement, not the prompt-only "you're in gather mode, please don't edit" Vader shipped
 // with (the UI already claimed "Reads files, but can't edit" for Gather; nothing actually
 // enforced that before this - see docs/integrations/plan-mode.md's audit note). Every
 // built-in tool that can write a file, run a shell command, delegate to another agent (which
@@ -1129,7 +1129,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 
-	// Vader addition: structured context compaction. Void's original safety net for context
+	// Vader addition: structured context compaction. Vader's original safety net for context
 	// overflow is convertToLLMMessageService.ts's prepareMessages, which blindly truncates
 	// the largest individual message's raw content when the final assembled request would
 	// still be too big - a real, still-present last resort, but one that discards whatever
@@ -1233,7 +1233,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			summaryText = await this._sendCompactionRequest(conversationText, compactionModelSelection)
 		} catch {
 			// compaction is a best-effort optimization, never load-bearing - if the
-			// summarization call itself fails, do nothing this round. Void's original
+			// summarization call itself fails, do nothing this round. Vader's original
 			// per-message truncation (prepareMessages, convertToLLMMessageService.ts) is
 			// still the final safety net if the raw context genuinely overflows.
 			return

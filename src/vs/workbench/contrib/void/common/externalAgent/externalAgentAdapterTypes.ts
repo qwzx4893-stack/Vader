@@ -10,7 +10,7 @@ import { IDisposable } from '../../../../../base/common/lifecycle.js';
 // streamed events, permission requests, cancellation, completion, errors. Kept as its OWN
 // contract - not a re-export of IAgentGatewayService/AgentExecutionState - because the two
 // have genuinely different semantics where it matters: the Gateway is Vader's own internal
-// seam (thread ids, Void-loop-shaped execution state) meant for callers inside this
+// seam (thread ids, Vader-loop-shaped execution state) meant for callers inside this
 // codebase; this is an external-protocol-shaped boundary meant to be implementable by
 // something that has never heard of chatThreadService.ts at all - a real third-party
 // ACP-speaking agent process, if one were wired up. See

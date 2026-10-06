@@ -82,10 +82,10 @@ export class VoidMainUpdateService extends Disposable implements IVoidUpdateServ
 
 		if (this._updateService.state.type === StateType.Disabled) {
 			// Vader ships no `updateUrl` and has no hosted release/update server of its own
-			// (upstream Void's fallback here queried `voideditor/binaries` on GitHub and
-			// offered to send users to reinstall Void, which would be actively wrong for
+			// (upstream Vader's fallback here queried `voideditor/binaries` on GitHub and
+			// offered to send users to reinstall Vader, which would be actively wrong for
 			// this product). Until Vader stands up its own release channel, treat "disabled"
-			// as simply "no update available" rather than reusing Void's infrastructure.
+			// as simply "no update available" rather than reusing Vader's infrastructure.
 			return { message: explicit ? 'Automatic updates are not configured for this build. Check the releases page of this project on GitHub for new versions.' : null } as const
 		}
 		return null

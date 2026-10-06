@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: If you use Vader, please cite it as below.
+title: Vader
+abstract: An AI-native IDE with a real coding agent, a hard policy engine in front of every action, and no telemetry.
+type: software
+license: Apache-2.0
+repository-code: https://github.com/qwzx4893-stack/Vader
+url: https://github.com/qwzx4893-stack/Vader
+keywords: [ide, ai, agents, coding-agent, policy-engine, privacy, mcp, electron]
+authors:
+  - name: Vader contributors

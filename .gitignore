@@ -30,7 +30,7 @@ product.overrides.json
 .eslintcache
 .vscode-test
 
-# Void added these:
+# Vader added these:
 .tmp/
 .tmp2/
 .tool-versions

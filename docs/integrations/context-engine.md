@@ -4,7 +4,7 @@
 
 ## What it adds, and what it deliberately doesn't replace
 
-Void already sends two static pieces of context on every turn, unchanged by this: the repo file tree (`IDirectoryStrService`, character-budget-aware, unrelated to this service) and the layered instructions (`IInstructionsService` - system invariants, policy summary, global/workspace/agent instructions). Neither knows anything about *this specific message* - they're the same regardless of what the user typed.
+The original code already sends two static pieces of context on every turn, unchanged by this: the repo file tree (`IDirectoryStrService`, character-budget-aware, unrelated to this service) and the layered instructions (`IInstructionsService` - system invariants, policy summary, global/workspace/agent instructions). Neither knows anything about *this specific message* - they're the same regardless of what the user typed.
 
 The Context Engine adds a third, dynamic section: symbol outlines, live diagnostics, and git diff/log for the files the user actually mentioned or has open right now, ranked and truncated by a rough classification of what kind of task the message looks like. It sits in `chat_systemMessage`'s new `<dynamic_context>` block, included only when there's something to say.
 

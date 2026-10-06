@@ -4,7 +4,7 @@
 
 ## Audit finding this starts from
 
-Void already shipped a "Gather" mode, described in its own UI as *"Reads files, but can't edit."* That claim was **not actually enforced anywhere** - `chatThreadService.ts`'s tool-execution gate (`_runToolCall`) never checked `chatMode` at all before this change. Gather mode's read-only-ness was prompt-level only: `availableTools()` in `prompts.ts` simply never told the model a mutating tool existed, so a native tool-calling model had nothing to call - but the XML tool-calling fallback grammar (used by models without native function-calling) parses tool tags out of raw text, and a model that hallucinated or was steered into emitting an `<edit_file>` tag anyway would have had it executed. This was a real gap, not a hypothetical one, and it's what "Plan Mode must be strictly read-only, hard-enforced" is actually asking to be true of.
+The original code already shipped a "Gather" mode, described in its own UI as *"Reads files, but can't edit."* That claim was **not actually enforced anywhere** - `chatThreadService.ts`'s tool-execution gate (`_runToolCall`) never checked `chatMode` at all before this change. Gather mode's read-only-ness was prompt-level only: `availableTools()` in `prompts.ts` simply never told the model a mutating tool existed, so a native tool-calling model had nothing to call - but the XML tool-calling fallback grammar (used by models without native function-calling) parses tool tags out of raw text, and a model that hallucinated or was steered into emitting an `<edit_file>` tag anyway would have had it executed. This was a real gap, not a hypothetical one, and it's what "Plan Mode must be strictly read-only, hard-enforced" is actually asking to be true of.
 
 ## What's real now
 

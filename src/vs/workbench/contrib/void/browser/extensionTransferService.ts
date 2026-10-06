@@ -31,7 +31,7 @@ const extensionBlacklist = [
 	// ignore extensions
 	'ms-vscode-remote.remote', // ms-vscode-remote.remote-ssh, ms-vscode-remote.remote-wsl
 	'ms-vscode.remote', // ms-vscode.remote-explorer
-	// ignore other AI copilots that could conflict with Void keybindings
+	// ignore other AI copilots that could conflict with Vader keybindings
 	'sourcegraph.cody-ai',
 	'continue.continue',
 	'codeium.codeium',

@@ -600,7 +600,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		}).join('\n\n');
 	}
 
-	// Read .vaderrules (or legacy .voidrules, for repos forked from Void) files from workspace folders
+	// Read .vaderrules (or legacy .voidrules, for repos forked from Vader) files from workspace folders
 	private _getVoidRulesFileContents(): string {
 		try {
 			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;

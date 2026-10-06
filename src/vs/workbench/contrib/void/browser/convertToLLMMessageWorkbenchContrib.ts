@@ -23,7 +23,7 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 
 		const initializeURI = (uri: URI) => {
 			this.workspaceContext.getWorkspace()
-			// .vaderrules is the primary name; .voidrules is also watched for repos forked from Void
+			// .vaderrules is the primary name; .voidrules is also watched for repos forked from Vader
 			for (const filename of ['.vaderrules', '.voidrules']) {
 				this.voidModelService.initializeModel(URI.joinPath(uri, filename))
 			}

@@ -64,4 +64,4 @@ For real-provider, real-network testing (an actual OpenRouter model driving a re
 - **Compiled**: verified via `tsc -p src/tsconfig.json --noEmit` (0 errors) and `npm run buildreact`.
 - **Unit/integration-tested against the real installed package**: `clineRuntimeSmoke.mjs`.
 - **Real-provider-tested**: the OpenRouter E2E harness (see `docs/integrations/providers/e2e-testing.md`).
-- **Not live-UI-verified**: an unpackaged Electron launch of this codebase does not reach a working workbench in this Linux sandbox (a pre-existing, documented limitation, true of unmodified Void too) - so the actual chat UI driving a Cline turn has not been click-tested here.
+- **Not live-UI-verified**: an unpackaged Electron launch of this codebase does not reach a working workbench in this Linux sandbox (a pre-existing, documented limitation, true of unmodified upstream too) - so the actual chat UI driving a Cline turn has not been click-tested here.

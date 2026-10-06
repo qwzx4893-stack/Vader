@@ -147,21 +147,21 @@ const performVoidCheck = async (
 
 	const metricsTag = explicit ? 'Manual' : 'Auto'
 
-	metricsService.capture(`Void Update ${metricsTag}: Checking...`, {})
+	metricsService.capture(`Vader Update ${metricsTag}: Checking...`, {})
 	const res = await voidUpdateService.check(explicit)
 	if (!res) {
 		const notifController = notifyErrChecking(notifService);
-		metricsService.capture(`Void Update ${metricsTag}: Error`, { res })
+		metricsService.capture(`Vader Update ${metricsTag}: Error`, { res })
 		return notifController
 	}
 	else {
 		if (res.message) {
 			const notifController = notifyUpdate(res, notifService, updateService)
-			metricsService.capture(`Void Update ${metricsTag}: Yes`, { res })
+			metricsService.capture(`Vader Update ${metricsTag}: Yes`, { res })
 			return notifController
 		}
 		else {
-			metricsService.capture(`Void Update ${metricsTag}: No`, { res })
+			metricsService.capture(`Vader Update ${metricsTag}: No`, { res })
 			return null
 		}
 	}

@@ -33,7 +33,7 @@ The `remember` tool (`toolsService.ts`) lets the Main Agent (or any thread) writ
 4. Archives the exact raw messages being replaced into `IMemoryService` (`scope: 'compactionArchive'`, keyed by thread id, capped at 20 archived compactions per thread) - compaction is never a silent, permanent loss of history.
 5. Splices the thread's persisted messages: the compacted range becomes one `compacted_summary` message; everything before and after (the preserved tail) stays untouched.
 
-If the summarization call itself fails (provider error, offline), compaction is skipped for that turn - it's a best-effort optimization, not load-bearing. Void's original safety net, `convertToLLMMessageService.ts`'s `prepareMessages` (blind per-message character truncation when the final assembled request would still be too big), is untouched and still runs as the last resort if compaction didn't get to a message in time; the two aren't in tension, since compaction runs first, with a safety margin, and truncation only ever sees what compaction left behind.
+If the summarization call itself fails (provider error, offline), compaction is skipped for that turn - it's a best-effort optimization, not load-bearing. the original safety net, `convertToLLMMessageService.ts`'s `prepareMessages` (blind per-message character truncation when the final assembled request would still be too big), is untouched and still runs as the last resort if compaction didn't get to a message in time; the two aren't in tension, since compaction runs first, with a safety margin, and truncation only ever sees what compaction left behind.
 
 ## What isn't done here
 

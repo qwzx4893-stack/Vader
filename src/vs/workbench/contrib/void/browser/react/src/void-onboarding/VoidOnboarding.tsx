@@ -3,15 +3,14 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
-import { ColorScheme } from '../../../../../../../platform/theme/common/theme.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
-import { isLinux } from '../../../../../../../base/common/platform.js';
+import { VaderLogo } from '../util/VaderLogo.js'
 
 const OVERRIDE_VALUE = false
 
@@ -40,28 +39,8 @@ export const VoidOnboarding = () => {
 }
 
 const VoidIcon = () => {
-	const accessor = useAccessor()
-	const themeService = accessor.get('IThemeService')
-
-	const divRef = useRef<HTMLDivElement | null>(null)
-
-	useEffect(() => {
-		// void icon style
-		const updateTheme = () => {
-			const theme = themeService.getColorTheme().type
-			const isDark = theme === ColorScheme.DARK || theme === ColorScheme.HIGH_CONTRAST_DARK
-			if (divRef.current) {
-				divRef.current.style.maxWidth = '220px'
-				divRef.current.style.opacity = '50%'
-				divRef.current.style.filter = isDark ? '' : 'invert(1)' //brightness(.5)
-			}
-		}
-		updateTheme()
-		const d = themeService.onDidColorThemeChange(updateTheme)
-		return () => d.dispose()
-	}, [])
-
-	return <div ref={divRef} className='@@void-void-icon' />
+	// the Vader logo, drawn in the theme's text colour (light on dark themes, dark on light themes)
+	return <VaderLogo className='w-full' style={{ maxWidth: 260, opacity: 0.92 }} />
 }
 
 const FADE_DURATION_MS = 2000
@@ -275,7 +254,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 // 	OnboardingPage
 // 		title:
 // 			div
-// 				"Welcome to Void"
+// 				"Welcome to Vader"
 // 			image
 // 		content:<></>
 // 		title
@@ -285,7 +264,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 // 	OnboardingPage
 // 		title:
 // 			div
-// 				"How would you like to use Void?"
+// 				"How would you like to use Vader?"
 // 		content:
 // 			ModelQuestionContent
 // 				|
@@ -598,9 +577,9 @@ const VoidOnboardingContent = () => {
 				<div className='flex flex-col items-center gap-8'>
 					<div className="text-5xl font-light text-center">Welcome to Vader</div>
 
-					{/* Slice of Void image */}
+					{/* Slice of Vader image */}
 					<div className='max-w-md w-full h-[30vh] mx-auto flex items-center justify-center'>
-						{!isLinux && <VoidIcon />}
+						<VoidIcon />
 					</div>
 
 

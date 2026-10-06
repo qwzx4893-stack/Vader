@@ -421,17 +421,17 @@ CommandsRegistry.registerCommand({
 					'properties': {
 						'installOnlyNewlyAddedFromExtensionPackVSIX': {
 							'type': 'boolean',
-							'description': localize('workbench.extensions.installExtension.option.installOnlyNewlyAddedFromExtensionPackVSIX', "When enabled, VS Code installs only newly added extensions from the extension pack VSIX. This option is considered only while installing a VSIX."),
+							'description': localize('workbench.extensions.installExtension.option.installOnlyNewlyAddedFromExtensionPackVSIX', "When enabled, Vader installs only newly added extensions from the extension pack VSIX. This option is considered only while installing a VSIX."),
 							default: false
 						},
 						'installPreReleaseVersion': {
 							'type': 'boolean',
-							'description': localize('workbench.extensions.installExtension.option.installPreReleaseVersion', "When enabled, VS Code installs the pre-release version of the extension if available."),
+							'description': localize('workbench.extensions.installExtension.option.installPreReleaseVersion', "When enabled, Vader installs the pre-release version of the extension if available."),
 							default: false
 						},
 						'donotSync': {
 							'type': 'boolean',
-							'description': localize('workbench.extensions.installExtension.option.donotSync', "When enabled, VS Code do not sync this extension when Settings Sync is on."),
+							'description': localize('workbench.extensions.installExtension.option.donotSync', "When enabled, Vader do not sync this extension when Settings Sync is on."),
 							default: false
 						},
 						'justification': {
@@ -956,8 +956,8 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 				if (requireReload) {
 					notificationService.prompt(
 						Severity.Info,
-						vsixs.length > 1 ? localize('InstallVSIXs.successReload', "Completed installing extensions. Please reload Visual Studio Code to enable them.")
-							: localize('InstallVSIXAction.successReload', "Completed installing extension. Please reload Visual Studio Code to enable it."),
+						vsixs.length > 1 ? localize('InstallVSIXs.successReload', "Completed installing extensions. Please reload Vader to enable them.")
+							: localize('InstallVSIXAction.successReload', "Completed installing extension. Please reload Vader to enable it."),
 						[{
 							label: localize('InstallVSIXAction.reloadNow', "Reload Now"),
 							run: () => hostService.reload()

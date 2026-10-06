@@ -97,7 +97,7 @@ export class OpenVSCodeWindowAction extends Action2 {
 	constructor() {
 		super({
 			id: OpenVSCodeWindowAction.ID,
-			title: localize2('openVSCodeWindow', 'Open VS Code Window'),
+			title: localize2('openVSCodeWindow', 'Open Vader Window'),
 			f1: true,
 			keybinding: {
 				primary: KeyMod.CtrlCmd | KeyMod.Shift | KeyCode.KeyA,
@@ -126,7 +126,7 @@ export class ReturnToVSCodeEditorAction extends Action2 {
 	constructor() {
 		super({
 			id: RETURN_TO_VSCODE_EDITOR_COMMAND_ID,
-			title: localize2('returnToVSCodeEditor', 'Return to VS Code Editor'),
+			title: localize2('returnToVSCodeEditor', 'Return to Vader Editor'),
 		});
 	}
 
@@ -141,7 +141,7 @@ export class ShouldShowReturnToVSCodeEditorAction extends Action2 {
 	constructor() {
 		super({
 			id: SHOULD_SHOW_RETURN_TO_VSCODE_EDITOR_COMMAND_ID,
-			title: localize2('shouldShowReturnToVSCodeEditor', 'Check Whether to Show Return to VS Code Editor'),
+			title: localize2('shouldShowReturnToVSCodeEditor', 'Check Whether to Show Return to Vader Editor'),
 		});
 	}
 

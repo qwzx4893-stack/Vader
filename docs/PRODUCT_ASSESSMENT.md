@@ -33,7 +33,7 @@ comparison sites for competitors, so read competitor rows as indicative); **[not
 | Roo Code / Kilo Code (open source) | modes (Architect, Code, Debug), agent manager, autocomplete **[source]** | Aider/Exercism-based eval repository **[source]**, large user base |
 | Continue (open source) | model-agnostic; AI checks as GitHub status checks in CI **[source]** | CI-side agent checks |
 | Zed (open source editor) | native, fast; AI less deep **[source]** | native performance |
-| Void (open source, Vader's origin) | VS Code fork with agent | Vader replaced its agent core, added policy, privacy, security and tests |
+| Vader (open source, Vader's origin) | VS Code fork with agent | Vader replaced its agent core, added policy, privacy, security and tests |
 
 Where Vader is ahead of the open-source field: a locked policy engine that sits before the approval UI, persistent agents and sub-agents with
 scoped permissions, a verification pipeline, a documented and tested privacy posture, a security scan with zero findings in its own code,

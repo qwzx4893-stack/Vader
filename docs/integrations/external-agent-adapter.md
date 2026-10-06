@@ -4,7 +4,7 @@
 
 ## Why a separate contract from the Agent Gateway
 
-`IAgentGatewayService` (Phase 1, `docs/integrations/agent-gateway.md`) is Vader's own internal seam - thread ids, `AgentExecutionState`'s Void-loop-shaped phases, methods like `approveToolRequest` that assume Vader's own approval model. It's meant for callers *inside* this codebase.
+`IAgentGatewayService` (Phase 1, `docs/integrations/agent-gateway.md`) is Vader's own internal seam - thread ids, `AgentExecutionState`'s original-loop-shaped phases, methods like `approveToolRequest` that assume Vader's own approval model. It's meant for callers *inside* this codebase.
 
 This is a different, ACP-inspired (Zed's Agent Client Protocol) shape, meant to be implementable by something that has never heard of `chatThreadService.ts`: capabilities, session creation, a prompt/response cycle, streamed events (`message_chunk`, `tool_call`, `plan_update`, `permission_request`, `error`, `complete`), and cancellation. Collapsing the two into one contract would mean either leaking Vader-internal concepts into a protocol boundary meant to be genuinely swappable, or weakening the Gateway's own shape to the lowest common denominator. They're kept separate on purpose.
 

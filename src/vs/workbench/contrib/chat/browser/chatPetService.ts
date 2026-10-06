@@ -32,7 +32,7 @@ export const CHAT_PET_DEFAULT_SCALE = 1;
 export type ChatPetVariant = 'stable' | 'insiders';
 
 export const ChatPetContextKeys = {
-	enabled: new RawContextKey<boolean>('chatPetEnabled', false, localize('chatPet.context.enabled', "Whether the VS Code pet is enabled")),
+	enabled: new RawContextKey<boolean>('chatPetEnabled', false, localize('chatPet.context.enabled', "Whether the Vader pet is enabled")),
 };
 
 type ChatPetEnablementEvent = {
@@ -173,8 +173,8 @@ export class ChatPetService extends Disposable implements IChatPetService {
 		this._setEnabled(enabled);
 		this.storageService.store(CHAT_PET_ENABLED_STORAGE_KEY, enabled, StorageScope.APPLICATION, StorageTarget.USER);
 		status(enabled
-			? localize('chatPet.enabled', "VS Code pet enabled. Click the pet to interact with it, or use the Left and Right Arrow keys to move it.")
-			: localize('chatPet.disabled', "VS Code pet disabled"));
+			? localize('chatPet.enabled', "Vader pet enabled. Click the pet to interact with it, or use the Left and Right Arrow keys to move it.")
+			: localize('chatPet.disabled', "Vader pet disabled"));
 		return enabled;
 	}
 
@@ -194,16 +194,16 @@ export class ChatPetService extends Disposable implements IChatPetService {
 		this._variant.set(variant, undefined);
 		this.storageService.store(CHAT_PET_VARIANT_STORAGE_KEY, variant, StorageScope.APPLICATION, StorageTarget.USER);
 		status(variant === 'stable'
-			? localize('chatPet.variant.stable', "VS Code pet changed to the Stable colors")
-			: localize('chatPet.variant.insiders', "VS Code pet changed to the Insiders colors"));
+			? localize('chatPet.variant.stable', "Vader pet changed to the Stable colors")
+			: localize('chatPet.variant.insiders', "Vader pet changed to the Insiders colors"));
 	}
 
 	setOnTheRun(onTheRun: boolean): void {
 		this._onTheRun.set(onTheRun, undefined);
 		this.storageService.store(CHAT_PET_ON_THE_RUN_STORAGE_KEY, onTheRun, StorageScope.APPLICATION, StorageTarget.USER);
 		status(onTheRun
-			? localize('chatPet.onTheRun', "The VS Code pet is on the run. Click the pet to bring it back.")
-			: localize('chatPet.restored', "The VS Code pet is back"));
+			? localize('chatPet.onTheRun', "The Vader pet is on the run. Click the pet to bring it back.")
+			: localize('chatPet.restored', "The Vader pet is back"));
 	}
 
 	setScale(scale: number): void {

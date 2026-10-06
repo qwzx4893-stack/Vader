@@ -41,7 +41,7 @@ this sandboxed environment, through no lack of trying:
 2. **No LIVE-UI run ever completed.** Electron starts and creates a window, but every attempt in
    this sandbox stops short of a mounted workbench on a CSS-MIME/dynamic-import error (see
    `docs/integrations/windows-build.md` for the full account) - and critically, **the same failure
-   reproduces identically on an unmodified upstream Void checkout** in this same sandbox, so this is
+   reproduces identically on an unmodified upstream checkout** in this same sandbox, so this is
    not attributed to anything Vader added. But that comparison only proves "not a regression here";
    it does not prove the workbench loads correctly on a normal desktop. Nobody has ever seen Vader's
    chat UI, Settings panel, Marketplace pane, or Agent Manager actually render.
@@ -156,7 +156,7 @@ raw messages archived not destroyed). Not independently re-tested in this pass; 
 
 ## 11. Filesystem, terminal
 
-Inherited Void tool implementations, not modified by either mission beyond the shell-injection fix
+Inherited tool implementations, not modified by either mission beyond the shell-injection fix
 covered in §14 (worktree-specific, not the general filesystem/terminal tools). **COMPILED** only for
 this report's scope - a full DI-graph test of `toolsService.ts`'s ~15-platform-service-dependent
 tool executors was assessed and deliberately not attempted (see `test/openRouterE2E.mjs`'s own
@@ -495,7 +495,7 @@ use - is precisely the surface this report could not verify from a sandboxed CLI
 1. **A real REAL-MODEL run**, end to end, against at least one of the newly-added providers and at
    least one of the original ones, from a network that isn't policy-blocked.
 2. **A real LIVE-UI run** on an actual desktop (not a headless/root/Xvfb sandbox) to confirm the
-   workbench actually mounts - this sandbox's own comparison against stock Void suggests the
+   workbench actually mounts - this sandbox's own comparison against the stock upstream suggests the
    current failure is environment-specific, but that has never been confirmed on a normal machine.
 3. **A real WINDOWS-LIVE build and run**, watching `.github/workflows/windows-build.yml`'s first
    real execution particularly closely around its Inno Setup step.

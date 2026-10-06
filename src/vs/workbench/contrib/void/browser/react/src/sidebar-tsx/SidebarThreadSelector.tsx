@@ -207,7 +207,7 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 	// 	codeStr={async () => {
 	// 		return JSON.stringify(currentThread.messages, null, 2)
 	// 	}}
-	// 	toolTipName={`Copy As Void Chat`}
+	// 	toolTipName={`Copy As Vader Chat`}
 	// />
 
 	let firstMsg = null;

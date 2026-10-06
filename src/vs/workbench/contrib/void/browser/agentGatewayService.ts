@@ -10,7 +10,7 @@ import { IChatThreadService } from './chatThreadService.js';
 
 export * from '../common/agentGateway/agentGatewayTypes.js';
 
-// Current implementation: delegates to chatThreadService's (Void-derived, Vader-hardened)
+// Current implementation: delegates to chatThreadService's (Vader-derived, Vader-hardened)
 // agent loop. See agentGatewayTypes.ts's doc comment for the reasoning and for what
 // replacing this implementation would involve.
 //

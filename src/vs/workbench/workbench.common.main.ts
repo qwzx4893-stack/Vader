@@ -21,8 +21,8 @@ import '../sessions/common/sizes.js';
 
 //#endregion
 
-//#region --- Void
-import './contrib/void/browser/void.contribution.js'; // Void added this
+//#region --- Vader
+import './contrib/void/browser/void.contribution.js'; // Vader added this
 //#endregion
 
 //#region --- workbench actions
@@ -393,7 +393,7 @@ import './contrib/surveys/browser/nps.contribution.js';
 import './contrib/surveys/browser/languageSurveys.contribution.js';
 
 // Welcome
-// Vader: the VS Code welcome / getting-started pages are not used (same choice Void made)
+// Vader: the VS Code welcome / getting-started pages are not used (same choice Vader made)
 // import './contrib/welcomeGettingStarted/browser/gettingStarted.contribution.js';
 // import './contrib/welcomeAgentSessions/browser/agentSessionsWelcome.contribution.js';
 import './contrib/welcomeWalkthrough/browser/walkThrough.contribution.js';

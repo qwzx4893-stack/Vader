@@ -164,7 +164,7 @@
 				}
 			}
 		},
-		{   // Void added this
+		{   // Vader added this
 			"type": "npm",
 			"script": "watchreactd",
 			"label": "React - Build",
