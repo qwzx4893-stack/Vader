@@ -326,7 +326,9 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 
 
 			// send the command now that listeners are attached
-			await terminal.sendText(command, true)
+			// sendText waits for the shell process to be ready; without a working pty host that never happens, so it is bounded like the other start-up steps
+			try { await withStartTimeout(Promise.resolve(terminal.sendText(command, true)), 'sending the command to the terminal') }
+			catch (e) { disposables.forEach(d => d.dispose()); if (!isPersistent) interrupt(); throw e }
 
 			const waitUntilInterrupt = isPersistent ?
 				// timeout after X seconds
