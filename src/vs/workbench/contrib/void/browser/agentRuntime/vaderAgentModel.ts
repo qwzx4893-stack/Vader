@@ -97,7 +97,10 @@ export class VaderAgentModel implements AgentModel {
 			},
 			onFinalMessage: ({ toolCalls }) => {
 				for (const toolCall of toolCalls ?? []) {
-					push({ type: 'tool-call-delta', toolCallId: toolCall.id, toolName: toolCall.name, input: toolCall.rawParams });
+					// invalid argument text goes to the runtime as text, which is what makes it answer that call with an "invalid JSON arguments" error result
+					push(toolCall.rawInputText !== undefined
+						? { type: 'tool-call-delta', toolCallId: toolCall.id, toolName: toolCall.name, inputText: toolCall.rawInputText }
+						: { type: 'tool-call-delta', toolCallId: toolCall.id, toolName: toolCall.name, input: toolCall.rawParams });
 				}
 				push({ type: 'finish', reason: (toolCalls && toolCalls.length > 0) ? 'tool-calls' : 'stop' });
 				finish();

@@ -87,6 +87,8 @@ export type RawToolCallObj = {
 	doneParams: ToolParamName<ToolName>[];
 	id: string;
 	isDone: boolean;
+	/** set only when the model's argument text was not a JSON object: the text as received, so the agent loop can tell the model what was wrong */
+	rawInputText?: string;
 };
 
 export type AnthropicReasoning = ({ type: 'thinking'; thinking: any; signature: string; } | { type: 'redacted_thinking', data: any })

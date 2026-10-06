@@ -271,12 +271,15 @@ const openAITools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | u
 
 // convert LLM tool call to our tool format
 const rawToolCallObjOfParamsStr = (name: string, toolParamsStr: string, id: string): RawToolCallObj | null => {
+	// Arguments that are not a JSON object (cut off by the output limit, unescaped quotes, prose instead of JSON) used to make the whole call
+	// disappear: the turn ended with an empty message, nothing was shown and the model was never told. The call is kept, with the text as received,
+	// so the agent loop answers it with an error result the model can act on.
+	if (!toolParamsStr.trim()) return { id, name, rawParams: {}, doneParams: [], isDone: true } // a tool without parameters
 	let input: unknown
 	try { input = JSON.parse(toolParamsStr) }
-	catch (e) { return null }
+	catch (e) { return { id, name, rawParams: {}, doneParams: [], isDone: true, rawInputText: toolParamsStr } }
 
-	if (input === null) return null
-	if (typeof input !== 'object') return null
+	if (input === null || typeof input !== 'object' || Array.isArray(input)) return { id, name, rawParams: {}, doneParams: [], isDone: true, rawInputText: toolParamsStr }
 
 	const rawParams: RawToolParamsObj = input
 	return { id, name, rawParams, doneParams: Object.keys(rawParams), isDone: true }

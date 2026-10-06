@@ -127,10 +127,13 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 			for (let i = 0; i < step.toolCalls.length; i++) {
 				const tc = step.toolCalls[i];
 				const callId = `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-				const args = JSON.stringify(tc.args ?? {});
+				// `rawArgs` sends the argument text exactly as given (a model's malformed JSON); `cutMidArgs` closes the connection halfway through it
+				const args = typeof tc.rawArgs === 'string' ? tc.rawArgs : JSON.stringify(tc.args ?? {});
 				sse(res, { ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, id: callId, type: 'function', function: { name: tc.name, arguments: '' } }] }, logprobs: null, finish_reason: null }] });
-				for (const part of tokenize(args, rand)) {
-					sse(res, { ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, function: { arguments: part } }] }, logprobs: null, finish_reason: null }] });
+				const parts = tokenize(args, rand);
+				for (let k = 0; k < parts.length; k++) {
+					sse(res, { ...base, choices: [{ index: 0, delta: { tool_calls: [{ index: i, function: { arguments: parts[k] } }] }, logprobs: null, finish_reason: null }] });
+					if (tc.cutMidArgs && k >= Math.floor(parts.length / 2)) { res.destroy(); return 'cut'; }
 					if (msPerChunk) { await sleep(msPerChunk); }
 				}
 			}
@@ -146,7 +149,7 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 
 	function jsonStep(res, body, step) {
 		const id = `chatcmpl-${randomUUID().replace(/-/g, '').slice(0, 24)}`;
-		const tool_calls = step.toolCalls?.map(tc => ({ id: `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.args ?? {}) } }));
+		const tool_calls = step.toolCalls?.map(tc => ({ id: `call_${randomUUID().replace(/-/g, '').slice(0, 24)}`, type: 'function', function: { name: tc.name, arguments: typeof tc.rawArgs === 'string' ? tc.rawArgs : JSON.stringify(tc.args ?? {}) } }));
 		res.writeHead(200, { 'Content-Type': 'application/json' });
 		res.end(JSON.stringify({
 			id, object: 'chat.completion', created: Math.floor(Date.now() / 1000), model: body.model ?? modelIds[0],

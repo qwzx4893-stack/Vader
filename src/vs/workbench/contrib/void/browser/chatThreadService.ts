@@ -438,6 +438,8 @@ export interface IChatThreadService {
 }
 
 export const IChatThreadService = createDecorator<IChatThreadService>('voidChatThreadService');
+const MAX_IDENTICAL_TOOL_CALLS_IN_A_ROW = 8
+
 class ChatThreadService extends Disposable implements IChatThreadService {
 	_serviceBrand: undefined;
 
@@ -1367,14 +1369,42 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		let textSoFar = ''
 		let reasoningSoFar = ''
+		// Loop guard: a model that makes the very same call (same tool, same arguments) many times in a row is stuck, and every further turn costs the
+		// user tokens for nothing. The runtime's own iteration cap only trips after dozens of turns.
+		let lastCallKey = ''
+		let identicalCallsInARow = 0
+		let loopStopMessage: string | undefined
 		const unsubscribe = runtime.subscribe((event) => {
-			if (event.type === 'assistant-text-delta') {
+			if (event.type === 'tool-started') {
+				const key = event.toolCall.toolName + '\u0000' + JSON.stringify(event.toolCall.input ?? {})
+				identicalCallsInARow = key === lastCallKey ? identicalCallsInARow + 1 : 1
+				lastCallKey = key
+				if (identicalCallsInARow >= MAX_IDENTICAL_TOOL_CALLS_IN_A_ROW && !loopStopMessage) {
+					loopStopMessage = `The model made the same "${event.toolCall.toolName}" call ${identicalCallsInARow} times in a row without making progress, so Vader stopped the run. Rephrase the request or pick a different model.`
+					runtime.abort()
+				}
+			}
+			else if (event.type === 'assistant-text-delta') {
 				textSoFar = event.accumulatedText
 				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
 			}
 			else if (event.type === 'assistant-reasoning-delta') {
 				reasoningSoFar = event.accumulatedText
 				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
+			}
+			else if (event.type === 'tool-finished') {
+				// Calls the runtime answers itself - an unknown tool name, arguments that are not valid JSON, a tool that is switched off - never reach
+				// _runToolCallInline, so nothing was recorded in the thread and the next request to the model lacked both the call and its error.
+				// Record them as failed calls, so the model is told what went wrong and can correct itself.
+				const result = event.message.content.find(p => p.type === 'tool-result') as { toolCallId: string, toolName: string, output: unknown, isError?: boolean } | undefined
+				const thread = this.state.allThreads[threadId]
+				if (result?.isError && thread && !thread.messages.some(m => m.role === 'tool' && m.id === result.toolCallId)) {
+					const out = result.output
+					const errorText = typeof out === 'string' ? out : (out && typeof out === 'object' && typeof (out as { error?: unknown }).error === 'string') ? (out as { error: string }).error : JSON.stringify(out)
+					const input = event.toolCall.input
+					const rawParams = (input && typeof input === 'object' && !Array.isArray(input)) ? input as RawToolParamsObj : {}
+					this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams, result: null, name: result.toolName as ToolName, content: errorText, id: result.toolCallId, mcpServerName: undefined })
+				}
 			}
 			else if (event.type === 'assistant-message') {
 				const text = event.message.content.filter(p => p.type === 'text').map(p => (p as { text: string }).text).join('')
@@ -1400,6 +1430,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			unsubscribe()
 
 			if (result.status === 'aborted') {
+				if (loopStopMessage) {
+					this._setStreamState(threadId, { isRunning: undefined, error: { message: loopStopMessage, fullError: null } })
+					this._addUserCheckpoint({ threadId })
+					return
+				}
 				this._setStreamState(threadId, undefined)
 				return
 			}

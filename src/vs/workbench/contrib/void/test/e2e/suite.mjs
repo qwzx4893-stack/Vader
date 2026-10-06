@@ -15,6 +15,7 @@ import { terminalScenarios, browserScenarios, mcpScenarios, agentScenarios } fro
 import { editorScenarios, autocompleteScenarios } from './scenarios/editor.mjs';
 import { generalScenarios } from './scenarios/general.mjs';
 import { providerScenarios } from './scenarios/providers.mjs';
+import { robustnessScenarios } from './scenarios/robustness.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
@@ -25,6 +26,7 @@ await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: [...coreScena
 await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenarios });
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
 await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
+await runGroup({ name: 'robustness', model: 'gpt-4o', scenarios: robustnessScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();
 await runPrivacyGroup();
