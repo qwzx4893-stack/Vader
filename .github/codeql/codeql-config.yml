@@ -2,7 +2,7 @@ name: Vader code scanning
 # Scan what Vader owns (the agent platform, its build tooling and the Electron main-process entry points). The VS Code base it
 # sits on is scanned and maintained upstream; including it would take hours and bury Vader's own findings.
 paths:
-  - src/vs/workbench/contrib/void
+  - src/vs/workbench/contrib/vader
   - src/vs/code/electron-main
   - src/main.ts
   - src/cli.ts
@@ -12,6 +12,6 @@ paths:
 paths-ignore:
   - '**/node_modules'
   - '**/*.min.js'
-  - src/vs/workbench/contrib/void/browser/agentRuntime/clineBundle
-  - src/vs/workbench/contrib/void/browser/react/out
-  - src/vs/workbench/contrib/void/test
+  - src/vs/workbench/contrib/vader/browser/agentRuntime/clineBundle
+  - src/vs/workbench/contrib/vader/browser/react/out
+  - src/vs/workbench/contrib/vader/test

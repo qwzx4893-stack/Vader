@@ -4,7 +4,7 @@ Written 2026-10-06. Everything below was computed the same way for every project
 reading each project's own source (mechanisms), plus real-app tests for Vader's agent behaviour. No API key was used or needed.
 
 **Scope of the comparison.** Open-source projects only, because only their code can be measured: Cline (`sdk/`, `apps/`), Roo Code (`src`, `webview-ui/src`,
-`packages`), Continue (`core`, `gui/src`, `extensions/vscode/src`), opencode (`packages/*`), the original base (Vader's origin, `src/vs/workbench/contrib/void`, which is
+`packages`), Continue (`core`, `gui/src`, `extensions/vscode/src`), opencode (`packages/*`), the original base (Vader's origin, `src/vs/workbench/contrib/vader`, which is
 the same folder as Vader's). Test files, generated files, `node_modules` and bundles are excluded everywhere. Closed-source products (Cursor, Windsurf,
 Copilot, Claude Code) cannot be measured this way; for them see `PRODUCT_ASSESSMENT.md` (public information only).
 Roo Code's last commit is from May 2026 and the original base's from June 2026, so both are quiet; the others were measured on commits from the last three months.

@@ -1,10 +1,10 @@
 # The Model Router
 
-**Contract:** `IModelRouterService` in `common/modelRouter/modelRouterTypes.ts`. **Implementation:** `common/modelRouter/modelRouterService.ts`. **Settings UI:** `ModelRouterSection` in `void-settings-tsx/Settings.tsx`.
+**Contract:** `IModelRouterService` in `common/modelRouter/modelRouterTypes.ts`. **Implementation:** `common/modelRouter/modelRouterService.ts`. **Settings UI:** `ModelRouterSection` in `vader-settings-tsx/Settings.tsx`.
 
 ## Why this exists alongside the original per-feature settings
 
-The original code already lets the user pick a model per feature (`voidSettingsTypes.ts`'s `featureNames`: Chat, Ctrl+K, Autocomplete, Apply, SCM) - each with its own Settings dropdown and its own persisted `ModelSelection`. That's untouched. The Model Router adds routing for work that doesn't have (and, for now, doesn't need) its own dedicated Settings dropdown: subagent delegation, read-only research subagents, browser-automation turns, and context-compaction's own summarization call - see `RouterCategory` in `modelRouterTypes.ts`. Expanding `featureNames` itself to cover these was considered and rejected for this pass: it's a persisted-settings-shape change with a much wider blast radius (every Settings dropdown, onboarding, `ModelSelectionOfFeature`'s storage shape) for categories that, unlike Chat/Autocomplete, most users will never want to configure individually - AUTO mode existing at all is precisely what makes that unnecessary.
+The original code already lets the user pick a model per feature (`vaderSettingsTypes.ts`'s `featureNames`: Chat, Ctrl+K, Autocomplete, Apply, SCM) - each with its own Settings dropdown and its own persisted `ModelSelection`. That's untouched. The Model Router adds routing for work that doesn't have (and, for now, doesn't need) its own dedicated Settings dropdown: subagent delegation, read-only research subagents, browser-automation turns, and context-compaction's own summarization call - see `RouterCategory` in `modelRouterTypes.ts`. Expanding `featureNames` itself to cover these was considered and rejected for this pass: it's a persisted-settings-shape change with a much wider blast radius (every Settings dropdown, onboarding, `ModelSelectionOfFeature`'s storage shape) for categories that, unlike Chat/Autocomplete, most users will never want to configure individually - AUTO mode existing at all is precisely what makes that unnecessary.
 
 ## AUTO vs MANUAL
 
@@ -18,7 +18,7 @@ The original code already lets the user pick a model per feature (`voidSettingsT
 | Field | Real source |
 |---|---|
 | `isConfigured` | `SettingsOfProvider[provider]._didFillInProviderSettings` + the model not being hidden |
-| `isLocal` | `voidSettingsTypes.ts`'s `localProviderNames` (ollama/vLLM/lmStudio) |
+| `isLocal` | `vaderSettingsTypes.ts`'s `localProviderNames` (ollama/vLLM/lmStudio) |
 | `supportsNativeToolCalling` / `supportsMultipleToolCallsPerTurn` | `getModelCapabilities(...).specialToolFormat` - undefined means the XML fallback grammar, which is genuinely still single-tool-per-turn (see `docs/integrations/agent-gateway.md`) |
 | `supportsReasoning` | `getModelCapabilities(...).reasoningCapabilities` |
 | `supportsFIM` | `getModelCapabilities(...).supportsFIM` |
@@ -26,7 +26,7 @@ The original code already lets the user pick a model per feature (`voidSettingsT
 | `contextWindow`, `cost*` | `getModelCapabilities(...)` directly |
 | `supportsVision` | `modelCapabilities.ts`'s `modelSupportsVision(providerName, modelName)` - see the Vision section below |
 
-**`supportsVision` is pattern-based, not table-driven, and that's stated plainly rather than hidden.** Unlike every other field above, `VoidStaticModelInfo` has no per-model vision flag to read from, so `modelSupportsVision` matches well-known model-name families instead (Claude 3+, GPT-4o/4.1/4.5/5\*/o1+, Gemini 1.5+, Pixtral, common local VL models). It's deliberately conservative - an unrecognized name returns `false` - so a model is never assumed vision-capable by default. If a new model doesn't match, this function is the one place to update, not something threaded through every call site.
+**`supportsVision` is pattern-based, not table-driven, and that's stated plainly rather than hidden.** Unlike every other field above, `VaderStaticModelInfo` has no per-model vision flag to read from, so `modelSupportsVision` matches well-known model-name families instead (Claude 3+, GPT-4o/4.1/4.5/5\*/o1+, Gemini 1.5+, Pixtral, common local VL models). It's deliberately conservative - an unrecognized name returns `false` - so a model is never assumed vision-capable by default. If a new model doesn't match, this function is the one place to update, not something threaded through every call site.
 
 ## What's wired to use it today
 
@@ -48,4 +48,4 @@ What this does *not* do: it does not let a user-provided or tool-produced image 
 
 ## Settings UI
 
-`ModelRouterSection` (`void-settings-tsx/Settings.tsx`) offers an Auto/Manual toggle, a live read-out of which configured model each category currently resolves to, and (added in the Agent Manager UI pass - see `docs/integrations/agent-manager-ui.md`) a per-category override picker calling `setCategoryOverride` directly.
+`ModelRouterSection` (`vader-settings-tsx/Settings.tsx`) offers an Auto/Manual toggle, a live read-out of which configured model each category currently resolves to, and (added in the Agent Manager UI pass - see `docs/integrations/agent-manager-ui.md`) a per-category override picker calling `setCategoryOverride` directly.

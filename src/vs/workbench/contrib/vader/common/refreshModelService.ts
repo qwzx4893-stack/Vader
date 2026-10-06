@@ -1,0 +1,293 @@
+/*--------------------------------------------------------------------------------------
+ *  Copyright 2025 Glass Devtools, Inc. All rights reserved.
+ *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
+ *--------------------------------------------------------------------------------------*/
+
+import { IVaderSettingsService } from './vaderSettingsService.js';
+import { ILLMMessageService } from './sendLLMMessageService.js';
+import { Emitter, Event } from '../../../../base/common/event.js';
+import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
+import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './vaderSettingsTypes.js';
+import { OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
+import { CloudListedProviderName, CloudListState, cloudListedProviderNames } from './cloudModelListTypes.js';
+import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
+import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
+
+
+
+
+type RefreshableState = ({
+	state: 'init',
+	timeoutId: null,
+} | {
+	state: 'refreshing',
+	timeoutId: TimeoutHandle | null, // the timeoutId of the most recent call to refreshModels
+} | {
+	state: 'finished',
+	timeoutId: null,
+} | {
+	state: 'error',
+	timeoutId: null,
+})
+
+
+/*
+
+user click -> error -> fire(error)
+		   \> success -> fire(success)
+	finally: keep polling
+
+poll -> do not fire
+
+*/
+export type RefreshModelStateOfProvider = Record<RefreshableProviderName, RefreshableState>
+
+
+
+const refreshBasedOn: { [k in RefreshableProviderName]: (keyof SettingsOfProvider[k])[] } = {
+	ollama: ['_didFillInProviderSettings', 'endpoint'],
+	vLLM: ['_didFillInProviderSettings', 'endpoint'],
+	lmStudio: ['_didFillInProviderSettings', 'endpoint'],
+	// openAICompatible: ['_didFillInProviderSettings', 'endpoint', 'apiKey'],
+}
+const REFRESH_INTERVAL = 5_000
+// const COOLDOWN_TIMEOUT = 300
+
+const autoOptions = { enableProviderOnSuccess: true, doNotFire: true }
+
+// element-wise equals
+function eq<T>(a: T[], b: T[]): boolean {
+	if (a.length !== b.length) return false
+	for (let i = 0; i < a.length; i++) {
+		if (a[i] !== b[i]) return false
+	}
+	return true
+}
+export interface IRefreshModelService {
+	readonly _serviceBrand: undefined;
+	startRefreshingModels: (providerName: RefreshableProviderName, options: { enableProviderOnSuccess: boolean, doNotFire: boolean }) => void;
+	onDidChangeState: Event<RefreshableProviderName>;
+	state: RefreshModelStateOfProvider;
+
+	/** hosted providers: did the entered key work, and how many models does it offer */
+	readonly cloudState: Record<CloudListedProviderName, CloudListState>;
+	readonly onDidChangeCloudState: Event<CloudListedProviderName>;
+	/** asks the provider which models the current key can use and applies the answer (called automatically when a key changes) */
+	refreshCloudModels(providerName: CloudListedProviderName): Promise<void>;
+}
+
+export const IRefreshModelService = createDecorator<IRefreshModelService>('RefreshModelService');
+
+export class RefreshModelService extends Disposable implements IRefreshModelService {
+
+	readonly _serviceBrand: undefined;
+
+	private readonly _onDidChangeState = new Emitter<RefreshableProviderName>();
+	readonly onDidChangeState: Event<RefreshableProviderName> = this._onDidChangeState.event; // this is primarily for use in react, so react can listen + update on state changes
+
+	private readonly _onDidChangeCloudState = new Emitter<CloudListedProviderName>();
+	readonly onDidChangeCloudState: Event<CloudListedProviderName> = this._onDidChangeCloudState.event;
+	readonly cloudState = Object.fromEntries(cloudListedProviderNames.map(p => [p, { status: 'idle' } as CloudListState])) as Record<CloudListedProviderName, CloudListState>
+
+
+	constructor(
+		@IVaderSettingsService private readonly vaderSettingsService: IVaderSettingsService,
+		@ILLMMessageService private readonly llmMessageService: ILLMMessageService,
+	) {
+		super()
+
+
+		const disposables: Set<IDisposable> = new Set()
+
+		const initializeAutoPollingAndOnChange = () => {
+			this._clearAllTimeouts()
+			disposables.forEach(d => d.dispose())
+			disposables.clear()
+
+			if (!vaderSettingsService.state.globalSettings.autoRefreshModels) return
+
+			for (const providerName of refreshableProviderNames) {
+
+				// const { '_didFillInProviderSettings': enabled } = this.vaderSettingsService.state.settingsOfProvider[providerName]
+				this.startRefreshingModels(providerName, autoOptions)
+
+				// every time providerName.enabled changes, refresh models too, like a useEffect
+				let relevantVals = () => refreshBasedOn[providerName].map(settingName => vaderSettingsService.state.settingsOfProvider[providerName][settingName])
+				let prevVals = relevantVals() // each iteration of a for loop has its own context and vars, so this is ok
+				disposables.add(
+					vaderSettingsService.onDidChangeState(() => { // we might want to debounce this
+						const newVals = relevantVals()
+						if (!eq(prevVals, newVals)) {
+
+							const prevEnabled = prevVals[0] as boolean
+							const enabled = newVals[0] as boolean
+
+							// if it was just enabled, or there was a change and it wasn't to the enabled state, refresh
+							if ((enabled && !prevEnabled) || (!enabled && !prevEnabled)) {
+								// if user just clicked enable, refresh
+								this.startRefreshingModels(providerName, autoOptions)
+							}
+							else {
+								// else if user just clicked disable, don't refresh
+
+								// //give cooldown before re-enabling (or at least re-fetching)
+								// const timeoutId = setTimeout(() => this.refreshModels(providerName, !enabled), COOLDOWN_TIMEOUT)
+								// this._setTimeoutId(providerName, timeoutId)
+							}
+							prevVals = newVals
+						}
+					})
+				)
+			}
+		}
+
+		// on mount (when get init settings state), and if a relevant feature flag changes, start refreshing models
+		vaderSettingsService.waitForInitState.then(() => {
+			initializeAutoPollingAndOnChange()
+			this._register(
+				vaderSettingsService.onDidChangeState((type) => { if (typeof type === 'object' && type[1] === 'autoRefreshModels') initializeAutoPollingAndOnChange() })
+			)
+		})
+
+		// Hosted providers: whenever a key (or endpoint) is typed in, ask the provider what it offers. Typing fires many changes,
+		// so each provider waits for a short pause first; a result that arrives after the key changed again is ignored.
+		vaderSettingsService.waitForInitState.then(() => {
+			const credentialsOf = (p: CloudListedProviderName) => {
+				const s = vaderSettingsService.state.settingsOfProvider[p] as { apiKey?: string, endpoint?: string }
+				return JSON.stringify([s.apiKey ?? '', s.endpoint ?? ''])
+			}
+			const hasKey = (p: CloudListedProviderName) => !!((vaderSettingsService.state.settingsOfProvider[p] as { apiKey?: string }).apiKey ?? '').trim()
+			const lastSeen = {} as Record<CloudListedProviderName, string>
+			const timers = {} as Record<CloudListedProviderName, ReturnType<typeof setTimeout> | undefined>
+			for (const p of cloudListedProviderNames) {
+				lastSeen[p] = credentialsOf(p)
+				// at startup, refresh providers that already have a key (unless the user turned automatic refreshing off)
+				if (hasKey(p) && vaderSettingsService.state.globalSettings.autoRefreshModels) { setTimeout(() => this.refreshCloudModels(p), 1500) }
+			}
+			this._register(vaderSettingsService.onDidChangeState(() => {
+				for (const p of cloudListedProviderNames) {
+					const now = credentialsOf(p)
+					if (now === lastSeen[p]) continue
+					lastSeen[p] = now
+					clearTimeout(timers[p])
+					if (!hasKey(p)) {
+						// key removed: forget the live list and show the built-in defaults again
+						this._setCloudState(p, { status: 'idle' })
+						if (vaderSettingsService.state.settingsOfProvider[p].models.some(m => m.type === 'autodetected')) vaderSettingsService.restoreDefaultModels(p)
+						continue
+					}
+					timers[p] = setTimeout(() => this.refreshCloudModels(p), 800)
+				}
+			}))
+		})
+
+	}
+
+	state: RefreshModelStateOfProvider = {
+		ollama: { state: 'init', timeoutId: null },
+		vLLM: { state: 'init', timeoutId: null },
+		lmStudio: { state: 'init', timeoutId: null },
+	}
+
+
+	// start listening for models (and don't stop)
+	startRefreshingModels: IRefreshModelService['startRefreshingModels'] = (providerName, options) => {
+
+		this._clearProviderTimeout(providerName)
+
+		this._setRefreshState(providerName, 'refreshing', options)
+
+		const autoPoll = () => {
+			if (this.vaderSettingsService.state.globalSettings.autoRefreshModels) {
+				// resume auto-polling
+				const timeoutId = setTimeout(() => this.startRefreshingModels(providerName, autoOptions), REFRESH_INTERVAL)
+				this._setTimeoutId(providerName, timeoutId)
+			}
+		}
+		const listFn = providerName === 'ollama' ? this.llmMessageService.ollamaList
+			: this.llmMessageService.openAICompatibleList
+
+		listFn({
+			providerName,
+			onSuccess: ({ models }) => {
+				// set the models to the detected models
+				this.vaderSettingsService.setAutodetectedModels(
+					providerName,
+					models.map(model => {
+						if (providerName === 'ollama') return (model as OllamaModelResponse).name;
+						else if (providerName === 'vLLM') return (model as OpenaiCompatibleModelResponse).id;
+						else if (providerName === 'lmStudio') return (model as OpenaiCompatibleModelResponse).id;
+						else throw new Error('refreshMode fn: unknown provider', providerName);
+					}),
+					{ enableProviderOnSuccess: options.enableProviderOnSuccess, hideRefresh: options.doNotFire }
+				)
+
+				if (options.enableProviderOnSuccess) this.vaderSettingsService.setSettingOfProvider(providerName, '_didFillInProviderSettings', true)
+
+				this._setRefreshState(providerName, 'finished', options)
+				autoPoll()
+			},
+			onError: ({ error }) => {
+				this._setRefreshState(providerName, 'error', options)
+				autoPoll()
+			}
+		})
+
+
+	}
+
+	private _setCloudState(providerName: CloudListedProviderName, state: CloudListState) {
+		this.cloudState[providerName] = state
+		this._onDidChangeCloudState.fire(providerName)
+	}
+
+	private readonly _cloudRequestId: Partial<Record<CloudListedProviderName, number>> = {}
+
+	refreshCloudModels = async (providerName: CloudListedProviderName): Promise<void> => {
+		const requestId = (this._cloudRequestId[providerName] ?? 0) + 1
+		this._cloudRequestId[providerName] = requestId
+		const credentials = () => { const s = this.vaderSettingsService.state.settingsOfProvider[providerName] as { apiKey?: string, endpoint?: string }; return JSON.stringify([s.apiKey ?? '', s.endpoint ?? '']) }
+		const before = credentials()
+
+		this._setCloudState(providerName, { status: 'loading' })
+		const result = await this.llmMessageService.cloudModelList(providerName)
+
+		// a newer request, or a different key typed meanwhile: this answer is about something else now
+		if (this._cloudRequestId[providerName] !== requestId || credentials() !== before) return
+
+		if (result.ok) {
+			this.vaderSettingsService.setLiveModels(providerName, result.models)
+			this._setCloudState(providerName, { status: 'ok', count: result.models.length })
+		}
+		else {
+			this._setCloudState(providerName, { status: 'error', reason: result.reason, message: result.message })
+		}
+	}
+
+	_clearAllTimeouts() {
+		for (const providerName of refreshableProviderNames) {
+			this._clearProviderTimeout(providerName)
+		}
+	}
+
+	_clearProviderTimeout(providerName: RefreshableProviderName) {
+		// cancel any existing poll
+		if (this.state[providerName].timeoutId) {
+			clearTimeout(this.state[providerName].timeoutId)
+			this._setTimeoutId(providerName, null)
+		}
+	}
+
+	private _setTimeoutId(providerName: RefreshableProviderName, timeoutId: TimeoutHandle | null) {
+		this.state[providerName].timeoutId = timeoutId
+	}
+
+	private _setRefreshState(providerName: RefreshableProviderName, state: RefreshableState['state'], options?: { doNotFire: boolean }) {
+		if (options?.doNotFire) return
+		this.state[providerName].state = state
+		this._onDidChangeState.fire(providerName)
+	}
+}
+
+registerSingleton(IRefreshModelService, RefreshModelService, InstantiationType.Eager);
+

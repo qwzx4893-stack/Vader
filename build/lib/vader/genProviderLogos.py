@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates src/vs/workbench/contrib/void/common/providerLogoData.ts: the real logo of every model provider, as plain data.
+"""Generates src/vs/workbench/contrib/vader/common/providerLogoData.ts: the real logo of every model provider, as plain data.
 
 Sources (all open source icon sets; the marks themselves remain the property of their owners and are used here only to identify
 the provider, nominative use):
@@ -29,7 +29,7 @@ ap.add_argument('--requesty', default='/tmp/rq/n8n-requesty/icons/requesty.svg')
 ap.add_argument('--sheet', default='')
 args = ap.parse_args()
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/void/common/providerLogoData.ts')
+OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/vader/common/providerLogoData.ts')
 
 # ProviderName -> source
 SRC = {

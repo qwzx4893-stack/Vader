@@ -115,7 +115,7 @@ jobs:
       # Catches the "installed app dies at startup with ERR_MODULE_NOT_FOUND" class of bug on the
       # real bundles, before an installer is even built.
       - name: Check main-process bundles import only resolvable packages
-        run: node src/vs/workbench/contrib/void/test/packagedImportsE2E.mjs out-vscode-min
+        run: node src/vs/workbench/contrib/vader/test/packagedImportsE2E.mjs out-vscode-min
 
       - name: Build Inno Setup updater icon
         run: npm run gulp vscode-win32-%ARCH%-inno-updater

@@ -314,7 +314,7 @@ assumed fine.
 ## 24. Provider capability metadata
 
 **Assessed, not converted.** `modelSupportsVision()` remains a pattern-matching heuristic rather
-than a static per-model field on `VoidStaticModelInfo`, unlike `supportsFIM`/`supportsSystemMessage`/
+than a static per-model field on `VaderStaticModelInfo`, unlike `supportsFIM`/`supportsSystemMessage`/
 `contextWindow`, which are genuine static per-model data. Converting it fully would mean hand-
 annotating all 90+ existing static model entries across every provider - assessed as a large,
 error-prone undertaking without a fresh, authoritative, per-model source for each one (the same

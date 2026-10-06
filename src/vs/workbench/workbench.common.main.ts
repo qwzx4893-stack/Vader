@@ -22,7 +22,7 @@ import '../sessions/common/sizes.js';
 //#endregion
 
 //#region --- Vader
-import './contrib/void/browser/void.contribution.js'; // Vader added this
+import './contrib/vader/browser/vader.contribution.js'; // Vader added this
 //#endregion
 
 //#region --- workbench actions
@@ -401,7 +401,7 @@ import './contrib/welcomeViews/common/viewsWelcome.contribution.js';
 import './contrib/welcomeViews/common/newFile.contribution.js';
 
 // Welcome Onboarding
-import './contrib/void/browser/vaderOnboardingService.js'; // Vader: inert stand-in for upstream's Copilot sign-in onboarding (needs product.defaultChatAgent)
+import './contrib/vader/browser/vaderOnboardingService.js'; // Vader: inert stand-in for upstream's Copilot sign-in onboarding (needs product.defaultChatAgent)
 
 // Onboarding (scenario engine)
 import './contrib/onboarding/browser/onboarding.contribution.js';

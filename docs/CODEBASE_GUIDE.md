@@ -3,7 +3,7 @@
 
 The Vader codebase is not as intimidating as it seems!
 
-Most of Vader's code lives in the folder `src/vs/workbench/contrib/void/`.
+Most of Vader's code lives in the folder `src/vs/workbench/contrib/vader/`.
 
 The purpose of this document is to explain how Vader's codebase works. If you want build instructions instead, see [Contributing](../CONTRIBUTING.md).
 
@@ -101,10 +101,10 @@ How Apply works:
 
 
 ### Writing Files Inner Workings
-When Vader wants to change your code, it just writes to a text model. This means all you need to know to write to a file is its URI - you don't have to load it, save it, etc. There are some annoying background URI/model things to think about to get this to work, but we handled them all in `voidModelService`.
+When Vader wants to change your code, it just writes to a text model. This means all you need to know to write to a file is its URI - you don't have to load it, save it, etc. There are some annoying background URI/model things to think about to get this to work, but we handled them all in `vaderModelService`.
 
 ### Vader Settings Inner Workings
-We have a service `voidSettingsService` that stores all your Vader settings (providers, models, global Vader settings, etc). Imagine this as an implicit dependency for any of the core Vader services:
+We have a service `vaderSettingsService` that stores all your Vader settings (providers, models, global Vader settings, etc). Imagine this as an implicit dependency for any of the core Vader services:
 
 <div align="center">
 	<img width="800" src="https://github.com/user-attachments/assets/9f3cb68c-a61b-4810-8429-bb90b992b3fa">

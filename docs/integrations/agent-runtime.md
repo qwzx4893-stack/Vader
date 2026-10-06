@@ -1,6 +1,6 @@
 # The Main Agent Runtime (Cline integration)
 
-**Contract:** `IAgentRuntimeRegistryService` in `common/agentRuntime/agentRuntimeTypes.ts`. **Implementation:** `browser/agentRuntime/agentRuntimeRegistryService.ts` (health only) + `browser/agentRuntime/{clineRuntimeAdapter,vaderAgentModel,clineToolAdapter}.ts` (the actual runtime). **Driven from:** `chatThreadService.ts`'s `_runChatAgent`/`_runChatAgentImpl`. **Settings UI:** `RuntimeStatusBlock` inside `AgentManagerSection`, `void-settings-tsx/Settings.tsx`.
+**Contract:** `IAgentRuntimeRegistryService` in `common/agentRuntime/agentRuntimeTypes.ts`. **Implementation:** `browser/agentRuntime/agentRuntimeRegistryService.ts` (health only) + `browser/agentRuntime/{clineRuntimeAdapter,vaderAgentModel,clineToolAdapter}.ts` (the actual runtime). **Driven from:** `chatThreadService.ts`'s `_runChatAgent`/`_runChatAgentImpl`. **Settings UI:** `RuntimeStatusBlock` inside `AgentManagerSection`, `vader-settings-tsx/Settings.tsx`.
 
 ## Current state: installed, implemented, and the only runtime
 
@@ -25,7 +25,7 @@ Fixed via `src/tsconfig.json`'s `compilerOptions.paths`:
 ```
 redirecting TypeScript's type resolution (only - not runtime module resolution) to two hand-transcribed, extension-clean local `.d.ts` files (`src/typings/cline-{shared,agents}.d.ts`), copied faithfully from the real installed declarations. Alternatives considered and rejected: an ambient `declare module` shim (TypeScript resolves to the real, existing file first, so this can't override it), deep-importing a specific subpath (blocked by the packages' own `package.json` "exports" maps, and the target files have the same broken-import problem internally anyway), patching `node_modules` directly or via `patch-package` (fragile, non-persistent across reinstalls, or a new dependency for something this narrow).
 
-**This shim is a real, acknowledged maintenance risk** - see `src/vs/workbench/contrib/void/test/checkClineTypingsVersion.mjs`, a standalone script (also runnable as part of the smoke test) that reads the installed `@cline/agents`/`@cline/shared` package versions from `node_modules` and fails loudly if they no longer match `CLINE_AGENTS_VERSION`/`CLINE_SHARED_VERSION` in `clineRuntimeAdapter.ts` - so a future `npm install @cline/agents@<newer>` cannot silently diverge from what these hand-written `.d.ts` files declare without a visible failure pointing at exactly this file pair.
+**This shim is a real, acknowledged maintenance risk** - see `src/vs/workbench/contrib/vader/test/checkClineTypingsVersion.mjs`, a standalone script (also runnable as part of the smoke test) that reads the installed `@cline/agents`/`@cline/shared` package versions from `node_modules` and fails loudly if they no longer match `CLINE_AGENTS_VERSION`/`CLINE_SHARED_VERSION` in `clineRuntimeAdapter.ts` - so a future `npm install @cline/agents@<newer>` cannot silently diverge from what these hand-written `.d.ts` files declare without a visible failure pointing at exactly this file pair.
 
 ## The three pieces
 
@@ -55,7 +55,7 @@ A verification thread's model resolves through `resolveModel('verification')`; `
 
 ## Testing
 
-`src/vs/workbench/contrib/void/test/clineRuntimeSmoke.mjs`: a standalone Node ESM script (no test infra exists for `contrib/void` code) exercising the **real, installed** `AgentRuntime` with scripted `AgentModel`/`AgentTool` objects (no real provider credentials in this sandbox, but the runtime itself is never mocked). 5 test functions, 14 assertions: basic run, single tool call, mid-batch approval resume (the critical one - tool A runs, tool B blocks on an external approval promise, tool C is verified not to run while B is pending, then runs once B resolves), cancellation, tool rejection. All passing.
+`src/vs/workbench/contrib/vader/test/clineRuntimeSmoke.mjs`: a standalone Node ESM script (no test infra exists for `contrib/vader` code) exercising the **real, installed** `AgentRuntime` with scripted `AgentModel`/`AgentTool` objects (no real provider credentials in this sandbox, but the runtime itself is never mocked). 5 test functions, 14 assertions: basic run, single tool call, mid-batch approval resume (the critical one - tool A runs, tool B blocks on an external approval promise, tool C is verified not to run while B is pending, then runs once B resolves), cancellation, tool rejection. All passing.
 
 For real-provider, real-network testing (an actual OpenRouter model driving a real coding task through this same runtime), see `docs/integrations/providers/e2e-testing.md`.
 

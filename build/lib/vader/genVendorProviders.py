@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generates src/vs/workbench/contrib/void/common/vendorProviderData.ts: first-class providers for the major model vendors and inference
+"""Generates src/vs/workbench/contrib/vader/common/vendorProviderData.ts: first-class providers for the major model vendors and inference
 platforms (gateway URL, key page, default models with context window / tool / vision / reasoning / price facts).
 
 Source of the model facts and gateway URLs: the models.dev catalog (github.com/sst/models.dev), the community registry that OpenCode uses; vendors
@@ -14,7 +14,7 @@ import os, sys, tomllib, subprocess, json
 
 SRC = os.path.abspath(sys.argv[1] if len(sys.argv) > 1 else '/tmp/modelsdev')
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
-OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/void/common/vendorProviderData.ts')
+OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/vader/common/vendorProviderData.ts')
 commit = subprocess.check_output(['git', '-C', SRC, 'rev-parse', '--short=9', 'HEAD']).decode().strip()
 date = subprocess.check_output(['git', '-C', SRC, 'log', '-1', '--format=%cs']).decode().strip()
 

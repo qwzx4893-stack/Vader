@@ -1,6 +1,6 @@
 # The Unified Capability Marketplace
 
-**Contract:** `IUnifiedMarketplaceService`/`IMarketplaceProvider`/`MarketplaceItem` in `common/marketplace/marketplaceTypes.ts`. **Implementation:** `browser/marketplace/unifiedMarketplaceService.ts` + `browser/marketplace/providers/*.ts`. **UI:** `MarketplaceViewPane` (`browser/marketplace/marketplaceViewPane.ts`), an additive pane in the existing Extensions view container, rendering the React `Marketplace` component (`browser/react/src/void-marketplace-tsx/`).
+**Contract:** `IUnifiedMarketplaceService`/`IMarketplaceProvider`/`MarketplaceItem` in `common/marketplace/marketplaceTypes.ts`. **Implementation:** `browser/marketplace/unifiedMarketplaceService.ts` + `browser/marketplace/providers/*.ts`. **UI:** `MarketplaceViewPane` (`browser/marketplace/marketplaceViewPane.ts`), an additive pane in the existing Extensions view container, rendering the React `Marketplace` component (`browser/react/src/vader-marketplace-tsx/`).
 
 ## Two layers, on purpose
 

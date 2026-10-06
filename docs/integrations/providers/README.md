@@ -1,14 +1,14 @@
 # Provider expansion (production-hardening pass)
 
-**Contract:** `ProviderName` (derived from `common/modelCapabilities.ts`'s `defaultProviderSettings`) + `VoidStaticProviderInfo`/`VoidStaticModelInfo`. **Implementation:** per-provider blocks in `modelCapabilities.ts` (model catalog/capabilities), `voidSettingsTypes.ts` (display name/help text/default settings shape), `electron-main/llmMessage/sendLLMMessage.impl.ts` (the actual network call).
+**Contract:** `ProviderName` (derived from `common/modelCapabilities.ts`'s `defaultProviderSettings`) + `VaderStaticProviderInfo`/`VaderStaticModelInfo`. **Implementation:** per-provider blocks in `modelCapabilities.ts` (model catalog/capabilities), `vaderSettingsTypes.ts` (display name/help text/default settings shape), `electron-main/llmMessage/sendLLMMessage.impl.ts` (the actual network call).
 
 ## Why this wasn't a bigger architectural rewrite
 
 Before adding new providers, this pass audited whether Vader's provider architecture actually needed the "Provider Registry / Protocol Adapter" restructuring the mission described. It didn't, for a concrete reason: **every provider that speaks an OpenAI-compatible wire format already goes through exactly one shared code path** - `newOpenAICompatibleSDK()` (client construction) → `_sendOpenAICompatibleChat()`/`_sendOpenAICompatibleFIM()` (the actual request), both in `sendLLMMessage.impl.ts`. Only Anthropic and Gemini have genuinely separate branches, because their wire formats are genuinely different (not because of duplicated code that should have been merged). Adding MiniMax, Alibaba (Qwen/DashScope), Moonshot (Kimi), and OpenCode Zen - all four OpenAI-compatible - required exactly **one new `else if` branch** in `newOpenAICompatibleSDK` (matching provider name → base URL) and four one-line entries in the `sendLLMMessageToProviderImplementation` map, each just `sendChat: (params) => _sendOpenAICompatibleChat(params)`. There was no duplicated networking code to normalize, because it was already normalized.
 
-What *does* repeat per provider - a model-capability table (`VoidStaticModelInfo` per model: context window, cost, reasoning support, etc.), a display name, a help-text link, and a settings-shape declaration - is not duplication to eliminate; it's real, provider-specific data that has to live somewhere, and every existing provider (Anthropic, OpenAI, Mistral, Groq, ...) already carries exactly this same shape. Introducing a generic "Provider Registry" indirection layer on top of it would add a layer of indirection without removing any actual duplicated logic - a "premature abstraction" this project's own conventions explicitly warn against (see `AGENTS.md`).
+What *does* repeat per provider - a model-capability table (`VaderStaticModelInfo` per model: context window, cost, reasoning support, etc.), a display name, a help-text link, and a settings-shape declaration - is not duplication to eliminate; it's real, provider-specific data that has to live somewhere, and every existing provider (Anthropic, OpenAI, Mistral, Groq, ...) already carries exactly this same shape. Introducing a generic "Provider Registry" indirection layer on top of it would add a layer of indirection without removing any actual duplicated logic - a "premature abstraction" this project's own conventions explicitly warn against (see `AGENTS.md`).
 
-The Settings UI required **zero new per-provider UI code**: `VoidProviderSettings` (`Settings.tsx`) already renders one generically from `nonlocalProviderNames`/`localProviderNames`, both derived automatically from `ProviderName`'s keys. A new provider key placed anywhere in `defaultProviderSettings` shows up in Settings automatically, with capability/connection info sourced the same way every existing provider's is.
+The Settings UI required **zero new per-provider UI code**: `VaderProviderSettings` (`Settings.tsx`) already renders one generically from `nonlocalProviderNames`/`localProviderNames`, both derived automatically from `ProviderName`'s keys. A new provider key placed anywhere in `defaultProviderSettings` shows up in Settings automatically, with capability/connection info sourced the same way every existing provider's is.
 
 ## Region-aware endpoints
 
@@ -85,7 +85,7 @@ Hardening found on the way: a region / Azure resource name / GCP project from se
 
 Once a key (or endpoint) is typed in, Vader asks that provider which models the key can use and shows exactly those, replacing the built-in defaults the key cannot use (models you added by hand stay). The settings page shows the result next to the key: *checking*, *key works - N models available*, *the provider rejected this key*, or *could not reach the provider - showing the built-in list meanwhile* (with Retry). Removing the key restores the defaults.
 
-- Implementation: `electron-main/llmMessage/modelListing.ts` (the only place that makes these requests), IPC command `cloudModelList`, `RefreshModelService.refreshCloudModels`, `VoidSettingsService.setLiveModels / restoreDefaultModels`.
+- Implementation: `electron-main/llmMessage/modelListing.ts` (the only place that makes these requests), IPC command `cloudModelList`, `RefreshModelService.refreshCloudModels`, `VaderSettingsService.setLiveModels / restoreDefaultModels`.
 - Endpoints: OpenAI `GET /v1/models`; Anthropic `GET /v1/models` (`x-api-key`, `anthropic-version`); Gemini `GET /v1beta/models` (key in `x-goog-api-key`, never in the URL); Mistral, Groq, xAI, DeepSeek, OpenRouter, Moonshot, MiniMax, Alibaba, OpenCode Zen: OpenAI-shaped `GET .../models`. Azure, Vertex and Bedrock are deployment/account-scoped and keep manual model entry.
 - Non-chat models (embeddings, speech, image, moderation, guard...) are filtered out; OpenRouter's several-hundred-model catalog is reduced to text-output + tool-calling models, newest first; at most 300 are kept.
 - Safety: https only (plain http only to a loopback address), 15 s timeout, 8 MB cap, **redirects refused** (the key never follows a redirect), model ids restricted to a plain character set (they end up in menus and prompts), and the key is never included in a result or message - provider error bodies, which can echo it, are not passed on.
@@ -106,11 +106,14 @@ Once a key (or endpoint) is typed in, Vader asks that provider which models the 
 The 29 vendors listed in [`PROVIDERS.md`](../../../PROVIDERS.md) are not individual adapters. `build/lib/vader/genVendorProviders.py` reads the models.dev catalog
 (`providers/<id>/provider.toml` for the gateway `api` and key `env`, model TOMLs with `base_model` inheritance from `models/<lab>/<model>.toml`) and writes
 `common/vendorProviderData.ts`; `ProviderName` is derived from `defaultSettingsOfProvider`, so settings, UI, capabilities, model listing and the SDK path all
-pick a new vendor up from the table. To add one: add it to the generator's vendor list, regenerate, run `node src/vs/workbench/contrib/void/test/vendorProvidersE2E.mjs`.
+pick a new vendor up from the table. To add one: add it to the generator's vendor list, regenerate, run `node src/vs/workbench/contrib/vader/test/vendorProvidersE2E.mjs`.
 
-Seams (each one reads the same table): `modelCapabilities.ts` (`vendorDefaultSettings`/`vendorDefaultModels`, capabilities from catalog facts), `voidSettingsTypes.ts`
+Seams (each one reads the same table): `modelCapabilities.ts` (`vendorDefaultSettings`/`vendorDefaultModels`, capabilities from catalog facts), `vaderSettingsTypes.ts`
 (titles, key placeholders, endpoint field), `electron-main/llmMessage/sendLLMMessage.impl.ts` (vendor branch of `newOpenAICompatibleSDK`, `assertVendorEndpoint`),
 `electron-main/llmMessage/modelListing.ts` (`${endpoint}/models`, bearer key), `common/providerSearch.ts` and `Settings.tsx` (search box).
+
+Logos: `common/providerLogoData.ts` is generated by `build/lib/vader/genProviderLogos.py` (see the file for the sources and licences); `react/src/util/ProviderLogo.tsx` draws it.
+Model lists: providers that can list the models of a key start with none (`defaultSettingsOfProvider`), the live list is the only source.
 
 Confidence: the table is generated from a public catalog and each vendor's documentation; the hosts are not reachable from the build environment, so the gateway
 URLs are **not** live-verified. The endpoint field in Settings is the escape hatch.

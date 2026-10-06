@@ -1,6 +1,6 @@
 This is Vader, an AI-native IDE built on Void (itself a fork of VS Code). Void is the deprecated upstream project this codebase was imported from.
 
-Most Void-inherited AI code lives in src/vs/workbench/contrib/void. Vader's new agent-platform code (policy engine, permanent/temporary agents, layered instructions, MCP registry, SkillNet skill provider, browser automation, capability bus) lives alongside it under the same folder, in dedicated subfolders — see ARCHITECTURE.md for the map.
+Most Void-inherited AI code lives in src/vs/workbench/contrib/vader. Vader's new agent-platform code (policy engine, permanent/temporary agents, layered instructions, MCP registry, SkillNet skill provider, browser automation, capability bus) lives alongside it under the same folder, in dedicated subfolders — see ARCHITECTURE.md for the map.
 
 You may often need to explore the full repo to find relevant parts of code. Look for services and built-in functions that you might need to use to solve the problem.
 

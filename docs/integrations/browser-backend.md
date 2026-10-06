@@ -1,8 +1,8 @@
 # The browser automation backend: multi-tab, and how to replace it
 
-**Contract:** `IBrowserToolMainService` in `src/vs/workbench/contrib/void/common/browser/browserToolServiceTypes.ts`.
+**Contract:** `IBrowserToolMainService` in `src/vs/workbench/contrib/vader/common/browser/browserToolServiceTypes.ts`.
 
-**Current implementation:** `src/vs/workbench/contrib/void/electron-main/browserToolMainService.ts`, using `playwright-core` to drive an existing Chrome/Chromium/Edge install (it does not bundle a browser).
+**Current implementation:** `src/vs/workbench/contrib/vader/electron-main/browserToolMainService.ts`, using `playwright-core` to drive an existing Chrome/Chromium/Edge install (it does not bundle a browser).
 
 ## Multi-tab
 
@@ -45,7 +45,7 @@ The primitives above are meant to compose into: modify UI code → start or reus
 ## To replace it
 
 1. Implement `IBrowserToolMainService` in a new `electron-main/` file (it needs Node - browser-context code can't launch a real browser process). The multi-page bookkeeping (a `Map<pageId, ...>`, an "active" pointer, the stale-ref/crash handling) lives entirely in this file, behind the interface - a replacement backend re-implements that bookkeeping however suits it, or delegates to whatever native tab concept its own driver has.
-2. In `src/vs/code/electron-main/app.ts`, change the `services.set(IBrowserToolMainService, new SyncDescriptor(...))` line to point at the new class. Nothing else changes - the IPC channel (`void-channel-browser`), the browser-side proxy (`common/browser/browserToolService.ts`), and the `browser_*` tools all go through the interface, not the implementation.
+2. In `src/vs/code/electron-main/app.ts`, change the `services.set(IBrowserToolMainService, new SyncDescriptor(...))` line to point at the new class. Nothing else changes - the IPC channel (`vader-channel-browser`), the browser-side proxy (`common/browser/browserToolService.ts`), and the `browser_*` tools all go through the interface, not the implementation.
 3. Re-run `node_modules/.bin/tsc -p src/tsconfig.json --noEmit`.
 
 ## Why playwright-core and not `playwright`

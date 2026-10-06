@@ -1,6 +1,6 @@
 # The Agent Gateway, and why the runtime wasn't replaced wholesale
 
-**Contract:** `IAgentGatewayService` in `src/vs/workbench/contrib/void/common/agentGateway/agentGatewayTypes.ts`. **Current implementation:** `browser/agentGatewayService.ts`, which delegates to `chatThreadService.ts`.
+**Contract:** `IAgentGatewayService` in `src/vs/workbench/contrib/vader/common/agentGateway/agentGatewayTypes.ts`. **Current implementation:** `browser/agentGatewayService.ts`, which delegates to `chatThreadService.ts`.
 
 ## The question this answers
 

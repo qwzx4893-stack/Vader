@@ -1,6 +1,6 @@
 # Deterministic production-simulation testing
 
-**File:** `src/vs/workbench/contrib/void/test/simulatedProviderServer.mjs`. **Status: built and verified against Vader's real, unmodified provider transport.**
+**File:** `src/vs/workbench/contrib/vader/test/simulatedProviderServer.mjs`. **Status: built and verified against Vader's real, unmodified provider transport.**
 
 ## Why this exists
 

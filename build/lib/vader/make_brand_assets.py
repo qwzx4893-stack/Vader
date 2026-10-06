@@ -182,4 +182,4 @@ export const VaderLogo = ({{ className, style }}: {{ className?: string, style?:
 	</svg>
 )
 '''
-write('src/vs/workbench/contrib/void/browser/react/src/util/VaderLogo.tsx', tsx)
+write('src/vs/workbench/contrib/vader/browser/react/src/util/VaderLogo.tsx', tsx)

@@ -66,7 +66,7 @@ export const enum KeybindingWeight {
 	SessionsContrib = 250,
 	BuiltinExtension = 300,
 	ExternalExtension = 400,
-	VoidExtension = 605, // Vader -  must trump any external extension
+	VaderExtension = 605, // Vader -  must trump any external extension
 }
 
 export interface ICommandAndKeybindingRule<Args extends unknown[] = unknown[]> extends IKeybindingRule {

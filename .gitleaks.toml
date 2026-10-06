@@ -1,5 +1,5 @@
 # Secret scan configuration (gitleaks). Findings that are not Vader secrets are allow-listed here, each group with its reason, so a
-# real leak stands out. Everything under src/vs/workbench/contrib/void/ other than test files is NOT allow-listed.
+# real leak stands out. Everything under src/vs/workbench/contrib/vader/ other than test files is NOT allow-listed.
 title = "Vader gitleaks config"
 
 [extend]
@@ -18,5 +18,5 @@ paths = [
 [[allowlists]]
 description = "Vader's own test files: fake provider keys such as sk-live-test-1234 that the local stub servers check for"
 paths = [
-  '''^src/vs/workbench/contrib/void/test/''',
+  '''^src/vs/workbench/contrib/vader/test/''',
 ]

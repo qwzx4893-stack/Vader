@@ -47,7 +47,7 @@ jobs:
           sparse-checkout: |
             .github/e2e-client
             .github/openrouter-models.txt
-            src/vs/workbench/contrib/void/test
+            src/vs/workbench/contrib/vader/test
             package.json
             .nvmrc
           sparse-checkout-cone-mode: false
@@ -149,7 +149,7 @@ jobs:
             $env:REAL_LLM_MODEL = $m
             $env:E2E_OUT = "e2e-out-$safe"
             $env:E2E_PRISTINE = '1'
-            node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+            node src/vs/workbench/contrib/vader/test/e2e/suite.mjs
             "exit code for ${m}: $LASTEXITCODE"
             Start-Sleep 20
           }

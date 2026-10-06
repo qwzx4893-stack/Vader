@@ -11,7 +11,7 @@ Vader's behaviour depends on a model, and CI has no API key. Three layers stand 
 ## Running it
 
 - Locally on Linux (no native modules, so terminal and restart scenarios are skipped):
-  `VADER_EXE=<packaged app> PW_CORE=<playwright-core> E2E_ARGS=--no-sandbox E2E_NATIVES=0 xvfb-run node src/vs/workbench/contrib/void/test/e2e/suite.mjs`
+  `VADER_EXE=<packaged app> PW_CORE=<playwright-core> E2E_ARGS=--no-sandbox E2E_NATIVES=0 xvfb-run node src/vs/workbench/contrib/vader/test/e2e/suite.mjs`
 - On Windows with every native module: dispatch the *Windows E2E* workflow with the run id of a *Windows Build*.
 - `E2E_ONLY` is a regex over `"<group> <scenario>"`; failures leave a screenshot, the chat transcript, the requests the model received and the renderer's errors in `E2E_OUT`.
 - `E2E_PRISTINE=1` (set by the workflow, not valid for a locally patched package) also fails on a "corrupt installation" notification.

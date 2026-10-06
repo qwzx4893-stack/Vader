@@ -150,22 +150,22 @@ import ErrorTelemetry from '../../platform/telemetry/electron-main/errorTelemetr
 
 // in theory this is not allowed
 // ignore the eslint errors below
-import { IMetricsService } from '../../workbench/contrib/void/common/metricsService.js';
-import { IVoidUpdateService } from '../../workbench/contrib/void/common/voidUpdateService.js';
-import { MetricsMainService } from '../../workbench/contrib/void/electron-main/metricsMainService.js';
-import { VoidMainUpdateService } from '../../workbench/contrib/void/electron-main/voidUpdateMainService.js';
-import { LLMMessageChannel } from '../../workbench/contrib/void/electron-main/sendLLMMessageChannel.js';
-import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidSCMMainService.js';
-import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
-import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
-import { IDiscoveryMainService } from '../../workbench/contrib/void/common/discovery/discoveryServiceTypes.js';
-import { DiscoveryMainService } from '../../workbench/contrib/void/electron-main/discoveryMainService.js';
-import { IBrowserToolMainService } from '../../workbench/contrib/void/common/browser/browserToolServiceTypes.js';
-import { BrowserToolMainService } from '../../workbench/contrib/void/electron-main/browserToolMainService.js';
-import { IGitWorktreeMainService } from '../../workbench/contrib/void/common/worktree/gitWorktreeTypes.js';
-import { GitWorktreeMainService } from '../../workbench/contrib/void/electron-main/gitWorktreeMainService.js';
-import { IVisionMainService } from '../../workbench/contrib/void/common/vision/visionQueryTypes.js';
-import { VisionMainService } from '../../workbench/contrib/void/electron-main/visionMainService.js';
+import { IMetricsService } from '../../workbench/contrib/vader/common/metricsService.js';
+import { IVaderUpdateService } from '../../workbench/contrib/vader/common/vaderUpdateService.js';
+import { MetricsMainService } from '../../workbench/contrib/vader/electron-main/metricsMainService.js';
+import { VaderMainUpdateService } from '../../workbench/contrib/vader/electron-main/vaderUpdateMainService.js';
+import { LLMMessageChannel } from '../../workbench/contrib/vader/electron-main/sendLLMMessageChannel.js';
+import { VaderSCMService } from '../../workbench/contrib/vader/electron-main/vaderSCMMainService.js';
+import { IVaderSCMService } from '../../workbench/contrib/vader/common/vaderSCMTypes.js';
+import { MCPChannel } from '../../workbench/contrib/vader/electron-main/mcpChannel.js';
+import { IDiscoveryMainService } from '../../workbench/contrib/vader/common/discovery/discoveryServiceTypes.js';
+import { DiscoveryMainService } from '../../workbench/contrib/vader/electron-main/discoveryMainService.js';
+import { IBrowserToolMainService } from '../../workbench/contrib/vader/common/browser/browserToolServiceTypes.js';
+import { BrowserToolMainService } from '../../workbench/contrib/vader/electron-main/browserToolMainService.js';
+import { IGitWorktreeMainService } from '../../workbench/contrib/vader/common/worktree/gitWorktreeTypes.js';
+import { GitWorktreeMainService } from '../../workbench/contrib/vader/electron-main/gitWorktreeMainService.js';
+import { IVisionMainService } from '../../workbench/contrib/vader/common/vision/visionQueryTypes.js';
+import { VisionMainService } from '../../workbench/contrib/vader/electron-main/visionMainService.js';
 type OSProxyConfigEvent = {
 	readonly success: boolean;
 	readonly durationMs: number;
@@ -1322,8 +1322,8 @@ export class CodeApplication extends Disposable {
 
 		// Vader main process services (required for services with a channel for comm between browser and electron-main (node))
 		services.set(IMetricsService, new SyncDescriptor(MetricsMainService, undefined, false));
-		services.set(IVoidUpdateService, new SyncDescriptor(VoidMainUpdateService, undefined, false));
-		services.set(IVoidSCMService, new SyncDescriptor(VoidSCMService, undefined, false));
+		services.set(IVaderUpdateService, new SyncDescriptor(VaderMainUpdateService, undefined, false));
+		services.set(IVaderSCMService, new SyncDescriptor(VaderSCMService, undefined, false));
 		services.set(IDiscoveryMainService, new SyncDescriptor(DiscoveryMainService, undefined, false));
 		services.set(IBrowserToolMainService, new SyncDescriptor(BrowserToolMainService, undefined, false));
 		services.set(IGitWorktreeMainService, new SyncDescriptor(GitWorktreeMainService, undefined, false));
@@ -1495,37 +1495,37 @@ export class CodeApplication extends Disposable {
 
 		// Vader - use loggerChannel as reference
 		const metricsChannel = ProxyChannel.fromService(accessor.get(IMetricsService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-metrics', metricsChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-metrics', metricsChannel);
 
-		const voidUpdatesChannel = ProxyChannel.fromService(accessor.get(IVoidUpdateService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-update', voidUpdatesChannel);
+		const vaderUpdatesChannel = ProxyChannel.fromService(accessor.get(IVaderUpdateService), disposables);
+		mainProcessElectronServer.registerChannel('vader-channel-update', vaderUpdatesChannel);
 
 		const sendLLMMessageChannel = new LLMMessageChannel(accessor.get(IMetricsService));
-		mainProcessElectronServer.registerChannel('void-channel-llmMessage', sendLLMMessageChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-llmMessage', sendLLMMessageChannel);
 
 		// Vader added this
-		const voidSCMChannel = ProxyChannel.fromService(accessor.get(IVoidSCMService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-scm', voidSCMChannel);
+		const vaderSCMChannel = ProxyChannel.fromService(accessor.get(IVaderSCMService), disposables);
+		mainProcessElectronServer.registerChannel('vader-channel-scm', vaderSCMChannel);
 
 		// Vader added this
 		const mcpChannel = new MCPChannel();
-		mainProcessElectronServer.registerChannel('void-channel-mcp', mcpChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-mcp', mcpChannel);
 
 		// Vader added this
 		const discoveryChannel = ProxyChannel.fromService(accessor.get(IDiscoveryMainService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-discovery', discoveryChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-discovery', discoveryChannel);
 
 		// Vader added this
 		const browserToolChannel = ProxyChannel.fromService(accessor.get(IBrowserToolMainService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-browser', browserToolChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-browser', browserToolChannel);
 
 		// Vader added this
 		const gitWorktreeChannel = ProxyChannel.fromService(accessor.get(IGitWorktreeMainService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-worktree', gitWorktreeChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-worktree', gitWorktreeChannel);
 
 		// Vader added this
 		const visionChannel = ProxyChannel.fromService(accessor.get(IVisionMainService), disposables);
-		mainProcessElectronServer.registerChannel('void-channel-vision', visionChannel);
+		mainProcessElectronServer.registerChannel('vader-channel-vision', visionChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

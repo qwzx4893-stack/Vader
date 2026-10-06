@@ -1,7 +1,7 @@
 name: Windows E2E
 
 # Installs the Windows installer produced by a Windows Build run and drives the REAL app through its UI with the
-# end-to-end suite (src/vs/workbench/contrib/void/test/e2e): chat, every agent tool (terminal, browser, MCP, edits),
+# end-to-end suite (src/vs/workbench/contrib/vader/test/e2e): chat, every agent tool (terminal, browser, MCP, edits),
 # Quick Edit / Apply / Autocomplete / commit messages, ordinary editor use, restart persistence.
 # The model is a protocol-faithful stand-in server (validated against the official `openai` SDK by ci.yml), so the run is
 # deterministic. With `real_llm` it additionally runs a small REAL model (Ollama) through the same app.
@@ -12,7 +12,7 @@ on:
   # (on the validation branch only) starts the same run against that branch's latest successful Windows Build.
   push:
     branches: [upgrade/vscode-1.136.2]
-    paths: ['.github/workflows/windows-e2e.yml', '.github/e2e-only.txt', 'src/vs/workbench/contrib/void/test/e2e/**']
+    paths: ['.github/workflows/windows-e2e.yml', '.github/e2e-only.txt', 'src/vs/workbench/contrib/vader/test/e2e/**']
   workflow_dispatch:
     inputs:
       run_id:
@@ -53,7 +53,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             .github/e2e-client
-            src/vs/workbench/contrib/void/test
+            src/vs/workbench/contrib/vader/test
             .github/e2e-only.txt
             package.json
             .nvmrc
@@ -131,7 +131,7 @@ jobs:
           E2E_OUT: e2e-out
           E2E_PRISTINE: '1'
           E2E_SCENARIO_TIMEOUT: '150000'
-        run: node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+        run: node src/vs/workbench/contrib/vader/test/e2e/suite.mjs
 
       - name: Start Ollama and pull the model
         if: ${{ always() && env.REAL_LLM == 'true' }}
@@ -169,7 +169,7 @@ jobs:
           "--- direct request through the same base URL the app will use"
           $body = @{ model = $env:REAL_LLM_MODEL; messages = @(@{ role = 'user'; content = 'Say PONG' }); stream = $false } | ConvertTo-Json -Depth 5
           (Invoke-RestMethod -Method Post -Uri "$env:REAL_LLM_BASEURL/chat/completions" -ContentType 'application/json' -Headers @{ Authorization = 'Bearer ollama' } -Body $body).choices[0].message.content
-          node src/vs/workbench/contrib/void/test/e2e/suite.mjs
+          node src/vs/workbench/contrib/vader/test/e2e/suite.mjs
 
       - name: Upload results
         if: always()

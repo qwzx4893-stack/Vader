@@ -101,7 +101,7 @@ Details that matter:
 - Paths are resolved through **symbolic links and `..`** before rules see them, so `docs/credentials` pointing at `~/.aws` does not slip past a secrets rule, and `src/../../etc/shadow` does not slip past a system-file rule.
 - Terminal commands are normalised (quotes, unicode look-alikes, escapes) before matching; user-written regexes are checked for catastrophic backtracking and **fail closed**.
 - A permanent agent's file scope is enforced on every path, written and resolved.
-- Add your own rules in settings; the engine, its rules and every bypass attempt it is tested against are in [`src/vs/workbench/contrib/void/common/policy/`](./src/vs/workbench/contrib/void/common/policy/) and [`policyBypassE2E.mjs`](./src/vs/workbench/contrib/void/test/policyBypassE2E.mjs) / [`symlinkPolicyE2E.mjs`](./src/vs/workbench/contrib/void/test/symlinkPolicyE2E.mjs).
+- Add your own rules in settings; the engine, its rules and every bypass attempt it is tested against are in [`src/vs/workbench/contrib/vader/common/policy/`](./src/vs/workbench/contrib/vader/common/policy/) and [`policyBypassE2E.mjs`](./src/vs/workbench/contrib/vader/test/policyBypassE2E.mjs) / [`symlinkPolicyE2E.mjs`](./src/vs/workbench/contrib/vader/test/symlinkPolicyE2E.mjs).
 
 It is a gate, not a sandbox: a command you approve runs with your account's permissions. [`SECURITY.md`](./SECURITY.md) says exactly what is and is not protected.
 
@@ -179,7 +179,7 @@ Read [`AGENTS.md`](./AGENTS.md) and [`CONTRIBUTING.md`](./CONTRIBUTING.md) befor
 - **Regression tests on every push** ([CI](./.github/workflows/ci.yml)): policy bypass attempts (symbolic links, `..`, regex bombs, obfuscated commands), provider wire formats against the real vendor SDKs, privacy flags, packaged-import checks, import cycles, and a gate that requires **zero known advisories** in every lockfile.
 - **The real app, end to end** ([Windows E2E](./.github/workflows/windows-e2e.yml)): the installed app is driven through its UI with a scripted model (every tool, edits, approvals, restart persistence, fault injection such as invalid JSON, endless tool loops and prompt injection hidden in files) and with a small real model.
 - **Security scanning** ([Security Scan](./.github/workflows/security-scan.yml)): CodeQL, Semgrep, secret scanning, dependency audit, workflow linting.
-- **A model in the loop:** [`agentBridge.mjs`](./src/vs/workbench/contrib/void/test/e2e/agentBridge.mjs) hands every request the app sends to its model to a person or an AI agent, so you see exactly what a keyed model would experience. [`docs/AGENT_SESSIONS.md`](./docs/AGENT_SESSIONS.md) lists what that found and how each issue was closed.
+- **A model in the loop:** [`agentBridge.mjs`](./src/vs/workbench/contrib/vader/test/e2e/agentBridge.mjs) hands every request the app sends to its model to a person or an AI agent, so you see exactly what a keyed model would experience. [`docs/AGENT_SESSIONS.md`](./docs/AGENT_SESSIONS.md) lists what that found and how each issue was closed.
 - **Compared with peers:** [`docs/QUALITY_COMPARISON.md`](./docs/QUALITY_COMPARISON.md) measures code and agent mechanisms against comparable open-source projects.
 
 What is *not* measured yet is written down too: [`docs/PRODUCT_ASSESSMENT.md`](./docs/PRODUCT_ASSESSMENT.md).
@@ -187,7 +187,7 @@ What is *not* measured yet is written down too: [`docs/PRODUCT_ASSESSMENT.md`](.
 ## Project layout
 
 ```
-src/vs/workbench/contrib/void/   Vader's own code: agent runtime, tools, policy engine, providers, chat UI (React)
+src/vs/workbench/contrib/vader/   Vader's own code: agent runtime, tools, policy engine, providers, chat UI (React)
   common/policy/                   the policy engine and its rules
   browser/ electron-main/          chat thread service, tool implementations, main-process services
   test/                            regression tests and the real-app E2E suite

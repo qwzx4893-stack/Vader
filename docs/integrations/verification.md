@@ -11,7 +11,7 @@ What was missing is the mission's other half: a check for things exit codes can'
 ## What evidence it's given - real, not self-reported
 
 `IVerificationService.gatherEvidence()`:
-- **Git diff** (`git diff --stat` via `IVoidSCMService`, the same real git service `mcp-and-policy.md` describes).
+- **Git diff** (`git diff --stat` via `IVaderSCMService`, the same real git service `mcp-and-policy.md` describes).
 - **Live diagnostics** (`IMarkerService`, current workspace-wide errors/warnings - the same data source the Context Engine and Problems panel use).
 - **Build/typecheck/lint/test results** - calls `IToolsService.callTool['run_verification']` directly rather than re-implementing project-command auto-detection a second time.
 

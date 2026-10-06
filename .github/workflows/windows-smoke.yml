@@ -37,7 +37,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             .github/e2e-client
-            src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+            src/vs/workbench/contrib/vader/test/windowsLiveSmoke.mjs
             .nvmrc
           sparse-checkout-cone-mode: false
 
@@ -113,7 +113,7 @@ jobs:
           RUN_LABEL: default
           CDP_PORT: '9222'
           SMOKE_OUT: smoke-out
-        run: node src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+        run: node src/vs/workbench/contrib/vader/test/windowsLiveSmoke.mjs
 
       - name: Launch - software rendering (--disable-gpu)
         if: always()
@@ -125,7 +125,7 @@ jobs:
           EXTRA_ARGS: '--disable-gpu'
           CDP_PORT: '9223'
           SMOKE_OUT: smoke-out
-        run: node src/vs/workbench/contrib/void/test/windowsLiveSmoke.mjs
+        run: node src/vs/workbench/contrib/vader/test/windowsLiveSmoke.mjs
 
       - name: Upload smoke output
         if: always()

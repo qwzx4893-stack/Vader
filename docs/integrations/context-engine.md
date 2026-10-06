@@ -12,7 +12,7 @@ The Context Engine adds a third, dynamic section: symbol outlines, live diagnost
 
 - **Symbol outlines**: `ILanguageFeaturesService.documentSymbolProvider.ordered(model)` - the same document-symbol provider registry that backs "Go to Symbol" and the same one `chatThreadService.ts`'s codespan-link resolution already calls. Flattened two levels deep (top-level declarations + their direct members), capped at 40 symbols/file.
 - **Diagnostics**: `IMarkerService.read({ resource, severities: Warning|Error })` - the same marker service that feeds the Problems panel. No LSP client of our own; whatever language service (built-in or extension) already populates markers for a file is what shows up here.
-- **Git diff/log**: `IVoidSCMService` (`gitStat`/`gitSampledDiffs`/`gitBranch`/`gitLog`) - this already existed, fully wired end-to-end (electron-main `child_process` git commands behind the `void-channel-scm` IPC channel), but had exactly one consumer before this (`voidSCMService.ts`'s commit-message generator). The Context Engine is its second real consumer, not a new git integration.
+- **Git diff/log**: `IVaderSCMService` (`gitStat`/`gitSampledDiffs`/`gitBranch`/`gitLog`) - this already existed, fully wired end-to-end (electron-main `child_process` git commands behind the `vader-channel-scm` IPC channel), but had exactly one consumer before this (`vaderSCMService.ts`'s commit-message generator). The Context Engine is its second real consumer, not a new git integration.
 
 ## Relevance ranking, token budget, and the "Context Router"
 

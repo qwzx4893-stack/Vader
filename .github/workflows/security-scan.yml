@@ -65,7 +65,7 @@ jobs:
           semgrep scan --metrics=off --disable-version-check --quiet \
             --config p/security-audit --config p/owasp-top-ten --config p/javascript --config p/typescript --config p/nodejs --config p/secrets --config p/xss \
             --sarif -o semgrep.sarif \
-            src/vs/workbench/contrib/void/browser src/vs/workbench/contrib/void/common src/vs/workbench/contrib/void/electron-main build/next build/lib/vader src/vs/code/electron-main
+            src/vs/workbench/contrib/vader/browser src/vs/workbench/contrib/vader/common src/vs/workbench/contrib/vader/electron-main build/next build/lib/vader src/vs/code/electron-main
       - name: Summary
         if: always()
         run: python3 .github/scripts/sarif_summary.py Semgrep semgrep.sarif --limit 120

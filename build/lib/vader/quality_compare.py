@@ -33,8 +33,8 @@ GENERATED_RE = re.compile(r'(providerModelData\.ts|\.generated\.|\.min\.js|/gene
 
 # name -> (root of the checkout, source roots relative to it, kind)
 PROJECTS = {
-    'Vader': ('/home/user/vader-upgrade', ['src/vs/workbench/contrib/void'], 'VS Code fork + agent platform'),
-    'Void (Vader\'s origin)': ('/tmp/void-upstream', ['src/vs/workbench/contrib/void'], 'VS Code fork + agent'),
+    'Vader': ('/home/user/vader-upgrade', ['src/vs/workbench/contrib/vader'], 'VS Code fork + agent platform'),
+    'Void (Vader\'s origin)': ('/tmp/vader-upstream', ['src/vs/workbench/contrib/void'], 'VS Code fork + agent'),  # the origin's own directory name
     'Cline': ('/tmp/peers/cline', ['sdk', 'apps'], 'agent SDK + VS Code/CLI apps'),
     'Roo Code': ('/tmp/peers/Roo-Code', ['src', 'webview-ui/src', 'packages', 'apps/cli'], 'VS Code extension agent'),
     'Continue': ('/tmp/peers/continue', ['core', 'gui/src', 'extensions/vscode/src', 'packages'], 'IDE extension + core'),

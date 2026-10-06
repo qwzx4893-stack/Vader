@@ -60,5 +60,5 @@ for prov,(prefix,ids) in SEL.items():
     out.append("\t},")
 out.append("}\n")
 out.append("export const curatedModelNames = {\n"+''.join(f"\t{p}: {json.dumps([i for i in ids if (pf+i) in d])},\n" for p,(pf,ids) in SEL.items())+"} as const\n")
-open('/home/user/vader-upgrade/src/vs/workbench/contrib/void/common/providerModelData.ts','w').write('\n'.join(out))
+open('/home/user/vader-upgrade/src/vs/workbench/contrib/vader/common/providerModelData.ts','w').write('\n'.join(out))
 print('missing:',missing)

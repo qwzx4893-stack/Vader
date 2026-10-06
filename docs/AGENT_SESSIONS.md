@@ -6,7 +6,7 @@ requests the app sends to its model endpoint**, exactly as a keyed model would: 
 descriptions and schemas, the conversation and every tool result, and replies with text and tool calls. Everything the app does with
 that reply (approvals, policy, edits, terminal, the UI) is the real thing.
 
-Tool: `src/vs/workbench/contrib/void/test/e2e/agentBridge.mjs` (protocol described at the top of the file; each request and answer is a
+Tool: `src/vs/workbench/contrib/vader/test/e2e/agentBridge.mjs` (protocol described at the top of the file; each request and answer is a
 file, `log.jsonl` records every event, `DONE.json` the transcript, approvals and the resulting diff).
 
 What this method **is**: a way to read the product from the model's side and to catch every defect that a competent model would hit.
@@ -69,6 +69,6 @@ pattern-based and the hard denies are the catastrophic cases); the answer to tha
 npm run buildreact && node build/next/index.ts bundle ...        # or use the packaged app
 BRIDGE_DIR=/tmp/bridge BRIDGE_WORKSPACE=/path/to/project \
 VADER_EXE=/path/to/vader PW_CORE=/path/to/playwright-core \
-  xvfb-run -a node src/vs/workbench/contrib/void/test/e2e/agentBridge.mjs
+  xvfb-run -a node src/vs/workbench/contrib/vader/test/e2e/agentBridge.mjs
 # write BRIDGE_DIR/task.txt, then answer each req-N.json with resp-N.json: {"text": "...", "toolCalls": [{"name": "...", "args": {...}}]}
 ```

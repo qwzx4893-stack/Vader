@@ -1,6 +1,6 @@
 # Real OpenRouter + Cline end-to-end test harness
 
-**File:** `src/vs/workbench/contrib/void/test/openRouterE2E.mjs`. **Status as of this writing: built, syntax-checked, import-path-verified — not yet run against live OpenRouter traffic.**
+**File:** `src/vs/workbench/contrib/vader/test/openRouterE2E.mjs`. **Status as of this writing: built, syntax-checked, import-path-verified — not yet run against live OpenRouter traffic.**
 
 ## Why it hasn't run yet
 
@@ -12,7 +12,7 @@ Everything else about this integration - the provider wiring itself (`sendLLMMes
 
 1. **Model selection**: queries OpenRouter's public `/models` endpoint live, filters to models that (a) declare `tools` in `supported_parameters` (native tool-calling), (b) cost under $2/M input tokens, and (c) are from a short list of models with a strong track record for reliable tool-calling at low cost (`gpt-4o-mini`, `gpt-5-mini`/`nano`, `claude-3-5-haiku`). Picks the cheapest match; falls back to `openai/gpt-4o-mini` (a well-established, cheap, reliable choice for tool-calling) if the live query fails. **Rationale for this shortlist**: the mission explicitly asks for "economical but genuinely capable" - a model with a poor tool-calling track record would produce a misleading test (failures attributable to the model, not to Vader's integration), and an expensive flagship model would waste the provided credit on a test whose point is integration correctness, not model capability.
 2. **Disposable fixture project**: a fresh directory under the OS temp dir (`os.tmpdir()`, never inside the Vader repo), containing a tiny Node module (`math.js`) with one deliberate bug, a test script (`test.js`), and a `README.md` - realistic enough to exercise read/write/run-command tool use without needing a large fixture.
-3. **Real provider call**: uses `sendLLMMessageToProviderImplementation.openRouter.sendChat` - the exact compiled function Vader ships (`out/vs/workbench/contrib/void/electron-main/llmMessage/sendLLMMessage.impl.js`), not a reimplementation - imported directly since it has no Electron-specific dependencies (confirmed by importing it successfully in plain Node).
+3. **Real provider call**: uses `sendLLMMessageToProviderImplementation.openRouter.sendChat` - the exact compiled function Vader ships (`out/vs/workbench/contrib/vader/electron-main/llmMessage/sendLLMMessage.impl.js`), not a reimplementation - imported directly since it has no Electron-specific dependencies (confirmed by importing it successfully in plain Node).
 4. **Real runtime**: the real, installed `@cline/agents` `AgentRuntime`, wired to a bridge (`makeOpenRouterAgentModel`) that mirrors `vaderAgentModel.ts`'s real logic (same event-queue bridging pattern, same incremental text-delta computation) - the harness's own message history stands in for `VaderAgentModel`'s real `getThreadMessages()`/`prepareLLMChatMessages()` call, since the full `ChatMessage`/`IChatThreadService` layer requires the Electron DI graph this sandbox can't launch (see the file's own header comment for the full reasoning on scope).
 5. **A harness-local Policy gate** (`buildClineTools`) that mirrors `_evaluateToolCallGate`/`_runToolCallInline`'s real shape: read-only tools run immediately, mutating tools (`write_file`, `run_command`) await an external promise exactly like `_pendingInlineApprovals` - proving the mid-batch-resume mechanism against a **real model's real tool-call batch**, not a scripted one.
 
@@ -29,7 +29,7 @@ The harness does not attempt precise billing-accurate token accounting (`sendCha
 ## Running it once network access is granted
 
 ```
-OPENROUTER_API_KEY=sk-or-... node src/vs/workbench/contrib/void/test/openRouterE2E.mjs
+OPENROUTER_API_KEY=sk-or-... node src/vs/workbench/contrib/vader/test/openRouterE2E.mjs
 ```
 
 The key is read from the environment only; it is never hardcoded, written to any file, logged, or echoed by this script.

@@ -77,15 +77,15 @@ jobs:
           status=0
           for t in scmInjectionE2E browserUrlPolicyE2E policyBypassE2E mcpServerEnvE2E discoveryUrlE2E moduleIgnoreE2E importCyclesE2E xmlToolParserE2E convertMessagesE2E reactTypecheckE2E providerCatalogE2E cloudModelListE2E searchRegexGuardE2E providerSdkE2E browserPrivacyArgsE2E unconnectedModulesE2E electronChecksumsE2E npmExtensionPreferredPmE2E shippedAdvisoriesE2E bracesPatchE2E buildToolPatchesE2E symlinkPolicyE2E vendorProvidersE2E; do
             echo "::group::$t"
-            node "src/vs/workbench/contrib/void/test/$t.mjs" || status=1
+            node "src/vs/workbench/contrib/vader/test/$t.mjs" || status=1
             echo "::endgroup::"
           done
           exit $status
 
       - name: Test model server speaks the OpenAI protocol as the official SDK expects
-        run: node src/vs/workbench/contrib/void/test/e2e/modelServerE2E.mjs
+        run: node src/vs/workbench/contrib/vader/test/e2e/modelServerE2E.mjs
 
       - name: Agent runtime bundle in a real browser (no Node)
         run: |
           npx playwright-core install --with-deps chromium
-          node src/vs/workbench/contrib/void/test/clineBundleBrowserE2E.mjs
+          node src/vs/workbench/contrib/vader/test/clineBundleBrowserE2E.mjs

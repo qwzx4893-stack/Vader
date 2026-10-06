@@ -1,6 +1,6 @@
 # Plan Mode
 
-**Where:** `voidSettingsTypes.ts` (`ChatMode`), `chatThreadService.ts` (`PlanObject`, `_maybeCaptureThreadPlan`, `READONLY_MODE_BLOCKED_BUILTIN_TOOLS`), `prompts.ts` (`chat_systemMessage`'s `plan` branch), `SidebarChat.tsx` (the plan banner).
+**Where:** `vaderSettingsTypes.ts` (`ChatMode`), `chatThreadService.ts` (`PlanObject`, `_maybeCaptureThreadPlan`, `READONLY_MODE_BLOCKED_BUILTIN_TOOLS`), `prompts.ts` (`chat_systemMessage`'s `plan` branch), `SidebarChat.tsx` (the plan banner).
 
 ## Audit finding this starts from
 

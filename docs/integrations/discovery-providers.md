@@ -1,8 +1,8 @@
 # Replacing SkillNet or the MCP Registry
 
-**Contract:** `IDiscoveryMainService` in `src/vs/workbench/contrib/void/common/discovery/discoveryServiceTypes.ts`.
+**Contract:** `IDiscoveryMainService` in `src/vs/workbench/contrib/vader/common/discovery/discoveryServiceTypes.ts`.
 
-**Current implementation:** `src/vs/workbench/contrib/void/electron-main/discoveryMainService.ts`, calling:
+**Current implementation:** `src/vs/workbench/contrib/vader/electron-main/discoveryMainService.ts`, calling:
 - `https://registry.modelcontextprotocol.io/v0/servers?search=...` (official MCP Registry, public, unauthenticated)
 - `http://api-skillnet.openkg.cn/v1/search?q=...` (SkillNet's public search API, unauthenticated)
 - `raw.githubusercontent.com` (best-effort fetch of a skill's `SKILL.md`/`README.md`, for GitHub-hosted skills only)

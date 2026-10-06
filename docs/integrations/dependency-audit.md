@@ -34,8 +34,8 @@ string - so the real question is whether anything in Vader's codebase ever reque
 
 Investigated two ways, not just one:
 
-1. **Static grep**: `grep -rin "dify" src/vs/workbench/contrib/void/` turns up zero real matches
-   (only "mo**dify**" substrings). Vader's provider list (`common/voidSettingsTypes.ts`,
+1. **Static grep**: `grep -rin "dify" src/vs/workbench/contrib/vader/` turns up zero real matches
+   (only "mo**dify**" substrings). Vader's provider list (`common/vaderSettingsTypes.ts`,
    `common/modelCapabilities.ts`) has no "dify" entry, and never could reach one from any
    user-facing setting.
 2. **Empirical module-load tracing** (`test/dependencyReachabilityE2E.mjs`,

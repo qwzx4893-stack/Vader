@@ -39,7 +39,16 @@ export class ServerInstallError extends Error {
 	}
 }
 
-const DEFAULT_DOWNLOAD_URL_TEMPLATE = 'https://github.com/voideditor/binaries/releases/download/${version}/void-reh-${os}-${arch}-${version}.tar.gz';
+// Vader publishes no remote server builds and does not point at anyone else's: the download URL must be configured
+// (`remote.SSH.serverDownloadUrlTemplate`) or provided by the product configuration.
+const DEFAULT_DOWNLOAD_URL_TEMPLATE = '';
+
+function requireDownloadUrl(template: string): string {
+	if (!template) {
+		throw new Error('No remote server download URL is configured. Set "remote.SSH.serverDownloadUrlTemplate" to a URL that serves a Vader remote server build.');
+	}
+	return template;
+}
 
 export async function installCodeServer(wslManager: WSLManager, distroName: string, serverDownloadUrlTemplate: string | undefined, extensionIds: string[], envVariables: string[], logger: Log): Promise<ServerInstallResult> {
 	const scriptId = crypto.randomBytes(12).toString('hex');
@@ -55,7 +64,7 @@ export async function installCodeServer(wslManager: WSLManager, distroName: stri
 		envVariables,
 		serverApplicationName: vscodeServerConfig.serverApplicationName,
 		serverDataFolderName: vscodeServerConfig.serverDataFolderName,
-		serverDownloadUrlTemplate: serverDownloadUrlTemplate ?? vscodeServerConfig.serverDownloadUrlTemplate ?? DEFAULT_DOWNLOAD_URL_TEMPLATE,
+		serverDownloadUrlTemplate: requireDownloadUrl(serverDownloadUrlTemplate || vscodeServerConfig.serverDownloadUrlTemplate || DEFAULT_DOWNLOAD_URL_TEMPLATE),
 	};
 
 	const installServerScript = generateBashInstallScript(installOptions);

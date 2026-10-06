@@ -13,7 +13,7 @@ Thanks for helping. Vader is an Electron app (a full editor workbench plus an ag
 1. [`ARCHITECTURE.md`](./ARCHITECTURE.md): the subsystem map. Find which subsystem owns the thing you are touching.
 2. [`AGENTS.md`](./AGENTS.md): how to change the agent platform safely (the exhaustive tool maps, the policy gate order, persisted formats, what the renderer may import).
 3. [`docs/integrations/`](./docs/integrations/): a guide per subsystem.
-4. [`docs/CODEBASE_GUIDE.md`](./docs/CODEBASE_GUIDE.md): a tour of `src/vs/workbench/contrib/void/`, where most of Vader's own code lives.
+4. [`docs/CODEBASE_GUIDE.md`](./docs/CODEBASE_GUIDE.md): a tour of `src/vs/workbench/contrib/vader/`, where most of Vader's own code lives.
 
 ## Prerequisites
 
@@ -53,7 +53,7 @@ The project has no unit-test runner beyond a type check and a set of Node regres
 
 ```bash
 node_modules/.bin/tsc -p src/tsconfig.json --noEmit          # must be clean
-for t in $(grep -o '[A-Za-z]*E2E' .github/workflows/ci.yml | sort -u); do node src/vs/workbench/contrib/void/test/$t.mjs || echo "FAILED $t"; done
+for t in $(grep -o '[A-Za-z]*E2E' .github/workflows/ci.yml | sort -u); do node src/vs/workbench/contrib/vader/test/$t.mjs || echo "FAILED $t"; done
 ```
 
 (The exact list CI runs is in [`.github/workflows/ci.yml`](./.github/workflows/ci.yml); CI uses Node 24, so run the tests on that version.) If you touched anything under `browser/react/src/`, run `npm run buildreact` *before* the type check, because `src/tsconfig.json` resolves against the built bundle.
@@ -78,5 +78,5 @@ Be kind and assume good faith. See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
 ## Adding a model provider
 
 Vendors that speak the OpenAI chat-completions protocol are rows in a generated table, not new code: add the vendor to `build/lib/vader/genVendorProviders.py`,
-regenerate `common/vendorProviderData.ts`, and run `node src/vs/workbench/contrib/void/test/vendorProvidersE2E.mjs`. Details in
+regenerate `common/vendorProviderData.ts`, and run `node src/vs/workbench/contrib/vader/test/vendorProvidersE2E.mjs`. Details in
 [`docs/integrations/providers/README.md`](./docs/integrations/providers/README.md). Please link the vendor's own documentation for the gateway URL in the pull request.

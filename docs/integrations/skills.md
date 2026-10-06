@@ -1,6 +1,6 @@
 # Skill lifecycle and security
 
-**Contract:** `ISkillService` in `common/skills/skillServiceTypes.ts`. **Implementation:** `common/skills/skillService.ts`. **Tool:** `install_skill`. **Settings UI:** `SkillsSection` in `void-settings-tsx/Settings.tsx`.
+**Contract:** `ISkillService` in `common/skills/skillServiceTypes.ts`. **Implementation:** `common/skills/skillService.ts`. **Tool:** `install_skill`. **Settings UI:** `SkillsSection` in `vader-settings-tsx/Settings.tsx`.
 
 ## What existed before this, and the gap it left
 

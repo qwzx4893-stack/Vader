@@ -34,9 +34,9 @@ product.overrides.json
 .tmp/
 .tmp2/
 .tool-versions
-src/vs/workbench/contrib/void/browser/react/out/**
-src/vs/workbench/contrib/void/browser/agentRuntime/clineBundle/index.js
-src/vs/workbench/contrib/void/browser/react/src2/**
+src/vs/workbench/contrib/vader/browser/react/out/**
+src/vs/workbench/contrib/vader/browser/agentRuntime/clineBundle/index.js
+src/vs/workbench/contrib/vader/browser/react/src2/**
 .chat-simulation-data
 vscode-telemetry-docs/
 test-output.json
