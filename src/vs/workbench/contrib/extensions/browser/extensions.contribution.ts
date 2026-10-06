@@ -330,8 +330,8 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration)
 			},
 			[VerifyExtensionSignatureConfigKey]: {
 				type: 'boolean',
-				description: localize('extensions.verifySignature', "When enabled, extensions are verified to be signed before getting installed."),
-				default: true,
+				description: localize('extensions.verifySignature', "When enabled, extensions are verified to be signed before getting installed. Off by default in Vader: its gallery (Open VSX) does not sign extensions with the certificate chain this check requires, so every extension would be refused."),
+				default: false, // Vader: Open VSX signatures cannot be verified by @vscode/vsce-sign (see docs/EXTENSIONS.md)
 				scope: ConfigurationScope.APPLICATION,
 				included: isNative
 			},

@@ -4,6 +4,8 @@
 
 // Ordinary editor use that has nothing to do with the model: the IDE underneath must still behave like VS Code.
 
+import fs from 'node:fs';
+
 const norm = (s) => s.replace(/ /g, ' ');
 const editorText = (page) => page.locator('.monaco-editor .view-lines').first().innerText().then(norm);
 
@@ -107,6 +109,45 @@ export const generalScenarios = [
 			t.check('the old thread is listed under Previous Threads', await prev.waitFor({ state: 'visible', timeout: 10_000 }).then(() => true, () => false));
 			await prev.click().catch(() => { });
 			t.check('opening it shows the earlier answer', await t.waitFor(async () => (await t.ui.assistantTexts(t.page)).some(x => x.includes('Answer for the history test.')), 10_000));
+		},
+	},
+	{
+		name: 'extensions: signature verification is off by default (the gallery is Open VSX, which Microsoft\'s signing chain cannot verify)',
+		fn: async (t) => {
+			await t.ui.runCommand(t.page, 'Preferences: Open Settings (UI)');
+			await t.sleep(800);
+			await t.page.keyboard.type('extensions.verifySignature');
+			await t.sleep(1200);
+			const row = t.page.locator('.settings-editor .setting-item').filter({ hasText: 'Verify Signature' }).first();
+			t.check('the setting is listed', (await row.count()) > 0);
+			const box = row.locator('.setting-value-checkbox, input[type="checkbox"], [role="checkbox"]').first();
+			const checked = await box.getAttribute('aria-checked').catch(() => null);
+			t.check('and it is switched off', checked === 'false', String(checked));
+			await t.page.keyboard.press('Control+W');
+		},
+	},
+	{
+		name: 'extensions: an extension from Open VSX installs without a signature error, and shows up as installed',
+		needs: ['network'],
+		timeout: 180_000,
+		fn: async (t) => {
+			await t.page.keyboard.press('Control+Shift+X');
+			await t.sleep(1000);
+			await t.page.keyboard.type('@id:PKief.material-icon-theme');
+			await t.page.keyboard.press('Enter');
+			const item = t.page.locator('.extensions-list .monaco-list-row').first();
+			t.check('the search finds the extension in the gallery', await t.waitFor(async () => (await item.count()) > 0 && /Material Icon Theme/i.test(await item.innerText()), 30_000), await item.innerText().catch(() => '(none)'));
+			await item.click();
+			const install = t.page.getByRole('button', { name: /^Install$/ }).first();
+			await install.waitFor({ timeout: 20_000 });
+			await install.click();
+			// Vader asks before installing from an unfamiliar publisher: confirm if the prompt appears
+			const trust = t.page.locator('.monaco-dialog-box').getByRole('button', { name: /Trust Publisher|Install/ }).first();
+			if (await trust.waitFor({ timeout: 8_000 }).then(() => true).catch(() => false)) { await trust.click(); }
+			const installed = () => fs.readdirSync(t.app.extensionsDir).some(n => /^pkief\.material-icon-theme-/i.test(n));
+			t.check('the extension is installed on disk', await t.waitFor(installed, 90_000), String(fs.readdirSync(t.app.extensionsDir)));
+			const dialogText = await t.page.locator('.monaco-dialog-box').innerText().catch(() => '');
+			t.check('no signature error was shown', !/signature/i.test(dialogText), dialogText.slice(0, 200));
 		},
 	},
 ];

@@ -169,7 +169,7 @@ export class PromptExtensionInstallFailureAction extends Action {
 				detail: getErrorMessage(this.error),
 				buttons: [{
 					label: localize('learn more', "Learn More"),
-					run: () => this.openerService.open('https://code.visualstudio.com/docs/editor/extension-marketplace#_the-extension-signature-cannot-be-verified-by-vs-code')
+					run: () => this.openerService.open('https://github.com/qwzx4893-stack/Vader/blob/main/docs/EXTENSIONS.md')
 				}, {
 					label: localize('install donot verify', "Install Anyway (Don't Verify Signature)"),
 					run: () => {
@@ -190,7 +190,7 @@ export class PromptExtensionInstallFailureAction extends Action {
 				detail: getErrorMessage(this.error),
 				buttons: [{
 					label: localize('learn more', "Learn More"),
-					run: () => this.openerService.open('https://code.visualstudio.com/docs/editor/extension-marketplace#_the-extension-signature-cannot-be-verified-by-vs-code')
+					run: () => this.openerService.open('https://github.com/qwzx4893-stack/Vader/blob/main/docs/EXTENSIONS.md')
 				}, {
 					label: localize('report issue', "Report Issue"),
 					run: () => this.workbenchIssueService.openReporter({

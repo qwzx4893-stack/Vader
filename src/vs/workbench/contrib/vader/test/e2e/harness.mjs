@@ -16,6 +16,7 @@ import * as ui from './ui.mjs';
 export const config = {
 	exe: process.env.VADER_EXE,
 	natives: process.env.E2E_NATIVES !== '0', // false on a machine without the built native modules (terminal needs node-pty)
+	network: process.env.E2E_NETWORK !== '0', // false where the public internet (open-vsx.org) is not reachable
 	only: process.env.E2E_ONLY ? new RegExp(process.env.E2E_ONLY, 'i') : null,
 	out: path.resolve(process.env.E2E_OUT || './e2e-out'),
 	extraArgs: (process.env.E2E_ARGS || '').split(' ').filter(Boolean),
@@ -96,6 +97,12 @@ async function runScenario({ group, s, server, ws, app }) {
 
 	if (s.needs?.includes('natives') && !config.natives) {
 		rec.status = 'skip'; rec.error = 'needs native modules (node-pty) that are not built on this machine';
+		log(`SKIP: ${s.name} - ${rec.error}`);
+		results.push(rec); return;
+	}
+
+	if (s.needs?.includes('network') && !config.network) {
+		rec.status = 'skip'; rec.error = 'needs the public internet (E2E_NETWORK=0)';
 		log(`SKIP: ${s.name} - ${rec.error}`);
 		results.push(rec); return;
 	}
