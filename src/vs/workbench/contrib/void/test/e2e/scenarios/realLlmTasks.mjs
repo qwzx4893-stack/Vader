@@ -45,7 +45,7 @@ export const TASKS = [
 		id: 'transform-file',
 		prompt: 'Read notes.txt and create out.txt with the same content in UPPERCASE.',
 		setup: (t) => { try { fs.rmSync(t.abs('out.txt')); } catch { /* absent */ } },
-		grade: (t) => t.exists('out.txt') && t.read('out.txt').trim() === t.read('notes.txt').trim().toUpperCase(),
+		grade: (t) => t.exists('out.txt') && t.read('out.txt').replace(/\r\n/g, '\n').trim() === t.read('notes.txt').replace(/\r\n/g, '\n').trim().toUpperCase(), // Windows editors may save CRLF
 	},
 ];
 

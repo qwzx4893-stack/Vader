@@ -72,7 +72,7 @@ is files and scales with project size).
 | persistent agents / memory | yes (20) | no (0) | yes (25) | yes (5) | yes (1) | yes (6) |
 
 Findings:
-- **Vader has every mechanism the peers have except two at the time of measurement**: killing child processes when a run is cancelled (checked by the new `robustness` scenario on Windows) and, until this pass, prompt caching and loop detection.
+- **Vader has every mechanism the peers have.** The keyword search shows no hit for "cancel kills child processes" because Vader does it through the terminal service rather than with a kill call in its own code; the new `robustness` scenario proves it on Windows (a command that writes a heartbeat stops writing the moment the run is stopped). Until this pass it lacked prompt caching and a loop guard.
 - **Where Vader is ahead**: hard deny rules independent of the UI (shared only with Cline, Roo Code and opencode, and only Vader makes them non-disableable), a built-in verification tool (`run_verification`, not found in the others), persistent agents with memory, and browser automation as a first-class tool (Cline and Continue have traces of it).
 - **Gaps found by this comparison and closed in this pass**: prompt caching for Anthropic requests (Cline, Roo Code, opencode and Continue have it; agents resend their whole prompt each turn, so it is the largest cost lever); an identical-call loop guard (the runtime's own cap only stopped a stuck model after about 50 turns, it now stops after 8); and the two real defects below.
 
@@ -85,9 +85,9 @@ Two key-free tiers, both running the real packaged app through its UI:
 2. A call to an unknown tool (or one the runtime refused) was answered inside the runtime but never recorded in the thread, so the next request lacked both the call and its error. Now it is recorded and the model is told.
 Also fixed: a model repeating one call 50 times; now 8.
 
-**Oracle task suite (`agent-tasks` group, 4 tasks).** Four plain-language coding tasks (create a file, fix a failing test, write a function, transform a file) run with a perfect scripted model and are graded by the resulting files. This measures the ceiling of the tool layer: if the harness lost an edit or mishandled an approval, a task would fail even though the "model" did everything right. Result: 4 of 4.
+**Oracle task suite (`agent-tasks` group, 4 tasks).** Four plain-language coding tasks (create a file, fix a failing test, write a function, transform a file) run with a perfect scripted model and are graded by the resulting files. This measures the ceiling of the tool layer: if the harness lost an edit or mishandled an approval, a task would fail even though the "model" did everything right. Result: 4 of 4 on the local build and on the first Windows run (the Windows run found that the file-transform grader compared line endings too strictly; CRLF-tolerant now).
 
-**Real-model capability eval (`real-llm` group, same 4 tasks).** The same tasks with a real model served by Ollama in the Windows workflow, several attempts each, reported as pass@k and pass^k in `agent-bench.json`. With a 1.5B model the numbers are low and are a baseline, not a quality claim; the same file runs against any stronger OpenAI-compatible model by setting `REAL_LLM_MODEL` and `REAL_LLM_BASEURL`.
+**Real-model capability eval (`real-llm` group, same 4 tasks).** The same tasks with a real model served by Ollama in the Windows workflow, several attempts each, reported as pass@k and pass^k in `agent-bench.json`. First Windows result with the 1.5B model `qwen2.5:1.5b`: 0 of 4 tasks in 2 attempts each (it never made a tool call that needed approval), against 4 of 4 for the scripted perfect model, which shows the harness is not what limits that number. The workflow now uses `qwen2.5:3b`. With small models the numbers are a baseline, not a quality claim; the same file runs against any stronger OpenAI-compatible model by setting `REAL_LLM_MODEL` and `REAL_LLM_BASEURL`.
 
 ## 4. What this does and does not show
 

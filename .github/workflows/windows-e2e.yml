@@ -30,7 +30,7 @@ on:
       real_llm_model:
         description: 'Ollama model for the real-model run'
         required: false
-        default: 'qwen2.5:1.5b'
+        default: 'qwen2.5:3b'
 
 permissions:
   contents: read
@@ -44,7 +44,7 @@ jobs:
     env:
       RUN_ID: ${{ github.event.inputs.run_id }}
       REAL_LLM: ${{ github.event.inputs.real_llm || 'true' }}
-      REAL_LLM_MODEL_NAME: ${{ github.event.inputs.real_llm_model || 'qwen2.5:1.5b' }}
+      REAL_LLM_MODEL_NAME: ${{ github.event.inputs.real_llm_model || 'qwen2.5:3b' }}
       INSTALL_DIR: C:\VaderApp
     steps:
       - name: Checkout (test sources only)
@@ -155,7 +155,7 @@ jobs:
         env:
           E2E_OUT: e2e-out-real
           E2E_ONLY: 'real-llm'
-          REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model || 'qwen2.5:1.5b' }}
+          REAL_LLM_MODEL: ${{ github.event.inputs.real_llm_model || 'qwen2.5:3b' }}
           REAL_LLM_BASEURL: http://127.0.0.1:11434/v1
           E2E_SCENARIO_TIMEOUT: '900000'
         run: |
