@@ -184,7 +184,7 @@ export class MCPChannel implements IServerChannel {
 					command: server.url.toString(),
 				}
 			} catch (httpErr) {
-				console.warn(`HTTP failed for ${serverName}, trying SSE…`, httpErr);
+				console.warn('HTTP failed for %s, trying SSE…', serverName, httpErr);
 				transport = new SSEClientTransport(server.url);
 				await client.connect(transport);
 				const { tools } = await client.listTools()
@@ -257,7 +257,7 @@ export class MCPChannel implements IServerChannel {
 			])
 			return c
 		} catch (err) {
-			console.error(`❌ Failed to connect to server "${serverName}":`, err)
+			console.error('❌ Failed to connect to server "%s":', serverName, err)
 			// the losing side of the race above isn't cancelled - if the connect attempt is still
 			// in flight (or somehow succeeds later), this closes it rather than leaking a live
 			// process/connection nothing else references anymore. Awaited deliberately (not
@@ -317,7 +317,7 @@ export class MCPChannel implements IServerChannel {
 		// Handle turning off the server
 		else {
 			// this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
-			await this._closeClient(serverName).catch(err => console.error(`Error closing MCP server "${serverName}":`, err))
+			await this._closeClient(serverName).catch(err => console.error('Error closing MCP server "%s":', serverName, err))
 			delete this.infoOfClientId[serverName]._client
 
 			this.mcpEmitters.serverEvent.onUpdate.fire({

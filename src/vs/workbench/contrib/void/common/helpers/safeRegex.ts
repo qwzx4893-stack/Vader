@@ -16,9 +16,15 @@ const NESTED_QUANTIFIER = /\((?:[^()\\]|\\.)*(?:[+*]|\{\d+,\d*\})(?:[^()\\]|\\.)
 
 export type SafeRegexResult = { ok: true, regex: RegExp } | { ok: false, reason: string }
 
-export const compileModelRegex = (source: string): SafeRegexResult => {
+export const compileModelRegex = (source: string, flags = ''): SafeRegexResult => {
 	if (source.length > MAX_REGEX_SOURCE_CHARS) return { ok: false, reason: `The pattern is longer than ${MAX_REGEX_SOURCE_CHARS} characters.` }
 	if (NESTED_QUANTIFIER.test(source)) return { ok: false, reason: 'The pattern repeats a group that already repeats (like "(a+)+"), which can make the search hang. Rewrite it without nested repetition.' }
-	try { return { ok: true, regex: new RegExp(source) } }
+	try { return { ok: true, regex: new RegExp(source, flags) } }
 	catch (e) { return { ok: false, reason: `Invalid regular expression: ${e instanceof Error ? e.message : String(e)}` } }
+}
+
+/** the reason a user-written, case-insensitive pattern cannot be used (invalid, or unsafe to run), or undefined when it is fine */
+export const validateUserPattern = (src: string): string | undefined => {
+	const r = compileModelRegex(src, 'i')
+	return r.ok ? undefined : r.reason
 }

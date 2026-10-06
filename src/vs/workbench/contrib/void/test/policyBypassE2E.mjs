@@ -57,6 +57,22 @@ for (const p of ['c:/work/app/src/main.ts', '/home/user/app/etc/config.json', 'c
 for (const p of ['c:/proj/.env', 'C:/proj/.ENV', 'c:/Users/me/.SSH/id_rsa', 'c:/Users/me/.ssh/id_ed25519', '/home/me/.aws/credentials', 'c:/proj/Server.PEM'])
 	check(`asks before touching secret ${p}`, asked('file-read', p));
 
+// ---- user-written rules: a pattern that could hang the window must neither hang it nor stop protecting
+{
+	const mk = (patterns, builtIn = false) => ({ id: 'u1', description: 'user rule', effect: 'deny', kinds: ['terminal-command'], commandPatterns: patterns, builtIn, locked: false, neverBypassAutonomous: false, enabled: true });
+	const req = (command) => ({ kind: 'terminal-command', toolName: 'run_command', command });
+	const evil = '(a+)+$';
+	const longCommand = 'a'.repeat(40) + 'b';
+	let t = Date.now(); const evilHit = ruleMatches(mk([evil]), req(longCommand)); const ms = Date.now() - t;
+	check(`a catastrophic user pattern returns at once (${ms} ms), it does not freeze the window`, ms < 200);
+	check('a user pattern that cannot be run safely fails CLOSED: the deny rule still fires', evilHit === true);
+	check('an ordinary user pattern still works (matches)', ruleMatches(mk(['curl .*\\| *sh']), req('curl http://x | sh')) === true);
+	check('an ordinary user pattern still works (does not match)', ruleMatches(mk(['curl .*\\| *sh']), req('ls -la')) === false);
+	check('a user pattern with invalid regex syntax is ignored, as before (and the settings UI refuses to save it)', ruleMatches(mk(['(unclosed']), req('anything')) === false);
+	check('built-in patterns are used exactly as written (no length cap)', ruleMatches(mk(['rm .*'], true), req('rm x')) === true);
+	t = Date.now(); ruleMatches(mk(['(x+x+)+y']), req('x'.repeat(5000))); check('a second catastrophic shape is also bounded', Date.now() - t < 200);
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -6,6 +6,7 @@
 // disable foreign import complaints
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
+import { withPromptCaching } from './anthropicCache.js';
 import { Ollama } from 'ollama';
 import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
 import { MistralCore } from '@mistralai/mistralai/core.js';
@@ -538,13 +539,17 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		dangerouslyAllowBrowser: true
 	});
 
+	// cache markers on the stable prefixes (tools, system prompt, conversation so far): see anthropicCache.ts
+	const cached = withPromptCaching({ system: separateSystemMessage, messages: messages as AnthropicLLMChatMessage[] & { role: string, content: any }[], tools: potentialTools && specialToolFormat === 'anthropic-style' ? potentialTools as unknown as { [k: string]: unknown }[] : undefined })
+	const cachedNativeToolsObj = cached.tools ? { tools: cached.tools, tool_choice: { type: 'auto' } } as const : nativeToolsObj
+
 	const stream = anthropic.messages.stream({
-		system: separateSystemMessage ?? undefined,
-		messages: messages as AnthropicLLMChatMessage[],
+		system: (cached.system ?? undefined) as any,
+		messages: cached.messages as unknown as AnthropicLLMChatMessage[],
 		model: modelName,
 		max_tokens: maxTokens ?? 4_096, // anthropic requires this
 		...includeInPayload,
-		...nativeToolsObj,
+		...(cachedNativeToolsObj as any),
 
 	})
 

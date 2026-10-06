@@ -175,6 +175,31 @@ const hasKeyLeak = (r) => JSON.stringify(r.error ?? {}).includes('KEY-123456');
 	check('anthropic: stream:true, the model id as chosen, max_tokens present', req?.body.stream === true && req.body.model === 'claude-sonnet-5-5' && req.body.max_tokens > 0);
 	check('anthropic: tools are sent in Anthropic format (name + input_schema)', req?.body.tools?.some(t => t.name === 'read_file' && t.input_schema));
 	check('anthropic: an adaptive-thinking model is NOT sent the legacy thinking parameter', req?.body.thinking === undefined, JSON.stringify(req?.body.thinking));
+
+	// prompt caching: markers on the stable prefixes, never more than the four the API allows, never on empty text, inputs untouched
+	anthropic.reset(); anthropicStep = { text: 'ok' };
+	const convo = [
+		{ role: 'user', content: 'first question' },
+		{ role: 'assistant', content: [{ type: 'text', text: 'first answer' }, { type: 'tool_use', id: 't1', name: 'read_file', input: { uri: '/a' } }] },
+		{ role: 'user', content: [{ type: 'tool_result', tool_use_id: 't1', content: 'file contents' }] },
+		{ role: 'assistant', content: 'second answer' },
+		{ role: 'user', content: 'second question' },
+	];
+	const before = JSON.stringify(convo);
+	await send('anthropic', { modelName: 'claude-sonnet-5-5', system: 'You are Vader.', messages: convo });
+	const cr = lastReq(anthropic);
+	const marked = JSON.stringify(cr?.body).match(/"cache_control":\{"type":"ephemeral"\}/g)?.length ?? 0;
+	check('anthropic caching: the system prompt carries a cache marker', cr?.body.system?.[0]?.cache_control?.type === 'ephemeral', JSON.stringify(cr?.body.system));
+	check('anthropic caching: the last tool definition carries a cache marker (caches all tools)', cr?.body.tools?.at(-1)?.cache_control?.type === 'ephemeral' && cr.body.tools.slice(0, -1).every(t => !t.cache_control));
+	const users = cr?.body.messages.filter(m => m.role === 'user') ?? [];
+	check('anthropic caching: the last two user turns carry a marker on their final block', users.length === 3 && users.slice(-2).every(m => Array.isArray(m.content) && m.content.at(-1).cache_control?.type === 'ephemeral') && !JSON.stringify(users[0]).includes('cache_control'), JSON.stringify(users).slice(0, 300));
+	check('anthropic caching: at most four markers are sent (the API limit)', marked >= 3 && marked <= 4, String(marked));
+	check('anthropic caching: assistant turns are never marked', !JSON.stringify(cr?.body.messages.filter(m => m.role === 'assistant')).includes('cache_control'));
+	check('anthropic caching: the caller\'s message objects are not modified', JSON.stringify(convo) === before);
+	// an empty system prompt and empty user text must not get a marker (the API rejects cache_control on empty text)
+	anthropic.reset(); anthropicStep = { text: 'ok' };
+	await send('anthropic', { modelName: 'claude-sonnet-5-5', messages: [{ role: 'user', content: '' }] });
+	check('anthropic caching: no marker is put on empty text', !JSON.stringify(lastReq(anthropic)?.body.messages).includes('cache_control'));
 }
 {
 	anthropic.reset(); anthropicStep = { text: 'Reading.', toolCalls: [{ name: 'read_file', args: { uri: '/work/a.txt' } }, { name: 'ls_dir', args: { uri: '/work' } }] };

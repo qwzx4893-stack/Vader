@@ -20,6 +20,7 @@ import Severity from '../../../../../../../base/common/severity.js'
 import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../../../common/modelCapabilities.js';
 import { RouterCategory } from '../../../../common/modelRouter/modelRouterService.js';
 import { PolicyRequestKind, UserPolicyRuleInput } from '../../../../common/policy/policyService.js';
+import { validateUserPattern } from '../../../../common/helpers/safeRegex.js';
 import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
@@ -790,6 +791,7 @@ export const AgentsAndPolicySection = () => {
 	const [newRuleEffect, setNewRuleEffect] = useState<'deny' | 'ask'>('ask')
 	const [newRuleDescription, setNewRuleDescription] = useState('')
 	const [newRulePattern, setNewRulePattern] = useState('')
+	const [newRuleError, setNewRuleError] = useState('')
 
 	const currentThread = chatThreadService.getCurrentThread()
 	const customRules = policyService.getAllRules().filter(r => !r.builtIn)
@@ -861,6 +863,7 @@ export const AgentsAndPolicySection = () => {
 							placeholder={newRuleKind === 'file-write' || newRuleKind === 'file-delete' ? 'Glob pattern(s), comma-separated (e.g. **/.env*)'
 								: newRuleKind === 'terminal-command' ? 'Regex pattern(s), comma-separated (e.g. rm -rf)'
 									: 'MCP server name regex(es), comma-separated - leave empty to match every MCP server'} />
+						{newRuleError && <div className='text-void-warning text-xs' data-testid='vader-policy-rule-error'>{newRuleError}</div>}
 						<div className='flex gap-x-2'>
 							<VoidButtonBgDarken
 								className='px-3 py-1'
@@ -868,6 +871,11 @@ export const AgentsAndPolicySection = () => {
 									if (!newRuleDescription.trim()) return
 									const patterns = newRulePattern.split(',').map(s => s.trim()).filter(Boolean)
 									if (patterns.length === 0 && newRuleKind !== 'mcp-tool') return // mcp-tool alone may deliberately have no patterns (matches every server); the others require a discriminator
+									// regex rules run against every command: refuse patterns that are invalid or could hang the window (see policyService.ts)
+									const regexKind = newRuleKind === 'terminal-command' || newRuleKind === 'mcp-tool'
+									const problem = regexKind ? patterns.map(p => { try { new RegExp(p, 'i') } catch (e) { return `"${p}" is not a valid regular expression.` } return validateUserPattern(p) }).find(Boolean) : undefined
+									if (problem) { setNewRuleError(problem); return }
+									setNewRuleError('')
 									const input: UserPolicyRuleInput = {
 										description: newRuleDescription.trim(),
 										effect: newRuleEffect,

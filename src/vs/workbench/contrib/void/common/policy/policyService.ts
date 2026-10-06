@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { compileModelRegex } from '../helpers/safeRegex.js';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
 import { match as matchGlob } from '../../../../../base/common/glob.js';
@@ -46,6 +47,25 @@ export interface IPolicyService {
 
 export const IPolicyService = createDecorator<IPolicyService>('vaderPolicyService');
 
+// User-written rules are text from a settings box and run on the renderer thread against every command a model proposes: a pattern such as
+// (a+)+$ would freeze the window on the next tool call. Built-in patterns are ours and are used as written. A user pattern that cannot be
+// evaluated safely (nested repetition, absurd length) is treated as MATCHING: for a deny/ask rule the failure mode must be "still protects", never
+// "silently stops protecting". A pattern that is not valid regex syntax keeps its old meaning (does not match); the settings UI refuses to save both.
+const MAX_POLICY_INPUT_CHARS = 20_000;
+
+const patternMatches = (builtIn: boolean, src: string, texts: string[]): boolean => {
+	if (builtIn) {
+		try { const re = new RegExp(src, 'i'); return texts.some(t => re.test(t)); }
+		catch { return false; }
+	}
+	const compiled = compileModelRegex(src, 'i');
+	if (!compiled.ok) {
+		try { new RegExp(src, 'i'); } catch { return false; } // invalid syntax: ignored, as before
+		return true; // valid but unsafe to run: fail closed
+	}
+	return texts.some(t => compiled.regex.test(t.slice(0, MAX_POLICY_INPUT_CHARS)));
+};
+
 export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	if (!rule.kinds.includes(req.kind)) return false;
 
@@ -62,20 +82,14 @@ export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 		const command = req.command ?? '';
 		if (!command) return false;
 		const normalized = normalizeCommandForPolicy(command);
-		const hit = rule.commandPatterns.some(src => {
-			try { const re = new RegExp(src, 'i'); return re.test(command) || re.test(normalized); }
-			catch { return false; }
-		});
+		const hit = rule.commandPatterns.some(src => patternMatches(rule.builtIn, src, [command, normalized]));
 		if (!hit) return false;
 	}
 
 	if (rule.serverNamePatterns && rule.serverNamePatterns.length) {
 		const serverName = req.mcpServerName ?? '';
 		if (!serverName) return false;
-		const hit = rule.serverNamePatterns.some(src => {
-			try { return new RegExp(src, 'i').test(serverName); }
-			catch { return false; }
-		});
+		const hit = rule.serverNamePatterns.some(src => patternMatches(rule.builtIn, src, [serverName]));
 		if (!hit) return false;
 	}
 
