@@ -97,3 +97,20 @@ Once a key (or endpoint) is typed in, Vader asks that provider which models the 
 - No hosted provider could be called (egress blocked), so **no key was tested against a real provider**. The listing code is verified against each provider's documented response format by local servers, and the `/models` paths are the standard documented ones, but a quirk of a real provider's answer (an extra field, a different error code for a bad key) would only show with a real key. The failure modes are designed to degrade to the built-in list.
 - Model facts come from the LiteLLM catalog; the catalog itself can lag a brand-new release by days. Unlisted models still work through the family fallbacks and the live list.
 - Alibaba/Moonshot/MiniMax/OpenCode `/models` support is assumed from their OpenAI-compatible mode; if one of them has no such route the status line says so and the built-in list is kept.
+
+
+---
+
+# Vendor providers (29 added, table-driven)
+
+The 29 vendors listed in [`PROVIDERS.md`](../../../PROVIDERS.md) are not individual adapters. `build/lib/vader/genVendorProviders.py` reads the models.dev catalog
+(`providers/<id>/provider.toml` for the gateway `api` and key `env`, model TOMLs with `base_model` inheritance from `models/<lab>/<model>.toml`) and writes
+`common/vendorProviderData.ts`; `ProviderName` is derived from `defaultSettingsOfProvider`, so settings, UI, capabilities, model listing and the SDK path all
+pick a new vendor up from the table. To add one: add it to the generator's vendor list, regenerate, run `node src/vs/workbench/contrib/void/test/vendorProvidersE2E.mjs`.
+
+Seams (each one reads the same table): `modelCapabilities.ts` (`vendorDefaultSettings`/`vendorDefaultModels`, capabilities from catalog facts), `voidSettingsTypes.ts`
+(titles, key placeholders, endpoint field), `electron-main/llmMessage/sendLLMMessage.impl.ts` (vendor branch of `newOpenAICompatibleSDK`, `assertVendorEndpoint`),
+`electron-main/llmMessage/modelListing.ts` (`${endpoint}/models`, bearer key), `common/providerSearch.ts` and `Settings.tsx` (search box).
+
+Confidence: the table is generated from a public catalog and each vendor's documentation; the hosts are not reachable from the build environment, so the gateway
+URLs are **not** live-verified. The endpoint field in Settings is the escape hatch.

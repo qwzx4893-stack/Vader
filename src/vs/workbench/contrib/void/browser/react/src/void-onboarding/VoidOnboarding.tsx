@@ -11,6 +11,8 @@ import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { VaderLogo } from '../util/VaderLogo.js'
+import { VoidSimpleInputBox } from '../util/inputs.js'
+import { filterProviders } from '../../../../common/providerSearch.js'
 
 const OVERRIDE_VALUE = false
 
@@ -91,7 +93,7 @@ const providerNamesOfTab: Record<TabName, ProviderName[]> = {
 
 const descriptionOfTab: Record<TabName, string> = {
 	Free: `Providers with a 100% free tier. Add as many as you'd like!`,
-	Paid: `Connect directly with any provider (bring your own key).`,
+	Paid: `Connect directly with any model vendor or inference platform (bring your own key). Use the search box to find one.`,
 	Local: `Active providers should appear automatically. Add as many as you'd like! `,
 	'Cloud/Other': `Add as many as you'd like! Reach out for custom configuration requests.`,
 };
@@ -107,6 +109,8 @@ const featureNameMap: { display: string, featureName: FeatureName }[] = [
 
 const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setPageIndex: (index: number) => void }) => {
 	const [currentTab, setCurrentTab] = useState<TabName>('Free');
+	const [providerQuery, setProviderQuery] = useState('');
+	useEffect(() => { setProviderQuery('') }, [currentTab]);
 	const settingsState = useSettingsState();
 	const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -179,7 +183,13 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 				<div className="text-sm opacity-80 text-void-fg-3 my-4 w-full">{descriptionOfTab[currentTab]}</div>
 			</div>
 
-			{providerNamesOfTab[currentTab].map((providerName) => (
+			{providerNamesOfTab[currentTab].length > 8 && (
+				<div className="w-full max-w-xl mb-6">
+					<VoidSimpleInputBox value={providerQuery} onChangeValue={setProviderQuery} placeholder={`Search ${providerNamesOfTab[currentTab].length} providers (for example: together, qwen, kimi, nvidia)`} compact={true} />
+				</div>
+			)}
+
+			{filterProviders(providerNamesOfTab[currentTab], providerQuery).map((providerName) => (
 				<div key={providerName} className="w-full max-w-xl mb-10">
 					<div className="text-xl mb-2">
 						Add {displayInfoOfProviderName(providerName).title}

@@ -7,6 +7,7 @@
 /* eslint-disable */
 import Anthropic from '@anthropic-ai/sdk';
 import { withPromptCaching } from './anthropicCache.js';
+import { isVendorProviderName, vendorProviderNames, VendorProviderName } from '../../common/vendorProviderData.js';
 import { Ollama } from 'ollama';
 import OpenAI, { ClientOptions, AzureOpenAI } from 'openai';
 import { MistralCore } from '@mistralai/mistralai/core.js';
@@ -188,7 +189,25 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		return new OpenAI({ baseURL, apiKey: thisConfig.apiKey, ...commonPayloadOpts })
 	}
 
+	// Vader addition: the vendor providers (common/vendorProviderData.ts) - OpenAI-compatible gateways with an editable endpoint
+	else if (isVendorProviderName(providerName)) {
+		const thisConfig = settingsOfProvider[providerName]
+		const baseURL = assertVendorEndpoint(providerName, thisConfig.endpoint)
+		return new OpenAI({ baseURL, apiKey: thisConfig.apiKey, ...commonPayloadOpts })
+	}
+
 	else throw new Error(`Vader providerName was invalid: ${providerName}.`)
+}
+
+/** An endpoint a user can edit must still be a real https URL (plain http only to a loopback gateway), and a template placeholder must have been filled in. */
+const assertVendorEndpoint = (providerName: VendorProviderName, endpoint: string): string => {
+	const trimmed = (endpoint || '').trim().replace(/\/+$/, '')
+	if (/ACCOUNT_ID/.test(trimmed)) throw new Error(`Replace ACCOUNT_ID in the ${providerName} Endpoint setting with your account id.`)
+	let u: URL
+	try { u = new URL(trimmed) } catch { throw new Error(`The ${providerName} Endpoint setting is not a valid URL: "${trimmed}".`) }
+	const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname)
+	if (u.protocol !== 'https:' && !(u.protocol === 'http:' && loopback)) throw new Error(`The ${providerName} Endpoint must start with https:// (got "${u.protocol}//").`)
+	return trimmed
 }
 
 
@@ -1021,6 +1040,9 @@ export const sendLLMMessageToProviderImplementation = {
 		sendFIM: null,
 		list: null,
 	},
+
+	// Vader addition: the vendor providers share one OpenAI-compatible chat path
+	...(Object.fromEntries(vendorProviderNames.map(k => [k, { sendChat: (params: SendChatParams_Internal) => _sendOpenAICompatibleChat(params), sendFIM: null, list: null }])) as { [K in VendorProviderName]: { sendChat: (params: SendChatParams_Internal) => Promise<void>, sendFIM: null, list: null } }),
 
 } satisfies CallFnOfProvider
 

@@ -74,3 +74,9 @@ Describe *what was wrong and why the change fixes it*, not only what changed. Li
 ## Code of conduct
 
 Be kind and assume good faith. See [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md).
+
+## Adding a model provider
+
+Vendors that speak the OpenAI chat-completions protocol are rows in a generated table, not new code: add the vendor to `build/lib/vader/genVendorProviders.py`,
+regenerate `common/vendorProviderData.ts`, and run `node src/vs/workbench/contrib/void/test/vendorProvidersE2E.mjs`. Details in
+[`docs/integrations/providers/README.md`](./docs/integrations/providers/README.md). Please link the vendor's own documentation for the gateway URL in the pull request.

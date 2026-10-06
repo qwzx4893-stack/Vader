@@ -4,6 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { isVendorProviderName, vendorProviders, vendorProviderNames, VendorProviderName } from './vendorProviderData.js';
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
 import { VoidSettingsState } from './voidSettingsService.js'
@@ -118,6 +119,9 @@ export const displayInfoOfProviderName = (providerName: ProviderName): DisplayIn
 	else if (providerName === 'openCodeZen') {
 		return { title: 'OpenCode Zen', }
 	}
+	else if (isVendorProviderName(providerName)) {
+		return { title: vendorProviders[providerName].title, }
+	}
 
 	throw new Error(`descOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -144,6 +148,11 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'alibaba') return 'Get your [API Key here](https://bailian.console.alibabacloud.com/) (Alibaba Cloud Model Studio / DashScope). Mainland China accounts should change the Endpoint above to `https://dashscope.aliyuncs.com/compatible-mode/v1` - keys are not portable across regions. Read more [here](https://www.alibabacloud.com/help/en/model-studio/compatibility-of-openai-with-dashscope).'
 	if (providerName === 'moonshot') return 'Get your [API Key here](https://platform.moonshot.ai/console/api-keys). Mainland China accounts should change the Endpoint above to `https://api.moonshot.cn/v1` and use a China-issued key - keys are not portable across regions.'
 	if (providerName === 'openCodeZen') return 'A pay-as-you-go gateway from the OpenCode team - add billing and get your [API Key here](https://opencode.ai/auth). The model catalog is beta/volatile; add the exact model id shown in your Zen console under Settings once this provider is enabled. Read more [here](https://opencode.ai/docs/zen/).'
+
+	if (isVendorProviderName(providerName)) {
+		const v = vendorProviders[providerName]
+		return `Get your [API Key here](${v.keyUrl}).${v.note ? ' ' + v.note : ''}`
+	}
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
@@ -176,7 +185,8 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 																providerName === 'moonshot' ? 'sk-key...' :
 																	providerName === 'minimax' ? 'key...' :
 																		providerName === 'openCodeZen' ? 'key...' :
-																			'',
+																			isVendorProviderName(providerName) ? vendorProviders[providerName].keyPlaceholder :
+																				'',
 
 			isPasswordField: true,
 		}
@@ -191,7 +201,7 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 								providerName === 'microsoftAzure' ? 'baseURL' :
 									providerName === 'liteLLM' ? 'baseURL' :
 										providerName === 'awsBedrock' ? 'Endpoint (optional proxy)' :
-											providerName === 'minimax' || providerName === 'alibaba' || providerName === 'moonshot' || providerName === 'openCodeZen' ? 'Endpoint' :
+											providerName === 'minimax' || providerName === 'alibaba' || providerName === 'moonshot' || providerName === 'openCodeZen' || isVendorProviderName(providerName) ? 'Endpoint' :
 												'(never)',
 
 			placeholder: providerName === 'ollama' ? defaultProviderSettings.ollama.endpoint
@@ -204,7 +214,8 @@ export const displayInfoOfSettingName = (providerName: ProviderName, settingName
 										: providerName === 'alibaba' ? defaultProviderSettings.alibaba.endpoint
 											: providerName === 'moonshot' ? defaultProviderSettings.moonshot.endpoint
 												: providerName === 'openCodeZen' ? defaultProviderSettings.openCodeZen.endpoint
-													: '(never)',
+													: isVendorProviderName(providerName) ? vendorProviders[providerName].endpoint
+														: '(never)',
 
 
 		}
@@ -401,6 +412,13 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		...modelInfoOfDefaultModelNames(defaultModelsOfProvider.openCodeZen),
 		_didFillInProviderSettings: undefined,
 	},
+	// the vendor providers (vendorProviderData.ts) all have the same shape: key + editable endpoint + their default models
+	...(Object.fromEntries(vendorProviderNames.map(k => [k, {
+		...defaultCustomSettings,
+		...defaultProviderSettings[k],
+		...modelInfoOfDefaultModelNames(defaultModelsOfProvider[k]),
+		_didFillInProviderSettings: undefined,
+	}])) as { [K in VendorProviderName]: SettingsAtProvider<K> }),
 }
 
 

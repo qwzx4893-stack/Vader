@@ -14,7 +14,7 @@ comparison sites for competitors, so read competitor rows as indicative); **[not
 | Vader's own code | 153 TypeScript/TSX files, about 40,500 lines (generated model data excluded) **[measured]** |
 | Agent loop | `@cline/agents` 0.0.90 behind Vader's own gate (policy engine, approvals, agent scoping) **[measured]** |
 | Built-in tools | 37: files, search, terminal and persistent terminals, browser (Playwright, 15 tools), verification, MCP/skill discovery, agents and sub-agents **[measured]** |
-| Providers | hosted and local providers, curated model lists that turn into live lists when a key works; real-SDK wire tests 45/45 **[measured]** |
+| Providers | 49 hosted and local providers, each native in Settings and searchable, curated model lists that turn into live lists when a key works; real-SDK wire tests 45/45 and 172 table-wide checks **[measured]**; the 29 newest gateways are recorded from vendor documentation, not live-verified **[assumed]** |
 | Agent features | hard policy engine with non-disableable rules, permanent agents, sub-agent delegation, plan mode, checkpoints, verification pipeline, memory/compaction, model router, marketplace (extensions, MCP, SkillNet, ACP adapter) **[measured: exist and are tested at the feature level; depth per `docs/integrations/*`]** |
 | Tests | 34 Node-level test files and a real-app suite of 9 scenario groups (about 51 scenarios, 172 checks) that drives the packaged Windows app, including a run against a real (small) local model **[measured]** |
 | Security | CodeQL 0, Semgrep 0, zizmor 0 high/medium, shipped-dependency gate, secrets history scan triaged **[measured]** |

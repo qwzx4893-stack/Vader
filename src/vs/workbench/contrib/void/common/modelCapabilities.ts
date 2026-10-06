@@ -5,10 +5,16 @@
 
 import { FeatureName, ModelSelectionOptions, OverridesOfModel, ProviderName } from './voidSettingsTypes.js';
 import { curatedModelFacts, curatedModelNames } from './providerModelData.js';
+import { vendorProviders, VendorProviderName, vendorProviderNames, isVendorProviderName, VendorModelFacts } from './vendorProviderData.js';
 
 
 
 
+
+// Vader addition: first-class providers for the other model vendors and inference platforms (vendorProviderData.ts, generated). They all speak the
+// OpenAI-compatible protocol, so one table drives their settings, defaults, live model lists and capabilities instead of a hand-written copy each.
+const vendorDefaultSettings = Object.fromEntries(vendorProviderNames.map(k => [k, { apiKey: '', endpoint: vendorProviders[k].endpoint }])) as { [K in VendorProviderName]: { apiKey: string, endpoint: string } }
+const vendorDefaultModels = Object.fromEntries(vendorProviderNames.map(k => [k, Object.keys(vendorProviders[k].models)])) as { [K in VendorProviderName]: string[] }
 
 export const defaultProviderSettings = {
 	anthropic: {
@@ -88,6 +94,8 @@ export const defaultProviderSettings = {
 		endpoint: 'https://opencode.ai/zen/v1',
 	},
 
+	...vendorDefaultSettings,
+
 } as const
 
 
@@ -130,6 +138,8 @@ export const defaultModelsOfProvider = {
 		'kimi-k2.6',
 	],
 	openCodeZen: [], // beta, volatile catalog re-exposing other vendors' model IDs - add the exact id shown in your Zen console
+
+	...vendorDefaultModels,
 
 
 } as const satisfies Record<ProviderName, string[]>
@@ -1769,6 +1779,30 @@ const familyOfOpenRouterModel = (n: string): string | null => {
 	return null
 }
 
+// Vader addition: capabilities of the vendor providers, from the catalog facts (vendorProviderData.ts). A model that is not in the catalog (picked from the
+// live list, or added by hand) falls back to the shared open-model rules; tool calling is native where the catalog says so and XML-in-prompt otherwise.
+const vendorSettings = Object.fromEntries(vendorProviderNames.map(k => {
+	const modelOptions: { [name: string]: VoidStaticModelInfo } = Object.fromEntries(Object.entries(vendorProviders[k].models as { [id: string]: VendorModelFacts }).map(([name, f]) => [name, {
+		contextWindow: f.ctx,
+		reservedOutputTokenSpace: Math.min(f.out || 8_192, 32_768),
+		cost: { input: f.cost.input, output: f.cost.output },
+		downloadable: false,
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		specialToolFormat: f.tools ? 'openai-style' : undefined,
+		reasoningCapabilities: f.reasoning ? { supportsReasoning: true, canTurnOffReasoning: false, canIOReasoning: true } : false,
+	} as VoidStaticModelInfo]))
+	const info: VoidStaticProviderInfo = {
+		modelOptions,
+		modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName),
+		providerReasoningIOSettings: {
+			input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+			output: { nameOfFieldInDelta: 'reasoning_content' },
+		},
+	}
+	return [k, info]
+})) as { [K in VendorProviderName]: VoidStaticProviderInfo }
+
 const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProviderInfo } = {
 	openAI: _augment(openAISettings, generatedOpenAIOptions, familyOfOpenAIModel),
 	anthropic: _augment(anthropicSettings, generatedAnthropicOptions, familyOfAnthropicModel),
@@ -1797,6 +1831,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	alibaba: _augment(alibabaSettings, generatedAlibabaOptions, () => null, 'base'),
 	moonshot: _augment(moonshotSettings, generatedMoonshotOptions, () => null, 'base'),
 	openCodeZen: openCodeZenSettings,
+	...vendorSettings,
 } as const
 
 
@@ -1880,6 +1915,12 @@ export const modelSupportsVision = (providerName: ProviderName, modelName: strin
 	if (providerName === 'alibaba') {
 		// the Qwen-VL family - qwen-max/plus/flash/qwq above are text-only
 		return /-vl|vl-/.test(m)
+	}
+	if (isVendorProviderName(providerName)) {
+		// the catalog says per model whether it takes images; for a model it does not list, only well-known vision naming conventions count
+		const f = (vendorProviders[providerName].models as { [id: string]: { vision: boolean } })[modelName]
+		if (f) return f.vision
+		return /-vl\b|vl-|vision|llava|pixtral|gpt-4o|gpt-4\.1|gpt-5|gpt-6|claude-(3|4|5)|gemini-(1\.5|2|3)|kimi-k3/.test(m)
 	}
 	if (providerName === 'moonshot') {
 		// kimi-k3 and the k2.5/k2.6/k2.7 line are documented multimodal; kimi-k2-thinking is not

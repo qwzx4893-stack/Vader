@@ -3,6 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import type { ProviderName } from './voidSettingsTypes.js';
+import { vendorLiveListedNames } from './vendorProviderData.js';
 
 // Live model lists for hosted providers: once a provider has a working API key, Vader asks the provider which models that key can
 // use and shows exactly those (instead of only the built-in defaults). See electron-main/llmMessage/modelListing.ts (the only place
@@ -12,6 +13,7 @@ import type { ProviderName } from './voidSettingsTypes.js';
 export const cloudListedProviderNames = [
 	'openAI', 'anthropic', 'gemini', 'xAI', 'groq', 'mistral', 'deepseek', 'openRouter',
 	'moonshot', 'minimax', 'alibaba', 'openCodeZen',
+	...vendorLiveListedNames, // vendors that expose an OpenAI-style GET {endpoint}/models (common/vendorProviderData.ts)
 ] as const satisfies readonly ProviderName[]
 export type CloudListedProviderName = typeof cloudListedProviderNames[number]
 export const isCloudListedProvider = (p: string): p is CloudListedProviderName => (cloudListedProviderNames as readonly string[]).includes(p)

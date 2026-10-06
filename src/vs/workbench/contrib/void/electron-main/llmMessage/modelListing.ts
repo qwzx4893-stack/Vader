@@ -6,6 +6,7 @@
 // of the LLM subsystem (AGENTS.md), with the provider's own endpoint, a timeout, a size cap and no redirects, so a key is only ever
 // sent to the host it was entered for. The key never appears in a result or an error message.
 
+import { vendorLiveListedNames } from '../../common/vendorProviderData.js';
 import type { CloudListedProviderName, CloudModelListResult } from '../../common/cloudModelListTypes.js';
 import { isCloudListedProvider } from '../../common/cloudModelListTypes.js';
 import type { ProviderName, SettingsOfProvider } from '../../common/voidSettingsTypes.js';
@@ -36,7 +37,7 @@ const bearer = (key: string) => ({ Authorization: `Bearer ${key}` })
 const NON_CHAT = /(embed|moderation|whisper|tts|transcri|dall-e|image|imagen|veo|audio|realtime|speech|rerank|ocr|guard|safeguard|orpheus|playai|lyria|robotics|aqa|computer-use|search-preview|davinci|babbage|instruct$)/i
 
 const openAIShaped = (keep: (id: string, m: any) => boolean = () => true) => (json: any) => {
-	const data = json?.data
+	const data = Array.isArray(json) ? json : json?.data // a few vendors (Together) return the bare array
 	if (!Array.isArray(data)) return null
 	const items: Raw[] = []
 	for (const m of data) {
@@ -121,6 +122,8 @@ const specOf: { [p in CloudListedProviderName]: Spec } = {
 	minimax: { url: s => `${trimSlash(s.minimax.endpoint)}/models`, headers: bearer, parse: openAIShaped() },
 	alibaba: { url: s => `${trimSlash(s.alibaba.endpoint)}/models`, headers: bearer, parse: openAIShaped(id => !NON_CHAT.test(id)) },
 	openCodeZen: { url: s => `${trimSlash(s.openCodeZen.endpoint)}/models`, headers: bearer, parse: openAIShaped() },
+	// the vendor providers (common/vendorProviderData.ts): every one with an OpenAI-style /models route, on the endpoint the user configured
+	...(Object.fromEntries(vendorLiveListedNames.map(k => [k, { url: (s: SettingsOfProvider) => `${trimSlash(s[k].endpoint)}/models`, headers: bearer, parse: openAIShaped(id => !NON_CHAT.test(id)) } as Spec])) as { [K in typeof vendorLiveListedNames[number]]: Spec }),
 }
 
 function trimSlash(u: string) { return (u || '').replace(/\/+$/, '') }

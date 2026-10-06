@@ -99,12 +99,12 @@ const _modelsWithSwappedInNewModels = (options: { existingModels: VoidStatefulMo
 
 	const newDefaultModels = models.map((modelName, i) => ({ modelName, type, isHidden: !!existingModelsMap[modelName]?.isHidden, }))
 
+	const kept = existingModels.filter(m => m.type !== type)
+	// one row per model name (the list is keyed by name in the UI): a model the user added wins over a default or detected one
+	const keptNames = new Set(kept.map(m => m.modelName))
 	return [
-		...newDefaultModels, // swap out all the models of this type for the new models of this type
-		...existingModels.filter(m => {
-			const keep = m.type !== type
-			return keep
-		})
+		...newDefaultModels.filter(m => !keptNames.has(m.modelName)), // swap out all the models of this type for the new models of this type
+		...kept,
 	]
 }
 
@@ -524,10 +524,10 @@ class VoidSettingsService extends Disposable implements IVoidSettingsService {
 	}
 	setLiveModels(providerName: ProviderName, liveModelNames: string[]) {
 		const { models } = this.state.settingsOfProvider[providerName]
-		const live = new Set(liveModelNames)
 		// live models replace the autodetected ones; built-in defaults the key cannot use are dropped; models the user added stay
 		const withLive = _modelsWithSwappedInNewModels({ existingModels: models, models: liveModelNames, type: 'autodetected' })
-		const newModels = withLive.filter(m => m.type !== 'default' || live.has(m.modelName))
+		// (a built-in default the key can use is already in the list as a live model, so it is dropped here rather than listed twice)
+		const newModels = withLive.filter(m => m.type !== 'default')
 		this.setSettingOfProvider(providerName, 'models', newModels)
 		this._metricsService.capture('Live Models', { providerName, count: liveModelNames.length })
 	}

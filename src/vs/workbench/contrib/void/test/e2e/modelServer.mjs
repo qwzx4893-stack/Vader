@@ -178,7 +178,7 @@ export function createModelServer({ responder, fimResponder, seed = 1234, modelI
 		req.on('end', async () => {
 			let body = {};
 			try { body = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch { /* empty */ }
-			const entry = { path: url, body, at: Date.now() };
+			const entry = { path: url, body, headers: req.headers, at: Date.now() };
 			requests.push(entry);
 			try {
 				if (url.endsWith('/chat/completions')) {

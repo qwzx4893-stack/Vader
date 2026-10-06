@@ -7,6 +7,7 @@ import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
+import { filterProviders } from '../../../../common/providerSearch.js'
 import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
@@ -1208,11 +1209,17 @@ export const AgentManagerSection = () => {
 }
 
 
-export const VoidProviderSettings = ({ providerNames }: { providerNames: ProviderName[] }) => {
+export const VoidProviderSettings = ({ providerNames, searchable }: { providerNames: ProviderName[], searchable?: boolean }) => {
+	const [query, setQuery] = useState('')
+	const shown = searchable ? filterProviders(providerNames, query) : providerNames
 	return <>
-		{providerNames.map(providerName =>
+		{searchable && <div className='mb-4'>
+			<VoidSimpleInputBox value={query} onChangeValue={setQuery} placeholder={`Search ${providerNames.length} providers (for example: together, qwen, kimi, nvidia)`} compact={true} />
+		</div>}
+		{shown.map(providerName =>
 			<SettingsForProvider key={providerName} providerName={providerName} showProviderTitle={true} showProviderSuggestions={true} />
 		)}
+		{searchable && shown.length === 0 && <div className='text-void-fg-3 opacity-70'>{`No provider matches "${query}". Any other OpenAI-compatible service can be added with the "OpenAI-Compatible" provider.`}</div>}
 	</>
 }
 
@@ -1667,9 +1674,9 @@ export const Settings = () => {
 							<div className={shouldShowTab('providers') ? `` : 'hidden'}>
 								<ErrorBoundary>
 									<h2 className={`text-3xl mb-2`}>Main Providers</h2>
-									<h3 className={`text-void-fg-3 mb-2`}>{`Vader can access models from Anthropic, OpenAI, OpenRouter, and more.`}</h3>
+									<h3 className={`text-void-fg-3 mb-2`}>{`Vader connects directly to the model vendors and inference platforms below with your own key: Anthropic, OpenAI, Google, xAI, DeepSeek, Mistral, Qwen, Kimi, Together, Fireworks, NVIDIA and many more. Use the search box to find one.`}</h3>
 
-									<VoidProviderSettings providerNames={nonlocalProviderNames} />
+									<VoidProviderSettings providerNames={nonlocalProviderNames} searchable={true} />
 								</ErrorBoundary>
 							</div>
 
