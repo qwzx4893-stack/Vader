@@ -119,6 +119,25 @@ export const robustnessScenarios = [
 		},
 	},
 	{
+		name: 'robustness: reading an endless device file or a FIFO neither hangs the run nor floods the model',
+		timeout: 150_000,
+		fn: async (t) => {
+			if (process.platform === 'win32') { t.check('device files do not exist on Windows (nothing to test)', true); return; }
+			t.use(seq([
+				{ toolCalls: [readCall('/dev/zero')] },
+				(c) => ({ toolCalls: [readCall('/dev/urandom')] }),
+				(c) => ({ text: `last result length ${(c.lastToolResult ?? '').length}` }),
+			]));
+			await t.send('read /dev/zero and /dev/urandom');
+			for (let i = 0; i < 3; i++) { if (await t.waitApproval(i === 0 ? 20_000 : 6_000)) { await t.approve(); } else { break; } }
+			t.check('the run ends (reading an endless file does not hang the app)', await t.idle({ timeout: 100_000 }));
+			const lens = t.server.chatRequests().map(r => (r.ctx.lastToolResult ?? '').length);
+			t.check(`what the model receives is bounded (${lens.join(', ')} characters)`, lens.every(n => n < 1_000_000), lens.join(','));
+			t.use(() => ({ text: 'still fine' })); await t.send('ok'); await t.idle();
+			t.check('the app is still responsive', (await t.ui.assistantTexts(t.page)).some(x => x.includes('still fine')));
+		},
+	},
+	{
 		name: 'robustness: stopping the run kills a command that is still running',
 		needs: ['natives'],
 		timeout: 150_000,

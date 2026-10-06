@@ -97,6 +97,9 @@ for (const p of ['/w/p/src/index.ts', '/w/p/package.json', '/w/p/.vscode/extensi
 	check(`writing ${p} does not ask`, !askWrite(p));
 for (const p of ['/home/me/.git-credentials', '/home/me/.config/gh/hosts.yml', '/home/me/.config/gcloud/credentials.db', '/home/me/.azure/accessTokens.json', '/home/me/.gnupg/private-keys-v1.d/x.key', '/home/me/.pgpass', '/home/me/.pypirc', '/w/p/infra/prod.tfvars', '/w/p/id_ecdsa', '/w/p/release.jks'])
 	check(`reading ${p} asks (credential file)`, verdict('file-read', [p]) === 'ask');
+for (const p of ['/proc/self/environ', '/proc/1234/environ', '/proc/1234/mem', '/proc/42/cmdline', '/home/me/.bash_history', '/home/me/.zsh_history', 'c:/Users/me/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt', '/home/me/.config/google-chrome/Default/Login Data', '/home/me/.mozilla/firefox/abc.default/logins.json', '/home/me/Library/Keychains/login.keychain-db'])
+	check(`reading ${p} asks (process environment, shell history or browser credential store)`, verdict('file-read', [p]) === 'ask');
+check('/proc/self/stat is an ordinary read', verdict('file-read', ['/proc/self/stat']) === 'allow');
 check('the autorun rule can be switched off by the user (not locked), unlike the hard denies', builtInPolicyRules.find(r => r.id === 'vader.ask.autorun-config')?.locked === false);
 check('...but is never bypassed by autonomous agents', builtInPolicyRules.find(r => r.id === 'vader.ask.autorun-config')?.neverBypassAutonomous === true);
 
