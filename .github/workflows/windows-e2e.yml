@@ -11,7 +11,7 @@ on:
   # Dispatching by name only works once this file is on the default branch; until then a push that touches it
   # (on the validation branch only) starts the same run against that branch's latest successful Windows Build.
   push:
-    branches: [upgrade/vscode-1.136.2]
+    branches: [main]
     paths: ['.github/workflows/windows-e2e.yml', '.github/e2e-only.txt', 'src/vs/workbench/contrib/vader/test/e2e/**']
   workflow_dispatch:
     inputs:

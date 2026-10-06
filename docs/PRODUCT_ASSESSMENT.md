@@ -1,6 +1,6 @@
 # Vader: product assessment and validation plan
 
-Written 2026-10-06 against branch `upgrade/vscode-1.136.2` (commit `1bdf86c`). Two parts: where Vader stands against comparable products, and how
+Written 2026-10-06 against the upgrade branch (commit `1bdf86c`, now merged into `main`). Two parts: where Vader stands against comparable products, and how
 companies validate that an AI coding product is fit for daily use, mapped onto what Vader has and lacks.
 
 Evidence tags: **[measured]** counted or run in this repository or in CI; **[source]** taken from a web source (linked, mostly secondary

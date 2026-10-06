@@ -6,7 +6,12 @@
 
 <p align="center">
   <b>The AI-native IDE for agents you can trust.</b><br>
-  A real coding agent, a hard policy engine in front of every action, zero telemetry, and the model of your choice.
+  An open-source code editor that pairs a full VS Code workbench with an autonomous coding agent,<br>
+  governed by a hard policy engine that sits in front of every action it takes.
+</p>
+
+<p align="center">
+  Bring any model &middot; 49 providers, local or hosted &middot; No telemetry &middot; Apache-2.0
 </p>
 
 <p align="center">
@@ -42,11 +47,22 @@
   <a href="#install">Install</a> ·
   <a href="#how-vader-is-verified">Verification</a> ·
   <a href="#roadmap">Roadmap</a> ·
+  <a href="#built-on-the-shoulders-of">Built on</a> ·
   <a href="#faq">FAQ</a> ·
   <a href="./README.ar.md">العربية</a>
 </p>
 
 ---
+
+## Overview
+
+Vader is a desktop IDE built for software teams and individuals who want the speed of an AI agent without surrendering control of their machine. It combines three things that are usually separate products:
+
+1. **A complete editor.** The full VS Code workbench (terminal, debugging, source control, themes, the Open VSX extension gallery), so nothing you rely on is missing.
+2. **An autonomous coding agent.** It reads and edits files, runs commands, drives a real browser, uses MCP servers and skills, and delegates work to sub-agents isolated in git worktrees.
+3. **A policy engine that the agent cannot talk its way past.** Every tool call is evaluated by deterministic rules before it runs: dangerous actions are denied outright, sensitive ones need your approval, and the rest flow freely. The check lives in code, not in a prompt.
+
+You choose the model. Vader speaks natively to 49 providers (OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Qwen, Kimi, NVIDIA, and many more, plus Ollama, LM Studio and vLLM for fully local use), lists the models your key can actually use, and sends nothing to anyone but the provider you configured.
 
 ## Why Vader
 
@@ -244,6 +260,24 @@ If Vader is useful to you, a star helps other people find it.
 
 [![Star History Chart](https://api.star-history.com/svg?repos=qwzx4893-stack/Vader&type=Date)](https://star-history.com/#qwzx4893-stack/Vader&Date)
 
+## Built on the shoulders of
+
+Vader stands on excellent open-source work, and says so plainly. The projects below are integrated into the product; each remains under its own licence and belongs to its authors.
+
+| Project | What Vader uses it for | Licence |
+|---|---|---|
+| [**VS Code**](https://github.com/microsoft/vscode) (Microsoft) | The editor workbench Vader is built on (currently the 1.136 line): editor, terminal, debugging, source control, extensions host | MIT |
+| [**Void**](https://github.com/voideditor/void) (Glass Devtools) | The open-source AI editor Vader was originally forked from; its chat, quick-edit, diff and provider foundations are the starting point of Vader's AI layer | Apache-2.0 |
+| [**Cline**](https://github.com/cline/cline) | The agent runtime: Vader runs every conversation through the Cline agent SDK (`@cline/agents`), with Vader's policy engine, approvals and verification wrapped around it | Apache-2.0 |
+| [**Model Context Protocol**](https://modelcontextprotocol.io) | MCP client for tools, with registry-based one-click setup | MIT |
+| [**Playwright**](https://playwright.dev) (Microsoft) | The browser backend behind the 15 browser tools | Apache-2.0 |
+| [**Open VSX**](https://open-vsx.org) (Eclipse Foundation) | The extension gallery | EPL-2.0 |
+| **SkillNet** (OpenKG) | Skill discovery and installation in the unified marketplace | see the project |
+| [**models.dev**](https://github.com/sst/models.dev) | Model and provider catalogue data behind the provider table | MIT |
+| [**lobe-icons**](https://github.com/lobehub/lobe-icons), LiteLLM and Requesty icon sets | The provider logos shown in Settings (marks belong to their owners and identify the provider only) | MIT |
+
+Vader is an independent project and is not affiliated with or endorsed by any of the above. The full third-party notices are in [`ThirdPartyNotices.txt`](./ThirdPartyNotices.txt).
+
 ## License and credits
 
-Vader's own code is licensed under the **Apache License 2.0** ([`LICENSE.txt`](./LICENSE.txt)). It is built on the open-source VS Code workbench (MIT, see [`LICENSE-VS-Code.txt`](./LICENSE-VS-Code.txt)) and on earlier open-source work by Glass Devtools, Inc. (Apache-2.0); third-party notices are in [`ThirdPartyNotices.txt`](./ThirdPartyNotices.txt). Those notices are preserved as the licenses require. Cite Vader with [`CITATION.cff`](./CITATION.cff).
+Vader's own code is licensed under the **Apache License 2.0** ([`LICENSE.txt`](./LICENSE.txt)). It is built on the open-source VS Code workbench (MIT, see [`LICENSE-VS-Code.txt`](./LICENSE-VS-Code.txt)) and on earlier open-source work by Glass Devtools, Inc. (the Void editor, Apache-2.0), with the Cline agent runtime (Apache-2.0) at its core; third-party notices are in [`ThirdPartyNotices.txt`](./ThirdPartyNotices.txt). Those notices are preserved as the licenses require. Cite Vader with [`CITATION.cff`](./CITATION.cff).

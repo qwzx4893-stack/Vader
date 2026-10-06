@@ -49,3 +49,14 @@ npm run compile
 شيفرة Vader نفسها بترخيص **Apache 2.0** ([`LICENSE.txt`](./LICENSE.txt))، وهي مبنية على مكوّنات مفتوحة المصدر بتراخيصها المحفوظة في [`LICENSE-VS-Code.txt`](./LICENSE-VS-Code.txt) و[`ThirdPartyNotices.txt`](./ThirdPartyNotices.txt).
 
 </div>
+
+## مبني على أكتاف مشاريع مفتوحة المصدر
+
+يعتمد Vader على أعمال مفتوحة المصدر ويذكرها صراحةً، ولكل مشروع منها ترخيصه ومؤلفوه:
+
+- **VS Code** (مايكروسوفت، MIT): بيئة المحرر التي بُني عليها Vader.
+- **Void** (Glass Devtools، Apache-2.0): المحرر مفتوح المصدر الذي اشتُقّ منه Vader في البداية.
+- **Cline** (Apache-2.0): بيئة تشغيل الوكيل؛ كل محادثة في Vader تمرّ عبر حزمة `@cline/agents` مع محرك السياسات والموافقات والتحقق من Vader حولها.
+- **Model Context Protocol** (MCP) وPlaywright وOpen VSX وSkillNet وmodels.dev وlobe-icons.
+
+Vader مشروع مستقل وغير تابع لأي منها ولا برعايتها. الإشعارات الكاملة في `ThirdPartyNotices.txt`.

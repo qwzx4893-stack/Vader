@@ -13,8 +13,10 @@ name: Security Scan
 
 on:
   push:
-    branches: [upgrade/vscode-1.136.2]
+    branches: [main]
     paths: ['.github/workflows/security-scan.yml', '.github/codeql/**', '.github/scripts/sarif_summary.py']
+  pull_request:
+    paths: ['package.json', 'package-lock.json', '**/package-lock.json', '.github/workflows/**']
   schedule:
     - cron: '17 4 * * 1'
   workflow_dispatch:

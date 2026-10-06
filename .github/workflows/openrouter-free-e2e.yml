@@ -10,7 +10,7 @@ name: OpenRouter free-model E2E
 
 on:
   push:
-    branches: [upgrade/vscode-1.136.2]
+    branches: [main]
     paths: ['.github/workflows/openrouter-free-e2e.yml', '.github/openrouter-models.txt']
   workflow_dispatch:
     inputs:
