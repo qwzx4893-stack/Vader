@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
+import { ProviderLogo } from '../util/ProviderLogo.js'
 import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VoidStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/voidSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VoidButtonBgDarken, VoidCustomDropdownBox, VoidInputBox2, VoidSimpleInputBox, VoidSwitch } from '../util/inputs.js'
@@ -472,7 +473,7 @@ export const ModelDump = ({ filteredProviders }: { filteredProviders?: ProviderN
 			>
 				{/* left part is width:full */}
 				<div className={`flex flex-grow items-center gap-4`}>
-					<span className='w-full max-w-32'>{isNewProviderName ? providerTitle : ''}</span>
+					<span className='w-full max-w-32 flex items-center gap-1.5 truncate'>{isNewProviderName ? <><ProviderLogo providerName={providerName} size={14} /><span className='truncate'>{providerTitle}</span></> : ''}</span>
 					<span className='w-fit max-w-[400px] truncate'>{modelName}</span>
 				</div>
 
@@ -701,7 +702,14 @@ const CloudModelListStatus = ({ providerName }: { providerName: ProviderName }) 
 	const accessor = useAccessor()
 	const refreshModelService = accessor.get('IRefreshModelService')
 	const cloudState = useCloudModelListState()
-	if (!isCloudListedProvider(providerName)) return null
+	if (!isCloudListedProvider(providerName)) {
+		// providers without a list route keep their catalogue; say so instead of implying the list is live
+		if (providerName === 'ollama' || providerName === 'vLLM' || providerName === 'lmStudio') return null // local servers are detected
+		return <div className='py-1 px-3 text-sm opacity-70' data-testid='vader-no-live-list'>
+			{providerName === 'openAICompatible' ? 'This endpoint has no model catalogue here: add the models it serves with "Add model".'
+				: 'This provider has no model-list API Vader can ask, so the models shown are its catalogue; add any other model by name with "Add model".'}
+		</div>
+	}
 	const st = cloudState[providerName]
 	if (st.status === 'idle') return null
 
@@ -710,7 +718,7 @@ const CloudModelListStatus = ({ providerName }: { providerName: ProviderName }) 
 		{st.status === 'ok' && <><Check className='size-3 text-green-500' /><span className='opacity-80'>Key works - {st.count} model{st.count === 1 ? '' : 's'} available to you.</span></>}
 		{st.status === 'error' && <>
 			<X className='size-3 text-red-500' />
-			<span className='opacity-80'>{st.message}{st.reason === 'unauthorized' ? '' : ' Showing the built-in list meanwhile.'}</span>
+			<span className='opacity-80'>{st.message}{st.reason === 'unauthorized' ? '' : ' No models are listed until the provider answers; you can still add a model by name.'}</span>
 			<button className='underline opacity-70 hover:opacity-100' onClick={() => refreshModelService.refreshCloudModels(providerName)}>Retry</button>
 		</>}
 	</div>
@@ -732,7 +740,7 @@ export const SettingsForProvider = ({ providerName, showProviderTitle, showProvi
 	return <div>
 
 		<div className='flex items-center w-full gap-4'>
-			{showProviderTitle && <h3 className='text-xl truncate'>{providerTitle}</h3>}
+			{showProviderTitle && <h3 className='text-xl truncate flex items-center gap-2'><ProviderLogo providerName={providerName} size={20} /><span className='truncate'>{providerTitle}</span></h3>}
 
 			{/* enable provider switch */}
 			{/* <VoidSwitch

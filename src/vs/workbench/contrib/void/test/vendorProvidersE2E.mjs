@@ -67,6 +67,31 @@ for (const k of vendorProviderNames) {
 	check(`${k}: the table entry is sane (https gateway, key page, model facts)`, bad.length === 0, bad.join('; '));
 }
 
+// ================================================================ model lists are the provider's own: no hand-written names for a provider that can list them
+{
+	const withNames = cloudListedProviderNames.filter(p => types.defaultSettingsOfProvider[p].models.length > 0);
+	check(`${cloudListedProviderNames.length} providers that can list their models start with none (the key decides what appears)`, withNames.length === 0, withNames.join(','));
+	const kept = Object.keys(types.defaultSettingsOfProvider).filter(p => !cloudListedProviderNames.includes(p) && types.defaultSettingsOfProvider[p].models.length > 0);
+	const noRoute = vendorProviderNames.filter(k => !vendorProviders[k].liveList);
+	check(`the ${noRoute.length} vendors without a list route keep their catalogue so they stay usable`, noRoute.length > 0 && noRoute.every(k => kept.includes(k)), noRoute.filter(k => !kept.includes(k)).join(','));
+}
+
+// ================================================================ every provider has its real logo, as safe one-colour data
+{
+	const { providerLogos } = await bundle('../common/providerLogoData.ts', 'logos.mjs');
+	const names = Object.keys(types.defaultSettingsOfProvider);
+	const missing = names.filter(n => !providerLogos[n]);
+	check(`all ${names.length} providers have a logo`, missing.length === 0, missing.join(','));
+	const extra = Object.keys(providerLogos).filter(n => !names.includes(n));
+	check('no logo belongs to an unknown provider', extra.length === 0, extra.join(','));
+	const ALLOWED_TAGS = new Set(['g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline', 'line', 'mask', 'defs', 'clipPath']);
+	const bad = [];
+	let drawn = 0;
+	const walk = (n, who) => { const [tag, attrs, kids] = n; if (!ALLOWED_TAGS.has(tag)) bad.push(`${who}: <${tag}>`); for (const [k, v] of Object.entries(attrs)) { if (/^on|href|style|script/i.test(k) || /javascript:|<|>/i.test(v) || (k === 'fill' && !/^(none|currentColor|#fff|#000)$/.test(v))) bad.push(`${who}: ${k}=${v}`); } if (tag === 'path' || tag === 'circle' || tag === 'rect' || tag === 'polygon') drawn++; kids.forEach(c => walk(c, who)); };
+	for (const [name, lg] of Object.entries(providerLogos)) { if (!/^-?[\d.]+ -?[\d.]+ [\d.]+ [\d.]+$/.test(lg.vb) || lg.els.length === 0) bad.push(`${name}: viewBox/els`); lg.els.forEach(e => walk(e, name)); }
+	check('every logo is plain drawing data: allowed shapes only, one colour, no scripts, links or styles', bad.length === 0 && drawn >= names.length, bad.slice(0, 5).join(' | '));
+}
+
 // ================================================================ settings and UI helpers never throw, for every provider
 for (const k of vendorProviderNames) {
 	let err = '';
@@ -75,7 +100,7 @@ for (const k of vendorProviderNames) {
 		const key = types.displayInfoOfSettingName(k, 'apiKey'); const ep = types.displayInfoOfSettingName(k, 'endpoint');
 		if (!d.title || !s.includes(vendorProviders[k].keyUrl) || !key.placeholder || ep.title !== 'Endpoint' || ep.placeholder !== vendorProviders[k].endpoint) err = JSON.stringify({ d, s: s.slice(0, 60), key, ep });
 		const def = types.defaultSettingsOfProvider[k];
-		if (!def || def.endpoint !== vendorProviders[k].endpoint || def.apiKey !== '' || def.models.length !== Object.keys(vendorProviders[k].models).length) err ||= 'default settings';
+		if (!def || def.endpoint !== vendorProviders[k].endpoint || def.apiKey !== '' || def.models.length !== (vendorProviders[k].liveList ? 0 : Object.keys(vendorProviders[k].models).length)) err ||= 'default settings (a live-listed vendor starts with no models, a vendor without a list route keeps its catalogue)';
 		if (!types.customSettingNamesOfProvider(k).includes('endpoint') || !types.customSettingNamesOfProvider(k).includes('apiKey')) err ||= 'setting names';
 	} catch (e) { err = String(e.message); }
 	check(`${k}: title, key hint, endpoint field and default settings are all defined`, !err, err);

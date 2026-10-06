@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Emitter, Event } from '../../../../base/common/event.js';
-import { isCloudListedProvider } from './cloudModelListTypes.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IEncryptionService } from '../../../../platform/encryption/common/encryptionService.js';
@@ -132,8 +131,7 @@ const _stateWithMergedDefaultModels = (state: VoidSettingsState): VoidSettingsSt
 	for (const providerName of providerNames) {
 		const defaultModels = defaultSettingsOfProvider[providerName]?.models ?? []
 		const currentModels = newSettingsOfProvider[providerName]?.models ?? []
-		// a hosted provider that has a live list (what its key can use) is not topped up with built-in defaults: the live list is the truth
-		if (isCloudListedProvider(providerName) && currentModels.some(m => m.type === 'autodetected')) continue
+		// (a hosted provider with a live list has no built-in defaults at all, so this also drops the defaults an older version stored)
 		const defaultModelNames = defaultModels.map(m => m.modelName)
 		const newModels = _modelsWithSwappedInNewModels({ existingModels: currentModels, models: defaultModelNames, type: 'default' })
 		newSettingsOfProvider = {

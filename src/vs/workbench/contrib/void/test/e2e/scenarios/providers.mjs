@@ -25,12 +25,12 @@ const modelsTabText = async (t) => {
 
 export const providerScenarios = [
 	{
-		name: 'providers: a working key unlocks the live model list, a rejected key is reported, removing it restores the defaults',
+		name: 'providers: models appear only from the key (live list), a rejected key lists none and is reported, removing the key clears them',
 		timeout: 150_000,
 		fn: async (t) => {
 			const KEY = 'sk-live-test-1234';
 			t.server.setModelsHandler(({ auth }) => auth === `Bearer ${KEY}`
-				? { body: { object: 'list', data: [{ id: 'kimi-live-alpha', created: 20 }, { id: 'kimi-k3', created: 10 }] } }
+				? { body: { object: 'list', data: [{ id: 'kimi-live-alpha', created: 20 }, { id: 'kimi-live-beta', created: 10 }] } }
 				: { status: 401, body: { error: { message: `bad key ${auth}` } } });
 			await openSettings(t, 'Main Providers');
 			const block = providerBlock(t, 'Moonshot');
@@ -43,25 +43,23 @@ export const providerScenarios = [
 			t.check('the message says the key was rejected and does not echo the key', /rejected/i.test(await status(t).innerText()) && !(await status(t).innerText()).includes('sk-wrong'));
 			t.check('the key was sent to the provider as a bearer token', t.server.modelListRequests.some(r => r.auth === 'Bearer sk-wrong'));
 			let text = await modelsTabText(t);
-			const kimiRows = (x) => (x.match(/kimi-k2\.6/g) ?? []).length; // other vendors (Cloudflare) list kimi-k2.6 and the chosen model shows up elsewhere too, so compare counts instead of looking for the text
-			const kimiBefore = kimiRows(text);
-			t.check('while the key is rejected the built-in defaults stay (kimi-k2.6 is listed)', kimiBefore >= 1);
+			const liveRows = (x) => new Set(x.match(/kimi-live-[a-z]+/g) ?? []).size; // distinct ids (the chosen model is also shown in the model pickers)
+			t.check('with only a rejected key none of Moonshot\'s models is listed (no names are written in)', liveRows(text) === 0 && !/moonshot-v1|kimi-k2\.6\b/.test(text.replace(/@cf\/moonshotai\/kimi-k2\.6/g, '')), text.split('\n').filter(l => /kimi|moonshot-v1/.test(l)).join(' | ').slice(0, 200));
 
 			// now the right key
 			await openSettings(t, 'Main Providers');
 			await setField(providerBlock(t, 'Moonshot'), 'API Key', KEY);
 			t.check('the right key turns the status to "works" with the model count', await t.waitFor(async () => (await status(t).getAttribute('data-status').catch(() => null)) === 'ok', 15_000) && /2 models/.test(await status(t).innerText()), await status(t).innerText().catch(() => '(no status)'));
 			text = await modelsTabText(t);
-			const kimiLive = kimiRows(text);
 			t.check('the models the key offers are listed (kimi-live-alpha)', text.includes('kimi-live-alpha'));
-			t.check('models the key does not offer are gone (Moonshot\'s own kimi-k2.6 row)', kimiRows(text) < kimiBefore, `${kimiRows(text)} vs ${kimiBefore}`);
+			t.check('exactly what the key offers is listed for Moonshot (both models, nothing else made up)', liveRows(text) === 2 && text.includes('kimi-live-beta'), String(liveRows(text)));
 
 			// remove the key again
 			await openSettings(t, 'Main Providers');
 			await setField(providerBlock(t, 'Moonshot'), 'API Key', '');
 			await t.sleep(1500);
 			text = await modelsTabText(t);
-			t.check('removing the key brings the built-in defaults back', kimiRows(text) > kimiLive && !text.includes('kimi-live-alpha'), `${kimiRows(text)} vs ${kimiLive} while live, alpha=${text.includes('kimi-live-alpha')}`);
+			t.check('removing the key clears the list again (nothing left over from the live answer)', liveRows(text) === 0, String(liveRows(text)));
 			await openSettings(t, 'Main Providers');
 			await setField(providerBlock(t, 'Moonshot'), 'Endpoint', 'https://api.moonshot.ai/v1');
 		},
@@ -88,6 +86,8 @@ export const providerScenarios = [
 			await search.fill('together');
 			await t.sleep(500);
 			const block = providerBlock(t, 'Together AI');
+			if (process.env.E2E_SHOTS) { await search.fill(''); await t.sleep(600); await t.page.screenshot({ path: `${process.env.E2E_SHOTS}/providers-list.png` }); await search.fill('together'); await t.sleep(500); }
+			t.check('the provider heading carries its real logo (an inline one-colour svg)', (await t.page.locator('.void-scope h3 svg[data-provider-logo="together"] path').count()) > 0);
 			const hint = await block.locator('input[placeholder^="Endpoint"]').first().getAttribute('placeholder');
 			t.check('the vendor fields are labelled with its real gateway as the endpoint hint', !!hint && hint.includes('api.together.xyz') && !(await block.innerText()).includes('(never)'), String(hint));
 			await setField(block, 'Endpoint', t.server.url);
@@ -104,7 +104,7 @@ export const providerScenarios = [
 		},
 	},
 	{
-		name: 'providers: a provider that cannot be reached keeps the built-in list and says so',
+		name: 'providers: a provider that cannot be reached lists nothing it cannot confirm, and says so',
 		timeout: 90_000,
 		fn: async (t) => {
 			await openSettings(t, 'Main Providers');
@@ -112,7 +112,7 @@ export const providerScenarios = [
 			await setField(block, 'Endpoint', 'http://127.0.0.1:9'); // nothing listens there
 			await setField(block, 'API Key', 'sk-any');
 			t.check('the status explains that the provider could not be reached', await t.waitFor(async () => /could not reach|did not answer/i.test(await status(t).innerText().catch(() => '')), 20_000), await status(t).innerText().catch(() => '(no status)'));
-			t.check('and says the built-in list is shown meanwhile', /built-in list/i.test(await status(t).innerText()));
+			t.check('and says no models are listed until the provider answers', /No models are listed until the provider answers/i.test(await status(t).innerText()));
 			t.check('a Retry button is offered', (await status(t).getByText('Retry').count()) === 1);
 			await setField(block, 'API Key', '');
 			await setField(block, 'Endpoint', 'https://api.moonshot.ai/v1');

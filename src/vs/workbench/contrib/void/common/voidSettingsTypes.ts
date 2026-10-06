@@ -4,6 +4,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { isCloudListedProvider } from './cloudModelListTypes.js';
 import { isVendorProviderName, vendorProviders, vendorProviderNames, VendorProviderName } from './vendorProviderData.js';
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
@@ -291,7 +292,7 @@ const modelInfoOfDefaultModelNames = (defaultModelNames: string[]): { models: Vo
 }
 
 // used when waiting and for a type reference
-export const defaultSettingsOfProvider: SettingsOfProvider = {
+const _defaultSettingsOfProvider: SettingsOfProvider = {
 	anthropic: {
 		...defaultCustomSettings,
 		...defaultProviderSettings.anthropic,
@@ -420,6 +421,13 @@ export const defaultSettingsOfProvider: SettingsOfProvider = {
 		_didFillInProviderSettings: undefined,
 	}])) as { [K in VendorProviderName]: SettingsAtProvider<K> }),
 }
+
+// A hosted provider that can list what the user's key may use starts with NO models: the list is whatever the provider says once a working key is
+// typed in (common/refreshModelService.ts), never names written here. Providers without such a route (Azure/Vertex/Bedrock deployments, a few
+// vendors, any generic endpoint) keep their catalogue models, and "Add model" accepts any id.
+export const defaultSettingsOfProvider: SettingsOfProvider = Object.fromEntries(
+	Object.entries(_defaultSettingsOfProvider).map(([name, settings]) => [name, isCloudListedProvider(name) ? { ...settings, models: [] } : settings])
+) as SettingsOfProvider
 
 
 export type ModelSelection = { providerName: ProviderName, modelName: string }

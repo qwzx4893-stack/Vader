@@ -6,6 +6,7 @@
 import { useEffect, useState } from 'react';
 import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
 import { Brain, Check, ChevronRight, DollarSign, ExternalLink, Lock, X } from 'lucide-react';
+import { ProviderLogo } from '../util/ProviderLogo.js';
 import { displayInfoOfProviderName, ProviderName, providerNames, localProviderNames, featureNames, FeatureName, isFeatureNameDisabled } from '../../../../common/voidSettingsTypes.js';
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js';
 import { OllamaSetupInstructions, OneClickSwitchButton, SettingsForProvider, ModelDump } from '../void-settings-tsx/Settings.js';
@@ -192,7 +193,7 @@ const AddProvidersPage = ({ pageIndex, setPageIndex }: { pageIndex: number, setP
 			{filterProviders(providerNamesOfTab[currentTab], providerQuery).map((providerName) => (
 				<div key={providerName} className="w-full max-w-xl mb-10">
 					<div className="text-xl mb-2">
-						Add {displayInfoOfProviderName(providerName).title}
+						<ProviderLogo providerName={providerName} size={22} className='mr-2 align-text-bottom' />Add {displayInfoOfProviderName(providerName).title}
 						{providerName === 'gemini' && (
 							<span
 								data-tooltip-id="void-tooltip-provider-info"
