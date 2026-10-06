@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased - Agent quality from the model's side, advisories in build/test tooling
+
+- **Driving the real app as the model** (`test/e2e/agentBridge.mjs`, `docs/AGENT_SESSIONS.md`): an agent answers the requests the packaged app
+  sends to its model endpoint, so defects show up as with a keyed model, without a key. Found and fixed: a self-contradicting system prompt
+  (never reject / policy rejections; one tool call / parallel execution), tool parameters sent untyped and without a `required` list
+  (OpenAI-shaped, Anthropic, Gemini and the Cline adapter), no guidance on verifying work or not repeating a failing call, and a
+  `run_command` that hung forever when the terminal host could not start (every start-up step is now bounded at 20 s with a clear error).
+  Tool-list size is held to a test-enforced budget (30 KB; 27 KB for 43 tools today).
+- **Agent robustness** (real-app `robustness` group, fault-injection): invalid-JSON and unknown-tool calls now reach the model as errors,
+  an identical call repeated 8 times in a row stops the run, Anthropic prompt caching on tools/system/recent turns.
+- **Advisories in VS Code's build and test tooling: all 58 lockfiles, development dependencies included, are at zero.** Where upstream has
+  no fix (braces, extract-zip, sprintf-js, decode-uri-component's CJS build) patched copies live in `build/stubs` with `PATCH.md` and tests.
+  `shippedAdvisoriesE2E` audits every lockfile and requires zero. The extract-zip stub depends on yauzl 3 directly (npm 11 re-resolved the
+  overridden yauzl 2 and rejected the lock). Six lockfiles were missing from the mirrored commit and are now included.
+
 ## Unreleased - Whole-project re-scan: privacy, unconnected parts, dependency age
 
 - **Network privacy.** Electron and the agent's Playwright Chromium no longer contact Google on their own (spell-check dictionary,
