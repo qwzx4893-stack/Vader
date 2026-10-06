@@ -3,10 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-import findWorkspaceRoot = require('../node_modules/find-yarn-workspace-root');
 import findUp from 'find-up';
 import * as path from 'path';
-import whichPM from 'which-pm';
+import * as fs from 'fs';
+import minimatch from 'minimatch';
 import { Uri, workspace } from 'vscode';
 
 interface PreferredProperties {
@@ -21,6 +21,61 @@ async function pathExists(filePath: string) {
 		return false;
 	}
 	return true;
+}
+
+// Replaces the `find-yarn-workspace-root` and `which-pm` packages (Vader). Both pulled in a YAML parser and micromatch/braces, which have open
+// denial-of-service advisories (merge-key CPU use, deeply nested braces) reachable from files in the opened workspace. What is needed here is
+// small: walk up looking for a package.json with `workspaces`, and read one `packageManager:` line from node_modules/.modules.yaml.
+const MAX_MANIFEST_BYTES = 1024 * 1024;
+const MAX_PATTERN_CHARS = 200;
+
+function readJsonFile(file: string): any | undefined {
+	try {
+		if (fs.statSync(file).size > MAX_MANIFEST_BYTES) {
+			return undefined;
+		}
+		return JSON.parse(fs.readFileSync(file, 'utf8'));
+	} catch {
+		return undefined;
+	}
+}
+
+function findWorkspaceRoot(initial: string): string | null {
+	let previous: string | null = null;
+	let current = path.normalize(initial);
+	do {
+		const manifest = readJsonFile(path.join(current, 'package.json'));
+		const ws = manifest?.workspaces;
+		const patterns: unknown = Array.isArray(ws) ? ws : Array.isArray(ws?.packages) ? ws.packages : undefined;
+		if (Array.isArray(patterns)) {
+			const relativePath = path.relative(current, initial).split(path.sep).join('/');
+			const matches = relativePath === '' || patterns.some(p => typeof p === 'string' && p.length <= MAX_PATTERN_CHARS && minimatch(relativePath, p));
+			return matches ? current : null;
+		}
+		previous = current;
+		current = path.dirname(current);
+	} while (current !== previous);
+	return null;
+}
+
+async function whichPM(pkgPath: string): Promise<{ name: string } | null> {
+	const modulesPath = path.join(pkgPath, 'node_modules');
+	if (await pathExists(path.join(modulesPath, '.yarn-integrity'))) {
+		return { name: 'yarn' };
+	}
+	if (await pathExists(path.join(pkgPath, 'bun.lockb'))) {
+		return { name: 'bun' };
+	}
+	try {
+		const text = fs.readFileSync(path.join(modulesPath, '.modules.yaml'), 'utf8').slice(0, MAX_MANIFEST_BYTES);
+		const m = /^packageManager:\s*['"]?(@?[^@\s'"]+)/m.exec(text);
+		if (m) {
+			return { name: m[1] };
+		}
+	} catch {
+		// no .modules.yaml: fall through
+	}
+	return (await pathExists(modulesPath)) ? { name: 'npm' } : null;
 }
 
 async function isBunPreferred(pkgPath: string): Promise<PreferredProperties> {

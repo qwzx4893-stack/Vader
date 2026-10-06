@@ -63,3 +63,26 @@ Moderate advisories that remain in shipped code: `uuid` 3.x inside `@microsoft/d
 ## Install scripts and signatures
 - `package-lock.json`: every package resolves to `https://registry.npmjs.org` with an integrity hash (checked by script; nothing from git, tarball URLs or other hosts except the in-repo SAP stub).
 - 31 packages run install scripts. All are native-module builds or prebuilt downloads of VS Code's own dependencies; `foundry-local-sdk` downloads binaries but is excluded from the installer. `npm audit signatures` could not be run from the sandbox (key endpoint blocked); run it in CI when the registry keys are reachable.
+
+
+## Second pass: shipped sub-packages, and what is left
+
+`shippedAdvisoriesE2E` used to audit only the root `package-lock.json`. VS Code's built-in extensions (css/html/json language features, emmet, npm,
+markdown, mermaid, open-remote-ssh...) each carry their own lockfile and `node_modules` into the installer, and had high advisories the gate never saw.
+It now audits the production dependencies of all 36 shipped lockfiles, **at every severity**, and the whole set is at zero:
+
+| Package | Where | Advisory | Fix |
+|---|---|---|---|
+| `proxy-addr` 2.0.7 (critical) | root, via MCP SDK -> express | IP spoofing through IPv4-mapped IPv6 | override to 2.0.8 (it was in the shipped app) |
+| `adm-zip` | root, via foundry-local-sdk (not in the installer) | 4 GB allocation, symlink extraction | override to 0.6.1 |
+| `katex` | root, `remote`, `remote/web`, markdown extensions, mermaid | prototype pollution bypassing trust settings | 0.19.0 everywhere; rendering verified with `@vscode/markdown-it-katex` |
+| `brace-expansion`, `minimatch`, `ip-address`, `socks`, `@babel/runtime-corejs3`, `js-yaml`, `sprintf-js`, ... | language-feature extensions, open-remote-ssh, extension-editing | ReDoS / XSS / DoS | `npm audit fix` (semver-compatible) per lockfile |
+| `image-size` | emmet | infinite loop in ICNS parser | upgraded to 2.0.4 and the helper ported to its API (`imageSizeFromFile`) |
+| `which-pm`, `find-yarn-workspace-root` (-> YAML parser, micromatch, braces) | npm extension | merge-key CPU use, brace-nesting stack exhaustion, both reachable from files in the opened workspace; `braces` has no patched release at all | replaced by ~50 lines in `preferred-pm.ts`; `npmExtensionPreferredPmE2E` checks real layouts and hostile inputs (merge-key bomb, 50,000 nested braces, 2 MB manifest) |
+| `Object` hook tables | `sendLLMMessageService`, `consistentItemService` | Semgrep dynamic-dispatch pattern | prototype-less tables, so ids like `constructor` cannot resolve to inherited members |
+
+Still reported by `npm audit` on the **root development tree** (33 packages): the gulp 4 chain (`glob-watcher`, `chokidar`, `anymatch`, `micromatch`, `braces`,
+`findup-sync`, `liftoff`, `gulp-sourcemaps`...), `tailwindcss` 3, `mocha`, `nodemon`, `ts-morph`, `next` and `@vscode/component-explorer-cli`. They are
+build and test tooling that only ever sees files from this repository. `braces`, `micromatch` and `fast-glob` have **no patched release** to move to; the
+rest need major upgrades of VS Code's own build (gulp 5, tailwind 4), which are upstream decisions. None of them is in the installer: the shipped
+`node_modules.asar` was checked and contains none of these packages, and the gate above fails if any advisory reaches a production tree.

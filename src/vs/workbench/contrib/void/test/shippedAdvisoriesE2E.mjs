@@ -3,7 +3,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-// Gate: nothing with a HIGH or CRITICAL known advisory may be in what Vader ships.
+// Gate: nothing with a known advisory of ANY severity may be in what Vader ships.
 //
 // `npm audit` reports every package in the repository, including build tooling (gulp, mocha, tailwind...) that never reaches
 // a user. What matters is the runtime (production) dependency tree minus what the installer leaves out (build/.moduleignore).
@@ -30,33 +30,50 @@ const isIgnored = (name) => ignored.some(g => name === g || name.startsWith(g + 
 const exceptionsFile = path.join(root, 'build/advisory-exceptions.json');
 const exceptions = fs.existsSync(exceptionsFile) ? JSON.parse(fs.readFileSync(exceptionsFile, 'utf8')) : [];
 
-let audit;
-try {
-	audit = JSON.parse(execFileSync('npm', ['audit', '--omit=dev', '--json'], { cwd: root, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
-} catch (e) {
-	audit = JSON.parse(e.stdout || '{}'); // npm audit exits non-zero when it finds something
+// Every package.json that has its own lockfile and ships: the root, each built-in extension (they carry their own node_modules into the
+// installer) and the remote server packages. This used to audit only the root and missed high advisories in the extensions.
+const lockDirs = ['.', 'remote', 'remote/web'];
+for (const e of fs.readdirSync(path.join(root, 'extensions'), { withFileTypes: true })) {
+	if (e.isDirectory() && fs.existsSync(path.join(root, 'extensions', e.name, 'package-lock.json'))) { lockDirs.push(`extensions/${e.name}`); }
 }
-if (!audit.vulnerabilities) { check('npm audit produced a report', false, 'no output (offline?)'); process.exit(1); }
+// extensions that exist only for testing the editor are not part of the product
+const NOT_SHIPPED = new Set(['extensions/vscode-api-tests', 'extensions/vscode-colorize-tests', 'extensions/vscode-colorize-perf-tests', 'extensions/vscode-test-resolver']);
 
-const severe = Object.entries(audit.vulnerabilities).filter(([, v]) => v.severity === 'high' || v.severity === 'critical');
-console.log(`production tree: ${Object.keys(audit.vulnerabilities).length} packages with advisories, ${severe.length} high/critical; installer leaves out ${ignored.length} package patterns`);
+const auditOf = (dir) => {
+	const cwd = path.join(root, dir);
+	const args = ['audit', '--omit=dev', '--json', ...(dir === '.' ? [] : ['--package-lock-only'])];
+	try {
+		return JSON.parse(execFileSync('npm', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
+	} catch (e) {
+		return JSON.parse(e.stdout || '{}'); // npm audit exits non-zero when it finds something
+	}
+};
 
+let audited = 0;
 const unexplained = [];
 const usedExceptions = new Set();
-for (const [name, v] of severe) {
-	if (isIgnored(name)) { continue; }
-	// a vulnerable package whose only vulnerable path runs through an excluded package is also not shipped
-	const viaNames = v.via.filter(x => typeof x === 'string');
-	if (viaNames.length && viaNames.every(n => isIgnored(n) || severe.some(([s]) => s === n && isIgnored(s)))) { continue; }
-	const ex = exceptions.find(x => x.package === name);
-	if (ex) { usedExceptions.add(name); continue; }
-	unexplained.push(`${v.severity} ${name} ${v.range} (${v.via.filter(x => typeof x !== 'string').map(x => x.title).slice(0, 1).join('; ') || 'via ' + viaNames.join(', ')})`);
+let excludedFromInstaller = 0;
+for (const dir of lockDirs) {
+	if (NOT_SHIPPED.has(dir)) { continue; }
+	const audit = auditOf(dir);
+	if (!audit.vulnerabilities) { check(`npm audit produced a report for ${dir}`, false, 'no output (offline?)'); continue; }
+	audited++;
+	for (const [name, v] of Object.entries(audit.vulnerabilities)) {
+		if (dir === '.' && isIgnored(name)) { excludedFromInstaller++; continue; }
+		// a vulnerable package whose only vulnerable path runs through an excluded package is also not shipped
+		const viaNames = v.via.filter(x => typeof x === 'string');
+		if (dir === '.' && viaNames.length && viaNames.every(n => isIgnored(n))) { excludedFromInstaller++; continue; }
+		const ex = exceptions.find(x => x.package === name && (x.in ?? '.') === dir);
+		if (ex) { usedExceptions.add(`${dir}:${name}`); continue; }
+		unexplained.push(`${dir}: ${v.severity} ${name} ${v.range} (${v.via.filter(x => typeof x !== 'string').map(x => x.title).slice(0, 1).join('; ') || 'via ' + viaNames.join(', ')})`);
+	}
 }
-check('no high/critical advisory in what ships (excluded packages and documented exceptions aside)', unexplained.length === 0, '\n  ' + unexplained.join('\n  '));
+console.log(`audited the production dependencies of ${audited} shipped packages; the installer leaves out ${ignored.length} package patterns (${excludedFromInstaller} advisory entries fall inside them)`);
+check('every shipped package.json with a lockfile was audited', audited >= 30, `${audited}`);
+check('no known advisory (any severity) in what ships, excluded packages and documented exceptions aside', unexplained.length === 0, '\n  ' + unexplained.join('\n  '));
 for (const ex of exceptions) {
-	check(`exception "${ex.package}" is still needed and carries a reason`, usedExceptions.has(ex.package) && typeof ex.reason === 'string' && ex.reason.length > 40, usedExceptions.has(ex.package) ? 'reason missing/too short' : 'no longer reported - remove it');
+	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
 }
-check('the excluded high/critical packages really are excluded from the installer', severe.filter(([n]) => isIgnored(n)).every(([n]) => isIgnored(n)));
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -7,6 +7,7 @@ name: Security Scan
 #   osv           - known-vulnerable dependencies from package-lock.json (OSV database, the broadest advisory source)
 #   zizmor        - GitHub Actions workflow security (injection, over-broad permissions, unpinned actions)
 #   electron      - Electron security-configuration checks (Electronegativity)
+#   signatures    - npm registry signatures / provenance of every installed package
 # Every job prints a readable summary into its log and uploads the raw SARIF; none of them fails the run, so one noisy
 # scanner cannot hide the others. Triage lives in docs/integrations/security-scan.md.
 
@@ -131,6 +132,23 @@ jobs:
           name: osv
           path: osv.json
           if-no-files-found: ignore
+
+  signatures:
+    # npm registry signatures and provenance of every installed package (supply-chain tampering check). Reported, never blocks.
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: '.nvmrc'
+      - name: Install without running scripts
+        run: npm install --ignore-scripts --no-audit --no-fund
+      - name: Verify registry signatures
+        continue-on-error: true
+        run: npm audit signatures
 
   zizmor:
     runs-on: ubuntu-latest

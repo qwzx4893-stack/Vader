@@ -37,23 +37,25 @@ export class LLMMessageService extends Disposable implements ILLMMessageService 
 	readonly _serviceBrand: undefined;
 	private readonly channel: IChannel // LLMMessageChannel
 
+	// Hook tables are keyed by request ids and called as `table[id]?.(...)`: prototype-less objects, so an id like "constructor" or "__proto__"
+	// can never resolve to something inherited.
 	// sendLLMMessage
 	private readonly llmMessageHooks = {
-		onText: {} as { [eventId: string]: ((params: EventLLMMessageOnTextParams) => void) },
-		onFinalMessage: {} as { [eventId: string]: ((params: EventLLMMessageOnFinalMessageParams) => void) },
-		onError: {} as { [eventId: string]: ((params: EventLLMMessageOnErrorParams) => void) },
-		onAbort: {} as { [eventId: string]: (() => void) }, // NOT sent over the channel, result is instant when we call .abort()
+		onText: Object.create(null) as { [eventId: string]: ((params: EventLLMMessageOnTextParams) => void) },
+		onFinalMessage: Object.create(null) as { [eventId: string]: ((params: EventLLMMessageOnFinalMessageParams) => void) },
+		onError: Object.create(null) as { [eventId: string]: ((params: EventLLMMessageOnErrorParams) => void) },
+		onAbort: Object.create(null) as { [eventId: string]: (() => void) }, // NOT sent over the channel, result is instant when we call .abort()
 	}
 
 	// list hooks
 	private readonly listHooks = {
 		ollama: {
-			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OllamaModelResponse>) => void) },
-			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OllamaModelResponse>) => void) },
+			success: Object.create(null) as { [eventId: string]: ((params: EventModelListOnSuccessParams<OllamaModelResponse>) => void) },
+			error: Object.create(null) as { [eventId: string]: ((params: EventModelListOnErrorParams<OllamaModelResponse>) => void) },
 		},
 		openAICompat: {
-			success: {} as { [eventId: string]: ((params: EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>) => void) },
-			error: {} as { [eventId: string]: ((params: EventModelListOnErrorParams<OpenaiCompatibleModelResponse>) => void) },
+			success: Object.create(null) as { [eventId: string]: ((params: EventModelListOnSuccessParams<OpenaiCompatibleModelResponse>) => void) },
+			error: Object.create(null) as { [eventId: string]: ((params: EventModelListOnErrorParams<OpenaiCompatibleModelResponse>) => void) },
 		}
 	} satisfies {
 		[providerName in 'ollama' | 'openAICompat']: {

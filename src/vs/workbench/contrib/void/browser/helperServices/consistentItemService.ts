@@ -30,14 +30,14 @@ export class ConsistentItemService extends Disposable implements IConsistentItem
 	readonly _serviceBrand: undefined
 
 	// the items that are attached to each URI, completely independent from current state of editors
-	private readonly consistentItemIdsOfURI: Record<string, Set<string> | undefined> = {}
+	private readonly consistentItemIdsOfURI: Record<string, Set<string> | undefined> = Object.create(null)
 	private readonly infoOfConsistentItemId: Record<string, AddItemInputs> = {}
 
 
 	// current state of items on each editor, and the fns to call to remove them
-	private readonly itemIdsOfEditorId: Record<string, Set<string> | undefined> = {}
+	private readonly itemIdsOfEditorId: Record<string, Set<string> | undefined> = Object.create(null)
 	private readonly consistentItemIdOfItemId: Record<string, string> = {}
-	private readonly disposeFnOfItemId: Record<string, () => void> = {}
+	private readonly disposeFnOfItemId: Record<string, () => void> = Object.create(null)
 
 
 	constructor(
