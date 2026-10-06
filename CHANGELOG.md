@@ -11,7 +11,8 @@
 - **Policy hardening found by attacking the file tools as a model** (`docs/AGENT_SESSIONS.md`, `symlinkPolicyE2E`): paths are resolved through
   symbolic links and `..` before rules and agent scopes are evaluated (a link to `~/.aws` and `src/../../../etc/...` both slipped past);
   new ask rule for files that run code later (`.vscode/tasks.json`, git hooks, `.envrc`, shell profiles, MCP config, `.vaderrules`);
-  more credential files; the agent filesystem scope, which denied every file, now works.
+  more credential files and process-environment/history/browser-store paths; installing a skill or marketplace item always asks (it was in the
+  auto-approvable `edits` bucket despite being documented as never auto-approved); the agent filesystem scope, which denied every file, now works.
 - **Agent robustness** (real-app `robustness` group, fault-injection): invalid-JSON and unknown-tool calls now reach the model as errors,
   an identical call repeated 8 times in a row stops the run, Anthropic prompt caching on tools/system/recent turns.
 - **Advisories in VS Code's build and test tooling: all 58 lockfiles, development dependencies included, are at zero.** Where upstream has

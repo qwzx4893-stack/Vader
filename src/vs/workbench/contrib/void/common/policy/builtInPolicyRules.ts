@@ -189,6 +189,17 @@ export const builtInPolicyRules: PolicyRule[] = [
 		enabled: true,
 	},
 	{
+		// Matches every request of its kind (a deliberate blanket rule, like 'ask before any MCP tool'): installing code or prompt-shaping content is never routine.
+		id: 'vader.ask.install-capability',
+		description: 'This installs a skill, extension or MCP server, which can run arbitrary code or change every future prompt.',
+		effect: 'ask',
+		kinds: ['capability-install'],
+		builtIn: true,
+		locked: false,
+		neverBypassAutonomous: true,
+		enabled: true,
+	},
+	{
 		id: 'vader.ask.sudo',
 		description: 'This command requests elevated (sudo/administrator) privileges.',
 		effect: 'ask',

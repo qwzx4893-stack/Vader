@@ -29,6 +29,7 @@ const { builtInPolicyRules, ruleMatches } = await bundle('../common/policy/polic
 const { withResolvedPaths, normalizeDotSegments } = await bundle('../common/policy/realPaths.ts', 'real.mjs');
 const { agentScopeCheck } = await bundle('../common/agents/agentScope.ts', 'scope.mjs');
 const { URI } = await bundle('../../../../base/common/uri.ts', 'uri.mjs');
+const { policyRequestOfToolCall } = await bundle('../common/policy/toolPolicyRequest.ts', 'req.mjs');
 
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
@@ -38,6 +39,7 @@ const realpath = async (uri) => URI.file(fs.realpathSync(uri.fsPath));
 const rules = (effect) => builtInPolicyRules.filter(r => r.effect === effect);
 const verdict = (kind, paths) => rules('deny').some(r => ruleMatches(r, { kind, toolName: 'edit_file', filePaths: paths })) ? 'deny'
 	: rules('ask').some(r => ruleMatches(r, { kind, toolName: 'edit_file', filePaths: paths })) ? 'ask' : 'allow';
+const verdict2 = (req) => rules('deny').some(r => ruleMatches(r, req)) ? 'deny' : rules('ask').some(r => ruleMatches(r, req)) ? 'ask' : 'allow';
 const gate = async (kind, p) => verdict(kind, await withResolvedPaths(realpath, [p]));
 
 // ---- a workspace with links that lead to places the rules protect
@@ -100,6 +102,20 @@ for (const p of ['/home/me/.git-credentials', '/home/me/.config/gh/hosts.yml', '
 for (const p of ['/proc/self/environ', '/proc/1234/environ', '/proc/1234/mem', '/proc/42/cmdline', '/home/me/.bash_history', '/home/me/.zsh_history', 'c:/Users/me/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt', '/home/me/.config/google-chrome/Default/Login Data', '/home/me/.mozilla/firefox/abc.default/logins.json', '/home/me/Library/Keychains/login.keychain-db'])
 	check(`reading ${p} asks (process environment, shell history or browser credential store)`, verdict('file-read', [p]) === 'ask');
 check('/proc/self/stat is an ordinary read', verdict('file-read', ['/proc/self/stat']) === 'allow');
+// ---- installing code: the approval bucket is 'edits', which users auto-approve, so the Policy Engine has to ask
+{
+	const ask = (toolName) => rules('ask').some(r => ruleMatches(r, { kind: 'capability-install', toolName }));
+	const reqOf = (tool, params = {}) => policyRequestOfToolCall(tool, params, true, undefined, undefined);
+	check('the real tool-call mapping turns install_skill into an install request', reqOf('install_skill')?.kind === 'capability-install');
+	check('...and install_marketplace_capability too', reqOf('install_marketplace_capability')?.kind === 'capability-install');
+	check('...while remember is left to its approval bucket (no install request)', reqOf('remember') === null);
+	check('...and an edit is still a file-write request', reqOf('edit_file', { uri: URI.file('/w/p/a.ts') })?.kind === 'file-write');
+	check('the install request is judged "ask" by the real built-in rules', verdict2(reqOf('install_skill')) === 'ask' && verdict2(reqOf('install_marketplace_capability')) === 'ask');
+	check('install_skill always asks, whatever the auto-approve settings', ask('install_skill'));
+	check('install_marketplace_capability (extensions, MCP servers) always asks', ask('install_marketplace_capability'));
+	check('a file write is not mistaken for an install', !rules('ask').some(r => r.id === 'vader.ask.install-capability' && ruleMatches(r, { kind: 'file-write', toolName: 'edit_file', filePaths: ['/w/p/a.ts'] })));
+	check('the install rule is never bypassed by autonomous agents', builtInPolicyRules.find(r => r.id === 'vader.ask.install-capability')?.neverBypassAutonomous === true);
+}
 check('the autorun rule can be switched off by the user (not locked), unlike the hard denies', builtInPolicyRules.find(r => r.id === 'vader.ask.autorun-config')?.locked === false);
 check('...but is never bypassed by autonomous agents', builtInPolicyRules.find(r => r.id === 'vader.ask.autorun-config')?.neverBypassAutonomous === true);
 

@@ -50,6 +50,12 @@ export function policyRequestOfToolCall(
 		case 'run_persistent_command':
 			return { kind: 'terminal-command', toolName, command: (p as any).command, agentId };
 
+		// Installing a skill or a marketplace item (an extension or an MCP server) can run arbitrary code or change every future prompt. Their
+		// approval bucket is 'edits', which users commonly auto-approve, so without this request nothing would ever stop an injected model installing one.
+		case 'install_skill':
+		case 'install_marketplace_capability':
+			return { kind: 'capability-install', toolName, agentId };
+
 		// directory/search listings and terminal lifecycle management (not execution) aren't gated
 		case 'ls_dir':
 		case 'get_dir_tree':

@@ -103,7 +103,7 @@ export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	// was unreachable dead code, since the old version of this check unconditionally
 	// required pathGlobs or commandPatterns, which those two kinds can never have.
 	const hasDiscriminator = !!(rule.pathGlobs?.length || rule.commandPatterns?.length || rule.serverNamePatterns?.length);
-	if (!hasDiscriminator && req.kind !== 'mcp-tool' && req.kind !== 'network') {
+	if (!hasDiscriminator && req.kind !== 'mcp-tool' && req.kind !== 'network' && req.kind !== 'capability-install') {
 		return false;
 	}
 

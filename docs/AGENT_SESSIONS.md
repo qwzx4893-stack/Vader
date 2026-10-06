@@ -38,7 +38,7 @@ local model. The numbers for real small models are in `docs/QUALITY_COMPARISON.m
 
 The same method pointed at security: what could a prompt-injected model do with the *file* tools alone (the terminal is a separate,
 already gated path)? Each row was reproduced first, then fixed, then pinned by a test that uses the real rules and real symbolic links
-(`symlinkPolicyE2E`, 63 checks) and, for the first two, a real-app scenario (`core` group).
+(`symlinkPolicyE2E`, 83 checks) and, for the first two, a real-app scenario (`core` group).
 
 | Finding | Severity | Fix |
 |---|---|---|
@@ -47,6 +47,10 @@ already gated path)? Each row was reproduced first, then fixed, then pinned by a
 | Nothing asked before the agent wrote a file that runs code later: `.vscode/tasks.json` (runs on folder open), `.vscode/settings.json`, `.git/hooks/*`, `.husky/*`, `.envrc`, devcontainer and MCP config, shell startup files, the workspace `.vaderrules`. With edits auto-approved, a prompt-injected model got code execution without ever calling a terminal tool | high | new built-in ask rule `vader.ask.autorun-config` (the user can switch it off in settings; autonomous agents never bypass it) |
 | Credential files the secret rule did not know: `.git-credentials`, `gh`/`gcloud`/`azure` config, `.gnupg`, `.pgpass`, `.pypirc`, `*.tfvars`, keystores, `secrets.*` | medium | added to `vader.ask.secrets-and-keys` |
 | A permanent agent with a filesystem scope could not touch **any** file, in scope or not (the check denied unconditionally): the feature was unusable, and failed closed so it was not exploitable | functional bug | real glob matching: relative globs against each workspace folder, absolute globs as written, every path (as written and resolved) must be in scope; `agentScope.ts` |
+
+| `install_marketplace_capability` is documented as "can run arbitrary code, never auto-approved", but its approval bucket is `edits`, which users commonly auto-approve: with that on, an injected model could install an extension or MCP server unasked (`install_skill` likewise feeds every future prompt) | high | new policy request kind `capability-install` and built-in rule `vader.ask.install-capability`: always asks, never bypassed by autonomous agents; the tool-call mapping is tested against the real rules |
+| The process environment and memory (`/proc/*/environ` holds API keys passed as environment variables), shell and PowerShell history, browser credential stores (`Login Data`, `Cookies`, `logins.json`, Keychains) could be read without a question | medium | added to `vader.ask.secrets-and-keys` |
+| Reading an endless device file (`/dev/zero`, `/dev/urandom`) | not a defect | tested in the real app: bounded, no hang, the app stays responsive; kept as a regression scenario |
 
 What is **not** closed by this: a hostile *terminal* command can still reach anything the user's account can (the terminal rules are
 pattern-based and the hard denies are the catastrophic cases); the answer to that is the approval prompt, which is on by default.

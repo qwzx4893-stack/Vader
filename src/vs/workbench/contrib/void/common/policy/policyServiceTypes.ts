@@ -16,6 +16,7 @@ export type PolicyRequestKind =
 	| 'terminal-command'
 	| 'mcp-tool'
 	| 'network'
+	| 'capability-install'
 
 export interface IPolicyRequest {
 	readonly kind: PolicyRequestKind;
