@@ -155,7 +155,7 @@ def process_signals(root):
 
 def jscpd_percent(root, rels):
     out = tempfile.mkdtemp(prefix='jscpd-')
-    cmd = ['npx', '--yes', 'jscpd@4', '--silent', '--reporters', 'json', '--output', out, '--min-tokens', '70', '--min-lines', '8', '--max-size', '300kb', '--mode', 'mild',
+    cmd = ['npx', '--yes', 'jscpd@4', '--silent', '--reporters', 'json', '--output', out, '--no-gitignore', '--min-tokens', '70', '--min-lines', '8', '--max-size', '300kb', '--mode', 'mild',
            '--format', 'typescript,tsx,javascript,jsx', '--ignore', '**/node_modules/**,**/dist/**,**/build/**,**/out/**,**/*.d.ts,**/src2/**,**/test/**,**/tests/**,**/__tests__/**,**/*.test.*,**/*.spec.*,**/e2e/**,**/fixtures/**,**/evals/**,**/eval/**,**/providerModelData.ts,**/clineBundle/**,**/generated/**']
     cmd += [os.path.join(root, r) for r in rels]
     try:
@@ -217,6 +217,7 @@ def main():
     ap.add_argument('--only', default='')
     ap.add_argument('--no-semgrep', action='store_true')
     ap.add_argument('--no-jscpd', action='store_true')
+    ap.add_argument('--refresh-duplication', action='store_true', help='only recompute the duplication figure of rows already in --out')
     ap.add_argument('--semgrep-rules', nargs='*', default=[
         '/home/user/semgrep/rules/javascript/lang/security', '/home/user/semgrep/rules/typescript/lang/security',
         '/home/user/semgrep/rules/javascript/express', '/home/user/semgrep/rules/javascript/browser/security',
@@ -226,6 +227,13 @@ def main():
     results = []
     if os.path.exists(args.out):
         results = json.load(open(args.out))
+    if args.refresh_duplication:
+        for r in results:
+            root, rels, _ = PROJECTS[r['name']]
+            print('duplication of', r['name'], file=sys.stderr, flush=True)
+            r['duplication'] = jscpd_percent(root, rels)
+            json.dump(results, open(args.out, 'w'), indent=1)
+        return
     done = {r['name'] for r in results}
     for name, (root, rels, kind) in PROJECTS.items():
         if (only and name not in only) or (name in done and not only):

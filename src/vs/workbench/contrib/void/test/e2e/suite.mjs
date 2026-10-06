@@ -17,6 +17,7 @@ import { generalScenarios } from './scenarios/general.mjs';
 import { providerScenarios } from './scenarios/providers.mjs';
 import { robustnessScenarios } from './scenarios/robustness.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
+import { realLlmTaskScenarios, oracleTaskScenarios } from './scenarios/realLlmTasks.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
@@ -27,12 +28,13 @@ await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenar
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
 await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
 await runGroup({ name: 'robustness', model: 'gpt-4o', scenarios: robustnessScenarios });
+await runGroup({ name: 'agent-tasks', model: 'gpt-4o', scenarios: oracleTaskScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();
 await runPrivacyGroup();
 
 if (process.env.REAL_LLM_MODEL) {
-	await runGroup({ name: 'real-llm', model: process.env.REAL_LLM_MODEL, baseURL: process.env.REAL_LLM_BASEURL || 'http://localhost:11434/v1', apiKey: 'ollama', scenarios: realLlmScenarios });
+	await runGroup({ name: 'real-llm', model: process.env.REAL_LLM_MODEL, baseURL: process.env.REAL_LLM_BASEURL || 'http://localhost:11434/v1', apiKey: 'ollama', scenarios: [...realLlmScenarios, ...realLlmTaskScenarios] });
 }
 
 const ok = summarize();

@@ -1,0 +1,27 @@
+# Dependency update pull requests. Security advisories are surfaced by the Security Scan workflow and the shipped-advisory test; this keeps
+# versions from silently ageing between them. Grouped so one weekly PR per ecosystem does not bury the review queue.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    groups:
+      llm-sdks:
+        patterns: ['openai', '@anthropic-ai/*', '@google/genai', '@mistralai/*', 'ollama', '@cline/*', 'ai', '@ai-sdk/*']
+      security-fixes:
+        applies-to: security-updates
+        patterns: ['*']
+    ignore:
+      # pinned to the versions of the VS Code base this fork tracks; moved together with the base, not one by one
+      - dependency-name: '@xterm/*'
+      - dependency-name: 'electron'
+      - dependency-name: 'node-pty'
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']
