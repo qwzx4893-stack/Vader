@@ -152,10 +152,18 @@ write(wm + 'letterpress-dark.svg', svg('#ffffff', 0.32))     # dark theme: grey/
 write(wm + 'letterpress-light.svg', svg('#1b1b1b', 0.22))    # light theme: a white logo would vanish, so the same shape in dark
 write(wm + 'letterpress-hcDark.svg', svg('#ffffff', 0.7))
 write(wm + 'letterpress-hcLight.svg', svg('#1b1b1b', 0.6))
-write('src/vs/workbench/browser/media/code-icon.svg', svg('#ffffff'))
+def badge():
+    # black rounded square with the white logo: readable on dark AND light surfaces (title bar icon, "open in" buttons)
+    k = 0.86
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{side}" height="{side}" viewBox="0 0 {side} {side}">'
+            f'<rect width="{side}" height="{side}" rx="{side * 0.22:.0f}" fill="#000"/>'
+            f'<path fill="#fff" fill-rule="evenodd" transform="translate({side * (1 - k) / 2 + ox * k:.1f} {side * (1 - k) / 2 + oy * k:.1f}) scale({k})" d="{d}"/></svg>\n')
+
+
+write('src/vs/workbench/browser/media/code-icon.svg', badge())
 # the other SVG logo slots of the (inherited) sessions window
 for name, fill, op in [('sessions-logo-dark.svg', '#ffffff', 1.0), ('sessions-logo-light.svg', '#1b1b1b', 1.0), ('vscode-icon.svg', '#ffffff', 1.0)]:
-    write('src/vs/sessions/browser/media/' + name, svg(fill, op))
+    write('src/vs/sessions/browser/media/' + name, badge() if name == 'vscode-icon.svg' else svg(fill, op))
 for name, fill, op in [('letterpress-sessions-dark.svg', '#ffffff', 0.32), ('letterpress-sessions-light.svg', '#1b1b1b', 0.22)]:
     write('src/vs/sessions/contrib/chat/browser/media/' + name, svg(fill, op))
 
