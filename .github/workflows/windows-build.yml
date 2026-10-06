@@ -20,6 +20,11 @@ on:
         required: true
         default: false
         type: boolean
+      remove_previous_releases:
+        description: 'With publish: delete every other release (and its tag) once the new one is published'
+        required: false
+        default: false
+        type: boolean
   push:
     branches: [main]
     paths:
@@ -192,7 +197,9 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          sparse-checkout: package.json
+          sparse-checkout: |
+            product.json
+            package.json
           sparse-checkout-cone-mode: false
 
       - name: Download installer built by this run
@@ -201,17 +208,39 @@ jobs:
           name: vader-win32-${{ env.ARCH }}-setup
           path: dist
 
-      # Idempotent (deletes any prior release/tag of the same name first) so a re-dispatch after fixing a build
-      # failure cleanly replaces an incomplete attempt at the same version.
+      # The release carries Vader's own product version (product.json "vaderVersion"), not the version of the VS Code base it is
+      # built on, and the installer is named Vader-Setup-<arch>-<version>.exe. Idempotent: a re-dispatch replaces an earlier
+      # attempt at the same version.
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          REMOVE_PREVIOUS: ${{ github.event.inputs.remove_previous_releases }}
         run: |
-          tag="v$(node -p "require('./package.json').version")"
-          setup="$(ls dist/*.exe | head -n 1)"
-          notes="Vader Windows build ($ARCH), built from commit ${GITHUB_SHA}.
+          ver="$(node -p "require('./product.json').vaderVersion")"
+          base="$(node -p "require('./package.json').version")"
+          tag="v${ver}"
+          src="$(ls dist/*.exe | head -n 1)"
+          setup="dist/Vader-Setup-${ARCH}-${ver}.exe"
+          mv "$src" "$setup"
+          cat > notes.md <<NOTES
+          # Vader ${ver}
 
-          An installer produced by this repository's own Windows CI workflow (.github/workflows/windows-build.yml),
-          packaged with Inno Setup. It is unsigned unless the repository has code-signing secrets configured."
+          An AI-native code editor: a full IDE with a built-in coding agent, a hard policy engine, permanent and temporary agents,
+          MCP, browser automation, checkpoints and a verification pipeline, and 49 model providers (hosted and local) with the
+          model list fetched live from your key. Built on the VS Code ${base} workbench.
+
+          **Install:** download \`Vader-Setup-${ARCH}-${ver}.exe\` below and run it (Windows ${ARCH}). The installer is unsigned unless this
+          repository has code-signing secrets configured, so Windows SmartScreen may ask you to confirm.
+
+          Built from commit ${GITHUB_SHA} by this repository's own Windows CI (.github/workflows/windows-build.yml).
+          See CHANGELOG.md for what is in this release and FINAL_PRODUCTION_READINESS_REPORT.md for what has and has not been verified.
+          NOTES
           gh release delete "$tag" --yes --cleanup-tag 2>/dev/null || true
-          gh release create "$tag" "$setup" --title "Vader $tag (Windows $ARCH)" --notes "$notes" --target "$GITHUB_SHA"
+          gh release create "$tag" "$setup" --title "Vader ${ver}" --notes-file notes.md --target "$GITHUB_SHA" --latest
+          if [ "$REMOVE_PREVIOUS" = "true" ]; then
+            gh release list --limit 100 --json tagName --jq '.[].tagName' | while read -r old; do
+              [ "$old" = "$tag" ] && continue
+              echo "removing previous release $old"
+              gh release delete "$old" --yes --cleanup-tag
+            done
+          fi
