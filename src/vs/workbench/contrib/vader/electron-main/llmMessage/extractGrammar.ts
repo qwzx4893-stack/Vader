@@ -153,16 +153,40 @@ const findPartiallyWrittenToolTagAtEnd = (fullText: string, toolTags: string[]) 
 	return false
 }
 
-const findIndexOfAny = (fullText: string, matches: string[]) => {
-	for (const str of matches) {
-		const idx = fullText.indexOf(str);
-		if (idx !== -1) {
-			return [idx, str] as const
-		}
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+/** `<name`, then whitespace, `>` or `/` - so `<read_file` does not match `<read_file_x>`. */
+const toolOpenTagRegex = (toolNames: string[]) => new RegExp(`<(${toolNames.map(escapeRegExp).join('|')})(?=[\\s>/])`)
+
+/** Finds `<toolName ...>` (attributes allowed) and says where its opening tag ends. Quotes are respected, so a `>` inside a value does not end it. */
+const findOpenToolTag = (str: string, toolName: string): { attrs: string, end: number, selfClosing: boolean, complete: boolean } | null => {
+	const m = new RegExp(`<${escapeRegExp(toolName)}(?=[\\s>/])`).exec(str)
+	if (!m) return null
+	let k = m.index + m[0].length
+	let quote: string | null = null
+	for (; k < str.length; k++) {
+		const c = str[k]
+		if (quote) { if (c === quote) quote = null; continue }
+		if (c === '"' || c === "'") { quote = c; continue }
+		if (c === '>') break
 	}
-	return null
+	const attrsStart = m.index + m[0].length
+	if (k >= str.length) return { attrs: str.substring(attrsStart), end: str.length, selfClosing: false, complete: false }
+	let attrs = str.substring(attrsStart, k)
+	const selfClosing = /\/\s*$/.test(attrs)
+	if (selfClosing) attrs = attrs.replace(/\/\s*$/, '')
+	return { attrs, end: k + 1, selfClosing, complete: true }
 }
 
+const unescapeXMLAttribute = (v: string) => v.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&')
+
+const parseXMLAttributes = (attrs: string): [string, string][] => {
+	const out: [string, string][] = []
+	const re = /([A-Za-z_][\w:.-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g
+	let m: RegExpExecArray | null
+	while ((m = re.exec(attrs)) !== null) { out.push([m[1], unescapeXMLAttribute(m[2] ?? m[3] ?? '')]) }
+	return out
+}
 
 type ToolOfToolName = { [toolName: string]: InternalToolInfo | undefined }
 const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: string, str: string, toolOfToolName: ToolOfToolName): RawToolCallObj => {
@@ -190,16 +214,27 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 		return ans
 	}
 
-	// find first toolName tag
-	const openToolTag = `<${toolName}>`
-	let i = str.indexOf(openToolTag)
-	if (i === -1) return getAnswer()
+	// find first toolName tag. Models do not always write the documented `<tool><param>value</param></tool>` form: some write the
+	// parameters as attributes (`<run_command command="ls -la">`), some self-close (`<list_tools/>`). All of those are accepted.
+	const open = findOpenToolTag(str, toolName)
+	if (!open) return getAnswer()
+	const allowedAttrParams = Object.keys(toolOfToolName[toolName]?.params ?? {})
+	for (const [name, value] of parseXMLAttributes(open.attrs)) {
+		if (!allowedAttrParams.includes(name)) continue
+		const paramName = name as ToolParamName<T>
+		paramsObj[paramName] = value
+		doneParams.push(paramName)
+	}
+	if (open.selfClosing) { isDone = true; return getAnswer() }
+	if (!open.complete) return getAnswer() // the opening tag is still being written
+	let i = open.end
 	let j = str.lastIndexOf(`</${toolName}>`)
 	if (j === -1) j = Infinity
 	else isDone = true
+	if (j < i) { j = i; isDone = true } // a stray closing tag before the end of the opening tag
 
 
-	str = str.substring(i + openToolTag.length, j)
+	str = str.substring(i, j)
 
 	const pm = new SurroundingsRemover(str)
 
@@ -267,6 +302,29 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 	}
 }
 
+
+/** `<tool_call>{"name": ..., "arguments": {...}}</tool_call>` -> a complete tool call, or null when it is not one of the available tools. */
+const parseHermesToolCall = (text: string, toolOfToolName: ToolOfToolName, toolId: string): { toolCall: RawToolCallObj, startIdx: number } | null => {
+	const m = /<tool_call>\s*(\{[\s\S]*\})\s*<\/tool_call>/.exec(text)
+	if (!m) return null
+	let parsed: any
+	try { parsed = JSON.parse(m[1]) } catch { return null }
+	const name = parsed?.name
+	if (typeof name !== 'string' || !toolOfToolName[name]) return null
+	let args = parsed.arguments ?? parsed.parameters ?? {}
+	if (typeof args === 'string') { try { args = JSON.parse(args) } catch { return null } }
+	if (typeof args !== 'object' || args === null) return null
+	const allowed = Object.keys(toolOfToolName[name]?.params ?? {})
+	const rawParams: RawToolParamsObj = {}
+	const doneParams: string[] = []
+	for (const [k, v] of Object.entries(args)) {
+		if (!allowed.includes(k)) continue
+		rawParams[k as ToolParamName<ToolName>] = typeof v === 'string' ? v : JSON.stringify(v)
+		doneParams.push(k)
+	}
+	return { toolCall: { name: name as ToolName, rawParams, doneParams: doneParams as ToolParamName<ToolName>[], isDone: true, id: toolId }, startIdx: m.index }
+}
+
 export const extractXMLToolsWrapper = (
 	onText: OnText,
 	onFinalMessage: OnFinalMessage,
@@ -279,7 +337,9 @@ export const extractXMLToolsWrapper = (
 	if (!tools) return { newOnText: onText, newOnFinalMessage: onFinalMessage }
 
 	const toolOfToolName: ToolOfToolName = {}
-	const toolOpenTags = tools.map(t => `<${t.name}>`)
+	// the tag may carry attributes (`<run_command command="...">`), so only `<name` is matched here and the delimiter is checked below
+	const toolOpenTags = tools.map(t => `<${t.name}`)
+	const openTagRegex = toolOpenTagRegex(tools.map(t => t.name))
 	for (const t of tools) { toolOfToolName[t.name] = t }
 
 	const toolId = generateUuid()
@@ -316,10 +376,10 @@ export const extractXMLToolsWrapper = (
 				openToolTagBuffer = ''
 				fullText += newText
 
-				const i = findIndexOfAny(fullText, toolOpenTags)
-				if (i !== null) {
-					const [idx, toolTag] = i
-					const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
+				const m = openTagRegex.exec(fullText)
+				if (m !== null) {
+					const idx = m.index
+					const toolName = m[1] as ToolName
 					// console.log('found ', toolName)
 					foundOpenTag = { idx, toolName }
 
@@ -352,6 +412,16 @@ export const extractXMLToolsWrapper = (
 	const newOnFinalMessage: OnFinalMessage = (params) => {
 		// treat like just got text before calling onFinalMessage (or else we sometimes miss the final chunk that's new to finalMessage)
 		newOnText({ ...params })
+
+		// Models trained on the Hermes/Qwen convention write `<tool_call>{"name": "run_command", "arguments": {"command": "ls"}}</tool_call>`
+		// instead of the documented format. Without this the call is plain text: nothing runs and the agent just stops.
+		if (latestToolCall === undefined) {
+			const hermes = parseHermesToolCall(trueFullText, toolOfToolName, toolId)
+			if (hermes) {
+				latestToolCall = hermes.toolCall
+				fullText = trueFullText.substring(0, hermes.startIdx)
+			}
+		}
 
 		fullText = fullText.trimEnd()
 		const toolCall = latestToolCall

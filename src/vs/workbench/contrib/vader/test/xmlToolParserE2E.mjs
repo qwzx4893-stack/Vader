@@ -68,5 +68,46 @@ for (const step of [1, 3, 7, 1000]) {
 	const f = run('Let me look.\n<ls_dir>\n</ls_dir>');
 	check('a call with no parameters parses', f.toolCalls?.[0]?.name === 'ls_dir', JSON.stringify(f.toolCalls));
 }
+
+// ---- parameters written as attributes: a real model wrote exactly this and the call was silently ignored (nothing ran, the agent stopped) ----
+{
+	const text = `بما أنني أتحقق من الطرفية:\n<run_command command="echo === TERMINAL TEST === && ver && node --version && git --version && python --version"></run_command>`;
+	for (const step of [1, 5, 1000]) {
+		const f = run(text, step);
+		check(`attribute-style call is recognised (chunks of ${step})`, f.toolCalls?.length === 1 && f.toolCalls[0].name === 'run_command', JSON.stringify(f));
+		check(`its command is intact, with && and = (chunks of ${step})`, f.toolCalls?.[0]?.rawParams.command === 'echo === TERMINAL TEST === && ver && node --version && git --version && python --version', JSON.stringify(f.toolCalls?.[0]?.rawParams));
+		check(`the tag is not shown to the user (chunks of ${step})`, !f.fullText.includes('<run_command') && f.fullText.includes('بما أنني'), f.fullText);
+		check(`it is complete, not "still streaming" (chunks of ${step})`, f.toolCalls?.[0]?.isDone === true);
+	}
+}
+{
+	const f = run(`Reading.\n<read_file uri="/a/b c/notes.txt" />`);
+	check('a self-closing call with an attribute parses', f.toolCalls?.[0]?.name === 'read_file' && f.toolCalls[0].rawParams.uri === '/a/b c/notes.txt' && f.toolCalls[0].isDone === true, JSON.stringify(f.toolCalls));
+}
+{
+	const f = run(`<run_command command='echo "hi" > out.txt'></run_command>`);
+	check('single-quoted attribute with double quotes and > inside', f.toolCalls?.[0]?.rawParams.command === 'echo "hi" > out.txt', JSON.stringify(f.toolCalls?.[0]?.rawParams));
+}
+{
+	const f = run(`<run_command command="echo a &amp;&amp; echo b"></run_command>`);
+	check('XML entities in an attribute are decoded', f.toolCalls?.[0]?.rawParams.command === 'echo a && echo b', JSON.stringify(f.toolCalls?.[0]?.rawParams));
+}
+{
+	const f = run(`<read_file uri="/a/notes.txt">\n<page_number>2</page_number>\n</read_file>`);
+	check('attributes and nested parameter tags can be mixed', f.toolCalls?.[0]?.rawParams.uri === '/a/notes.txt' && f.toolCalls[0].rawParams.page_number === '2', JSON.stringify(f.toolCalls?.[0]?.rawParams));
+}
+{
+	const f = run('Compare <read_file_extra> with something.');
+	check('a different tag that merely starts with a tool name is not a call', !f.toolCalls?.length, JSON.stringify(f.toolCalls));
+}
+{
+	const f = run(`Checking.\n<tool_call>\n{"name": "run_command", "arguments": {"command": "ver && node --version"}}\n</tool_call>`);
+	check('a Hermes/Qwen style <tool_call> JSON call is executed', f.toolCalls?.[0]?.name === 'run_command' && f.toolCalls[0].rawParams.command === 'ver && node --version' && f.toolCalls[0].isDone, JSON.stringify(f.toolCalls));
+	check('and its text is not left in the answer', f.fullText === 'Checking.', f.fullText);
+}
+{
+	const f = run('<tool_call>{"name": "format_disk", "arguments": {}}</tool_call>');
+	check('a <tool_call> for a tool that does not exist is not run', !f.toolCalls?.length, JSON.stringify(f.toolCalls));
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

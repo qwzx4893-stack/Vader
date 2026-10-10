@@ -42,6 +42,22 @@ export const xmlScenarios = [
 		},
 	},
 	{
+		name: 'xml: a call whose parameters are written as attributes (what a real model did) is executed, not silently dropped',
+		fn: async (t) => {
+			t.use(seq([
+				{ text: `Let me read it.\n<read_file uri="${t.abs('notes.txt')}"></read_file>` },
+				(c) => ({ text: `It says: ${c.lastMessageText.includes('hello world') ? 'hello world' : '(missing)'}` }),
+			]));
+			await t.send('read notes.txt');
+			t.check('agent returns to idle', await t.idle());
+			t.check('a "Read file" tool call is shown', (await t.ui.toolHeaders(t.page)).some(h => /read file/i.test(h)));
+			const reqs = t.server.chatRequests();
+			t.check('the model was called again with the tool result (the agent did not just stop)', reqs.length === 2, reqs.length);
+			t.check('the real file content came back', (reqs[1]?.ctx.lastMessageText ?? '').includes('hello world'), (reqs[1]?.ctx.lastMessageText ?? '').slice(0, 200));
+			t.check('the raw tag is not left in the chat', !(await t.ui.assistantTexts(t.page)).some(x => x.includes('<read_file')));
+		},
+	},
+	{
 		name: 'xml: edit_file written as XML needs approval and changes the file',
 		fn: async (t) => {
 			t.use(seq([

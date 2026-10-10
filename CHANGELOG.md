@@ -8,6 +8,10 @@
   The old "Metrics" opt-out switch (it controlled nothing) is gone.
 - **Update check that works.** The inherited updater needs an update server Vader does not have. "Check for Updates" now compares the running version with
   the latest GitHub release and offers the download page; a background check exists but is off by default.
+- **Agent no longer stops silently on a differently-written tool call.** A real model wrote `<run_command command="...">` (parameters as attributes)
+  and the XML tool parser, which only knew `<run_command><command>...</command></run_command>`, treated it as plain text: nothing ran and the
+  agent ended its turn. The parser now accepts attribute and self-closing forms and Hermes/Qwen `<tool_call>{"name": ...}</tool_call>` JSON calls, and the
+  prompt says parameters are nested tags. Covered by the parser test and a real-app scenario.
 - **Inherited leftovers removed:** the two bundled Remote-SSH / Remote-WSL extensions (they could not work with Microsoft's remote server), the
   "Use AI Features with Copilot for free..." palette command, the Accounts icon (starts hidden; Microsoft/GitHub sign-in only), and a crash in
   *One-Click Switch* when the source editor had no extensions folder.

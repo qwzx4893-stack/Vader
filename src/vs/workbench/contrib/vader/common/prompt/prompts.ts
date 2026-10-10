@@ -628,7 +628,7 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 
 	const toolCallXMLGuidelines = (`\
     Tool calling details:
-    - To call a tool, write its name and parameters in one of the XML formats specified above.
+    - To call a tool, write its name and parameters in one of the XML formats specified above: every parameter is a nested tag (for example the tag run_command containing a nested command tag with the text ls -la), never an attribute and never JSON.
     - After you write the tool call, you must STOP and WAIT for the result.
     - All parameters are REQUIRED unless noted otherwise.
     - You are only allowed to output ONE tool call, and it must be at the END of your response.
