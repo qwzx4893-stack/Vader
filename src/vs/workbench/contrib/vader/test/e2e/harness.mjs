@@ -107,7 +107,22 @@ async function runScenario({ group, s, server, ws, app }) {
 		results.push(rec); return;
 	}
 
+	// isolation: no editor from an earlier scenario stays open (a buffer left dirty by one scenario would otherwise leak into the next)
+	const settleDialogs = async () => {
+		// a "save changes?" or "file is newer" dialog left by the previous scenario would swallow this one's keystrokes
+		for (let i = 0; i < 3; i++) {
+			const dialog = page.locator('.monaco-dialog-box');
+			if (!(await dialog.count())) { return; }
+			const button = dialog.getByRole('button', { name: /Don.?t Save|Revert|Discard|Cancel|Close/ });
+			if (await button.count()) { await button.first().click().catch(() => { }); } else { await page.keyboard.press('Escape'); }
+			await sleep(300);
+		}
+	};
+	await ui.runCommand(page, 'View: Close All Editors').catch(() => { });
+	await settleDialogs();
+
 	// isolation: clean workspace, new empty chat thread, fresh request log, default responder
+	await settleDialogs();
 	resetWorkspace(ws);
 	server.reset(); server.setResponder(() => ({ text: 'OK' })); server.setFim(() => '');
 	await ui.dismissNotifications(page);

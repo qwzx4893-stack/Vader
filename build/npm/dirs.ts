@@ -64,8 +64,6 @@ export const dirs = [
 	'.vscode/extensions/vscode-selfhost-test-provider',
 	'.vscode/extensions/vscode-extras',
 	'.vscode/extensions/vscode-pr-pinger',
-	'extensions/open-remote-ssh', // Vader (inherited from Vader)
-	'extensions/open-remote-wsl', // Vader (inherited from Vader)
 ];
 
 if (existsSync(`${import.meta.dirname}/../../.build/distro/npm`)) {

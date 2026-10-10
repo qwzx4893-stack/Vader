@@ -5,7 +5,9 @@
 
 export type VaderCheckUpdateRespose = {
 	message: string,
-	action?: 'reinstall' | 'restart' | 'download' | 'apply'
+	action?: 'reinstall' | 'restart' | 'download' | 'apply' | 'release'
+	/** with action 'release': the GitHub release page of the newer version */
+	url?: string
 } | {
 	message: null,
 	actions?: undefined,

@@ -68,7 +68,7 @@ Moderate advisories that remain in shipped code: `uuid` 3.x inside `@microsoft/d
 ## Second pass: shipped sub-packages, and what is left
 
 `shippedAdvisoriesE2E` used to audit only the root `package-lock.json`. VS Code's built-in extensions (css/html/json language features, emmet, npm,
-markdown, mermaid, open-remote-ssh...) each carry their own lockfile and `node_modules` into the installer, and had high advisories the gate never saw.
+markdown, mermaid...) each carry their own lockfile and `node_modules` into the installer, and had high advisories the gate never saw.
 It now audits the production dependencies of all 36 shipped lockfiles, **at every severity**, and the whole set is at zero:
 
 | Package | Where | Advisory | Fix |
@@ -76,7 +76,7 @@ It now audits the production dependencies of all 36 shipped lockfiles, **at ever
 | `proxy-addr` 2.0.7 (critical) | root, via MCP SDK -> express | IP spoofing through IPv4-mapped IPv6 | override to 2.0.8 (it was in the shipped app) |
 | `adm-zip` | root, via foundry-local-sdk (not in the installer) | 4 GB allocation, symlink extraction | override to 0.6.1 |
 | `katex` | root, `remote`, `remote/web`, markdown extensions, mermaid | prototype pollution bypassing trust settings | 0.19.0 everywhere; rendering verified with `@vscode/markdown-it-katex` |
-| `brace-expansion`, `minimatch`, `ip-address`, `socks`, `@babel/runtime-corejs3`, `js-yaml`, `sprintf-js`, ... | language-feature extensions, open-remote-ssh, extension-editing | ReDoS / XSS / DoS | `npm audit fix` (semver-compatible) per lockfile |
+| `brace-expansion`, `minimatch`, `ip-address`, `socks`, `@babel/runtime-corejs3`, `js-yaml`, `sprintf-js`, ... | language-feature extensions, extension-editing | ReDoS / XSS / DoS | `npm audit fix` (semver-compatible) per lockfile |
 | `image-size` | emmet | infinite loop in ICNS parser | upgraded to 2.0.4 and the helper ported to its API (`imageSizeFromFile`) |
 | `which-pm`, `find-yarn-workspace-root` (-> YAML parser, micromatch, braces) | npm extension | merge-key CPU use, brace-nesting stack exhaustion, both reachable from files in the opened workspace; `braces` has no patched release at all | replaced by ~50 lines in `preferred-pm.ts`; `npmExtensionPreferredPmE2E` checks real layouts and hostile inputs (merge-key bomb, 50,000 nested braces, 2 MB manifest) |
 | `Object` hook tables | `sendLLMMessageService`, `consistentItemService` | Semgrep dynamic-dispatch pattern | prototype-less tables, so ids like `constructor` cannot resolve to inherited members |

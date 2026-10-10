@@ -1,7 +1,9 @@
 # Network privacy: what Vader contacts, and how that is checked
 
 Vader talks to the network for exactly these reasons: the model provider the user configured (and its "list models" call), the extension
-gallery (Open VSX), update/telemetry endpoints configured in `product.json` (none by default), and pages the user or the agent opens.
+gallery (Open VSX), the public list of Vader releases on GitHub (`api.github.com/repos/qwzx4893-stack/Vader/releases/latest`; only when the user presses
+"Check for Updates" or has switched on **Settings > About & Updates > Check for new releases automatically**, which is off by default), and pages the user or the agent opens.
+The editor's own update and telemetry endpoints in `product.json` are not configured. The same list is shown to the user in **Settings > Privacy & Network**.
 Chromium and Electron ship background services that contact Google on their own; Vader turns them off.
 
 ## Electron (main process, workbench windows) - `src/main.ts`

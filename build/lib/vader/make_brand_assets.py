@@ -5,7 +5,7 @@
   brand/source/banner.jpg       the wide banner (README / social preview)
 
 Run from the repository root:   python3 build/lib/vader/make_brand_assets.py
-Needs:  pip install pillow numpy potracer
+Needs:  pip install pillow numpy scipy potracer
 
 The transparent logo is derived from the black one (brightness becomes opacity), so the white logo can sit on any dark or grey surface.
 Light-theme surfaces get a dark variant of the same shape (a white logo on white would vanish).
@@ -14,7 +14,8 @@ import io
 import os
 import sys
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
+from scipy import ndimage
 import potrace
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
@@ -58,6 +59,40 @@ def on_black(size, pad=0.06, rounded=0.0, margin=0.0):
     return out
 
 
+# ---- small sizes: the logo is much wider than tall (a black hole with long wings), so fitting it by width leaves a small mark in a
+# square tile. Square icons crop the ORIGINAL artwork around the ring instead (the part that carries the identity), scaled to fill the
+# tile by height; nothing is simplified, redrawn or thickened. The ring (shadow disc centre and outer radius) was measured on the source.
+RING_CX, RING_CY, RING_R = 642, 644, 338
+
+
+def ring_box(pad=1.12):
+    half = RING_R * pad
+    return (RING_CX - half, RING_CY - half, RING_CX + half, RING_CY + half)
+
+
+def ring_mark(size, pad=1.12, ss=1):
+    """The ring crop of the original logo, white on black ('L' image) at size x size."""
+    return mask.resize((size * ss, size * ss), Image.LANCZOS, box=ring_box(pad))
+
+
+def icon_image(size):
+    """App icon at `size` (RGBA, opaque black background, white original logo cropped around the ring)."""
+    m = ring_mark(size)
+    return Image.merge('RGBA', (m, m, m, Image.new('L', (size, size), 255)))
+
+
+def stars(w, h, count, seed):
+    """Deterministic star field (RGB image, near black) for the installer panel."""
+    rng = np.random.default_rng(seed)
+    im = Image.new('RGB', (w, h), (4, 5, 9))
+    d = ImageDraw.Draw(im)
+    for _ in range(count):
+        x, y = int(rng.integers(0, w)), int(rng.integers(0, h))
+        v = int(rng.integers(70, 200))
+        d.point((x, y), fill=(v, v, min(255, v + 25)))
+    return im
+
+
 def save_png(im, *path):
     p = P(*path); os.makedirs(os.path.dirname(p), exist_ok=True); im.save(p, optimize=True); print('wrote', os.path.relpath(p, ROOT), im.size)
 
@@ -78,21 +113,36 @@ save_png(on_black(512, pad=0.05), 'docs/assets/logo.png')
 save_png(square_logo(512, pad=0.02), 'docs/assets/logo-transparent.png')
 
 # ---- Windows
-ico = on_black(256, pad=0.05)
+ico_sizes = [16, 24, 32, 48, 64, 72, 96, 128, 256]
+imgs = [icon_image(sz) for sz in ico_sizes]
 os.makedirs(P('resources/win32'), exist_ok=True)
-ico.save(P('resources/win32/code.ico'), sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (72, 72), (96, 96), (128, 128), (256, 256)]); print('wrote resources/win32/code.ico')
-save_png(on_black(150, pad=0.08).convert('RGB'), 'resources/win32/code_150x150.png')
-save_png(on_black(70, pad=0.08).convert('RGB'), 'resources/win32/code_70x70.png')
-# installer: left panel (164x314 at 100%) and the small header image (55x55 at 100%), every DPI step
+imgs[-1].save(P('resources/win32/code.ico'), format='ICO', sizes=[(sz, sz) for sz in ico_sizes], append_images=imgs[:-1]); print('wrote resources/win32/code.ico')
+save_png(icon_image(150).convert('RGB'), 'resources/win32/code_150x150.png')
+save_png(icon_image(70).convert('RGB'), 'resources/win32/code_70x70.png')
+# installer: left panel (164x314 at 100%) and the small header image (55x55 at 100%), every DPI step.
+# Both keep a generous margin so nothing touches the edge of the wizard window.
+FONT_BOLD = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+FONT_REG = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 for scale, (bw, bh), (sw, sh) in [(100, (164, 314), (55, 55)), (125, (192, 386), (64, 68)), (150, (246, 459), (83, 80)), (175, (273, 556), (92, 97)),
                                   (200, (328, 604), (110, 106)), (225, (355, 700), (119, 123)), (250, (410, 797), (138, 140))]:
-    big = Image.new('RGB', (bw, bh), (0, 0, 0))
-    lg = square_logo(int(bw * 0.92), pad=0.0)
-    big.paste(lg, ((bw - lg.width) // 2, int(bh * 0.30)), lg)
+    big = stars(bw, bh, count=int(bw * bh / 380), seed=7)
+    logo_w = int(bw * 0.62)                                   # 19% free on each side
+    mk = ring_mark(logo_w, pad=1.10)
+    lg = Image.merge('RGBA', (mk, mk, mk, mk))
+    ly = int(bh * 0.24)
+    big.paste(lg, ((bw - logo_w) // 2, ly), lg)
+    d = ImageDraw.Draw(big)
+    f1 = ImageFont.truetype(FONT_BOLD, max(12, int(bw * 0.17)))
+    f2 = ImageFont.truetype(FONT_REG, max(8, int(bw * 0.065)))
+    ty = ly + logo_w + int(bh * 0.05)
+    d.text((bw / 2, ty), 'Vader', font=f1, fill=(255, 255, 255), anchor='ma')
+    d.text((bw / 2, ty + f1.size + int(bh * 0.012)), 'AI-native IDE', font=f2, fill=(150, 154, 170), anchor='ma')
     big.save(P(f'resources/win32/inno-big-{scale}.bmp'))
     small = Image.new('RGB', (sw, sh), (0, 0, 0))
-    ls = square_logo(min(sw, sh), pad=0.04)
-    small.paste(ls, ((sw - ls.width) // 2, (sh - ls.height) // 2), ls)
+    side = int(min(sw, sh) * 0.76)                            # 12% margin all round
+    ms = ring_mark(side, pad=1.10)
+    ls = Image.merge('RGBA', (ms, ms, ms, ms))
+    small.paste(ls, ((sw - side) // 2, (sh - side) // 2), ls)
     small.save(P(f'resources/win32/inno-small-{scale}.bmp'))
 print('wrote installer images')
 
@@ -100,8 +150,9 @@ print('wrote installer images')
 save_png(on_black(1024, pad=0.04), 'resources/linux/code.png')
 save_png(on_black(192, pad=0.05), 'resources/server/code-192.png')
 save_png(on_black(512, pad=0.05), 'resources/server/code-512.png')
-on_black(256, pad=0.05).save(P('resources/server/favicon.ico'), sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (256, 256)]); print('wrote resources/server/favicon.ico')
-save_png(on_black(256, pad=0.05), 'scripts/appimage/vader.png')
+fav = [16, 32, 48, 64, 256]; fimgs = [icon_image(sz) for sz in fav]
+fimgs[-1].save(P('resources/server/favicon.ico'), format='ICO', sizes=[(sz, sz) for sz in fav], append_images=fimgs[:-1]); print('wrote resources/server/favicon.ico')
+save_png(icon_image(256), 'scripts/appimage/vader.png')
 
 # ---- macOS: a rounded black square with the usual margin
 mac = on_black(1024, pad=0.07, rounded=0.225, margin=0.098)
@@ -109,7 +160,8 @@ os.makedirs(P('resources/darwin'), exist_ok=True)
 mac.save(P('resources/darwin/code.icns')); print('wrote resources/darwin/code.icns')
 
 # ---- in-app: the logo without a background for grey/black surfaces (banner part, getting started, walkthrough file icons)
-save_png(square_logo(128, pad=0.0), 'src/vs/workbench/browser/media/vader-icon-sm.png')
+_b = ring_mark(128, pad=1.08)   # shown at 16-48 px in the UI: the original logo cropped around the ring, white on transparent
+save_png(Image.merge('RGBA', (Image.new('L', (128, 128), 255),) * 3 + (_b,)), 'src/vs/workbench/browser/media/vader-icon-sm.png')
 
 
 # ---- vector logo (traced from the mask) for the editor watermark and the other SVG logo slots
@@ -153,11 +205,14 @@ write(wm + 'letterpress-light.svg', svg('#1b1b1b', 0.22))    # light theme: a wh
 write(wm + 'letterpress-hcDark.svg', svg('#ffffff', 0.7))
 write(wm + 'letterpress-hcLight.svg', svg('#1b1b1b', 0.6))
 def badge():
-    # black rounded square with the white logo: readable on dark AND light surfaces (title bar icon, "open in" buttons)
-    k = 0.86
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{side}" height="{side}" viewBox="0 0 {side} {side}">'
-            f'<rect width="{side}" height="{side}" rx="{side * 0.22:.0f}" fill="#000"/>'
-            f'<path fill="#fff" fill-rule="evenodd" transform="translate({side * (1 - k) / 2 + ox * k:.1f} {side * (1 - k) / 2 + oy * k:.1f}) scale({k})" d="{d}"/></svg>\n')
+    # black rounded square with the ORIGINAL logo cropped around the ring (the traced path is clipped by the viewBox):
+    # readable on dark AND light surfaces at 16-22 px (title bar icon, "open in" buttons)
+    half = RING_R * 1.10
+    vx, vy = RING_CX - bbox[0] - half, RING_CY - bbox[1] - half     # ring square in the traced path's coordinates
+    side2 = 2 * half
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="{vx:.1f} {vy:.1f} {side2:.1f} {side2:.1f}">'
+            f'<rect x="{vx:.1f}" y="{vy:.1f}" width="{side2:.1f}" height="{side2:.1f}" rx="{side2 * 0.22:.0f}" fill="#000"/>'
+            f'<path fill="#fff" fill-rule="evenodd" d="{d}"/></svg>\n')
 
 
 write('src/vs/workbench/browser/media/code-icon.svg', badge())

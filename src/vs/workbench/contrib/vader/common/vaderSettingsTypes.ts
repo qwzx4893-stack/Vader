@@ -531,6 +531,7 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	autoCheckUpdates: boolean; // look for a newer GitHub release in the background (off by default: nothing contacts the network on its own)
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -547,6 +548,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	autoCheckUpdates: false,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

@@ -5,12 +5,12 @@
 
 import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react'; // Added useRef import just in case it was missed, though likely already present
 import { ProviderLogo } from '../util/ProviderLogo.js'
-import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VaderStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName } from '../../../../common/vaderSettingsTypes.js'
+import { ProviderName, SettingName, displayInfoOfSettingName, providerNames, VaderStatefulModelInfo, customSettingNamesOfProvider, RefreshableProviderName, refreshableProviderNames, displayInfoOfProviderName, nonlocalProviderNames, localProviderNames, GlobalSettingName, featureNames, displayInfoOfFeatureName, isProviderNameDisabled, FeatureName, hasDownloadButtonsOnModelsProviderNames, subTextMdOfProviderName, ChatMode } from '../../../../common/vaderSettingsTypes.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VaderButtonBgDarken, VaderCustomDropdownBox, VaderInputBox2, VaderSimpleInputBox, VaderSwitch } from '../util/inputs.js'
 import { filterProviders } from '../../../../common/providerSearch.js'
-import { useAccessor, useIsDark, useIsOptedOut, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus } from 'lucide-react'
+import { useAccessor, useIsDark, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
@@ -23,20 +23,23 @@ import { getModelCapabilities, modelOverrideKeys, ModelOverrides } from '../../.
 import { RouterCategory } from '../../../../common/modelRouter/modelRouterService.js';
 import { PolicyRequestKind, UserPolicyRuleInput } from '../../../../common/policy/policyService.js';
 import { validateUserPattern } from '../../../../common/helpers/safeRegex.js';
-import { TransferEditorType, TransferFilesInfo } from '../../../extensionTransferTypes.js';
+import { TransferEditorType, TransferFilesInfo, transferEditorTypes } from '../../../extensionTransferTypes.js';
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
-import { OPT_OUT_KEY } from '../../../../common/storageKeys.js';
-import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
 
 type Tab =
 	| 'models'
 	| 'localProviders'
 	| 'providers'
+	| 'agent'
+	| 'context'
 	| 'featureOptions'
 	| 'mcp'
-	| 'general'
+	| 'extensions'
+	| 'privacy'
+	| 'data'
+	| 'about'
 	| 'all';
 
 
@@ -1386,7 +1389,7 @@ export const OneClickSwitchButton = ({ fromEditor = 'VS Code', className = '' }:
 	}
 
 	return <>
-		<VaderButtonBgDarken className={`max-w-48 p-4 ${className}`} disabled={transferState.type !== 'done'} onClick={onClick}>
+		<VaderButtonBgDarken className={`p-4 ${className}`} disabled={transferState.type !== 'done'} onClick={onClick}>
 			{transferState.type === 'done' ? `Transfer from ${fromEditor}`
 				: transferState.type === 'loading' ? <span className='text-nowrap flex flex-nowrap'>Transferring<IconLoading /></span>
 					: transferState.type === 'justfinished' ? <AnimatedCheckmarkButton text='Settings Transferred' className='bg-none' />
@@ -1508,20 +1511,232 @@ const MCPServersList = () => {
 	return <div className="my-2">{content}</div>
 };
 
+// ─────────────── sections added with the Settings restructure ───────────────
+
+const REPO_URL = 'https://github.com/qwzx4893-stack/Vader'
+
+const SectionTitle = ({ title, desc }: { title: string, desc?: React.ReactNode }) => (
+	<>
+		<h2 className='text-3xl mb-2'>{title}</h2>
+		{desc && <h4 className='text-vader-fg-3 mb-4'>{desc}</h4>}
+	</>
+)
+
+const InfoRow = ({ label, value, testId }: { label: string, value: React.ReactNode, testId?: string }) => (
+	<div className='flex items-baseline gap-4 py-1.5 border-b border-vader-border-2 text-sm' data-testid={testId}>
+		<div className='w-40 shrink-0 text-vader-fg-3'>{label}</div>
+		<div className='min-w-0 break-words select-text'>{value}</div>
+	</div>
+)
+
+const SwitchRow = ({ value, onChange, label, detail, testId }: { value: boolean, onChange: (v: boolean) => void, label: string, detail?: string, testId?: string }) => (
+	<div className='my-3' data-testid={testId}>
+		<div className='flex items-center gap-x-2'>
+			<VaderSwitch size='xs' value={value} onChange={onChange} />
+			<span className='text-sm'>{label}</span>
+		</div>
+		{detail && <div className='text-vader-fg-3 text-xs mt-1 max-w-[560px]'>{detail}</div>}
+	</div>
+)
+
+const chatModeInfo: { mode: ChatMode, name: string, detail: string }[] = [
+	{ mode: 'agent', name: 'Agent', detail: 'Edits files, runs commands and uses tools, within your approvals and policy rules.' },
+	{ mode: 'plan', name: 'Plan', detail: 'Read-only research that ends in a structured plan you can approve into Agent mode.' },
+	{ mode: 'gather', name: 'Gather', detail: 'Reads files and searches the project, but cannot edit anything.' },
+	{ mode: 'normal', name: 'Chat', detail: 'Plain conversation with the model, no tools.' },
+]
+
+const ChatModeSection = () => {
+	const accessor = useAccessor()
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const settingsState = useSettingsState()
+	const current = settingsState.globalSettings.chatMode
+	return <div data-testid='vader-settings-chatmode'>
+		<SectionTitle title='Chat Mode' desc='The mode a chat uses. You can also switch it from the chat box at any time; the choice is remembered.' />
+		<div className='grid gap-2' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+			{chatModeInfo.map(({ mode, name, detail }) => (
+				<button
+					key={mode}
+					type='button'
+					data-testid={`vader-chatmode-${mode}`}
+					aria-pressed={current === mode}
+					onClick={() => vaderSettingsService.setGlobalSetting('chatMode', mode)}
+					className={`text-left p-3 rounded-md border transition-colors duration-150 ${current === mode ? 'border-[#0e70c0] bg-[#0e70c0]/15' : 'border-vader-border-2 hover:bg-vader-bg-3'}`}
+				>
+					<div className='text-sm font-medium'>{name}</div>
+					<div className='text-xs text-vader-fg-3 mt-1'>{detail}</div>
+				</button>
+			))}
+		</div>
+	</div>
+}
+
+const ExtensionsSection = () => {
+	const accessor = useAccessor()
+	const commandService = accessor.get('ICommandService')
+	const openerService = accessor.get('IOpenerService')
+	const configurationService = accessor.get('IConfigurationService')
+	const productService = accessor.get('IProductService')
+
+	const galleryHost = (() => {
+		try { return new URL(productService.extensionsGallery?.serviceUrl ?? '').host } catch { return null }
+	})()
+
+	const [verifySignature, setVerifySignature] = useState<boolean>(!!configurationService.getValue('extensions.verifySignature'))
+	useEffect(() => {
+		const d = configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('extensions.verifySignature')) { setVerifySignature(!!configurationService.getValue('extensions.verifySignature')) }
+		})
+		return () => d.dispose()
+	}, [configurationService])
+
+	return <div data-testid='vader-settings-extensions'>
+		<SectionTitle title='Extensions' desc='Vader runs VS Code extensions: themes, languages, formatters, debuggers and more.' />
+
+		<div className='mb-4'>
+			<InfoRow label='Marketplace' value={galleryHost ? <span>{galleryHost} (Open VSX, the open extension registry)</span> : 'Not configured'} testId='vader-settings-gallery' />
+			<InfoRow label='Not available' value='Extensions that Microsoft publishes only on its own Marketplace (for example Remote-SSH and the C/C++ pack) are not on Open VSX. The guide lists alternatives, or install a .vsix you trust.' />
+		</div>
+
+		<div className='flex flex-wrap gap-2 mb-4'>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => commandService.executeCommand('workbench.view.extensions')}>Browse Extensions</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => commandService.executeCommand('workbench.extensions.action.installVSIX')}>Install from VSIX…</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => openerService.open(URI.parse(`${REPO_URL}/blob/main/docs/EXTENSIONS.md`))}>Extensions guide</VaderButtonBgDarken>
+		</div>
+
+		<SwitchRow
+			testId='vader-settings-verify-signature'
+			value={verifySignature}
+			onChange={(v) => configurationService.updateValue('extensions.verifySignature', v)}
+			label='Require signed extensions'
+			detail='Off by default: Open VSX does not sign extensions with the Microsoft certificate chain this check needs, so turning it on makes extensions from Open VSX fail to install.'
+		/>
+	</div>
+}
+
+const PrivacySection = () => {
+	const accessor = useAccessor()
+	const settingsState = useSettingsState()
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const openerService = accessor.get('IOpenerService')
+	const autoCheckUpdates = settingsState.globalSettings.autoCheckUpdates
+
+	const contacts: { who: string, when: string, host: string }[] = [
+		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure (or localhost for local models)' },
+		{ who: 'Extension registry', when: 'When you browse, search or install extensions.', host: 'open-vsx.org' },
+		{ who: 'Release check', when: autoCheckUpdates ? 'Now on: a quiet check for a newer Vader release every few hours, plus the manual button.' : 'Only when you press "Check for Updates". The background check is off.', host: 'api.github.com' },
+		{ who: 'Pages the agent opens', when: 'Only when the agent uses its browser tool, and only the sites it was told to visit.', host: 'the sites in question' },
+	]
+
+	return <div data-testid='vader-settings-privacy'>
+		<SectionTitle title='Privacy & Network' desc='What Vader sends over the network, and to whom. Nothing else is contacted at start-up.' />
+
+		<div className='mb-6'>
+			<InfoRow label='Usage metrics' value='None. Vader has no analytics endpoint, no crash reporter and no account.' />
+			<InfoRow label='API keys' value='Stored on this computer and only sent to the provider they belong to.' />
+			<InfoRow label='Your code and chats' value='Stay on this computer except for what is sent to the model you chose.' />
+		</div>
+
+		<h3 className='text-xl mb-2'>Who Vader can contact</h3>
+		<div className='mb-6' data-testid='vader-settings-contacts'>
+			{contacts.map(c => (
+				<div key={c.who} className='py-2 border-b border-vader-border-2 text-sm'>
+					<div className='flex justify-between gap-4'><span className='font-medium'>{c.who}</span><span className='text-vader-fg-3 text-xs'>{c.host}</span></div>
+					<div className='text-vader-fg-3 text-xs mt-0.5'>{c.when}</div>
+				</div>
+			))}
+		</div>
+
+		<SwitchRow
+			testId='vader-settings-privacy-autocheck'
+			value={autoCheckUpdates}
+			onChange={(v) => vaderSettingsService.setGlobalSetting('autoCheckUpdates', v)}
+			label='Check for new releases automatically'
+			detail='Looks at the public list of Vader releases on GitHub; sends no information about you. Off by default.'
+		/>
+
+		<div className='mt-4'>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => openerService.open(URI.parse(`${REPO_URL}/blob/main/docs/integrations/privacy.md`))}>How this is verified</VaderButtonBgDarken>
+		</div>
+	</div>
+}
+
+const AboutSection = () => {
+	const accessor = useAccessor()
+	const productService = accessor.get('IProductService')
+	const commandService = accessor.get('ICommandService')
+	const openerService = accessor.get('IOpenerService')
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const settingsState = useSettingsState()
+	const open = (url: string) => openerService.open(URI.parse(url))
+
+	return <div data-testid='vader-settings-about'>
+		<SectionTitle title='About & Updates' />
+		<div className='mb-6'>
+			<InfoRow label='Vader' value={productService.vaderVersion ?? 'unknown'} testId='vader-settings-version' />
+			<InfoRow label='Editor base' value={`VS Code ${productService.version}`} />
+			<InfoRow label='Commit' value={productService.commit ? productService.commit.slice(0, 10) : 'development build'} />
+			<InfoRow label='Built' value={productService.date ? new Date(productService.date).toLocaleString() : 'n/a'} />
+			<InfoRow label='License' value='Apache-2.0 (Vader), MIT (VS Code), see the links below' />
+		</div>
+
+		<h3 className='text-xl mb-2'>Updates</h3>
+		<div className='text-vader-fg-3 text-sm mb-2'>Vader does not update itself. It can tell you when a newer release is on GitHub; you download and install it.</div>
+		<div className='flex flex-wrap gap-2 mb-2'>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => commandService.executeCommand('vader.vaderCheckUpdate')}>Check for Updates</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => open(`${REPO_URL}/releases`)}>All releases</VaderButtonBgDarken>
+		</div>
+		<SwitchRow
+			testId='vader-settings-about-autocheck'
+			value={settingsState.globalSettings.autoCheckUpdates}
+			onChange={(v) => vaderSettingsService.setGlobalSetting('autoCheckUpdates', v)}
+			label='Check for new releases automatically'
+			detail='Off by default. When on, Vader looks at GitHub shortly after start and then every few hours.'
+		/>
+
+		<h3 className='text-xl mt-6 mb-2'>Links</h3>
+		<div className='flex flex-wrap gap-2 mb-6'>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => open(REPO_URL)}>GitHub</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => open(`${REPO_URL}/issues`)}>Report an issue</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => open(`${REPO_URL}/blob/main/LICENSE.txt`)}>License</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-4 py-1' onClick={() => open(`${REPO_URL}/blob/main/ThirdPartyNotices.txt`)}>Third-party notices</VaderButtonBgDarken>
+		</div>
+
+		<h3 className='text-xl mb-2'>Credits</h3>
+		<div className='text-vader-fg-3 text-sm max-w-[600px]'>
+			Built on the open-source VS Code workbench (Microsoft, MIT), on Void by Glass Devtools, Inc. (Apache-2.0), and it runs its agent on the Cline SDK (Apache-2.0).
+		</div>
+	</div>
+}
+
 export const Settings = () => {
 	const isDark = useIsDark()
 	// ─── sidebar nav ──────────────────────────
 	const [selectedSection, setSelectedSection] =
 		useState<Tab>('models');
 
-	const navItems: { tab: Tab; label: string }[] = [
-		{ tab: 'models', label: 'Models' },
-		{ tab: 'localProviders', label: 'Local Providers' },
-		{ tab: 'providers', label: 'Main Providers' },
-		{ tab: 'featureOptions', label: 'Feature Options' },
-		{ tab: 'general', label: 'General' },
-		{ tab: 'mcp', label: 'MCP' },
-		{ tab: 'all', label: 'All Settings' },
+	const mainRef = useRef<HTMLElement>(null)
+	const navGroups: { title: string | null; items: { tab: Tab; label: string; Icon: typeof Brain }[] }[] = [
+		{ title: 'Models', items: [
+			{ tab: 'models', label: 'Models', Icon: Brain },
+			{ tab: 'localProviders', label: 'Local Providers', Icon: HardDrive },
+			{ tab: 'providers', label: 'Main Providers', Icon: Cloud },
+		] },
+		{ title: 'Agent', items: [
+			{ tab: 'agent', label: 'Agent & Permissions', Icon: Bot },
+			{ tab: 'context', label: 'Context & Instructions', Icon: BookOpen },
+			{ tab: 'mcp', label: 'MCP', Icon: Plug },
+			{ tab: 'featureOptions', label: 'Editor Features', Icon: SlidersHorizontal },
+		] },
+		{ title: 'Workspace', items: [
+			{ tab: 'extensions', label: 'Extensions', Icon: Puzzle },
+			{ tab: 'privacy', label: 'Privacy & Network', Icon: ShieldCheck },
+			{ tab: 'data', label: 'Data & Backup', Icon: Database },
+			{ tab: 'about', label: 'About & Updates', Icon: Info },
+		] },
+		{ title: null, items: [
+			{ tab: 'all', label: 'All Settings', Icon: List },
+		] },
 	];
 	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
 	const accessor = useAccessor()
@@ -1533,9 +1748,6 @@ export const Settings = () => {
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const notificationService = accessor.get('INotificationService')
 	const mcpService = accessor.get('IMCPService')
-	const storageService = accessor.get('IStorageService')
-	const metricsService = accessor.get('IMetricsService')
-	const isOptedOut = useIsOptedOut()
 
 	const onDownload = (t: 'Chats' | 'Settings') => {
 		let dataStr: string
@@ -1602,54 +1814,40 @@ export const Settings = () => {
 
 
 	return (
-		<div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', overflow: 'auto' }}>
-			<div className="flex flex-col md:flex-row w-full gap-6 max-w-[900px] mx-auto mb-32" style={{ minHeight: '80vh' }}>
-				{/* ──────────────  SIDEBAR  ────────────── */}
-
-				<aside className="md:w-1/4 w-full p-6 shrink-0">
-					{/* vertical tab list */}
-					<div className="flex flex-col gap-2 mt-12">
-						{navItems.map(({ tab, label }) => (
-							<button
-								key={tab}
-								onClick={() => {
-									if (tab === 'all') {
-										setSelectedSection('all');
-										window.scrollTo({ top: 0, behavior: 'smooth' });
-									} else {
+		<div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', display: 'flex' }} data-testid='vader-settings-page'>
+			{/* ──────────────  SIDEBAR  ────────────── */}
+			<aside className='w-60 shrink-0 h-full flex flex-col border-r border-vader-border-2 bg-vader-bg-2 py-4 px-3 select-none'>
+				<nav className='flex flex-col gap-1 flex-1 overflow-y-auto' aria-label='Settings sections'>
+					{navGroups.map((group, gi) => (
+						<div key={gi} className='flex flex-col gap-1'>
+							{group.title && <div className={`px-3 ${gi === 0 ? '' : 'mt-3'} mb-0.5 text-[10px] uppercase tracking-wider text-vader-fg-3`}>{group.title}</div>}
+							{!group.title && <div className='h-px bg-vader-border-2 my-2 mx-1' />}
+							{group.items.map(({ tab, label, Icon }) => (
+								<button
+									key={tab}
+									data-testid={`vader-settings-nav-${tab}`}
+									onClick={() => {
 										setSelectedSection(tab);
-									}
-								}}
-								className={`
-          py-2 px-4 rounded-md text-left transition-all duration-200
-          ${selectedSection === tab
-										? 'bg-[#0e70c0]/80 text-white font-medium shadow-sm'
-										: 'bg-vader-bg-2 hover:bg-vader-bg-2/80 text-vader-fg-1'}
-        `}
-							>
-								{label}
-							</button>
-						))}
-					</div>
-				</aside>
+										if (tab === 'all') { mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }
+									}}
+									className={`flex items-center gap-3 py-2 px-3 rounded-md text-left text-sm transition-colors duration-150
+										${selectedSection === tab ? 'bg-[#0e70c0]/80 text-white font-medium' : 'text-vader-fg-1 hover:bg-vader-bg-3'}`}
+								>
+									<Icon size={16} className='shrink-0 opacity-90' />
+									{label}
+								</button>
+							))}
+						</div>
+					))}
+				</nav>
+				<ErrorBoundary>
+					<RedoOnboardingButton className='text-xs px-3 pt-3' />
+				</ErrorBoundary>
+			</aside>
 
-				{/* ───────────── MAIN PANE ───────────── */}
-				<main className="flex-1 p-6 select-none">
-
-
-
-					<div className='max-w-3xl'>
-
-						<h1 className='text-2xl w-full'>{`Vader's Settings`}</h1>
-
-						<div className='w-full h-[1px] my-2' />
-
-						{/* Models section (formerly FeaturesTab) */}
-						<ErrorBoundary>
-							<RedoOnboardingButton />
-						</ErrorBoundary>
-
-						<div className='w-full h-[1px] my-4' />
+			{/* ───────────── MAIN PANE ───────────── */}
+			<main ref={mainRef} className='flex-1 h-full overflow-y-auto select-none'>
+				<div className='max-w-3xl mx-auto px-10 py-8 mb-24'>
 
 						{/* All sections in flex container with gap-12 */}
 						<div className='flex flex-col gap-12'>
@@ -1691,7 +1889,7 @@ export const Settings = () => {
 							{/* Feature Options section */}
 							<div className={shouldShowTab('featureOptions') ? `` : 'hidden'}>
 								<ErrorBoundary>
-									<h2 className={`text-3xl mb-2`}>Feature Options</h2>
+									<h2 className={`text-3xl mb-2`}>Editor Features</h2>
 
 									<div className='flex flex-col gap-y-8 my-4'>
 										<ErrorBoundary>
@@ -1775,51 +1973,6 @@ export const Settings = () => {
 
 
 
-										{/* Tools Section */}
-										<div>
-											<h4 className={`text-base`}>Tools</h4>
-											<div className='text-sm text-vader-fg-3 mt-1'>{`Tools are functions that LLMs can call. Some tools require user approval.`}</div>
-
-											<div className='my-2'>
-												{/* Auto Accept Switch */}
-												<ErrorBoundary>
-													{[...toolApprovalTypes].map((approvalType) => {
-														return <div key={approvalType} className="flex items-center gap-x-2 my-2">
-															<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
-														</div>
-													})}
-
-												</ErrorBoundary>
-
-												{/* Tool Lint Errors Switch */}
-												<ErrorBoundary>
-
-													<div className='flex items-center gap-x-2 my-2'>
-														<VaderSwitch
-															size='xs'
-															value={settingsState.globalSettings.includeToolLintErrors}
-															onChange={(newVal) => vaderSettingsService.setGlobalSetting('includeToolLintErrors', newVal)}
-														/>
-														<span className='text-vader-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.includeToolLintErrors ? 'Fix lint errors' : `Fix lint errors`}</span>
-													</div>
-												</ErrorBoundary>
-
-												{/* Auto Accept LLM Changes Switch */}
-												<ErrorBoundary>
-													<div className='flex items-center gap-x-2 my-2'>
-														<VaderSwitch
-															size='xs'
-															value={settingsState.globalSettings.autoAcceptLLMChanges}
-															onChange={(newVal) => vaderSettingsService.setGlobalSetting('autoAcceptLLMChanges', newVal)}
-														/>
-														<span className='text-vader-fg-3 text-xs pointer-events-none'>Auto-accept LLM changes</span>
-													</div>
-												</ErrorBoundary>
-											</div>
-										</div>
-
-
-
 										<div className='w-full'>
 											<h4 className={`text-base`}>Editor</h4>
 											<div className='text-sm text-vader-fg-3 mt-1'>{`Settings that control the visibility of Vader suggestions in the code editor.`}</div>
@@ -1869,8 +2022,116 @@ export const Settings = () => {
 								</ErrorBoundary>
 							</div>
 
-							{/* General section */}
-							<div className={`${shouldShowTab('general') ? `` : 'hidden'} flex flex-col gap-12`}>
+							{/* Agent & Permissions */}
+							<div className={`${shouldShowTab('agent') ? `` : 'hidden'} flex flex-col gap-12`}>
+								<ErrorBoundary><ChatModeSection /></ErrorBoundary>
+								<div>
+									<h2 className='text-3xl mb-2'>Tools & Approvals</h2>
+									{/* Tools Section */}
+										<div>
+											
+											<div className='text-sm text-vader-fg-3 mt-1'>{`Tools are functions that LLMs can call. Some tools require user approval.`}</div>
+
+											<div className='my-2'>
+												{/* Auto Accept Switch */}
+												<ErrorBoundary>
+													{[...toolApprovalTypes].map((approvalType) => {
+														return <div key={approvalType} className="flex items-center gap-x-2 my-2">
+															<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
+														</div>
+													})}
+
+												</ErrorBoundary>
+
+												{/* Tool Lint Errors Switch */}
+												<ErrorBoundary>
+
+													<div className='flex items-center gap-x-2 my-2'>
+														<VaderSwitch
+															size='xs'
+															value={settingsState.globalSettings.includeToolLintErrors}
+															onChange={(newVal) => vaderSettingsService.setGlobalSetting('includeToolLintErrors', newVal)}
+														/>
+														<span className='text-vader-fg-3 text-xs pointer-events-none'>{settingsState.globalSettings.includeToolLintErrors ? 'Fix lint errors' : `Fix lint errors`}</span>
+													</div>
+												</ErrorBoundary>
+
+												{/* Auto Accept LLM Changes Switch */}
+												<ErrorBoundary>
+													<div className='flex items-center gap-x-2 my-2'>
+														<VaderSwitch
+															size='xs'
+															value={settingsState.globalSettings.autoAcceptLLMChanges}
+															onChange={(newVal) => vaderSettingsService.setGlobalSetting('autoAcceptLLMChanges', newVal)}
+														/>
+														<span className='text-vader-fg-3 text-xs pointer-events-none'>Auto-accept LLM changes</span>
+													</div>
+												</ErrorBoundary>
+											</div>
+										</div>
+
+
+
+										
+								</div>
+								<AgentsAndPolicySection />
+								<ModelRouterSection />
+								<AgentManagerSection />
+							</div>
+
+							{/* Context & Instructions */}
+							<div className={`${shouldShowTab('context') ? `` : 'hidden'} flex flex-col gap-12`}>
+								{/* AI Instructions section */}
+								<div className='max-w-[600px]'>
+									<h2 className={`text-3xl mb-2`}>AI Instructions</h2>
+									<h4 className={`text-vader-fg-3 mb-4`}>
+										<ChatMarkdownRender inPTag={true} string={`
+System instructions to include with all AI requests.
+Alternatively, place a \`.vaderrules\` file in the root of your workspace.
+								`} chatMessageLocation={undefined} />
+									</h4>
+									<ErrorBoundary>
+										<AIInstructionsBox />
+									</ErrorBoundary>
+									{/* --- Disable System Message Toggle --- */}
+									<div className='my-4'>
+										<ErrorBoundary>
+											<div className='flex items-center gap-x-2'>
+												<VaderSwitch
+													size='xs'
+													value={!!settingsState.globalSettings.disableSystemMessage}
+													onChange={(newValue) => {
+														vaderSettingsService.setGlobalSetting('disableSystemMessage', newValue);
+													}}
+												/>
+												<span className='text-vader-fg-3 text-xs pointer-events-none'>
+													{'Disable system message'}
+												</span>
+											</div>
+										</ErrorBoundary>
+										<div className='text-vader-fg-3 text-xs mt-1'>
+											{`When disabled, Vader will not include anything in the system message except for content you specified above.`}
+										</div>
+									</div>
+								</div>
+
+							
+								<SkillsSection />
+								<MemorySection />
+							</div>
+
+							{/* Extensions */}
+							<div className={shouldShowTab('extensions') ? `` : 'hidden'}>
+								<ErrorBoundary><ExtensionsSection /></ErrorBoundary>
+							</div>
+
+							{/* Privacy & Network */}
+							<div className={shouldShowTab('privacy') ? `` : 'hidden'}>
+								<ErrorBoundary><PrivacySection /></ErrorBoundary>
+							</div>
+
+							{/* Data & Backup */}
+							<div className={`${shouldShowTab('data') ? `` : 'hidden'} flex flex-col gap-12`}>
 								{/* One-Click Switch section */}
 								<div>
 									<ErrorBoundary>
@@ -1878,13 +2139,12 @@ export const Settings = () => {
 										<h4 className='text-vader-fg-3 mb-4'>{`Transfer your editor settings into Vader.`}</h4>
 
 										<div className='flex flex-col gap-2'>
-											<OneClickSwitchButton className='w-48' fromEditor="VS Code" />
-											<OneClickSwitchButton className='w-48' fromEditor="Cursor" />
-											<OneClickSwitchButton className='w-48' fromEditor="Windsurf" />
+											{transferEditorTypes.map(editor => <OneClickSwitchButton key={editor} className='w-64' fromEditor={editor} />)}
 										</div>
 									</ErrorBoundary>
 								</div>
 
+								
 								{/* Import/Export section */}
 								<div>
 									<h2 className='text-3xl mb-2'>Import/Export</h2>
@@ -1922,6 +2182,7 @@ export const Settings = () => {
 
 
 
+								
 								{/* Built-in Settings section */}
 								<div>
 									<h2 className={`text-3xl mb-2`}>Built-in Settings</h2>
@@ -1946,76 +2207,13 @@ export const Settings = () => {
 								</div>
 
 
-								{/* Metrics section */}
-								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>Metrics</h2>
-									<h4 className={`text-vader-fg-3 mb-4`}>Vader does not send anonymous usage metrics to any external analytics service (unlike upstream Vader, which reported basic usage to its own analytics by default). This toggle only sets a local flag for compatibility; it does not transmit anything regardless of its value. Vader never sees your code, messages, or API keys.</h4>
-
-									<div className='my-2'>
-										{/* Disable All Metrics Switch */}
-										<ErrorBoundary>
-											<div className='flex items-center gap-x-2 my-2'>
-												<VaderSwitch
-													size='xs'
-													value={isOptedOut}
-													onChange={(newVal) => {
-														storageService.store(OPT_OUT_KEY, newVal, StorageScope.APPLICATION, StorageTarget.MACHINE)
-														metricsService.capture(`Set metrics opt-out to ${newVal}`, {}) // this only fires if it's enabled, so it's fine to have here
-													}}
-												/>
-												<span className='text-vader-fg-3 text-xs pointer-events-none'>{'Opt-out (requires restart)'}</span>
-											</div>
-										</ErrorBoundary>
-									</div>
-								</div>
-
-								<AgentsAndPolicySection />
-
-								<ModelRouterSection />
-
-								<SkillsSection />
-
-								<MemorySection />
-
-								<AgentManagerSection />
-
-								{/* AI Instructions section */}
-								<div className='max-w-[600px]'>
-									<h2 className={`text-3xl mb-2`}>AI Instructions</h2>
-									<h4 className={`text-vader-fg-3 mb-4`}>
-										<ChatMarkdownRender inPTag={true} string={`
-System instructions to include with all AI requests.
-Alternatively, place a \`.vaderrules\` file in the root of your workspace.
-								`} chatMessageLocation={undefined} />
-									</h4>
-									<ErrorBoundary>
-										<AIInstructionsBox />
-									</ErrorBoundary>
-									{/* --- Disable System Message Toggle --- */}
-									<div className='my-4'>
-										<ErrorBoundary>
-											<div className='flex items-center gap-x-2'>
-												<VaderSwitch
-													size='xs'
-													value={!!settingsState.globalSettings.disableSystemMessage}
-													onChange={(newValue) => {
-														vaderSettingsService.setGlobalSetting('disableSystemMessage', newValue);
-													}}
-												/>
-												<span className='text-vader-fg-3 text-xs pointer-events-none'>
-													{'Disable system message'}
-												</span>
-											</div>
-										</ErrorBoundary>
-										<div className='text-vader-fg-3 text-xs mt-1'>
-											{`When disabled, Vader will not include anything in the system message except for content you specified above.`}
-										</div>
-									</div>
-								</div>
-
+								
 							</div>
 
-
+							{/* About & Updates */}
+							<div className={shouldShowTab('about') ? `` : 'hidden'}>
+								<ErrorBoundary><AboutSection /></ErrorBoundary>
+							</div>
 
 							{/* MCP section */}
 							<div className={shouldShowTab('mcp') ? `` : 'hidden'}>
@@ -2042,11 +2240,10 @@ Use Model Context Protocol to provide Agent mode with more tools.
 
 
 
-						</div>
-
 					</div>
-				</main>
-			</div>
+
+				</div>
+			</main>
 		</div>
 	);
 }

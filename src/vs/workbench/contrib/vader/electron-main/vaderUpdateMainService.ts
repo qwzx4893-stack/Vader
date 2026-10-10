@@ -5,11 +5,33 @@
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
+import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
+import { asJson, IRequestService, isSuccess } from '../../../../platform/request/common/request.js';
+import { IProductService } from '../../../../platform/product/common/productService.js';
 import { IUpdateService, StateType } from '../../../../platform/update/common/update.js';
 import { IVaderUpdateService } from '../common/vaderUpdateService.js';
 import { VaderCheckUpdateRespose } from '../common/vaderUpdateServiceTypes.js';
 
 
+
+const RELEASES_API_URL = 'https://api.github.com/repos/qwzx4893-stack/Vader/releases/latest'
+const RELEASES_TIMEOUT_MS = 10_000
+
+/** '1.2.3' / 'v1.2.3' / '1.2.3-beta' -> [1, 2, 3]; null when it does not look like a version */
+export const parseVersion = (v: string): number[] | null => {
+	const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(v.trim())
+	return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null
+}
+
+/** true when `candidate` is a strictly newer version than `current` */
+export const isNewerVersion = (candidate: string, current: string): boolean => {
+	const a = parseVersion(candidate), b = parseVersion(current)
+	if (!a || !b) return false
+	for (let i = 0; i < 3; i++) {
+		if (a[i] !== b[i]) return a[i] > b[i]
+	}
+	return false
+}
 
 export class VaderMainUpdateService extends Disposable implements IVaderUpdateService {
 	_serviceBrand: undefined;
@@ -17,6 +39,8 @@ export class VaderMainUpdateService extends Disposable implements IVaderUpdateSe
 	constructor(
 		@IEnvironmentMainService private readonly _envMainService: IEnvironmentMainService,
 		@IUpdateService private readonly _updateService: IUpdateService,
+		@IProductService private readonly _productService: IProductService,
+		@IRequestService private readonly _requestService: IRequestService,
 	) {
 		super()
 	}
@@ -81,12 +105,43 @@ export class VaderMainUpdateService extends Disposable implements IVaderUpdateSe
 		}
 
 		if (this._updateService.state.type === StateType.Disabled) {
-			// Vader ships no `updateUrl` and has no hosted release/update server of its own
-			// (the inherited fallback queried another project's release repository and offered to send
-			// users to reinstall that product, which would be wrong here). Until Vader stands up its own
-			// release channel, "disabled" simply means "no update available".
-			return { message: explicit ? 'Automatic updates are not configured for this build. Check the releases page of this project on GitHub for new versions.' : null } as const
+			// Vader ships no `updateUrl` (no update server of its own), so the editor's built-in updater is off. Instead the
+			// newest GitHub release of this project is compared with the running version; installing it is left to the user.
+			return this._checkGitHubReleases(explicit)
 		}
 		return null
+	}
+
+	private async _checkGitHubReleases(explicit: boolean): Promise<VaderCheckUpdateRespose> {
+		const current = this._productService.vaderVersion
+		if (!current) return { message: explicit ? 'This build has no version number, so it cannot be compared with the latest release.' : null } as const
+
+		// the editor's own request service: it follows the system / corporate proxy settings, which a bare fetch() in the main process does not
+		const cts = new CancellationTokenSource()
+		const timeoutId = setTimeout(() => cts.cancel(), RELEASES_TIMEOUT_MS)
+		try {
+			const context = await this._requestService.request({ type: 'GET', url: RELEASES_API_URL, headers: { 'Accept': 'application/vnd.github+json' }, callSite: 'vaderUpdate.checkReleases' }, cts.token)
+			if (!isSuccess(context)) throw new Error(`GitHub answered ${context.res.statusCode}`)
+			const release = await asJson<{ tag_name?: string, html_url?: string, draft?: boolean, prerelease?: boolean }>(context)
+			const tag = release?.tag_name
+			if (!release || !tag || release.draft || release.prerelease) {
+				return { message: explicit ? `Vader ${current} is up to date.` : null } as const
+			}
+			if (isNewerVersion(tag, current)) {
+				const url = typeof release.html_url === 'string' && release.html_url.startsWith('https://github.com/qwzx4893-stack/Vader/')
+					? release.html_url : 'https://github.com/qwzx4893-stack/Vader/releases/latest'
+				return { message: `Vader ${tag.replace(/^v/, '')} is available (you have ${current}).`, action: 'release', url } as const
+			}
+			return { message: explicit ? `Vader ${current} is up to date.` : null } as const
+		}
+		catch (e) {
+			console.log('Vader update check failed:', e)
+			// a silent background check never nags about a missing connection; a manual one says what happened
+			return { message: explicit ? 'Could not reach GitHub to look for a newer version. Check your connection and try again.' : null } as const
+		}
+		finally {
+			clearTimeout(timeoutId)
+			cts.dispose()
+		}
 	}
 }

@@ -1,6 +1,18 @@
 # Changelog
 
-## Unreleased - Every provider native, new Vader identity, repository polish
+## Unreleased - Settings page sections, update check, inherited-leftover cleanup
+
+- **Settings page, same look, more of it.** The sidebar is grouped (Models / Agent / Workspace) and gained: *Agent & Permissions* (default chat mode,
+  tool approvals, policy rules, router, agents), *Context & Instructions* (AI instructions, skills, memory), *Extensions* (marketplace, signature switch,
+  Install from VSIX), *Privacy & Network* (what is contacted, and why), *Data & Backup* and *About & Updates*. *Feature Options* is now *Editor Features*.
+  The old "Metrics" opt-out switch (it controlled nothing) is gone.
+- **Update check that works.** The inherited updater needs an update server Vader does not have. "Check for Updates" now compares the running version with
+  the latest GitHub release and offers the download page; a background check exists but is off by default.
+- **Inherited leftovers removed:** the two bundled Remote-SSH / Remote-WSL extensions (they could not work with Microsoft's remote server), the
+  "Use AI Features with Copilot for free..." palette command, the Accounts icon (starts hidden; Microsoft/GitHub sign-in only), and a crash in
+  *One-Click Switch* when the source editor had no extensions folder.
+
+## Earlier unreleased - Every provider native, new Vader identity, repository polish
 
 - **49 model providers, each native in Settings and in the backend** (not only through OpenRouter): 29 vendor providers were added to the
   existing 20 (Together AI, Fireworks, Cerebras, Cohere, Z.AI, Perplexity, NVIDIA NIM, Hugging Face, DeepInfra, Nebius, Cloudflare Workers AI,

@@ -4,117 +4,101 @@
  *--------------------------------------------------------------------------------------*/
 
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
-import { EditorInput } from '../../../common/editor/editorInput.js';
 import * as nls from '../../../../nls.js';
-import { EditorExtensions } from '../../../common/editor.js';
-import { EditorPane } from '../../../browser/parts/editor/editorPane.js';
-import { IEditorGroup, IEditorGroupsService } from '../../../services/editor/common/editorGroupsService.js';
-import { ITelemetryService } from '../../../../platform/telemetry/common/telemetry.js';
-import { IThemeService } from '../../../../platform/theme/common/themeService.js';
-import { IStorageService } from '../../../../platform/storage/common/storage.js';
-import { Dimension } from '../../../../base/browser/dom.js';
-import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
-import { SyncDescriptor } from '../../../../platform/instantiation/common/descriptors.js';
+import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
-import { Registry } from '../../../../platform/registry/common/platform.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
-import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { URI } from '../../../../base/common/uri.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
-
-
-import { mountVaderSettings } from './react/out/vader-settings-tsx/index.js'
 import { Codicon } from '../../../../base/common/codicons.js';
-import { toDisposable } from '../../../../base/common/lifecycle.js';
+import { ThemeIcon } from '../../../../base/common/themables.js';
+import { mountVaderSettings } from './react/out/vader-settings-tsx/index.js'
 
 
-// refer to preferences.contribution.ts keybindings editor
+// Vader's settings are a full-window page that opens over the editor (below the title bar), not a tab in the editor area:
+// a header with the title and a close button, then the React settings page (a navigation column on the left, the section on the right).
+// It stays mounted once opened, so reopening is instant and nothing typed is lost. Esc or the close button hides it.
 
-class VaderSettingsInput extends EditorInput {
+class VaderSettingsOverlay {
+	private root: HTMLElement | undefined
+	private previouslyFocused: Element | null = null
 
-	static readonly ID: string = 'workbench.input.vader.settings';
+	constructor(private readonly instantiationService: IInstantiationService) { }
 
-	static readonly RESOURCE = URI.from({ // I think this scheme is invalid, it just shuts up TS
-		scheme: 'vader',  // Custom scheme for our editor (try Schemas.https)
-		path: 'settings'
-	})
-	readonly resource = VaderSettingsInput.RESOURCE;
+	get isOpen(): boolean { return !!this.root && this.root.style.display !== 'none' }
 
-	constructor() {
-		super();
+	open(): void {
+		const win = getActiveWindow()
+		const workbench = win.document.querySelector('.monaco-workbench')
+		if (!workbench) { return }
+		if (!this.root) { this.create(workbench as HTMLElement) }
+		const root = this.root!
+		if (this.isOpen) { return }
+		this.previouslyFocused = win.document.activeElement
+		this.position()
+		root.style.display = 'flex'
+		root.focus()
 	}
 
-	override get typeId(): string {
-		return VaderSettingsInput.ID;
+	close(): void {
+		if (!this.root || !this.isOpen) { return }
+		this.root.style.display = 'none'
+		const prev = this.previouslyFocused as HTMLElement | null
+		this.previouslyFocused = null
+		prev?.focus?.()
 	}
 
-	override getName(): string {
-		return nls.localize('vaderSettingsInputsName', 'Vader\'s Settings');
+	toggle(): void { this.isOpen ? this.close() : this.open() }
+
+	/** The page starts right below the title bar, so the window controls and menu stay usable. */
+	private position(): void {
+		const titlebar = getActiveWindow().document.querySelector('.part.titlebar')
+		this.root!.style.top = `${titlebar ? Math.max(0, titlebar.getBoundingClientRect().bottom) : 0}px`
 	}
 
-	override getIcon() {
-		return Codicon.checklist // symbol for the actual editor pane
-	}
+	private create(workbench: HTMLElement): void {
+		const doc = workbench.ownerDocument
+		const root = doc.createElement('div')
+		root.className = 'vader-settings-overlay'
+		root.setAttribute('role', 'dialog')
+		root.setAttribute('aria-label', nls.localize('vaderSettingsOverlayLabel', "Vader Settings"))
+		root.setAttribute('data-testid', 'vader-settings-overlay')
+		root.tabIndex = -1
+		root.style.display = 'none'
+		root.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); this.close() } })
 
-}
+		const header = doc.createElement('div')
+		header.className = 'vader-settings-overlay-header'
+		const title = doc.createElement('div')
+		title.className = 'vader-settings-overlay-title'
+		title.textContent = nls.localize('vaderSettingsOverlayTitle', "Vader Settings")
+		const closeButton = doc.createElement('button')
+		closeButton.className = 'vader-settings-overlay-close'
+		closeButton.type = 'button'
+		closeButton.setAttribute('aria-label', nls.localize('vaderSettingsClose', "Close settings (Esc)"))
+		closeButton.setAttribute('title', nls.localize('vaderSettingsClose', "Close settings (Esc)"))
+		closeButton.setAttribute('data-testid', 'vader-settings-close')
+		const icon = doc.createElement('span')
+		icon.className = ThemeIcon.asClassName(Codicon.close)
+		closeButton.appendChild(icon)
+		closeButton.addEventListener('click', () => this.close())
+		header.append(title, closeButton)
 
+		const body = doc.createElement('div')
+		body.className = 'vader-settings-overlay-body'
+		root.append(header, body)
+		workbench.appendChild(root)
+		this.root = root
 
-class VaderSettingsPane extends EditorPane {
-	static readonly ID = 'workbench.test.myCustomPane';
+		doc.defaultView?.addEventListener('resize', () => { if (this.isOpen) { this.position() } })
 
-	// private _scrollbar: DomScrollableElement | undefined;
-
-	constructor(
-		group: IEditorGroup,
-		@ITelemetryService telemetryService: ITelemetryService,
-		@IThemeService themeService: IThemeService,
-		@IStorageService storageService: IStorageService,
-		@IInstantiationService private readonly instantiationService: IInstantiationService
-	) {
-		super(VaderSettingsPane.ID, group, telemetryService, themeService, storageService);
-	}
-
-	protected createEditor(parent: HTMLElement): void {
-		parent.style.height = '100%';
-		parent.style.width = '100%';
-
-		const settingsElt = document.createElement('div');
-		settingsElt.style.height = '100%';
-		settingsElt.style.width = '100%';
-
-		parent.appendChild(settingsElt);
-
-		// this._scrollbar = this._register(new DomScrollableElement(scrollableContent, {}));
-		// parent.appendChild(this._scrollbar.getDomNode());
-		// this._scrollbar.scanDomNode();
-
-		// Mount React into the scrollable content
 		this.instantiationService.invokeFunction(accessor => {
-			const disposeFn = mountVaderSettings(settingsElt, accessor)?.dispose;
-			this._register(toDisposable(() => disposeFn?.()))
-
-			// setTimeout(() => { // this is a complete hack and I don't really understand how scrollbar works here
-			// 	this._scrollbar?.scanDomNode();
-			// }, 1000)
-		});
+			mountVaderSettings(body, accessor) // lives as long as the window
+		})
 	}
-
-	layout(dimension: Dimension): void {
-		// if (!settingsElt) return
-		// settingsElt.style.height = `${dimension.height}px`;
-		// settingsElt.style.width = `${dimension.width}px`;
-	}
-
-
-	override get minimumWidth() { return 700 }
-
 }
 
-// register Settings pane
-Registry.as<IEditorPaneRegistry>(EditorExtensions.EditorPane).registerEditorPane(
-	EditorPaneDescriptor.create(VaderSettingsPane, VaderSettingsPane.ID, nls.localize('VaderSettingsPane', "Vader\'s Settings Pane")),
-	[new SyncDescriptor(VaderSettingsInput)]
-);
+let overlay: VaderSettingsOverlay | undefined
+const overlayOf = (accessor: ServicesAccessor): VaderSettingsOverlay => overlay ??= new VaderSettingsOverlay(accessor.get(IInstantiationService))
 
 
 // register the gear on the top right
@@ -141,31 +125,9 @@ registerAction2(class extends Action2 {
 	}
 
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const editorService = accessor.get(IEditorService);
-		const editorGroupService = accessor.get(IEditorGroupsService);
-
-		const instantiationService = accessor.get(IInstantiationService);
-
-		// if is open, close it
-		const openEditors = editorService.findEditors(VaderSettingsInput.RESOURCE); // should only have 0 or 1 elements...
-		if (openEditors.length !== 0) {
-			const openEditor = openEditors[0].editor
-			const isCurrentlyOpen = editorService.activeEditor?.resource?.fsPath === openEditor.resource?.fsPath
-			if (isCurrentlyOpen)
-				await editorService.closeEditors(openEditors)
-			else
-				await editorGroupService.activeGroup.openEditor(openEditor)
-			return;
-		}
-
-
-		// else open it
-		const input = instantiationService.createInstance(VaderSettingsInput);
-
-		await editorGroupService.activeGroup.openEditor(input);
+		overlayOf(accessor).toggle()
 	}
 })
-
 
 
 registerAction2(class extends Action2 {
@@ -178,23 +140,9 @@ registerAction2(class extends Action2 {
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
-		const editorService = accessor.get(IEditorService);
-		const instantiationService = accessor.get(IInstantiationService);
-
-		// close all instances if found
-		const openEditors = editorService.findEditors(VaderSettingsInput.RESOURCE);
-		if (openEditors.length > 0) {
-			await editorService.closeEditors(openEditors);
-		}
-
-		// then, open one single editor
-		const input = instantiationService.createInstance(VaderSettingsInput);
-		await editorService.openEditor(input);
+		overlayOf(accessor).open()
 	}
 })
-
-
-
 
 
 // add to settings gear on bottom left

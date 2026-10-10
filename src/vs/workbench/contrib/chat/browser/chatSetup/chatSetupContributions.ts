@@ -231,7 +231,7 @@ export class ChatSetupContribution extends Disposable implements IWorkbenchContr
 					id: CHAT_SETUP_ACTION_ID,
 					title: ChatSetupTriggerAction.CHAT_SETUP_ACTION_LABEL,
 					category: CHAT_CATEGORY,
-					f1: true,
+					f1: false, // Vader: it signs in to GitHub Copilot, which Vader does not use; keep the command id for internal callers but out of the palette
 					precondition: ContextKeyExpr.or(
 						ChatContextKeys.Setup.hidden,
 						ChatContextKeys.Setup.disabledInWorkspace,

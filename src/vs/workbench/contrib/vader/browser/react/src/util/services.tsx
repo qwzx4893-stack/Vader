@@ -35,6 +35,8 @@ import { ILanguageFeaturesService } from '../../../../../../../editor/common/ser
 import { ILanguageDetectionService } from '../../../../../../services/languageDetection/common/languageDetectionWorkerService.js'
 import { IKeybindingService } from '../../../../../../../platform/keybinding/common/keybinding.js'
 import { IEnvironmentService } from '../../../../../../../platform/environment/common/environment.js'
+import { IProductService } from '../../../../../../../platform/product/common/productService.js'
+import { IOpenerService } from '../../../../../../../platform/opener/common/opener.js'
 import { IConfigurationService } from '../../../../../../../platform/configuration/common/configuration.js'
 import { IPathService } from '../../../../../../../workbench/services/path/common/pathService.js'
 import { IMetricsService } from '../../../../../../../workbench/contrib/vader/common/metricsService.js'
@@ -305,6 +307,8 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExplorerService: accessor.get(IExplorerService),
 		IEnvironmentService: accessor.get(IEnvironmentService),
 		IConfigurationService: accessor.get(IConfigurationService),
+		IProductService: accessor.get(IProductService),
+		IOpenerService: accessor.get(IOpenerService),
 		IPathService: accessor.get(IPathService),
 		IMetricsService: accessor.get(IMetricsService),
 		ITerminalToolService: accessor.get(ITerminalToolService),

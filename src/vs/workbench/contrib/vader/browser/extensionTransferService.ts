@@ -137,6 +137,8 @@ class ExtensionTransferService extends Disposable implements IExtensionTransferS
 		const fileService = this._fileService
 		const extensionsURI = getExtensionsFolder(os)
 		if (!extensionsURI) return
+		// the source editor may have no extensions folder at all (nothing was copied from it)
+		if (!(await fileService.exists(extensionsURI))) return
 		const eURI = await fileService.resolve(extensionsURI)
 		for (const child of eURI.children ?? []) {
 
@@ -185,141 +187,51 @@ registerSingleton(IExtensionTransferService, ExtensionTransferService, Instantia
 
 
 
+// Where each editor keeps its user settings (a folder under the OS's application-data directory) and its extensions (a dot-folder in the home
+// directory). Table-driven so adding an editor is one line; a missing folder is skipped at transfer time, so listing an editor that is not
+// installed is harmless. Only VS Code-family editors that share the settings.json / keybindings.json / extensions layout belong here.
+const EDITOR_FOLDERS: { [editor in TransferEditorType]: { userData: string, extensions: string } } = {
+	'VS Code': { userData: 'Code', extensions: '.vscode' },
+	'VS Code Insiders': { userData: 'Code - Insiders', extensions: '.vscode-insiders' },
+	'VSCodium': { userData: 'VSCodium', extensions: '.vscode-oss' },
+	'Cursor': { userData: 'Cursor', extensions: '.cursor' },
+	'Windsurf': { userData: 'Windsurf', extensions: '.windsurf' },
+	'Antigravity': { userData: 'Antigravity', extensions: '.antigravity' },
+	'Trae': { userData: 'Trae', extensions: '.trae' },
+}
+
 const transferTheseFilesOfOS = (os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType = 'VS Code'): TransferFilesInfo => {
 	if (os === null)
 		throw new Error(`One-click switch is not possible in this environment.`)
+	const folders = EDITOR_FOLDERS[fromEditor]
+	if (!folders)
+		throw new Error(`editor type '${fromEditor}' is not supported`)
+
+	const file = URI.from({ scheme: 'file' })
+	let base: URI        // the folder that holds the "<name>/User" directories
+	let home: string     // the folder that holds the dot-folders
 	if (os === 'mac') {
 		const homeDir = env['HOME']
 		if (!homeDir) throw new Error(`$HOME not found`)
-
-		if (fromEditor === 'VS Code') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Code', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Code', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vscode', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Cursor') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Cursor', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.cursor', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Windsurf') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Windsurf', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Windsurf', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, 'Library', 'Application Support', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.windsurf', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		}
-	}
-
-	if (os === 'linux') {
+		base = URI.joinPath(file, homeDir, 'Library', 'Application Support'); home = homeDir
+	} else if (os === 'linux') {
 		const homeDir = env['HOME']
 		if (!homeDir) throw new Error(`variable for $HOME location not found`)
-
-		if (fromEditor === 'VS Code') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Code', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Code', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vscode', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Cursor') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Cursor', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Cursor', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.cursor', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Windsurf') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Windsurf', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Windsurf', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.config', 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.windsurf', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), homeDir, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		}
-	}
-
-	if (os === 'windows') {
+		base = URI.joinPath(file, homeDir, '.config'); home = homeDir
+	} else if (os === 'windows') {
 		const appdata = env['APPDATA']
 		if (!appdata) throw new Error(`variable for %APPDATA% location not found`)
 		const userprofile = env['USERPROFILE']
 		if (!userprofile) throw new Error(`variable for %USERPROFILE% location not found`)
-
-		if (fromEditor === 'VS Code') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Code', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Code', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.vscode', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Cursor') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Cursor', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Cursor', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.cursor', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		} else if (fromEditor === 'Windsurf') {
-			return [{
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Windsurf', 'User', 'settings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'settings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Windsurf', 'User', 'keybindings.json'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), appdata, 'Vader', 'User', 'keybindings.json'),
-			}, {
-				from: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.windsurf', 'extensions'),
-				to: URI.joinPath(URI.from({ scheme: 'file' }), userprofile, '.vader-editor', 'extensions'),
-				isExtensions: true,
-			}]
-		}
+		base = URI.joinPath(file, appdata); home = userprofile
+	} else {
+		throw new Error(`os '${os}' not recognized`)
 	}
-
-	throw new Error(`os '${os}' not recognized or editor type '${fromEditor}' not supported for this OS`)
+	return [
+		{ from: URI.joinPath(base, folders.userData, 'User', 'settings.json'), to: URI.joinPath(base, 'Vader', 'User', 'settings.json') },
+		{ from: URI.joinPath(base, folders.userData, 'User', 'keybindings.json'), to: URI.joinPath(base, 'Vader', 'User', 'keybindings.json') },
+		{ from: URI.joinPath(file, home, folders.extensions, 'extensions'), to: URI.joinPath(file, home, '.vader-editor', 'extensions'), isExtensions: true },
+	]
 }
 
 

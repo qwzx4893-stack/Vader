@@ -112,6 +112,61 @@ export const generalScenarios = [
 		},
 	},
 	{
+		name: 'settings: every section of the Settings page opens and shows its own content',
+		timeout: 90_000,
+		fn: async (t) => {
+			const TID = (id) => `[data-testid="${id}"]`;
+			const visible = async (id) => t.page.locator(TID(id)).waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false);
+			await t.ui.runCommand(t.page, 'Vader: Open Settings');
+			await t.page.locator(TID('vader-settings-page')).waitFor({ state: 'visible', timeout: 20_000 });
+			for (const tab of ['models', 'localProviders', 'providers', 'agent', 'context', 'mcp', 'featureOptions', 'extensions', 'privacy', 'data', 'about', 'all']) {
+				t.check(`the "${tab}" entry is in the sidebar`, (await t.page.locator(TID(`vader-settings-nav-${tab}`)).count()) === 1);
+			}
+
+			await t.page.locator(TID('vader-settings-nav-agent')).click();
+			t.check('Agent & Permissions shows the chat-mode chooser', await visible('vader-settings-chatmode'));
+			await t.page.locator(TID('vader-chatmode-plan')).click();
+			await t.sleep(300);
+			t.check('choosing Plan selects it', (await t.page.locator(TID('vader-chatmode-plan')).getAttribute('aria-pressed')) === 'true');
+			t.check('and deselects Agent', (await t.page.locator(TID('vader-chatmode-agent')).getAttribute('aria-pressed')) === 'false');
+			await t.page.locator(TID('vader-chatmode-agent')).click();
+
+			await t.page.locator(TID('vader-settings-nav-extensions')).click();
+			t.check('Extensions is shown', await visible('vader-settings-extensions'));
+			t.check('it names the Open VSX registry', /open-vsx\.org/.test(await t.page.locator(TID('vader-settings-gallery')).innerText()));
+			t.check('and shows the signature switch', await visible('vader-settings-verify-signature'));
+
+			await t.page.locator(TID('vader-settings-nav-privacy')).click();
+			t.check('Privacy & Network is shown', await visible('vader-settings-privacy'));
+			const contacts = await t.page.locator(TID('vader-settings-contacts')).innerText();
+			t.check('it lists the registry and the release check', /open-vsx\.org/.test(contacts) && /api\.github\.com/.test(contacts), contacts.slice(0, 200));
+			t.check('the background release check is off by default', /Only when you press/.test(contacts), contacts.slice(0, 400));
+
+			await t.page.locator(TID('vader-settings-nav-about')).click();
+			t.check('About & Updates is shown', await visible('vader-settings-about'));
+			t.check('it shows the Vader version', /\d+\.\d+\.\d+/.test(await t.page.locator(TID('vader-settings-version')).innerText()));
+
+			await t.page.locator(TID('vader-settings-nav-data')).click();
+			const dataText = await t.page.locator(TID('vader-settings-page')).innerText();
+			t.check('Data & Backup offers import, export and the editor switch', /Import Settings/.test(dataText) && /Export Chats/.test(dataText) && /One-Click Switch/.test(dataText));
+
+			await t.page.locator(TID('vader-settings-close')).click();
+			await t.sleep(300);
+		},
+	},
+	{
+		name: 'updates: "Check for Updates" compares the running version with the latest GitHub release',
+		needs: ['network'],
+		timeout: 60_000,
+		fn: async (t) => {
+			await t.ui.runCommand(t.page, 'Vader: Check for Updates');
+			const toast = t.page.locator('.notifications-toasts .notification-toast').filter({ hasText: /Vader \d/ }).first();
+			t.check('a notification names the version result', await toast.waitFor({ state: 'visible', timeout: 30_000 }).then(() => true, () => false), await t.page.locator('.notifications-toasts').innerText().catch(() => ''));
+			const text = await toast.innerText().catch(() => '');
+			t.check('it says "up to date" or offers a newer release', /up to date|is available/.test(text), text);
+		},
+	},
+	{
 		name: 'extensions: signature verification is off by default (the gallery is Open VSX, which Microsoft\'s signing chain cannot verify)',
 		fn: async (t) => {
 			await t.ui.runCommand(t.page, 'Preferences: Open Settings (UI)');

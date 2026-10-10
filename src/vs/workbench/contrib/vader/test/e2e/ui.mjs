@@ -24,21 +24,35 @@ export async function isOnboarding(page) {
 	}).catch(() => false);
 }
 
-/** First-run flow, exactly as a new user sees it: Welcome -> Add a Provider (OpenAI-Compatible) -> model -> done. */
+/** First-run flow, exactly as a new user sees it: Welcome -> Import settings (skipped here) -> the IDE; then the provider is set up in the Settings page. */
 export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model }) {
-	await page.getByText('Get Started', { exact: true }).first().click({ timeout: 30_000 });
-	await page.getByText('Cloud/Other', { exact: true }).click({ timeout: 15_000 });
-	await page.locator('input[placeholder^="baseURL (https://my-website.com"]').fill(baseURL);
-	await page.locator('input[placeholder^="API Key (sk-key"]').fill(apiKey);
-	await page.getByText('Add a model').last().click();
-	await page.getByText('Provider Na', { exact: false }).first().click();
-	await page.getByText('OpenAI-Compatible', { exact: true }).last().click();
-	await page.locator('input[placeholder="Model Name"]').fill(model);
-	await page.getByText('Add', { exact: true }).last().click();
-	await sleep(400);
-	await page.getByText('Next', { exact: true }).click();
-	await page.getByText('Get Started', { exact: true }).click({ timeout: 15_000 }); // "Settings and Themes" step
+	await page.locator(TID('vader-welcome-continue')).click({ timeout: 30_000 });
+	await page.locator(TID('vader-import-done')).click({ timeout: 15_000 });
+	await sleep(1200); // the welcome overlay fades out
+	await configureOpenAICompatible(page, { baseURL, apiKey, model });
 	await page.waitForSelector(CHAT_INPUT, { timeout: 30_000 });
+}
+
+/** In the Settings page: point the OpenAI-Compatible provider at `baseURL` and add one model (this is how a user adds their first provider). */
+export async function configureOpenAICompatible(page, { baseURL, apiKey = 'sk-test-key', model }) {
+	await runCommand(page, 'Vader: Open Settings');
+	await page.locator(TID('vader-settings-nav-providers')).click({ timeout: 20_000 });
+	await sleep(600);
+	const block = page.locator('.vader-scope h3', { hasText: 'OpenAI-Compatible' }).first().locator('xpath=../..');
+	await block.locator('input[placeholder^="baseURL (https://my-website.com"]').first().fill(baseURL);
+	await block.locator('input[placeholder^="API Key (sk-key"]').first().fill(apiKey);
+	await page.locator(TID('vader-settings-nav-models')).click();
+	await sleep(500);
+	const settings = page.locator(TID('vader-settings-page'));   // the chat behind the page has its own "Add a model" prompt: stay inside the page
+	const visible = (l) => l.filter({ visible: true });         // the sections of the other tabs stay in the DOM, hidden
+	await visible(settings.getByText('Add a model')).last().click();
+	await visible(settings.getByText('Provider Na', { exact: false })).first().click();
+	await visible(settings.getByText('OpenAI-Compatible', { exact: true })).last().click();
+	await visible(settings.locator('input[placeholder="Model Name"]')).first().fill(model);
+	await visible(settings.getByText('Add', { exact: true })).last().click();
+	await sleep(400);
+	await page.locator(TID('vader-settings-close')).click();
+	await sleep(300);
 }
 
 export async function focusChat(page) {

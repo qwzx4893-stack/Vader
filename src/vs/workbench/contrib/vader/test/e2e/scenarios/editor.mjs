@@ -89,12 +89,12 @@ export const autocompleteScenarios = [
 		timeout: 150_000,
 		fn: async (t) => {
 			await t.ui.runCommand(t.page, 'Vader: Open Settings');
-			await t.page.getByText('Feature Options', { exact: true }).first().click({ timeout: 20_000 });
+			await t.page.getByText('Editor Features', { exact: true }).first().click({ timeout: 20_000 });
 			await t.sleep(800);
 			await t.page.getByText('Disabled', { exact: true }).first().locator('xpath=..').locator('div').first().click({ force: true });
 			await t.sleep(800);
 			t.check('autocomplete is switched on in settings', await t.page.getByText('Enabled', { exact: true }).first().isVisible());
-			await t.page.keyboard.press('Control+W'); // close the settings tab
+			await t.page.locator('[data-testid="vader-settings-close"]').click(); // close the Settings page
 			t.useFim(({ prompt, suffix }) => '  return a + b;');
 			await t.ui.openFile(t.page, 'app.js');
 			await t.page.locator('.monaco-editor .view-lines').first().click();

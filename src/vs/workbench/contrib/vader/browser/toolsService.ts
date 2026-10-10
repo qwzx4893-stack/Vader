@@ -522,6 +522,10 @@ export class ToolsService implements IToolsService {
 
 		this.callTool = {
 			read_file: async ({ uri, startLine, endLine, pageNumber }) => {
+				// Devices, pipes and sockets (/dev/zero, a FIFO...) have no end: loading one into a text model would spin the editor's main
+				// process for minutes. A missing file falls through to the normal "does not exist" error below.
+				const stat = await fileService.stat(uri).catch(() => null)
+				if (stat && !stat.isFile && !stat.isDirectory) { throw new Error(`${uri.fsPath} is not a regular file (it is a device, pipe or socket), so it cannot be read.`) }
 				await vaderModelService.initializeModel(uri)
 				const { model } = await vaderModelService.getModelSafe(uri)
 				if (model === null) { throw new Error(`No contents; File does not exist.`) }

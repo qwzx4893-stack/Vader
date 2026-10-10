@@ -5,7 +5,8 @@
 
 import { URI } from '../../../../base/common/uri.js'
 
-export type TransferEditorType = 'VS Code' | 'Cursor' | 'Windsurf'
+export const transferEditorTypes = ['VS Code', 'VS Code Insiders', 'VSCodium', 'Cursor', 'Windsurf', 'Antigravity', 'Trae'] as const
+export type TransferEditorType = typeof transferEditorTypes[number]
 // https://github.com/VSCodium/vscodium/blob/master/docs/index.md#migrating-from-visual-studio-code-to-vscodium
 // https://code.visualstudio.com/docs/editor/extension-marketplace#_where-are-extensions-installed
 export type TransferFilesInfo = { from: URI, to: URI, isExtensions?: boolean }[]
