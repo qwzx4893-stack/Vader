@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Generates every Vader brand asset from the two source images in brand/source/.
 
-  brand/source/logo-black.jpg   the logo, white on a black background (the app icon)
-  brand/source/banner.jpg       the wide banner (README / social preview)
+  brand/source/logo-black.jpg      the logo, white on a black background (the original artwork, 1280 px, JPEG)
+  brand/source/logo-black-x4.png   that artwork run through Real-ESRGAN x4 (an open-source super-resolution network; the crop (30,266)-(1246,1024)
+                                   of the JPEG, 4864 x 3032 px). Everything below is generated from THIS file: clean edges instead of JPEG noise.
+  brand/source/banner.jpg          the wide banner (README / social preview)
 
 Run from the repository root:   python3 build/lib/vader/make_brand_assets.py
 Needs:  pip install pillow numpy scipy potracer
@@ -21,10 +23,15 @@ import potrace
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 P = lambda *a: os.path.join(ROOT, *a)
 
-src = Image.open(P('brand/source/logo-black.jpg')).convert('L')
-a = np.asarray(src, dtype=np.float32)
-alpha = np.clip((a - 40) / (215 - 40), 0, 1)          # JPEG noise below 40 is background, above 215 is solid logo
+SCALE = 4                                                  # the upscaled master is 4x the original artwork
+CROP_X, CROP_Y = 30, 266                                   # where the master sits inside the 1280 px original
+_m = Image.open(P('brand/source/logo-black-x4.png')).convert('L')
+_canvas = Image.new('L', (1280 * SCALE, 1280 * SCALE), 0)
+_canvas.paste(_m, (CROP_X * SCALE, CROP_Y * SCALE))
+a = np.asarray(_canvas, dtype=np.float32) / 255.0
+alpha = np.clip((a - 0.35) / (0.65 - 0.35), 0, 1)         # pure white on pure black: a narrow ramp keeps edges crisp and anti-aliased
 mask = Image.fromarray((alpha * 255).astype(np.uint8), 'L')
+del a, alpha, _canvas, _m
 bbox = mask.point(lambda v: 255 if v > 24 else 0).getbbox()
 
 
@@ -62,7 +69,7 @@ def on_black(size, pad=0.06, rounded=0.0, margin=0.0):
 # ---- small sizes: the logo is much wider than tall (a black hole with long wings), so fitting it by width leaves a small mark in a
 # square tile. Square icons crop the ORIGINAL artwork around the ring instead (the part that carries the identity), scaled to fill the
 # tile by height; nothing is simplified, redrawn or thickened. The ring (shadow disc centre and outer radius) was measured on the source.
-RING_CX, RING_CY, RING_R = 642, 644, 338
+RING_CX, RING_CY, RING_R = 642 * SCALE, 644 * SCALE, 338 * SCALE
 
 
 def ring_box(pad=1.12):
@@ -75,9 +82,25 @@ def ring_mark(size, pad=1.12, ss=1):
     return mask.resize((size * ss, size * ss), Image.LANCZOS, box=ring_box(pad))
 
 
+def whole_mark(size, pad=0.04):
+    """The WHOLE logo (ring and both wings) fitted to the width of a size x size square, white on black ('L' image).
+    Below 64 px the logo is rendered 16x oversampled and the edges are firmed up, so thin strokes stay visible instead of turning grey."""
+    tight = mask.crop(bbox)
+    w = round(size * (1 - 2 * pad)); h = round(w * tight.height / tight.width)
+    ss = 16 if size <= 64 else 1
+    r = tight.resize((w * ss, h * ss), Image.LANCZOS)
+    canvas = Image.new('L', (size * ss, size * ss), 0)
+    canvas.paste(r, ((size * ss - w * ss) // 2, (size * ss - h * ss) // 2))
+    if ss > 1:
+        canvas = canvas.resize((size, size), Image.BOX)
+        arr = np.asarray(canvas, dtype=np.float32) / 255.0
+        canvas = Image.fromarray((np.clip((arr - 0.5) * 1.5 + 0.5, 0, 1) * 255).astype(np.uint8), 'L')
+    return canvas
+
+
 def icon_image(size):
-    """App icon at `size` (RGBA, opaque black background, white original logo cropped around the ring)."""
-    m = ring_mark(size)
+    """App icon at `size` (RGBA, opaque black background, the whole white logo - what the person sees on the desktop and in the task bar)."""
+    m = whole_mark(size)
     return Image.merge('RGBA', (m, m, m, Image.new('L', (size, size), 255)))
 
 
@@ -160,26 +183,27 @@ os.makedirs(P('resources/darwin'), exist_ok=True)
 mac.save(P('resources/darwin/code.icns')); print('wrote resources/darwin/code.icns')
 
 # ---- in-app: the logo without a background for grey/black surfaces (banner part, getting started, walkthrough file icons)
-_b = ring_mark(128, pad=1.08)   # shown at 16-48 px in the UI: the original logo cropped around the ring, white on transparent
+_b = whole_mark(128, pad=0.02)   # shown at 16-48 px in the UI: the whole logo, white on transparent
 save_png(Image.merge('RGBA', (Image.new('L', (128, 128), 255),) * 3 + (_b,)), 'src/vs/workbench/browser/media/vader-icon-sm.png')
 
 
 # ---- vector logo (traced from the mask) for the editor watermark and the other SVG logo slots
 def trace_path():
     tight = mask.crop(bbox)
-    bm = potrace.Bitmap(np.asarray(tight) <= 110)  # potracer traces the "false" pixels of its input: invert so the logo is what gets traced
-    plist = bm.trace(turdsize=20, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY, alphamax=1.0, opticurve=True, opttolerance=0.2)
+    bm = potrace.Bitmap(np.asarray(tight) <= 128)  # potracer traces the "false" pixels of its input: invert so the logo is what gets traced
+    plist = bm.trace(turdsize=80, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY, alphamax=1.0, opticurve=True, opttolerance=0.4)
+    k = 1.0 / SCALE                                  # the trace is on the 4x master: write the path in the 1280 px space
     parts = []
     for curve in plist:
         s = curve.start_point
-        parts.append(f'M{s.x:.1f},{s.y:.1f}')
+        parts.append(f'M{s.x * k:.2f},{s.y * k:.2f}')
         for seg in curve.segments:
             if seg.is_corner:
-                parts.append(f'L{seg.c.x:.1f},{seg.c.y:.1f}L{seg.end_point.x:.1f},{seg.end_point.y:.1f}')
+                parts.append(f'L{seg.c.x * k:.2f},{seg.c.y * k:.2f}L{seg.end_point.x * k:.2f},{seg.end_point.y * k:.2f}')
             else:
-                parts.append(f'C{seg.c1.x:.1f},{seg.c1.y:.1f} {seg.c2.x:.1f},{seg.c2.y:.1f} {seg.end_point.x:.1f},{seg.end_point.y:.1f}')
+                parts.append(f'C{seg.c1.x * k:.2f},{seg.c1.y * k:.2f} {seg.c2.x * k:.2f},{seg.c2.y * k:.2f} {seg.end_point.x * k:.2f},{seg.end_point.y * k:.2f}')
         parts.append('Z')
-    return ''.join(parts), tight.size
+    return ''.join(parts), (tight.size[0] * k, tight.size[1] * k)
 
 
 d, (tw, th) = trace_path()
@@ -205,14 +229,14 @@ write(wm + 'letterpress-light.svg', svg('#1b1b1b', 0.22))    # light theme: a wh
 write(wm + 'letterpress-hcDark.svg', svg('#ffffff', 0.7))
 write(wm + 'letterpress-hcLight.svg', svg('#1b1b1b', 0.6))
 def badge():
-    # black rounded square with the ORIGINAL logo cropped around the ring (the traced path is clipped by the viewBox):
-    # readable on dark AND light surfaces at 16-22 px (title bar icon, "open in" buttons)
-    half = RING_R * 1.10
-    vx, vy = RING_CX - bbox[0] - half, RING_CY - bbox[1] - half     # ring square in the traced path's coordinates
-    side2 = 2 * half
-    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="{vx:.1f} {vy:.1f} {side2:.1f} {side2:.1f}">'
-            f'<rect x="{vx:.1f}" y="{vy:.1f}" width="{side2:.1f}" height="{side2:.1f}" rx="{side2 * 0.22:.0f}" fill="#000"/>'
-            f'<path fill="#fff" fill-rule="evenodd" d="{d}"/></svg>\n')
+    # black rounded square with the WHOLE logo (ring and both wings) fitted to its width: readable on dark AND light surfaces at 16-22 px
+    # (title bar icon, "open in" buttons). Same layout as the app icon on the desktop.
+    pad = tw * 0.04
+    sd = tw + 2 * pad
+    ty = (sd - th) / 2
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 {sd:.1f} {sd:.1f}">'
+            f'<rect width="{sd:.1f}" height="{sd:.1f}" rx="{sd * 0.22:.0f}" fill="#000"/>'
+            f'<path fill="#fff" fill-rule="evenodd" transform="translate({pad:.1f} {ty:.1f})" d="{d}"/></svg>\n')
 
 
 write('src/vs/workbench/browser/media/code-icon.svg', badge())

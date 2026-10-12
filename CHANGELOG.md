@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Sharper logo and icons, calmer dark interface
+
+- **Logo and icons from a clean source.** The original artwork (1280 px, JPEG) was run through Real-ESRGAN x4, an open-source super-resolution network; the result
+  (`brand/source/logo-black-x4.png`, 4864 x 3032 px) is now the source of every generated asset: the app icon (all sizes in the `.ico`), installer images, favicon, the in-app
+  logo, and the vector logo (re-traced from the clean master, with about four times more edge points). The app icon is the **whole logo** (ring and both wings) on a black square, as
+  before; below 64 px it is drawn 16x oversampled with firmed-up edges, so thin strokes stay visible instead of turning grey. `build/lib/vader/make_brand_assets.py` regenerates everything.
+- **Calmer dark interface, same identity.** The editor base's own *Modern UI* layout (floating rounded panels with gaps) is on by default, and `media/vaderPolish.css` refines the dark theme: a dimmer window
+  frame, quieter edges, the chat request as a card, soft tool-call rows, checkpoints as a hairline, a larger floating composer, settings cards with a status dot and a divided action row, grouped model list.
+  Same greys, same blue, same fonts and logo; the send button is unchanged. Everything is scoped to the dark theme: light and high-contrast themes keep their own look. "Modern UI" can be switched off in Settings.
+
 ## Unreleased - Coding agents you already have an account with
 
 - **Connect, not download.** A program the person already has (OpenCode, Cursor, Copilot, Mistral Vibe, Grok, Kimi) is found, verified with a protocol handshake and used as it is: no download, the sign-in it holds counts. Each agent card has one primary

@@ -13,7 +13,10 @@
 import { Registry } from '../../../../platform/registry/common/platform.js';
 import { Extensions, IConfigurationRegistry } from '../../../../platform/configuration/common/configurationRegistry.js';
 import { ChatAIDisabledSettingId } from '../../../../platform/chat/common/chatSettings.js';
+import { LayoutSettings } from '../../../services/layout/browser/layoutService.js';
 
 Registry.as<IConfigurationRegistry>(Extensions.Configuration).registerDefaultConfigurations([{
-	overrides: { [ChatAIDisabledSettingId]: true }
+	// The editor base's own "Modern UI" layout (floating, rounded panels with gaps) is on by default: it is the layout Vader's dark-theme
+	// refinement (media/vaderPolish.css) is designed for. It is off in the base only because it is an experiment there; users can switch it off.
+	overrides: { [ChatAIDisabledSettingId]: true, [LayoutSettings.MODERN_UI]: true }
 }]);

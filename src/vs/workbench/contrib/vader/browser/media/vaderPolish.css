@@ -1,0 +1,475 @@
+/*--------------------------------------------------------------------------------------
+ *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
+ *
+ *  Refinement of the dark theme (same greys, same blue, same logo and fonts): the editor base's own "Modern UI" layout (floating rounded
+ *  panels; switched on by default in product.json) with a dimmer window frame, quieter edges, softer chat messages and settings cards.
+ *  Everything is scoped to the dark theme (.vs-dark): light and high-contrast themes keep their own look. The send button is deliberately
+ *  left as it was.
+ *--------------------------------------------------------------------------------------*/
+
+/* 1. tokens: neutral greys, dimmer chrome, no hard separators */
+
+.monaco-workbench.vs-dark.vs-dark {
+	--vscode-editor-background: #141516;
+	--vscode-editorGutter-background: #141516;
+	--vscode-sideBar-background: #18191a;
+	--vscode-sideBar-foreground: #a3a5a8;
+	--vscode-sideBarTitle-foreground: #8b8d90;
+	--vscode-sideBarSectionHeader-background: transparent;
+	--vscode-sideBarSectionHeader-border: transparent;
+	--vscode-sideBar-border: transparent;
+	--vscode-panel-background: #18191a;
+	--vscode-panel-border: transparent;
+	--vscode-activityBar-background: #0f1011;
+	--vscode-activityBar-border: transparent;
+	--vscode-activityBar-foreground: #e6e6e6;
+	--vscode-activityBar-inactiveForeground: #6b6d70;
+	--vscode-activityBar-activeBorder: transparent;
+	--vscode-activityBar-activeBackground: rgba(255,255,255,.07);
+	--vscode-activityBarBadge-background: #0e70c0;
+	--vscode-titleBar-activeBackground: #0f1011;
+	--vscode-titleBar-inactiveBackground: #0f1011;
+	--vscode-titleBar-border: transparent;
+	--vscode-titleBar-activeForeground: #9b9da0;
+	--vscode-commandCenter-background: rgba(255,255,255,.045);
+	--vscode-commandCenter-border: rgba(255,255,255,.07);
+	--vscode-commandCenter-foreground: #9b9da0;
+	--vscode-statusBar-background: #0f1011;
+	--vscode-statusBar-foreground: #7d7f82;
+	--vscode-statusBar-border: transparent;
+	--vscode-statusBar-noFolderBackground: #0f1011;
+	--vscode-editorGroupHeader-tabsBackground: #141516;
+	--vscode-editorGroupHeader-tabsBorder: transparent;
+	--vscode-editorGroup-border: transparent;
+	--vscode-tab-activeBackground: #1f2022;
+	--vscode-tab-inactiveBackground: transparent;
+	--vscode-tab-border: transparent;
+	--vscode-tab-activeBorder: transparent;
+	--vscode-tab-activeBorderTop: transparent;
+	--vscode-tab-inactiveForeground: #7d7f82;
+	--vscode-tab-activeForeground: #e6e6e6;
+	--vscode-breadcrumb-foreground: #6f7174;
+	--vscode-list-activeSelectionBackground: rgba(255,255,255,.08);
+	--vscode-list-activeSelectionForeground: #f0f0f0;
+	--vscode-list-inactiveSelectionBackground: rgba(255,255,255,.06);
+	--vscode-list-hoverBackground: rgba(255,255,255,.04);
+	--vscode-list-focusOutline: transparent;
+	--vscode-list-inactiveFocusOutline: transparent;
+	--vscode-list-focusAndSelectionOutline: transparent;
+	--vscode-focusBorder: rgba(55,148,255,.55);
+	--vscode-input-background: #1c1d1f;
+	--vscode-input-border: rgba(255,255,255,.07);
+	--vscode-editorLineNumber-foreground: #4a4c4f;
+	--vscode-editorLineNumber-activeForeground: #a3a5a8;
+	--vscode-editor-lineHighlightBackground: rgba(255,255,255,.025);
+	--vscode-editor-lineHighlightBorder: transparent;
+	--vscode-widget-shadow: rgba(0,0,0,.45);
+	--vscode-scrollbarSlider-background: rgba(255,255,255,.07);
+	background: #0f1011 !important;
+}
+
+.monaco-workbench.vs-dark .part.titlebar .command-center .command-center-center {
+	border-radius: 8px !important;
+}
+
+.monaco-workbench.vs-dark .part.titlebar,
+.monaco-workbench.vs-dark .part.statusbar,
+.monaco-workbench.vs-dark .part.activitybar {
+	background-color: #0f1011 !important;
+}
+
+.monaco-workbench.vs-dark > .monaco-grid-view,
+.monaco-workbench.vs-dark .monaco-grid-view .monaco-split-view2,
+.monaco-workbench.vs-dark .monaco-grid-view .split-view-container,
+.monaco-workbench.vs-dark .monaco-grid-view .split-view-view {
+	background-color: transparent !important;
+}
+
+.monaco-workbench.vs-dark .monaco-grid-view {
+	background-color: #0f1011 !important;
+}
+
+.monaco-workbench.vs-dark .part.statusbar {
+	border-top: 0 !important;
+}
+
+.monaco-workbench.vs-dark .part.activitybar .action-item .action-label {
+	border-radius: 8px;
+}
+
+.monaco-workbench.vs-dark .part.activitybar .action-item.checked .active-item-indicator::before {
+	display: none !important;
+}
+
+.monaco-workbench.vs-dark .part.activitybar .action-item.checked {
+	background: rgba(255,255,255,.07);
+	border-radius: 10px;
+	margin: 2px 6px;
+}
+
+.monaco-workbench.vs-dark .monaco-list .monaco-list-row.selected,
+.monaco-workbench.vs-dark .monaco-list .monaco-list-row.focused {
+	border-radius: 6px;
+}
+
+.monaco-workbench.vs-dark .pane-composite-part .title-label h2,
+.monaco-workbench.vs-dark .pane-header .title {
+	font-weight: 600 !important;
+	letter-spacing: 0 !important;
+}
+
+.monaco-workbench.vs-dark .tabs-container .tab {
+	border-radius: 8px 8px 0 0;
+}
+
+.monaco-workbench.vs-dark .tabs-container .tab.active {
+	box-shadow: none !important;
+}
+
+/* 2. chat panel */
+
+.monaco-workbench.vs-dark .vader-scope {
+	--vader-bg-1: #1c1d1f;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-ml-auto.vader-self-end {
+	margin-left: 0 !important;
+	width: 100% !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-rounded-lg.vader-bg-vader-bg-1 {
+	width: 100%;
+	background: #1f2022 !important;
+	border: 1px solid rgba(255,255,255,.07) !important;
+	border-radius: 12px !important;
+	padding: 12px 14px !important;
+	color: #e4e4e4 !important;
+	line-height: 1.55;
+	box-shadow: 0 1px 0 rgba(255,255,255,.03) inset;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-assistant-text"] .vader-prose {
+	font-size: 13.5px !important;
+	line-height: 1.7 !important;
+	color: #c8cacd !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-assistant-text"] code {
+	background: rgba(255,255,255,.06) !important;
+	color: #e6e6e6 !important;
+	border-radius: 5px !important;
+	padding: 1px 6px !important;
+	text-decoration: none !important;
+	font-size: 12px;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool"] > div {
+	border: 0 !important;
+	background: rgba(255,255,255,.035) !important;
+	border-radius: 8px !important;
+	padding: 5px 10px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool"] > div:hover {
+	background: rgba(255,255,255,.06) !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool"] .vader-text-vader-fg-3 {
+	color: #a3a5a8 !important;
+	font-weight: 500;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool"] .vader-italic {
+	font-style: normal !important;
+	font-family: var(--monaco-monospace-font, monospace);
+	font-size: 11.5px !important;
+	color: #7d7f82 !important;
+	background: rgba(255,255,255,.05);
+	border-radius: 4px;
+	padding: 1px 6px;
+}
+
+.monaco-workbench.vs-dark .vader-scope div:has(> .vader-select-none.vader-cursor-pointer.vader-text-xs) {
+	position: relative;
+	padding: 2px 0 !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope div:has(> .vader-select-none.vader-cursor-pointer.vader-text-xs)::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	right: 0;
+	top: 50%;
+	height: 1px;
+	background: rgba(255,255,255,.05);
+}
+
+.monaco-workbench.vs-dark .vader-scope div:has(> .vader-select-none.vader-cursor-pointer.vader-text-xs) > div {
+	position: relative;
+	background: #18191a;
+	padding: 0 10px;
+	font-size: 10.5px;
+	color: #4f5154 !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input {
+	border-radius: 14px !important;
+	background: #1c1d1f !important;
+	border: 1px solid rgba(255,255,255,.08) !important;
+	box-shadow: 0 10px 30px rgba(0,0,0,.35), 0 1px 0 rgba(255,255,255,.04) inset !important;
+	padding: 12px 12px 10px !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input:hover {
+	border-color: rgba(255,255,255,.12) !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input:focus-within {
+	border-color: rgba(55,148,255,.55) !important;
+	box-shadow: 0 0 0 3px rgba(55,148,255,.14), 0 10px 30px rgba(0,0,0,.35) !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input textarea {
+	font-size: 13.5px !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input textarea::placeholder {
+	color: #6b6d70 !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input .vader-inline-block.vader-relative.vader-text-xs {
+	border-radius: 999px !important;
+	border: 0 !important;
+	background: rgba(255,255,255,.06) !important;
+	padding: 4px 10px !important;
+	color: #b4b6b9 !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input .vader-inline-block.vader-relative.vader-text-xs button {
+	height: 16px !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-input .vader-inline-block.vader-relative.vader-text-xs:hover {
+	background: rgba(255,255,255,.1) !important;
+}
+
+.monaco-workbench.vs-dark .vader-scope .vader-rounded-t-lg,
+.monaco-workbench.vs-dark .vader-scope .vader-border-b-0 {
+	border-radius: 10px 10px 0 0 !important;
+	background: #18191a !important;
+	border-color: rgba(255,255,255,.06) !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool-approve"] {
+	background: #0e70c0 !important;
+	color: #fff !important;
+	border: 0 !important;
+	border-radius: 7px !important;
+	padding: 6px 16px !important;
+	font-weight: 600;
+	box-shadow: 0 2px 10px rgba(14,112,192,.35);
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-tool-reject"] {
+	background: transparent !important;
+	border: 1px solid rgba(255,255,255,.12) !important;
+	border-radius: 7px !important;
+	padding: 6px 14px !important;
+	color: #c8cacd !important;
+}
+
+/* 3. settings page */
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] > aside {
+	background: #141516 !important;
+	border-right: 1px solid rgba(255,255,255,.05) !important;
+	padding: 18px 12px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] > aside .vader-uppercase {
+	font-size: 10.5px !important;
+	letter-spacing: .08em !important;
+	color: #5f6164 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"] {
+	border-radius: 8px !important;
+	color: #a3a5a8 !important;
+	padding-top: 7px !important;
+	padding-bottom: 7px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"] svg {
+	opacity: .7 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:hover {
+	background: rgba(255,255,255,.04) !important;
+	color: #e6e6e6 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"].vader-text-white {
+	background: rgba(255,255,255,.08) !important;
+	color: #f0f0f0 !important;
+	box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"].vader-text-white svg {
+	opacity: 1 !important;
+	color: #3794ff;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] main {
+	background: #141516 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] h2,
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] h1 {
+	letter-spacing: -.01em;
+	font-weight: 600 !important;
+	color: #ededed !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] h4 {
+	color: #8b8d90 !important;
+	line-height: 1.6 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] input {
+	border-radius: 8px !important;
+	background: #1c1d1f !important;
+	border-color: rgba(255,255,255,.08) !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] button.vader-rounded-sm {
+	border-radius: 7px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] button {
+	font-weight: 500 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] button.dark\:vader-bg-white\/10,
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] button.vader-bg-black\/10 {
+	background: transparent !important;
+	box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+	color: #c8cacd;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] {
+	border-radius: 12px !important;
+	background: #18191a !important;
+	border: 1px solid rgba(255,255,255,.06) !important;
+	padding: 18px 18px 16px !important;
+	gap: 8px !important;
+	box-shadow: 0 1px 0 rgba(255,255,255,.03) inset;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > div:first-child {
+	padding-bottom: 6px;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > div:first-child > svg:first-child,
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] [data-agent-logo] {
+	box-sizing: content-box;
+	padding: 5px;
+	border-radius: 8px;
+	background: rgba(255,255,255,.05);
+	flex: none;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > div:first-child {
+	flex-wrap: nowrap !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > div:first-child > * {
+	white-space: nowrap;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] .vader-text-base {
+	font-size: 14.5px !important;
+	font-weight: 600 !important;
+	color: #ededed;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] .vader-uppercase {
+	border: 0 !important;
+	background: rgba(255,255,255,.06);
+	border-radius: 999px !important;
+	padding: 1px 8px !important;
+	color: #8b8d90 !important;
+	letter-spacing: .06em;
+}
+
+.monaco-workbench.vs-dark [data-testid$="-state"] {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: rgba(255,255,255,.05);
+	border-radius: 999px;
+	padding: 2px 10px 2px 8px;
+	color: #8b8d90 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid$="-state"]::before {
+	content: '';
+	width: 6px;
+	height: 6px;
+	border-radius: 50%;
+	background: #5f6164;
+}
+
+.monaco-workbench.vs-dark [data-state="connected"] [data-testid$="-state"]::before,
+.monaco-workbench.vs-dark [data-state="installed"] [data-testid$="-state"]::before,
+.monaco-workbench.vs-dark [data-state="ready"] [data-testid$="-state"]::before {
+	background: #3fb950;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > .vader-text-sm {
+	color: #d4d4d4 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > .vader-text-xs {
+	color: #74767a !important;
+	line-height: 1.55 !important;
+}
+
+.monaco-workbench.vs-dark [data-testid^="vader-external-agent-"][data-state] > div:last-child {
+	margin-top: auto !important;
+	padding-top: 12px;
+	border-top: 1px solid rgba(255,255,255,.05);
+}
+
+/* 4. models list + card edges */
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] .vader-group.vader-justify-between {
+	border-radius: 8px !important;
+	padding-top: 7px !important;
+	padding-bottom: 7px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] .vader-group.vader-justify-between:hover {
+	background: rgba(255,255,255,.04) !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] .vader-group.vader-justify-between:has(.vader-max-w-32 svg) {
+	margin-top: 12px;
+	box-shadow: 0 -1px 0 rgba(255,255,255,.05);
+	border-radius: 0 0 8px 8px !important;
+}
+
+.monaco-workbench.vs-dark [data-testid="vader-settings-page"] .vader-max-w-32 {
+	color: #ededed;
+	font-weight: 500;
+}
+
+.monaco-workbench.vs-dark .modern-ui .part.sidebar,
+.monaco-workbench.vs-dark .modern-ui .part.auxiliarybar,
+.monaco-workbench.vs-dark .modern-ui .part.editor,
+.monaco-workbench.vs-dark .modern-ui .part.panel {
+	box-shadow: inset 0 0 0 1px rgba(255,255,255,.05);
+}
+
+.monaco-workbench.vs-dark.vs-dark {
+	--vscode-cornerRadius-large: 12px;
+}

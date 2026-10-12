@@ -26,6 +26,7 @@ import './vaderSettingsPane.js'
 
 // register css
 import './media/vader.css'
+import './media/vaderPolish.css'
 
 // update (frontend part, also see platform/)
 import './vaderUpdateActions.js'
