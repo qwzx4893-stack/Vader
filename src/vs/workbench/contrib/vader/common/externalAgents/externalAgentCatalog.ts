@@ -78,16 +78,16 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 	},
 	{
 		id: 'gemini', name: 'Gemini CLI', kind: 'acp', logo: 'gemini',
-		tagline: 'Google\'s agent with a free daily allowance when you sign in with a Google account.',
-		website: 'https://geminicli.com',
-		note: 'Needs Node.js. Limits and data use are Google\'s.',
-		acp: { registryId: 'gemini', loginNote: 'A browser page opens to sign in with your Google account.', authPreference: ['oauth-personal'] },
+		tagline: 'Google\'s open-source agent CLI. Needs a Gemini API key or a company licence.',
+		website: 'https://github.com/google-gemini/gemini-cli',
+		note: 'Needs Node.js. Since 18 June 2026 Google no longer serves free personal Google-account logins in it (Antigravity replaces it for that); Vader\'s Antigravity card is the one for a Google account.',
+		acp: { registryId: 'gemini', loginNote: 'Signing in with a personal Google account no longer works for the free tier; use an API key or a Code Assist licence.', authPreference: ['oauth-personal'] },
 	},
 	{
 		id: 'claude-code', name: 'Claude Code', kind: 'terminal', logo: 'claudecode',
 		tagline: 'Your Claude plan (Pro, Max, Team) in Anthropic\'s own program.',
 		website: 'https://code.claude.com/docs/en/setup',
-		note: 'Anthropic allows its subscription only inside its own unmodified Claude Code, so it runs here as it is, in a terminal, and is not wired into Vader\'s chat. Vader never handles the sign-in.',
+		note: 'Needs a paid Claude plan (Pro, Max, Team or Enterprise; the free plan does not include Claude Code). Anthropic allows its subscription only inside its own unmodified Claude Code, so it runs here exactly as Anthropic ships it, in a terminal, and is not wired into Vader\'s chat. Vader never handles the sign-in.',
 		terminal: {
 			command: 'claude',
 			install: { windows: 'irm https://claude.ai/install.ps1 | iex', posix: 'curl -fsSL https://claude.ai/install.sh | bash' },

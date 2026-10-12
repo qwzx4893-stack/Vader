@@ -51,7 +51,7 @@ SRC = {
 # the coding agents of Settings > Models > External agents -> source (written to their own file, common/externalAgents/agentLogoData.ts)
 AGENT_SRC = {
   'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'gemini': ('lobe', 'geminicli'),
-  'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
+  'claudecode': ('prompt', ''), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
 }
 
 TAGS = {'g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline', 'line', 'mask', 'defs', 'clipPath'}
@@ -140,14 +140,22 @@ def generic():
         {'t': 'path', 'a': {**stroke, 'd': 'M13.5 5 10.5 19'}, 'k': []},
     ]
 
+def prompt_glyph():
+    # Anthropic's terms for Claude Code (code.claude.com/docs/en/legal-and-compliance) allow saying in plain text that a product runs Claude Code but
+    # do not allow their names or logos beyond that without written permission, so its card uses this neutral terminal prompt instead of their mark.
+    stroke = {'stroke': 'currentColor', 'strokeWidth': '2', 'strokeLinecap': 'round', 'strokeLinejoin': 'round', 'fill': 'none'}
+    return '0 0 24 24', [
+        {'t': 'path', 'a': {**stroke, 'd': 'm5 7 5 5-5 5'}, 'k': []},
+        {'t': 'path', 'a': {**stroke, 'd': 'M13 17h6'}, 'k': []},
+    ]
+
 def freebuff():
-    # Freebuff / Codebuff publish no vector file. Their official mark is the organisation's GitHub avatar (github.com/CodebuffAI, a white
-    # rounded terminal frame holding a four-point sparkle and a cursor bar on black). It is redrawn here as vector, one colour, measured
-    # from that image (frame 80 units square with a 6 stroke, sparkle 24 units, bar 20 x 4.5), so it follows the theme.
-    return '0 0 86 86', [
-        {'t': 'rect', 'a': {'x': '3', 'y': '3', 'width': '80', 'height': '80', 'rx': '9', 'stroke': 'currentColor', 'strokeWidth': '6', 'fill': 'none'}, 'k': []},
-        {'t': 'path', 'a': {'d': 'M24 18Q25.8 28.2 36 30Q25.8 31.8 24 42Q22.2 31.8 12 30Q22.2 28.2 24 18Z'}, 'k': []},
-        {'t': 'path', 'a': {'d': 'M36 38.3h20v4.5H36z'}, 'k': []},
+    # Freebuff's own mark, as the person who owns the project supplied it: two nested corner shapes that together make an "F", white on a black
+    # rounded tile. Only the glyph is kept (every logo here is one colour, currentColor, without a tile, so it follows the theme); the geometry is
+    # measured from the supplied 512 px image: outer corner 130..382, stroke 63; inner corner 211..337, stroke 63, a gap of 18 between them.
+    return '100 100 312 312', [
+        {'t': 'path', 'a': {'d': 'M130 130H382V193H193V382H130Z'}, 'k': []},
+        {'t': 'path', 'a': {'d': 'M211 211H337V274H274V382H211Z'}, 'k': []},
     ]
 
 def load(table):
@@ -158,8 +166,9 @@ def load(table):
         elif kind == 'litellm': vb, kids = parse(args.litellm)
         elif kind == 'requesty': vb, kids = requesty()
         elif kind == 'freebuff': vb, kids = freebuff()
+        elif kind == 'prompt': vb, kids = prompt_glyph()
         else: vb, kids = generic()
-        if kind not in ('requesty', 'generic', 'freebuff'): flatten_colours(kids)
+        if kind not in ('requesty', 'generic', 'freebuff', 'prompt'): flatten_colours(kids)
         if not kids: raise SystemExit(f'{key}: empty logo')
         for n in kids: strip(n)
         out[key] = {'vb': vb, 'els': kids}

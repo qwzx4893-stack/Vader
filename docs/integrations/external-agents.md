@@ -81,7 +81,13 @@ says (`common/helpers/settingsPortability.ts`, tested in `settingsPortabilityE2E
   the handshake; OpenCode 1.19.0 downloads from GitHub, passes its checksum, unpacks and answers. Codex's real first message starts the ChatGPT sign-in. **Not verified here**: Cursor and Antigravity (their
   download hosts are not reachable from the build machine), and any complete conversation (that needs a signed-in account).
 - **Codex.** The adapter's real handshake lists `API Key` before `ChatGPT`; choosing "the first method" would have signed the person into the wrong thing. Fixed, and tested with the verbatim answer.
-- **Claude Code.** Anthropic's documentation (February 2026) says OAuth tokens of Free, Pro and Max plans are only for Claude Code and claude.ai, and that using them in other products, including the Agent SDK,
+- **Gemini CLI.** Google ended free Gemini CLI access for personal Google accounts and AI Pro/Ultra on 18 June 2026 (announced at I/O on 19 May; Antigravity CLI replaces it; the package itself ships a migration skill to Antigravity CLI).
+  It still starts and answers the handshake, but the account route that made it worth listing is gone, so its card says so; the Antigravity card is the Google-account one. Removing it is a catalog deletion.
+- **Claude Code (Anthropic's current text, `code.claude.com/docs/en/legal-and-compliance`).** Preinstalling or running Claude Code *in a product* needs Anthropic's Commercial Terms and an unmodified binary, and each end user must use their own
+  plan or key; and, verbatim, the rules "do not prevent an end user from signing in to the unmodified Claude Code binary with their own Claude subscription, including where a platform hosts Claude Code". Developers on the Agent SDK are told to use API keys,
+  and "may not collect, store, or intermediate Claude.ai credentials or session tokens". Vader's shape is the clearly allowed one: the person installs Anthropic's own program with Anthropic's own installer, Vader only opens a terminal for it,
+  nothing is bundled, modified or intercepted. The Claude Code name may be used in plain text; their name and logo may not be used otherwise without written permission, so the card uses a neutral terminal glyph instead of Anthropic's mark.
+  Install needs no administrator rights; Git for Windows is optional; the free claude.ai plan does not include Claude Code (the card says so). The earlier text of this paragraph (February 2026) says OAuth tokens of Free, Pro and Max plans are only for Claude Code and claude.ai, and that using them in other products, including the Agent SDK,
   is not allowed; later statements softened the billing side (June 2026) but not the rule, and the situation has changed more than once. An ACP adapter for Claude exists in the registry (`claude-acp`, authors
   Anthropic, Zed Industries, JetBrains) and uses the Agent SDK. Vader therefore keeps the conservative shape: the unmodified `claude` program in a terminal. Switching to the adapter is a catalog entry
   if the terms are confirmed to allow it.
@@ -89,6 +95,29 @@ says (`common/helpers/settingsPortability.ts`, tested in `settingsPortabilityE2E
   avatar of CodebuffAI: a terminal frame with a sparkle and a cursor), redrawn as vector by `build/lib/vader/genProviderLogos.py` because no vector file is published.
 - **Antigravity.** The first version of this feature treated it as terminal-only because the `agy` CLI has no protocol mode. The registry shows Google's own ACP server for editors, so it is now a chat agent. Community ACP
   bridges around `agy` exist but their authors warn that they may violate Google's terms; Vader uses none of them.
+
+## Agents considered for the page, with what the real programs answered (12 October 2026)
+
+Each one was installed the way Vader installs agents and started; the handshake answers below are real (`/tmp` research probe, same rules as `externalAgentLiveE2E`).
+
+| Agent | Account it uses | Sign-in as the real agent offers it | Resume | Download | Verdict |
+|---|---|---|---|---|---|
+| GitHub Copilot CLI (`@github/copilot`) | GitHub Copilot (a Free plan exists, Pro, Pro+) | `terminal-auth`: runs `copilot login` | no (load only) | npm, official | **add** (needs the `_meta["terminal-auth"]` convention) |
+| Mistral Vibe | Le Chat Pro (about $15/month) | `browser-auth` (the agent's own page) | no (load only) | GitHub release, checksum for every platform | **add** (works with today's sign-in code) |
+| Grok Build (`@xai-official/grok`) | SuperGrok / X Premium+ | "Sign in with Grok" (the agent's own page) | yes | npm, official | **add** (works with today's sign-in code; paid only) |
+| Kimi CLI | Kimi membership (a free tier exists) | `terminal-auth`: runs `kimi login` | yes | GitHub release, checksum | **add** (needs the `terminal-auth` convention) |
+| Cline | Cline account / ClinePass, and ChatGPT through Codex | `cline`, `cline-pass`, `openai-codex` | no | npm | good second wave |
+| Junie | JetBrains AI plans (a free quota exists) | `jetbrains-account` (agent) and a terminal login | yes | GitHub release, **no checksum** | second wave, for JetBrains subscribers |
+| Factory Droid | Factory plan | `device-pairing` (browser) | yes | npm | niche, paid |
+| Kilo | Kilo account, rotating free models | "Run `kilo auth login`" (text only, no machine-readable command) | yes | GitHub release, checksum | needs a manual terminal step |
+| Goose | none: "run `goose configure`", provider and API key | key only | no | GitHub release, checksum | not for this page (Vader already takes API keys) |
+| Qwen Code | none: the free OAuth tier closed on 15 April 2026; API key only | key only | yes | npm | no |
+| Auggie | Augment plan | none offered in the handshake (login happens outside) | no | npm | no |
+| Claude Agent (ACP adapter) | Claude plan | `claude /login` in a terminal | yes | npm | not by default: see the Anthropic paragraph above |
+| Devin, Poolside, Cortex Code | their own plans | not testable here (download hosts not reachable) | | | unverified |
+
+Real agents do not all use the sign-in fields the protocol's newer versions define: Copilot and Kimi describe their terminal login in `_meta["terminal-auth"]` (a command, arguments and environment), Qwen in `_meta.type`, and Kilo only in
+the description text. Supporting `_meta["terminal-auth"]` is a small change in `chooseAuthMethod`; it is needed before Copilot CLI and Kimi can be added.
 
 ## Honest limits
 
