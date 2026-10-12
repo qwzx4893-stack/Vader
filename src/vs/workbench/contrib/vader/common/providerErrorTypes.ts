@@ -108,3 +108,23 @@ export function classifyProviderError(message: string, fullError: unknown, opts?
 
 	return { category: 'UNKNOWN', retryable: false };
 }
+
+
+/** What the user reads: one plain sentence that says what to do, then the provider's own words. (The bare category tag used to be shown, e.g. "[UNKNOWN] ...".) */
+export function userFacingProviderError(category: ProviderErrorCategory, message: string): string {
+	const lead: Partial<Record<ProviderErrorCategory, string>> = {
+		AUTHENTICATION: 'The provider rejected your API key. Check the key in Settings > Main Providers (or Local Providers).',
+		RATE_LIMIT: 'The provider is limiting how many requests you can send. Wait a moment and send the message again.',
+		CONTEXT_LIMIT: 'This conversation is longer than the model can take. Start a new chat, or pick a model with a larger context window.',
+		MODEL_NOT_FOUND: 'The provider has no model with this name. Pick another model in Settings > Models.',
+		NETWORK: 'Vader could not reach the provider. Check your internet connection and the base URL of the provider in Settings.',
+		TIMEOUT: 'The provider did not answer in time. Send the message again.',
+		PROVIDER_UNAVAILABLE: 'The provider is having problems right now (server error). Try again in a little while.',
+		INVALID_REQUEST: 'The provider refused the request as invalid. Its explanation is below.',
+		TOOL_UNSUPPORTED: 'This model does not support tool use, so Agent mode cannot work with it. Switch to Chat mode or pick another model.',
+		VISION_UNSUPPORTED: 'This model cannot read images. Remove the image or pick a model with vision.',
+		MALFORMED_RESPONSE: 'The provider sent an answer Vader could not read. Send the message again; if it keeps happening, try another model.',
+	};
+	const l = lead[category];
+	return l ? `${l}\n\nDetails: ${message}` : message;
+}

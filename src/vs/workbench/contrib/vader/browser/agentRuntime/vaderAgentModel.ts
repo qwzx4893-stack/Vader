@@ -8,7 +8,7 @@ import { ILLMMessageService } from '../../common/sendLLMMessageService.js';
 import { IConvertToLLMMessageService } from '../convertToLLMMessageService.js';
 import { ChatMessage } from '../../common/chatThreadServiceTypes.js';
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel } from '../../common/vaderSettingsTypes.js';
-import { classifyProviderError } from '../../common/providerErrorTypes.js';
+import { classifyProviderError, userFacingProviderError } from '../../common/providerErrorTypes.js';
 
 /**
  * Vader addition, part of the Cline Main Agent Runtime integration (see
@@ -118,7 +118,7 @@ export class VaderAgentModel implements AgentModel {
 				// on top of that.
 				const { category, retryable } = classifyProviderError(message, fullError)
 				const errorClass: ProviderErrorClass = category === 'AUTHENTICATION' ? 'auth' : category === 'CONTEXT_LIMIT' ? 'context_window_exceeded' : 'unknown'
-				push({ type: 'finish', reason: 'error', error: `[${category}] ${message}`, errorClass, errorRetryable: retryable })
+				push({ type: 'finish', reason: 'error', error: userFacingProviderError(category, message), errorClass, errorRetryable: retryable })
 				finish();
 			},
 			onAbort: () => {

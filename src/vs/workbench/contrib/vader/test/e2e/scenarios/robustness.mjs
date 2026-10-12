@@ -77,6 +77,7 @@ export const robustnessScenarios = [
 			t.use(() => ({ text: '' }));
 			await t.send('hello');
 			t.check('the run ends', await t.idle({ timeout: 60_000 }));
+			t.check('the user is told the reply was empty (not left with a silent stop)', (await t.ui.errorTexts(t.page)).some(x => /empty reply/i.test(x)), JSON.stringify(await t.ui.errorTexts(t.page)));
 			t.use(() => ({ text: 'Now I answer.' }));
 			await t.send('hello again'); await t.idle();
 			t.check('the next message works', (await t.ui.assistantTexts(t.page)).some(x => x.includes('Now I answer.')));

@@ -1380,6 +1380,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let lastCallKey = ''
 		let identicalCallsInARow = 0
 		let loopStopMessage: string | undefined
+		let lastTurnWasEmpty: { hadReasoning: boolean } | null = null
 		const unsubscribe = runtime.subscribe((event) => {
 			if (event.type === 'tool-started') {
 				const key = event.toolCall.toolName + '\u0000' + JSON.stringify(event.toolCall.input ?? {})
@@ -1420,6 +1421,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				// extended-thinking blocks (needed only for exact replay on a later turn) - a
 				// known, honest fidelity gap, documented in docs/integrations/agent-runtime.md.
 				this._addMessageToThread(threadId, { role: 'assistant', displayContent: text, reasoning, anthropicReasoning: null })
+				// A turn with neither text nor a tool call would end the run with nothing on screen: the user cannot tell a finished task from a broken one.
+				const hasToolCall = event.message.content.some(p => p.type === 'tool-call')
+				lastTurnWasEmpty = (!text.trim() && !hasToolCall) ? { hadReasoning: !!reasoning.trim() } : null
 				this._maybeCaptureThreadPlan(threadId, text)
 				textSoFar = ''
 				reasoningSoFar = ''
@@ -1454,7 +1458,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// 'completed': if a tool call is still awaiting approval, _runToolCallInline has
 			// already set isRunning to 'awaiting_user' and this must not clear it.
 			if (this._currentIsRunning(threadId) !== 'awaiting_user') {
-				this._setStreamState(threadId, undefined)
+				const emptyTurn = lastTurnWasEmpty as { hadReasoning: boolean } | null
+				if (emptyTurn) {
+					// say so instead of stopping silently
+					const message = emptyTurn.hadReasoning
+						? 'The model only produced reasoning and then stopped, without an answer or an action. Send the message again, or try another model.'
+						: 'The model sent an empty reply (no text and no action), so nothing happened. Send the message again, or try another model; if it keeps happening, check that the model supports the Agent mode (tool use).'
+					this._setStreamState(threadId, { isRunning: undefined, error: { message, fullError: null } })
+				}
+				else {
+					this._setStreamState(threadId, undefined)
+				}
 				this._addUserCheckpoint({ threadId })
 			}
 			this._metricsService.capture('Agent Loop Done', { chatMode, runtime: 'cline' })

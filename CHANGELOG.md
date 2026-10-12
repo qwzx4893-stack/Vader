@@ -12,6 +12,15 @@
   and the XML tool parser, which only knew `<run_command><command>...</command></run_command>`, treated it as plain text: nothing ran and the
   agent ended its turn. The parser now accepts attribute and self-closing forms and Hermes/Qwen `<tool_call>{"name": ...}</tool_call>` JSON calls, and the
   prompt says parameters are nested tags. Covered by the parser test and a real-app scenario.
+- **Everyday agent problems found by probing the real app with a scripted model** (each now has a test):
+  - *Relative paths* (`src/app.js`, `./notes.txt`, `.`) were turned into paths at the root of the disk: files "did not exist", `ls_dir .` listed `/`, and a
+    file created with a relative path landed outside the project. They now resolve against the open folder (`~` too); with no folder open the model is
+    told to use an absolute path. Terminal `cwd` follows the same rule.
+  - *Shell syntax:* the prompt now says which shell the terminal is (PowerShell on Windows, so no `&&` / `ver`), the cause of many failed commands.
+  - *Errors in plain words:* provider failures show one sentence about what to do (bad key, rate limit, model not found, no connection, context too
+    long...) instead of `[UNKNOWN] ...`; an empty model reply is explained instead of ending silently.
+  - *Edits right after a file changed on disk* could not be saved ("file modified since"); an unmodified open file is re-read first.
+  - Tool arguments sent as strings or `null`, `file://` URLs, CRLF files and an edit whose ORIGINAL text is missing are covered by tests.
 - **Inherited leftovers removed:** the two bundled Remote-SSH / Remote-WSL extensions (they could not work with Microsoft's remote server), the
   "Use AI Features with Copilot for free..." palette command, the Accounts icon (starts hidden; Microsoft/GitHub sign-in only), and a crash in
   *One-Click Switch* when the source editor had no extensions folder.

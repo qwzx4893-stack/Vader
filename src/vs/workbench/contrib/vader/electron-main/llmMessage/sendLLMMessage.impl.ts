@@ -446,7 +446,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 			}
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && toolCallsByIndex.size === 0) {
-				onError({ message: 'Vader: Response from model was empty.', fullError: null })
+				onError({ message: 'The model sent an empty reply (no text and no action), so nothing happened. Send the message again or pick another model; Agent mode needs a model that supports tool use.', fullError: null })
 			}
 			else {
 				const toolCalls = [...toolCallsByIndex.values()]
@@ -899,7 +899,7 @@ const sendGeminiChat = async ({
 
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && allFunctionCalls.length === 0) {
-				onError({ message: 'Vader: Response from model was empty.', fullError: null })
+				onError({ message: 'The model sent an empty reply (no text and no action), so nothing happened. Send the message again or pick another model; Agent mode needs a model that supports tool use.', fullError: null })
 			} else {
 				const toolCalls = allFunctionCalls
 					.map(fc => rawToolCallObjOfParamsStr(fc.name ?? '', JSON.stringify(fc.args ?? {}), fc.id || generateUuid()))

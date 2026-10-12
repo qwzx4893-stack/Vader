@@ -69,8 +69,11 @@ export async function runGroup(group) {
 	const ws = group.workspace ?? makeWorkspace(group.name);
 	let app;
 	try {
-		app = await launchApp({ exe: config.exe, workspace: ws, userDataDir: group.userDataDir, extraArgs: config.extraArgs, label: group.name });
+		// noWorkspace: the app starts with NO folder open (the files still exist on disk, so a scenario can point tools at them by absolute path)
+		app = await launchApp({ exe: config.exe, workspace: group.noWorkspace ? undefined : ws, userDataDir: group.userDataDir, extraArgs: config.extraArgs, label: group.name });
 		const { page } = app;
+		// the first-run overlay can take a few seconds to mount (more with no folder to restore); it stays in the page, faded out, once setup is done
+		await page.locator('[data-testid="vader-onboarding"]').first().waitFor({ state: 'attached', timeout: 30_000 }).catch(() => { });
 		await sleep(1500);
 		if (await ui.isOnboarding(page)) { await ui.completeOnboarding(page, { baseURL: group.baseURL ?? server.url, apiKey: group.apiKey, model: group.model }); }
 		await sleep(800);

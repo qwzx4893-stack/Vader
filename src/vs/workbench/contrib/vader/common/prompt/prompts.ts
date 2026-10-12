@@ -655,9 +655,17 @@ Please assist the user with their query.`)
 
 
 
+	// The shell the run_command tool opens. A command written for the wrong shell (`&&` or `ver` in Windows PowerShell 5.1, `dir /b` anywhere but cmd) fails
+	// with a parse error the user sees as "the agent can't even run a simple command".
+	const terminalInfo = os === 'windows'
+		? 'Terminal commands run in the default terminal, which on Windows is PowerShell (not cmd.exe or bash) unless the user changed it: chain commands with `;` (the `&&` operator only exists in PowerShell 7+), cmd built-ins such as `ver` or `dir /b` are not available (use `$PSVersionTable`, `Get-ChildItem`), environment variables are `$env:NAME`, and paths may use either slash.'
+		: 'Terminal commands run in the user\'s default shell (bash or zsh), so normal POSIX syntax (`&&`, `$VAR`, pipes) works.'
+
 	const sysInfo = (`Here is the user's system information:
 <system_info>
-- ${os}
+- ${os}${mode === 'agent' ? `
+
+- ${terminalInfo}` : ''}
 
 - The user's workspace contains these folders:
 ${workspaceFolders.join('\n') || 'NO FOLDERS OPEN'}

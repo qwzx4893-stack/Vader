@@ -16,6 +16,8 @@ import { editorScenarios, autocompleteScenarios } from './scenarios/editor.mjs';
 import { generalScenarios } from './scenarios/general.mjs';
 import { providerScenarios } from './scenarios/providers.mjs';
 import { robustnessScenarios } from './scenarios/robustness.mjs';
+import { toleranceScenarios } from './scenarios/tolerance.mjs';
+import { noWorkspaceScenarios } from './scenarios/noWorkspace.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { realLlmTaskScenarios, oracleTaskScenarios } from './scenarios/realLlmTasks.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
@@ -23,11 +25,12 @@ import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
 if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missing or not found: ${config.exe}`); process.exit(2); }
 
-await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: [...coreScenarios, ...agentScenarios, ...browserScenarios, ...mcpScenarios, ...terminalScenarios, ...editorScenarios, ...generalScenarios] });
+await runGroup({ name: 'native-tools', model: 'gpt-4o', scenarios: [...coreScenarios, ...agentScenarios, ...browserScenarios, ...mcpScenarios, ...terminalScenarios, ...editorScenarios, ...generalScenarios, ...toleranceScenarios] });
 await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenarios });
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
 await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
 await runGroup({ name: 'robustness', model: 'gpt-4o', scenarios: robustnessScenarios });
+await runGroup({ name: 'no-workspace', model: 'gpt-4o', noWorkspace: true, scenarios: noWorkspaceScenarios });
 await runGroup({ name: 'agent-tasks', model: 'gpt-4o', scenarios: oracleTaskScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();

@@ -43,7 +43,14 @@ class VaderModelService extends Disposable implements IVaderModelService {
 
 	initializeModel = async (uri: URI) => {
 		try {
-			if (uri.fsPath in this._modelRefOfURI) return;
+			if (uri.fsPath in this._modelRefOfURI) {
+				// A file changed on disk behind this model's back (git checkout, a formatter, another tool) is normally picked up by the file watcher a moment
+				// later. An edit made in that moment was applied to the old text and could not be saved ("file modified since"). Re-read an unmodified model
+				// first; the file service skips the read when the file is unchanged.
+				const fileModel = this._textFileService.files.get(uri)
+				if (fileModel && !fileModel.isDirty()) { await fileModel.resolve() }
+				return;
+			}
 			const editorModelRef = await this._textModelService.createModelReference(uri);
 			// Keep a strong reference to prevent disposal
 			this._modelRefOfURI[uri.fsPath] = editorModelRef;

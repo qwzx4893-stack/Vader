@@ -188,6 +188,25 @@ const parseXMLAttributes = (attrs: string): [string, string][] => {
 	return out
 }
 
+
+// Names models often use for a parameter instead of the documented one. Only applied when the tool really has the documented parameter and
+// the model wrote no tag with the documented name.
+const PARAM_ALIASES: { [canonical: string]: string[] } = {
+	uri: ['path', 'file', 'filepath', 'file_path', 'filename', 'file_name', 'folder', 'directory', 'dir', 'url_path'],
+	command: ['cmd', 'shell_command', 'bash', 'script'],
+	query: ['q', 'pattern', 'search', 'search_query', 'keyword', 'keywords'],
+	new_content: ['content', 'contents', 'text', 'file_content', 'new_contents'],
+	search_replace_blocks: ['blocks', 'diff', 'edits', 'patch', 'search_replace'],
+	url: ['link', 'href', 'address'],
+}
+const paramTagNames = (allowedParams: string[]): { tag: string, param: string }[] => {
+	const out = allowedParams.map(p => ({ tag: p, param: p }))
+	for (const p of allowedParams) {
+		for (const a of PARAM_ALIASES[p] ?? []) { if (!allowedParams.includes(a)) out.push({ tag: a, param: p }) }
+	}
+	return out
+}
+
 type ToolOfToolName = { [toolName: string]: InternalToolInfo | undefined }
 const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: string, str: string, toolOfToolName: ToolOfToolName): RawToolCallObj => {
 	const paramsObj: RawToolParamsObj = {}
@@ -240,6 +259,10 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 
 	const allowedParams = Object.keys(toolOfToolName[toolName]?.params ?? {}) as ToolParamName<T>[]
 	if (allowedParams.length === 0) return getAnswer()
+	const tagNames = paramTagNames(allowedParams)
+	// the one required parameter of a tool that has exactly one: models often write just `<run_command>ls -la</run_command>`
+	const requiredParams = allowedParams.filter(p => !/^\s*optional\b/i.test(toolOfToolName[toolName]?.params[p]?.description ?? ''))
+	const soleParam = requiredParams.length === 1 ? requiredParams[0] : null
 	let latestMatchedOpenParam: null | ToolParamName<T> = null
 	let n = 0
 	while (true) {
@@ -255,10 +278,10 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 
 		// find the param name opening tag
 		let matchedOpenParam: null | ToolParamName<T> = null
-		for (const paramName of allowedParams) {
-			const removed = pm.removeFromStartUntilFullMatch(`<${paramName}>`, true)
+		for (const { tag, param } of tagNames) {
+			const removed = pm.removeFromStartUntilFullMatch(`<${tag}>`, true)
 			if (removed) {
-				matchedOpenParam = paramName
+				matchedOpenParam = param as ToolParamName<T>
 				break
 			}
 		}
@@ -266,6 +289,14 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 		if (matchedOpenParam === null) {
 			if (latestMatchedOpenParam !== null) {
 				paramsObj[latestMatchedOpenParam] += pm.value()
+			}
+			else if (soleParam !== null && paramsObj[soleParam] === undefined) {
+				// no parameter tags at all: the body is the value of the tool's only required parameter
+				const body = pm.value()
+				if (body.trim() !== '' && !body.trimStart().startsWith('<')) {
+					paramsObj[soleParam] = body
+					if (isDone) doneParams.push(soleParam)
+				}
 			}
 			return getAnswer()
 		}
@@ -278,9 +309,9 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 		// find the param name closing tag
 		let matchedCloseParam: boolean = false
 		let paramContents = ''
-		for (const paramName of allowedParams) {
+		for (const { tag } of tagNames) {
 			const i = pm.i
-			const closeTag = `</${paramName}>`
+			const closeTag = `</${tag}>`
 			const removed = pm.removeFromStartUntilFullMatch(closeTag, true)
 			if (removed) {
 				const i2 = pm.i
@@ -383,8 +414,8 @@ export const extractXMLToolsWrapper = (
 					// console.log('found ', toolName)
 					foundOpenTag = { idx, toolName }
 
-					// do not count anything at or after i in fullText
-					fullText = fullText.substring(0, idx)
+					// do not count anything at or after i in fullText; a code fence the model opened right before the call goes with it
+					fullText = fullText.substring(0, idx).replace(/(^|\n)[ \t]*```[a-zA-Z]*[ \t]*\n?$/, '$1')
 				}
 
 

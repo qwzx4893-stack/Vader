@@ -1,5 +1,6 @@
 import { CancellationToken } from '../../../../base/common/cancellation.js'
 import { compileModelRegex, MAX_LINE_CHARS } from '../common/helpers/safeRegex.js';
+import { IPathService } from '../../../services/path/common/pathService.js';
 import { URI } from '../../../../base/common/uri.js'
 import { IFileService } from '../../../../platform/files/common/files.js'
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js'
@@ -53,7 +54,25 @@ const validateStr = (argName: string, value: unknown) => {
 
 
 // We are NOT checking to make sure in workspace
-const validateURI = (uriStr: unknown) => {
+// A path the model wrote without a drive or a leading slash ("src/app.js", "./notes.txt", ".") is relative to the folder that is open. It used to be turned
+// into a path at the root of the disk ("/src/app.js", and "." listed "/"), so the file "did not exist" or, worse, the whole disk was listed.
+const isAbsolutePathString = (p: string) => p.startsWith('/') || p.startsWith('\\\\') || /^[a-zA-Z]:[\\/]/.test(p)
+
+const resolveFilePath = (uriStr: string, workspaceRoot: URI | undefined, userHome: URI | undefined): URI => {
+	const trimmed = uriStr.trim()
+	if (trimmed === '~' || trimmed.startsWith('~/') || trimmed.startsWith('~\\')) {
+		if (!userHome) throw new Error(`Cannot resolve "${uriStr}": the home folder is unknown. Use the full absolute path.`)
+		return trimmed === '~' ? userHome : URI.joinPath(userHome, ...trimmed.slice(2).split(/[\\/]+/).filter(Boolean))
+	}
+	if (isAbsolutePathString(trimmed)) return URI.file(uriStr)
+	if (!workspaceRoot) {
+		throw new Error(`"${uriStr}" is a relative path, but no folder is open in Vader, so there is nothing to resolve it against. Use the full absolute path (for example "/home/you/project/${trimmed.replace(/^\.[\\/]/, '')}"), or ask the user to open the project folder first.`)
+	}
+	const parts = trimmed.split(/[\\/]+/).filter(p => p !== '' && p !== '.')
+	return parts.length === 0 ? workspaceRoot : URI.joinPath(workspaceRoot, ...parts)
+}
+
+const validateURIWith = (uriStr: unknown, workspaceRoot: URI | undefined, userHome: URI | undefined) => {
 	if (uriStr === null) throw new Error(`Invalid LLM output: uri was null.`)
 	if (typeof uriStr !== 'string') throw new Error(`Invalid LLM output format: Provided uri must be a string, but it's a(n) ${typeof uriStr}. Full value: ${JSON.stringify(uriStr)}.`)
 
@@ -65,6 +84,7 @@ const validateURI = (uriStr: unknown) => {
 	// - file:///home/user/file.txt (local file with scheme)
 	// - /home/user/file.txt (local file path, will be converted to file://)
 	// - C:\Users\file.txt (Windows local path, will be converted to file://)
+	// - src/app.js, ./app.js, . (relative to the open folder), ~/notes.txt (home folder)
 	if (uriStr.includes('://')) {
 		try {
 			const uri = URI.parse(uriStr)
@@ -73,17 +93,8 @@ const validateURI = (uriStr: unknown) => {
 			// If parsing fails, it's a malformed URI
 			throw new Error(`Invalid URI format: ${uriStr}. Error: ${e}`)
 		}
-	} else {
-		// No scheme present, treat as file path
-		// This handles regular file paths like /home/user/file.txt or C:\Users\file.txt
-		const uri = URI.file(uriStr)
-		return uri
 	}
-}
-
-const validateOptionalURI = (uriStr: unknown) => {
-	if (isFalsy(uriStr)) return null
-	return validateURI(uriStr)
+	return resolveFilePath(uriStr, workspaceRoot, userHome)
 }
 
 const validateOptionalStr = (argName: string, str: unknown) => {
@@ -182,8 +193,19 @@ export class ToolsService implements IToolsService {
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@ISkillService private readonly skillService: ISkillService,
+		@IPathService pathService: IPathService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+
+		// paths the model writes are resolved against the folder that is open (see resolveFilePath)
+		const validateURI = (uriStr: unknown) => validateURIWith(uriStr, workspaceContextService.getWorkspace().folders[0]?.uri, pathService.userHome({ preferLocal: true }))
+		const validateOptionalURI = (uriStr: unknown) => { if (isFalsy(uriStr)) return null; return validateURI(uriStr) }
+		// a terminal's working directory the model wrote as a path: relative ones start from the open folder, empty means the default
+		const validateOptionalCwd = (cwdUnknown: unknown) => {
+			const cwd = validateOptionalStr('cwd', cwdUnknown)
+			if (cwd === null || cwd.trim() === '') return null
+			return validateURI(cwd).fsPath
+		}
 
 		this.runVerificationChecksAt = async (root: URI) => {
 			let scripts: Record<string, string> = {}
@@ -416,7 +438,7 @@ export class ToolsService implements IToolsService {
 			run_command: (params: RawToolParamsObj) => {
 				const { command: commandUnknown, cwd: cwdUnknown } = params
 				const command = validateStr('command', commandUnknown)
-				const cwd = validateOptionalStr('cwd', cwdUnknown)
+				const cwd = validateOptionalCwd(cwdUnknown)
 				const terminalId = generateUuid()
 				return { command, cwd, terminalId }
 			},
@@ -428,7 +450,7 @@ export class ToolsService implements IToolsService {
 			},
 			open_persistent_terminal: (params: RawToolParamsObj) => {
 				const { cwd: cwdUnknown } = params;
-				const cwd = validateOptionalStr('cwd', cwdUnknown)
+				const cwd = validateOptionalCwd(cwdUnknown)
 				// No parameters needed; will open a new background terminal
 				return { cwd };
 			},

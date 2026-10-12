@@ -109,5 +109,32 @@ for (const step of [1, 3, 7, 1000]) {
 	const f = run('<tool_call>{"name": "format_disk", "arguments": {}}</tool_call>');
 	check('a <tool_call> for a tool that does not exist is not run', !f.toolCalls?.length, JSON.stringify(f.toolCalls));
 }
+
+// ---- other shapes real models use ----
+{
+	const f = run('Listing it.\n<run_command>ls -la /tmp</run_command>');
+	check('a call whose body is the value of its only required parameter', f.toolCalls?.[0]?.name === 'run_command' && f.toolCalls[0].rawParams.command === 'ls -la /tmp' && f.toolCalls[0].isDone, JSON.stringify(f.toolCalls));
+}
+{
+	const f = run('<read_file>\n<path>/a/notes.txt</path>\n</read_file>');
+	check('<path> is accepted for the uri parameter', f.toolCalls?.[0]?.rawParams.uri === '/a/notes.txt', JSON.stringify(f.toolCalls));
+}
+{
+	const f = run('<run_command>\n<cmd>echo hi</cmd>\n</run_command>');
+	check('<cmd> is accepted for the command parameter', f.toolCalls?.[0]?.rawParams.command === 'echo hi', JSON.stringify(f.toolCalls));
+}
+{
+	const f = run('<rewrite_file>\n<path>/a/x.txt</path>\n<content>new text\nline 2</content>\n</rewrite_file>');
+	check('<content> is accepted for new_content', f.toolCalls?.[0]?.rawParams.uri === '/a/x.txt' && f.toolCalls[0].rawParams.new_content === 'new text\nline 2', JSON.stringify(f.toolCalls));
+}
+{
+	const f = run('I will do it:\n```xml\n<run_command>\n<command>ls</command>\n</run_command>\n```');
+	check('a call inside a code fence is executed', f.toolCalls?.[0]?.rawParams.command === 'ls', JSON.stringify(f.toolCalls));
+	check('and the fence opener is not left in the answer', f.fullText === 'I will do it:', JSON.stringify(f.fullText));
+}
+{
+	const f = run('<run_command>\n<command>ls</command>\n</run_command>', 1);
+	check('the documented form still parses one character at a time', f.toolCalls?.[0]?.rawParams.command === 'ls' && f.toolCalls[0].isDone);
+}
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
