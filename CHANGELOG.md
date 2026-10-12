@@ -3,12 +3,20 @@
 ## Unreleased - Coding agents you already have an account with
 
 - **Settings > Models > Coding Agents** (`docs/integrations/external-agents.md`): use the subscription or free tier you already have with Codex, Cursor,
-  OpenCode and Gemini CLI inside Vader's chat (Agent Client Protocol; the vendor's own program does the work and the sign-in, Vader never sees a
-  token), and open Claude Code, Antigravity and Freebuff in a Vader terminal exactly as the vendor ships them (Anthropic allows its subscription only in
-  its own unmodified program). One card per agent with its logo; install/download actions show what they will run; add any other ACP program by hand;
-  pick the agent in the chat box and switch back to your models at any time. The agent keeps its own tools and permission rules: its permission questions
-  are shown in Vader, Vader's policy engine does not apply to it (stated on the cards). Tested against a stand-in agent that speaks the real wire
-  (`externalAgentE2E`, 51 checks) and through the real UI (`external-agents` group).
+  OpenCode, Gemini CLI and Antigravity inside Vader's chat (Agent Client Protocol; the vendor's own program does the work and the sign-in, Vader never sees a
+  token), and open Claude Code and Freebuff in a Vader terminal exactly as the vendors ship them (Anthropic allows its subscription only in its own unmodified
+  program; Freebuff has no integration protocol). One card per agent with its logo (Freebuff's is the organisation's official mark, redrawn as vector); add any other ACP program by hand
+  (after a confirmation); pick the agent in the chat box and switch back to your models at any time. The agent keeps its own tools and permission rules: its permission questions are shown in
+  Vader, Vader's policy engine does not apply to it (stated on the cards).
+- **Built to be reliable, and checked against the real programs.** npm agents are installed once with `--ignore-scripts` and started with `node` (about 0.4 s, offline, pinned; no `npx`, no shell);
+  binary agents are downloaded only from each vendor's own release address with the registry's checksum; every install has a manifest; update and remove; "Test connection" per agent;
+  one process per chat, stopped as a tree (no orphaned shell commands), idle stop after 30 minutes, at most four at once; the conversation is stored with the thread and picked up again
+  after a restart (`session/resume`, else `session/load`); the agent's own models and modes are shown in the chat box; an expired sign-in is repeated mid-conversation; start-up failures show what
+  the program printed. `externalAgentLiveE2E` installs and starts the real Gemini CLI, Codex and OpenCode.
+- **Fixed by the real-agent test:** Codex lists "API Key" before "ChatGPT"; "use the first sign-in method" would have signed the person into the wrong thing. The method is now chosen by account, never by key.
+- **Antigravity is a chat agent**, not a terminal one: Google publishes its own ACP server for editors in the ACP registry.
+- **Settings files cannot add programs:** Export leaves the custom agents and the chosen agent out; Import keeps this computer's values whatever the file says.
+- Tests: `externalAgentE2E` (95 checks, stand-in agent on the real wire), `externalAgentLiveE2E` (real vendor programs, needs the network), the `external-agents` group of the real-app suite (5 scenarios, 47 checks).
 
 ## Unreleased - Settings page sections, update check, inherited-leftover cleanup
 

@@ -34,6 +34,10 @@ export type AcpAgentSpec = {
 	readonly registryId: string
 	/** shown when a sign-in needs the person to do something outside Vader */
 	readonly loginNote: string
+	/** ids of the agent's sign-in methods that use the person's account, best first. Agents list their methods in their own order (Codex lists "API Key" before "ChatGPT"). */
+	readonly authPreference?: readonly string[]
+	/** a downloaded program may only come from an address that starts with one of these (the vendor's own release location), whatever the registry says */
+	readonly archivePrefixes?: readonly string[]
 }
 
 export type ExternalAgentDef = {
@@ -56,28 +60,28 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		tagline: 'Your ChatGPT plan (Plus, Pro, Business) or an OpenAI API key, through OpenAI\'s Codex.',
 		website: 'https://developers.openai.com/codex',
 		note: 'Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan.',
-		acp: { registryId: 'codex-acp', loginNote: 'A browser page opens to sign in with your OpenAI account.' },
+		acp: { registryId: 'codex-acp', loginNote: 'A browser page opens to sign in with your ChatGPT account.', authPreference: ['chat-gpt'] },
 	},
 	{
 		id: 'opencode', name: 'OpenCode', kind: 'acp', logo: 'opencode',
 		tagline: 'Free models from OpenCode Zen (no card), your ChatGPT plan, or any provider key.',
 		website: 'https://opencode.ai',
 		note: 'The free models change from time to time and OpenCode may use the free-tier prompts to improve them. Limits are OpenCode\'s.',
-		acp: { registryId: 'opencode', loginNote: 'OpenCode asks which provider to use; free Zen models need no payment details.' },
+		acp: { registryId: 'opencode', loginNote: 'OpenCode asks which provider to use; free Zen models need no payment details.', archivePrefixes: ['https://github.com/anomalyco/opencode/releases/download/', 'https://github.com/sst/opencode/releases/download/'] },
 	},
 	{
 		id: 'cursor', name: 'Cursor', kind: 'acp', logo: 'cursor',
 		tagline: 'Your Cursor subscription, through Cursor\'s own agent.',
 		website: 'https://cursor.com/docs/cli/acp',
 		note: 'You sign in with your Cursor account; Cursor counts the usage on your plan.',
-		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.' },
+		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.', archivePrefixes: ['https://downloads.cursor.com/'] },
 	},
 	{
 		id: 'gemini', name: 'Gemini CLI', kind: 'acp', logo: 'gemini',
 		tagline: 'Google\'s agent with a free daily allowance when you sign in with a Google account.',
 		website: 'https://geminicli.com',
 		note: 'Needs Node.js. Limits and data use are Google\'s.',
-		acp: { registryId: 'gemini', loginNote: 'A browser page opens to sign in with Google.' },
+		acp: { registryId: 'gemini', loginNote: 'A browser page opens to sign in with your Google account.', authPreference: ['oauth-personal'] },
 	},
 	{
 		id: 'claude-code', name: 'Claude Code', kind: 'terminal', logo: 'claudecode',
@@ -91,15 +95,11 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		},
 	},
 	{
-		id: 'antigravity', name: 'Antigravity', kind: 'terminal', logo: 'antigravity',
+		id: 'antigravity', name: 'Antigravity', kind: 'acp', logo: 'antigravity',
 		tagline: 'Google\'s Antigravity agent with your Google account\'s plan.',
-		website: 'https://antigravity.google/docs/cli/overview',
-		note: 'Runs the Antigravity CLI as Google ships it, in a terminal. The models are the ones your plan offers.',
-		terminal: {
-			command: 'agy',
-			install: { windows: 'irm https://antigravity.google/cli/install.ps1 | iex', posix: 'curl -fsSL https://antigravity.google/cli/install.sh | bash' },
-			candidateDirs: ['.local/bin', '.antigravity/bin'],
-		},
+		website: 'https://antigravity.google/docs/ide/extensions',
+		note: 'Google\'s own agent server for editors (listed in the ACP registry). The models are the ones your plan offers; limits and data use are Google\'s.',
+		acp: { registryId: 'antigravity-acp', loginNote: 'Sign in with your Google account when Antigravity asks.', archivePrefixes: ['https://dl.google.com/agy-extensions/'] },
 	},
 	{
 		id: 'freebuff', name: 'Freebuff', kind: 'terminal', logo: 'freebuff',
@@ -142,11 +142,12 @@ export const distributionOf = (def: ExternalAgentDef, live?: { [registryId: stri
 export const isPlainSpec = (s: string): boolean => /^[A-Za-z0-9@/._:=+-]+$/.test(s)
 
 /** archives may only come from these hosts, over https */
-const ARCHIVE_HOSTS = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'downloads.cursor.com']
-export const isAllowedArchiveUrl = (url: string): boolean => {
+const ARCHIVE_HOSTS = ['github.com', 'objects.githubusercontent.com', 'release-assets.githubusercontent.com', 'downloads.cursor.com', 'dl.google.com']
+export const isAllowedArchiveUrl = (url: string, prefixes?: readonly string[]): boolean => {
 	try {
 		const u = new URL(url)
-		return u.protocol === 'https:' && !u.username && !u.password && ARCHIVE_HOSTS.includes(u.hostname)
+		if (!(u.protocol === 'https:' && !u.username && !u.password && ARCHIVE_HOSTS.includes(u.hostname))) { return false }
+		return !prefixes || prefixes.some(p => url.startsWith(p))
 	} catch { return false }
 }
 

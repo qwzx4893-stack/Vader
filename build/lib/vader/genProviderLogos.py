@@ -51,7 +51,7 @@ SRC = {
 # the coding agents of Settings > Models > External agents -> source (written to their own file, common/externalAgents/agentLogoData.ts)
 AGENT_SRC = {
   'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'gemini': ('lobe', 'geminicli'),
-  'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('letterF', ''), 'custom': ('generic', ''),
+  'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
 }
 
 TAGS = {'g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline', 'line', 'mask', 'defs', 'clipPath'}
@@ -140,10 +140,15 @@ def generic():
         {'t': 'path', 'a': {**stroke, 'd': 'M13.5 5 10.5 19'}, 'k': []},
     ]
 
-def letter_f():
-    # Freebuff publishes no vector mark: a neutral "F" monogram drawn here, not their logo
-    stroke = {'stroke': 'currentColor', 'strokeWidth': '2.4', 'strokeLinecap': 'round', 'strokeLinejoin': 'round', 'fill': 'none'}
-    return '0 0 24 24', [{'t': 'path', 'a': {**stroke, 'd': 'M17 5H8v14M8 12h7'}, 'k': []}]
+def freebuff():
+    # Freebuff / Codebuff publish no vector file. Their official mark is the organisation's GitHub avatar (github.com/CodebuffAI, a white
+    # rounded terminal frame holding a four-point sparkle and a cursor bar on black). It is redrawn here as vector, one colour, measured
+    # from that image (frame 80 units square with a 6 stroke, sparkle 24 units, bar 20 x 4.5), so it follows the theme.
+    return '0 0 86 86', [
+        {'t': 'rect', 'a': {'x': '3', 'y': '3', 'width': '80', 'height': '80', 'rx': '9', 'stroke': 'currentColor', 'strokeWidth': '6', 'fill': 'none'}, 'k': []},
+        {'t': 'path', 'a': {'d': 'M24 18Q25.8 28.2 36 30Q25.8 31.8 24 42Q22.2 31.8 12 30Q22.2 28.2 24 18Z'}, 'k': []},
+        {'t': 'path', 'a': {'d': 'M36 38.3h20v4.5H36z'}, 'k': []},
+    ]
 
 def load(table):
     out = {}
@@ -152,9 +157,9 @@ def load(table):
         elif kind == 'modelsdev': vb, kids = parse(os.path.join(args.modelsdev, 'providers', name, 'logo.svg'))
         elif kind == 'litellm': vb, kids = parse(args.litellm)
         elif kind == 'requesty': vb, kids = requesty()
-        elif kind == 'letterF': vb, kids = letter_f()
+        elif kind == 'freebuff': vb, kids = freebuff()
         else: vb, kids = generic()
-        if kind not in ('requesty', 'generic', 'letterF'): flatten_colours(kids)
+        if kind not in ('requesty', 'generic', 'freebuff'): flatten_colours(kids)
         if not kids: raise SystemExit(f'{key}: empty logo')
         for n in kids: strip(n)
         out[key] = {'vb': vb, 'els': kids}

@@ -6,6 +6,7 @@
 // Agent Client Protocol (fixtures/fakeAcpAgent.cjs) added as "your own agent", so the whole path is real except the vendor:
 // UI -> settings -> chat -> IPC -> main process -> the agent's process -> events -> chat, including the permission question and stop.
 
+import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -21,14 +22,32 @@ const openAgentsTab = async (t) => {
 const section = (t) => t.page.locator('[data-testid="vader-settings-external-agents"]');
 const card = (t, id) => t.page.locator(`[data-testid="vader-external-agent-${id}"]`).first();
 
-/** adds a custom agent that runs the stand-in in `mode`, through the form on the page */
+// the questions Vader asks (add an agent, permission requests) are ordinary dialogs; the default dialog style is the operating system's own window,
+// which a page driver cannot see
+const useCustomDialogs = async (t) => {
+	const userDir = path.join(t.app.userDataDir, 'User');
+	fs.mkdirSync(userDir, { recursive: true });
+	fs.writeFileSync(path.join(userDir, 'settings.json'), JSON.stringify({ 'window.dialogStyle': 'custom' }));
+	await t.sleep(1200);
+};
+const dialogButton = async (t, name) => {
+	const dialog = t.page.locator('.monaco-dialog-box');
+	await dialog.waitFor({ state: 'visible', timeout: 15_000 });
+	await dialog.getByRole('button', { name, exact: true }).click();
+};
+
+/** adds a custom agent that runs the stand-in in `mode`, through the form on the page (and the question that asks to trust it) */
 const addFake = async (t, name, mode) => {
+	await useCustomDialogs(t);
 	await openAgentsTab(t);
 	const custom = t.page.locator('[data-testid="vader-external-agent-custom"]');
 	await custom.locator('input[placeholder="Name"]').fill(name);
 	await custom.locator('input[placeholder^="Program"]').fill(process.execPath);
 	await custom.locator('input[placeholder^="Arguments"]').fill(`${FAKE} ${mode}`);
 	await custom.getByRole('button', { name: 'Add', exact: true }).click();
+	const dialogText = await t.page.locator('.monaco-dialog-box').innerText().catch(() => '');
+	t.check('adding a program asks first, shows the exact command and warns that it runs with the user\'s rights', /rights/.test(dialogText) && dialogText.includes(path.basename(FAKE)), dialogText);
+	await dialogButton(t, 'Add');
 	const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 	await t.waitFor(async () => (await card(t, id).getAttribute('data-testid').catch(() => null)) !== null, 10_000);
 	return id;
@@ -58,7 +77,12 @@ export const externalAgentScenarios = [
 			const cc = await card(t, 'claude-code').innerText();
 			t.check('a terminal agent that is not installed offers Install and not "Use in the chat"', /Install/.test(cc) && !/Use in the chat/.test(cc), cc);
 			t.check('a terminal agent can never be chosen for the chat', (await section(t).getByRole('button', { name: 'Use in the chat' }).count()) === 0 || !(await card(t, 'freebuff').innerText()).includes('Use in the chat'));
+			await t.page.locator('main').first().evaluate(e => { e.scrollTop = 0; }).catch(() => { });
+			await t.sleep(300);
 			await t.shot('external-agents-settings');
+			await t.page.locator('main').first().evaluate(e => { e.scrollTop = e.scrollHeight; }).catch(() => { });
+			await t.sleep(300);
+			await t.shot('external-agents-settings-bottom');
 			await closeSettings(t);
 		},
 	},
@@ -66,11 +90,6 @@ export const externalAgentScenarios = [
 		name: 'external agents: pick an agent, chat with it, answer its permission question, switch back to models',
 		timeout: 120_000,
 		fn: async (t) => {
-			// the permission question is an ordinary dialog; the default dialog style is the operating system's own window, which a page driver cannot see
-			const userDir = path.join(t.app.userDataDir, 'User');
-			fs.mkdirSync(userDir, { recursive: true });
-			fs.writeFileSync(path.join(userDir, 'settings.json'), JSON.stringify({ 'window.dialogStyle': 'custom' }));
-			await t.sleep(1500);
 			const id = await addFake(t, 'Fake Agent', 'permission');
 			await useInChat(t, id);
 			t.check('the card shows the agent is in use', await t.waitFor(async () => /Use my models instead/.test(await card(t, id).innerText()), 10_000), await card(t, id).innerText());
@@ -113,6 +132,47 @@ export const externalAgentScenarios = [
 			await t.ui.newThread(t.page);
 			await t.send('hello model');
 			t.check('after switching back, the next message goes to the configured model', await t.idle() && (await t.ui.assistantTexts(t.page)).some(x => x.includes('Answer from the model.')));
+			await cleanUp(t, id);
+			await closeSettings(t);
+		},
+	},
+	{
+		name: 'external agents: test connection, the agent\'s own model choice, and a conversation that survives the agent process being killed',
+		timeout: 150_000,
+		fn: async (t) => {
+			const id = await addFake(t, 'Resumable Agent', 'resumable');
+			await t.waitFor(async () => (await card(t, id).innerText().catch(() => '')).includes('Ready'), 20_000);
+			await card(t, id).getByRole('button', { name: 'Test connection' }).click();
+			const probe = t.page.locator(`[data-testid="vader-external-agent-${id}-probe"]`);
+			t.check('"Test connection" starts the program and reports what answered', await probe.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false) && /Works: Fake Agent 9\.9\.9/.test(await probe.innerText()), await probe.innerText().catch(() => ''));
+			t.check('it also says the conversation can be continued after a restart', /continue a conversation after a restart/.test(await probe.innerText().catch(() => '')));
+			await card(t, id).getByRole('button', { name: 'Use in the chat' }).click();
+			await closeSettings(t);
+
+			await t.ui.newThread(t.page);
+			await t.send('one');
+			t.check('the first turn finishes', await t.idle({ timeout: 40_000 }));
+			t.check('the agent starts a new conversation', (await t.ui.assistantTexts(t.page)).join('\n').includes('turn 1'));
+			const modelBox = t.page.locator('[data-testid="vader-agent-config-model"]');
+			t.check('the model the agent offers is shown in the chat box', await modelBox.waitFor({ state: 'visible', timeout: 15_000 }).then(() => true, () => false) && /Fast/.test(await modelBox.innerText()), await modelBox.innerText().catch(() => ''));
+			await modelBox.click();
+			await t.page.getByText('Smart', { exact: true }).last().click();
+			t.check('choosing another model is shown', await t.waitFor(async () => /Smart/.test(await modelBox.innerText()), 10_000), await modelBox.innerText());
+			await t.send('two');
+			t.check('the second turn finishes', await t.idle({ timeout: 40_000 }));
+			await t.shot('external-agents-chat');
+			t.check('the chosen model was used by the agent', (await t.ui.assistantTexts(t.page)).join('\n').includes('model=smart'), (await t.ui.assistantTexts(t.page)).join('\n'));
+
+			if (process.platform !== 'win32') {
+				// the agent's process dies (a crash, the computer's memory, an idle timeout): the next message starts it again and continues the same conversation
+				try { execSync('pkill -f "fakeAcpAgent.cjs resumable"'); } catch { /* none running */ }
+				await t.sleep(800);
+				await t.send('three');
+				t.check('the third turn finishes after the process was killed', await t.idle({ timeout: 40_000 }));
+				const all = (await t.ui.assistantTexts(t.page)).join('\n');
+				t.check('the new process picked the same conversation up again (its turn counter continued)', /resumed=S-\d+/.test(all) && all.includes('turn 6'), all);
+				t.check('no "started a new conversation" notice, because nothing was lost', !/started a new conversation/.test(all), all);
+			}
 			await cleanUp(t, id);
 			await closeSettings(t);
 		},

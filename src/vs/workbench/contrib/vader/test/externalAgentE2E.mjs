@@ -20,12 +20,16 @@ const require = createRequire(path.join(repo, 'package.json'));
 const esbuild = require('esbuild');
 const root = path.join(here, '..');
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-extagent-'));
+// the service keeps installed agents under the home folder: a throw-away one
+process.env.HOME = path.join(tmp, 'home'); process.env.USERPROFILE = path.join(tmp, 'home');
+fs.mkdirSync(process.env.HOME, { recursive: true });
 
 await esbuild.build({
 	stdin: {
 		contents: [
 			`export * from '${root}/electron-main/externalAgentMainService.ts'`,
 			`export * from '${root}/common/externalAgents/externalAgentCatalog.ts'`,
+			`export * from '${root}/common/externalAgents/externalAgentProtocol.ts'`,
 			`export { agentLogos } from '${root}/common/externalAgents/agentLogoData.ts'`,
 			`export { acpRegistrySnapshot } from '${root}/common/externalAgents/acpRegistrySnapshot.ts'`,
 		].join('\n'),
@@ -144,11 +148,162 @@ try {
 		await svc.closeSession('k-crash');
 	}
 
+
+	// ---------- a conversation that outlives the process: resume, load, and a resume that fails ----------
+	{
+		const key = 'k-res';
+		await turn('resumable', key, 'first');
+		const session1 = eventsOf(key, 'session')[0];
+		check('a new conversation reports its id and that nothing was resumed', session1?.sessionId?.startsWith('S-') && session1.resumed === false, JSON.stringify(session1));
+		const tool = eventsOf(key, 'tool')[0];
+		check('tool calls carry their kind and the files they touch', tool?.kind === 'read' && tool.paths?.[0] === '/work/src/a.ts', JSON.stringify(tool));
+		await svc.closeSession(key);
+		events.length = 0;
+		await svc.runTurn({ sessionKey: key, agentId: 'custom-resumable', custom: custom('resumable'), cwd: workDir, text: 'second', resumeSessionId: session1.sessionId });
+		const session2 = eventsOf(key, 'session')[0];
+		const said = eventsOf(key, 'text').map(e => e.text).join('');
+		check('with the earlier id the agent picks the conversation up again (session/resume)', session2?.resumed === true && session2.sessionId === session1.sessionId, JSON.stringify(session2));
+		check('the resumed agent remembers where it was (turn counter continues)', said.includes('turn 6') && said.includes('resumed=' + session1.sessionId), said);
+		await svc.closeSession(key);
+
+		events.length = 0;
+		await svc.runTurn({ sessionKey: key, agentId: 'custom-loadable', custom: custom('loadable'), cwd: workDir, text: 'again', resumeSessionId: 'S-old-1' });
+		const said2 = eventsOf(key, 'text').map(e => e.text).join('');
+		check('an agent that can only load a session (session/load) resumes too', eventsOf(key, 'session')[0]?.resumed === true && said2.includes('resumed=S-old-1'), said2);
+		check('the old conversation it replays while loading is not shown again', !said2.includes('OLD-HISTORY-REPLAY'), said2);
+		await svc.closeSession(key);
+
+		events.length = 0;
+		await svc.runTurn({ sessionKey: key, agentId: 'custom-resumable', custom: custom('resumable'), cwd: workDir, text: 'fresh', resumeSessionId: 'gone-forever' });
+		check('an id the agent no longer knows starts a new conversation and says so', eventsOf(key, 'session')[0]?.resumed === false && eventsOf(key, 'text').map(e => e.text).join('').includes('turn 1'));
+		await svc.closeSession(key);
+
+		events.length = 0;
+		await svc.runTurn({ sessionKey: key, agentId: 'custom-basic', custom: custom('basic'), cwd: workDir, text: 'x', resumeSessionId: 'S1' });
+		check('an agent that cannot resume simply starts a new conversation', eventsOf(key, 'session')[0]?.resumed === false);
+		await svc.closeSession(key);
+	}
+
+	// ---------- the settings an agent offers (its model, its mode) ----------
+	{
+		const key = 'k-config';
+		await turn('resumable', key, 'hi');
+		const cfg = eventsOf(key, 'config').at(-1);
+		const model = cfg?.options.find(o => o.id === 'model');
+		check('the agent\'s model choices are offered', model?.type === 'select' && model.value === 'fast' && model.choices.map(c => c.name).join() === 'Fast,Smart' && model.category === 'model', JSON.stringify(cfg));
+		check('an agent that offers modes gets a mode choice too', cfg?.options.find(o => o.id === '__mode')?.choices.length === 2);
+		await svc.setConfigOption(key, 'model', 'smart');
+		check('changing the model is passed to the agent and confirmed', eventsOf(key, 'config').at(-1).options.find(o => o.id === 'model').value === 'smart');
+		await svc.setConfigOption(key, '__mode', 'code');
+		await turn('resumable', key, 'again');
+		const said = eventsOf(key, 'text').map(e => e.text).join('');
+		check('the next message runs with the chosen model and mode', said.includes('model=smart') && said.includes('mode=code'), said);
+		let noSession = '';
+		try { await svc.setConfigOption('k-none', 'model', 'x'); } catch (e) { noSession = String(e.message); }
+		check('changing a setting before the agent runs says to send a message first', /send a message first/.test(noSession), noSession);
+		await svc.closeSession(key);
+	}
+
+	// ---------- signing in picks the account method, not the first one listed ----------
+	{
+		const key = 'k-multi';
+		const r = await turn('multi-auth', key);
+		check('"API Key" is listed first but the sign-in uses the account method (ChatGPT) and the turn continues', r.stopReason === 'end_turn' && eventsOf(key, 'status').some(e => /ChatGPT/.test(e.message)), JSON.stringify(eventsOf(key, 'status')));
+		await svc.closeSession(key);
+	}
+
+	// ---------- an agent that exits by itself is started again by the next message ----------
+	{
+		const key = 'k-die';
+		await turn('die-after', key, 'one');
+		await new Promise(r => setTimeout(r, 400));
+		events.length = 0;
+		const r = await turn('die-after', key, 'two');
+		check('after the process ended on its own, the next message starts it again', r.stopReason === 'end_turn' && eventsOf(key, 'text').map(e => e.text).join('').includes('turn 1'));
+		await svc.closeSession(key);
+	}
+
+	// ---------- one message at a time per chat ----------
+	{
+		const key = 'k-busy';
+		const first = turn('hang', key);
+		while (!eventsOf(key, 'text').length) { await new Promise(r => setTimeout(r, 20)); }
+		let error = '';
+		try { await turn('hang', key); } catch (e) { error = String(e.message); }
+		check('a second message while the agent is still working is refused with a clear message', /still working/.test(error), error);
+		await svc.cancel(key); await first; await svc.closeSession(key);
+	}
+
+	// ---------- many chats: the oldest idle agent makes room ----------
+	{
+		const keys = ['k-m1', 'k-m2', 'k-m3', 'k-m4', 'k-m5'];
+		for (const k of keys) { await turn('basic', k); }
+		check('no more than four agents run at once; the longest idle one was stopped', svc._sessions.size <= 4 && !svc._sessions.has('k-m1') && svc._sessions.has('k-m5'), [...svc._sessions.keys()].join());
+		for (const k of keys) { await svc.closeSession(k); }
+	}
+
+	// ---------- stopping an agent stops what it started ----------
+	if (process.platform !== 'win32') {
+		const key = 'k-tree';
+		await turn('spawner', key);
+		const pid = Number(/child=(\d+);/.exec(eventsOf(key, 'text').map(e => e.text).join(''))?.[1]);
+		const alive = (p) => { try { process.kill(p, 0); return true; } catch { return false; } };
+		check('the agent started a child process', pid > 0 && alive(pid), String(pid));
+		await svc.closeSession(key);
+		let gone = false;
+		for (let i = 0; i < 30 && !gone; i++) { await new Promise(r => setTimeout(r, 100)); gone = !alive(pid); }
+		check('closing the chat stopped the child process too (no orphans)', gone, `pid ${pid} still running`);
+		if (!gone) { try { process.kill(pid, 'SIGKILL'); } catch { } }
+	}
+
+	// ---------- "Test connection" ----------
+	{
+		const ok = await svc.probe('custom-resumable', custom('resumable'));
+		check('probe: a working agent reports its name, version and protocol', ok.ok && ok.agentName === 'Fake Agent' && ok.agentVersion === '9.9.9' && ok.protocolVersion === 1, JSON.stringify(ok));
+		check('probe: it says whether the conversation can be resumed', ok.canResume === true && (await svc.probe('custom-basic', custom('basic'))).canResume === false);
+		check('probe: it lists the sign-in methods without signing in', (await svc.probe('custom-multi', custom('multi-auth'))).authMethods?.map(a => a.id).join() === 'api-key,chat-gpt');
+		const missing = await svc.probe('custom-x', { id: 'custom-x', name: 'X', command: 'definitely-not-a-program-xyz', args: [] });
+		check('probe: a missing program is reported, not thrown', missing.ok === false && /Could not find/.test(missing.error), JSON.stringify(missing));
+		const stops = await svc.probe('custom-y', { id: 'custom-y', name: 'Y', command: process.execPath, args: ['-e', 'process.stderr.write("not an agent"); process.exit(2)'] });
+		check('probe: a program that is not an ACP agent is reported with what it printed', stops.ok === false && /not an agent/.test(stops.error), JSON.stringify(stops));
+		const notInstalled = await svc.probe('opencode');
+		check('probe: an agent that is not downloaded says so', notInstalled.ok === false && /not been downloaded/.test(notInstalled.error), JSON.stringify(notInstalled));
+	}
+
+	// ---------- what is installed on disk ----------
+	{
+		const agents = path.join(process.env.HOME, '.vader-editor', 'agents');
+		const put = (id, version, manifest, files) => {
+			const dir = path.join(agents, id, version);
+			fs.mkdirSync(dir, { recursive: true });
+			for (const f of files) { fs.mkdirSync(path.dirname(path.join(dir, f)), { recursive: true }); fs.writeFileSync(path.join(dir, f), 'x'); }
+			if (manifest) { fs.writeFileSync(path.join(dir, 'manifest.json'), typeof manifest === 'string' ? manifest : JSON.stringify(manifest)); }
+		};
+		const statusOf = async (id) => (await svc.getStatuses([])).find(s => s.id === id);
+		put('opencode', '1.0.0', { id: 'opencode', version: '1.0.0', kind: 'binary', command: 'opencode', args: ['acp'] }, ['opencode']);
+		let st = await statusOf('opencode');
+		check('an installed agent is ready and shows its version', st.state === 'ready' && st.installedVersion === '1.0.0', JSON.stringify(st));
+		check('an install older than the version Vader knows is marked as updatable', st.latestVersion === m.acpRegistrySnapshot.opencode.version, JSON.stringify(st));
+		put('opencode', '1.10.0', { id: 'opencode', version: '1.10.0', kind: 'binary', command: 'opencode', args: ['acp'] }, ['opencode']);
+		check('the newest install wins (1.10.0 is newer than 1.9.x, not older)', (await statusOf('opencode')).installedVersion === '1.10.0');
+		fs.rmSync(path.join(agents, 'opencode'), { recursive: true });
+		put('opencode', '9.9.9', '{ this is not json', ['opencode']);
+		check('a half-finished install (broken manifest) is not "ready"', (await statusOf('opencode')).state === 'not-installed');
+		fs.rmSync(path.join(agents, 'opencode'), { recursive: true });
+		put('opencode', '9.9.9', { id: 'opencode', version: '9.9.9', kind: 'binary', command: '../../../evil', args: [] }, []);
+		check('a manifest that points outside its folder is ignored', (await statusOf('opencode')).state === 'not-installed');
+		fs.rmSync(path.join(agents, 'opencode'), { recursive: true });
+		put('opencode', '9.9.9', { id: 'opencode', version: '9.9.9', kind: 'binary', command: 'missing-file', args: [] }, []);
+		check('a manifest whose program is gone is not "ready"', (await statusOf('opencode')).state === 'not-installed');
+		const gone = await svc.uninstall('opencode');
+		check('uninstall removes the folder', gone.state === 'not-installed' && !fs.existsSync(path.join(agents, 'opencode')));
+	}
+
 	// ---------- an agent that cannot start ----------
 	{
 		let error = '';
 		try { await svc.runTurn({ sessionKey: 'k-nostart', agentId: 'custom-x', custom: { id: 'custom-x', name: 'X', command: path.join(tmp, 'no-such-program'), args: [] }, cwd: workDir, text: 'hi' }); } catch (e) { error = String(e.message ?? e); }
-		check('a program that cannot be started gives a readable error', error.includes('Could not start'), error);
+		check('a program that cannot be found gives a readable error', /Could not (find|start)/.test(error), error);
 	}
 
 	// ---------- a catalog agent that was not downloaded yet ----------
@@ -190,6 +345,37 @@ const goodBinary = { id: 'opencode', version: '1.2.3', distribution: { binary: {
 	check('plain specs: package names pass, shell syntax does not', m.isPlainSpec('@scope/pkg@1.2.3') && ['a b', 'a;b', 'a|b', '$(x)', 'a`b`', 'a&b', 'a>b', ''].every(s => !m.isPlainSpec(s)));
 	check('safe paths: relative paths pass, escapes and absolute paths do not', m.isSafeRelativePath('./dist/agent.exe') && ['../x', 'a/../../x', '/etc/passwd', 'C:\\x', '\\\\server\\share'].every(p => !m.isSafeRelativePath(p)));
 	check('platform keys map Node names to the registry names', m.platformKeyOf('win32', 'x64') === 'windows-x86_64' && m.platformKeyOf('darwin', 'arm64') === 'darwin-aarch64' && m.platformKeyOf('freebsd', 'x64') === undefined);
+}
+
+
+// ---------- the sign-in choice, with the answers real agents gave ----------
+{
+	const geminiMethods = [{ id: 'oauth-personal', name: 'Log in with Google' }, { id: 'gemini-api-key', name: 'Gemini API key', _meta: { 'api-key': { provider: 'google' } } }, { id: 'vertex-ai', name: 'Vertex AI' }, { id: 'gateway', name: 'AI API Gateway', _meta: { gateway: { protocol: 'google' } } }];
+	const codexMethods = [{ id: 'api-key', name: 'API Key', _meta: { 'api-key': { provider: 'openai' } } }, { id: 'chat-gpt', name: 'ChatGPT' }];
+	check('auth: Gemini CLI -> "Log in with Google"', m.chooseAuthMethod(geminiMethods, ['oauth-personal']).method?.id === 'oauth-personal' && m.chooseAuthMethod(geminiMethods).method?.id === 'oauth-personal');
+	check('auth: Codex -> ChatGPT, although "API Key" comes first', m.chooseAuthMethod(codexMethods, ['chat-gpt']).method?.id === 'chat-gpt' && m.chooseAuthMethod(codexMethods).method?.id === 'chat-gpt');
+	check('auth: only key-based methods -> no guess, the names are reported', (() => { const c = m.chooseAuthMethod([{ id: 'k', name: 'API Key' }, { id: 'v', name: 'Vertex AI' }]); return c.kind === 'none' && c.offered.length === 2; })());
+	check('auth: the agent\'s own page is preferred to a terminal login', m.chooseAuthMethod([{ id: 't', name: 'CLI', type: 'terminal' }, { id: 'a', name: 'Browser' }]).method.id === 'a' && m.chooseAuthMethod([{ id: 't', name: 'CLI', type: 'terminal' }]).kind === 'terminal');
+	check('auth: no methods at all -> none', m.chooseAuthMethod([]).kind === 'none');
+	check('auth-required errors are recognised by code and by wording', m.isAuthRequiredError({ code: -32000 }) && m.isAuthRequiredError(new Error('Authentication required')) && m.isAuthRequiredError(new Error('You are not logged in')) && !m.isAuthRequiredError(new Error('rate limited')));
+}
+{
+	const flat = m.flattenConfigOptions([
+		{ id: 'model', name: 'Model', category: 'model', type: 'select', currentValue: 'a', options: [{ group: 'g1', name: 'Group', options: [{ value: 'a', name: 'A' }, { value: 'b', name: 'B' }] }, { value: 'c', name: 'C' }] },
+		{ id: 'think', name: 'Thinking', type: 'boolean', currentValue: true },
+		{ id: 'empty', name: 'Empty', type: 'select', currentValue: '', options: [] },
+		{ name: 'no id' },
+	]);
+	check('config options: groups are flattened, booleans kept, empty and malformed options dropped', flat.length === 2 && flat[0].choices.map(c => c.value).join() === 'a,b,c' && flat[1].type === 'boolean' && flat[1].value === true, JSON.stringify(flat));
+	check('config options: nothing offered -> nothing shown', m.flattenConfigOptions(null).length === 0 && m.modesAsConfigOption(null) === undefined);
+	check('npm bin: the program of a package is found and kept inside the package', m.npmBinScript({ name: '@scope/x', bin: { x: 'dist/i.js' } }) === 'dist/i.js' && m.npmBinScript({ name: 'y', bin: 'cli.js' }) === 'cli.js' && m.npmBinScript({ name: 'z', bin: { a: '1.js', b: '2.js' } }) === undefined && m.npmBinScript({ name: 'w', bin: '../../evil.js' }) === undefined && m.npmBinScript({ name: 'v' }) === undefined);
+	check('tool paths: from locations and diffs, at most five', m.pathsOfToolCall({ locations: [{ path: '/a' }], content: [{ type: 'diff', path: '/b' }, { type: 'text' }] }).join() === '/a,/b' && m.pathsOfToolCall({ locations: Array.from({ length: 9 }, (_, i) => ({ path: '/p' + i })) }).length === 5);
+}
+{
+	const good = (id, archive) => ({ agents: [{ id, version: '1.0.0', distribution: { binary: { 'linux-x86_64': { archive, cmd: './x' } } } }] });
+	check('registry: OpenCode may only come from OpenCode\'s own GitHub releases', !!m.acceptRegistryDocument(good('opencode', 'https://github.com/anomalyco/opencode/releases/download/v1/x.tgz')).opencode && !m.acceptRegistryDocument(good('opencode', 'https://github.com/someone-else/opencode/releases/download/v1/x.tgz')).opencode);
+	check('registry: Cursor only from downloads.cursor.com, Antigravity only from dl.google.com/agy-extensions', !!m.acceptRegistryDocument(good('cursor', 'https://downloads.cursor.com/lab/1/x.tgz')).cursor && !m.acceptRegistryDocument(good('cursor', 'https://github.com/a/b/x.tgz')).cursor
+		&& !!m.acceptRegistryDocument(good('antigravity-acp', 'https://dl.google.com/agy-extensions/releases/linux/x.zip'))['antigravity-acp'] && !m.acceptRegistryDocument(good('antigravity-acp', 'https://dl.google.com/other/x.zip'))['antigravity-acp']);
 }
 
 // ---------- the catalog's own invariants ----------

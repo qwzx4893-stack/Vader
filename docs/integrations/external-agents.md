@@ -1,62 +1,99 @@
 # Coding agents you already have an account with
 
 **Settings > Models > Coding Agents** lets a person use the subscription or free tier they already have with Codex, Cursor, OpenCode, Gemini CLI,
-Claude Code, Antigravity or Freebuff inside Vader, or add any other program that speaks the Agent Client Protocol. One card per agent, with its logo.
+Antigravity, Claude Code or Freebuff inside Vader, or add any other program that speaks the Agent Client Protocol. One card per agent, with its logo.
 
-Code: `common/externalAgents/` (catalog, types, the registry snapshot, logos), `electron-main/externalAgentMainService.ts` (download, start, protocol),
-`browser/externalAgents/externalAgentsService.ts` (status, install/open actions), `browser/chatThreadService.ts` (`_runExternalAgentTurn`),
-`browser/react/src/vader-settings-tsx/ExternalAgents.tsx` (cards and the chat picker). Tests: `test/externalAgentE2E.mjs` (service, against
-`test/fixtures/fakeAcpAgent.cjs`), `test/e2e/scenarios/externalAgents.mjs` (the real app).
+Code: `common/externalAgents/` (catalog, types, protocol rules, the registry snapshot, logos), `electron-main/externalAgentMainService.ts` (install, start,
+protocol), `browser/externalAgents/externalAgentsService.ts` (status, install / test / remove actions, per-chat settings), `browser/chatThreadService.ts`
+(`_runExternalAgentTurn`), `browser/react/src/vader-settings-tsx/ExternalAgents.tsx` (cards and the chat picker).
+Tests: `test/externalAgentE2E.mjs` (95 checks against `test/fixtures/fakeAcpAgent.cjs`), `test/externalAgentLiveE2E.mjs` (the **real** vendor programs),
+`test/e2e/scenarios/externalAgents.mjs` (the real app).
 
 ## Two ways in, chosen by what each vendor officially supports
 
-| Agent | Way | What happens |
+| Agent | Way | Why this way (checked, see the audit below) |
 |---|---|---|
-| **Codex**, **OpenCode**, **Cursor**, **Gemini CLI** | `acp` | Vader starts the vendor's official program and talks to it with the [Agent Client Protocol](https://agentclientprotocol.com) (JSON-RPC over stdin/stdout, the same protocol Zed and JetBrains use). The conversation appears in Vader's own chat. |
-| **Claude Code**, **Antigravity**, **Freebuff** | `terminal` | The vendor's official terminal program runs **unchanged** in a Vader terminal. It is not wired into the chat. |
-| Anything else | `acp` ("Your own agent") | Name, program and arguments, entered by the person. |
-
-Why Claude Code is a terminal: Anthropic allows its subscription only inside its own, unmodified Claude Code, and forbids routing the
-subscription through another product or collecting its tokens. Hosting the official binary in a terminal is the allowed shape. Antigravity has no
-ACP mode (its `agy` CLI has a headless mode, not a protocol), and Freebuff has no integration protocol at all.
+| **Codex** | ACP, `@agentclientprotocol/codex-acp` (npm) | The Agent Client Protocol (the one Zed and JetBrains use) is the standard way an editor drives a coding agent; the adapter is in the public ACP registry. |
+| **Gemini CLI** | ACP, `gemini --acp` (npm) | Google's own CLI speaks ACP natively. |
+| **OpenCode** | ACP, `opencode acp` (GitHub release binary) | Native ACP mode; the registry publishes a checksum. |
+| **Cursor** | ACP, `cursor-agent acp` (binary from downloads.cursor.com) | Cursor's own CLI speaks ACP. The registry publishes no checksum for it. |
+| **Antigravity** | ACP, `agy_acp_server` (binary from dl.google.com) | Google ships an agent server for editors and lists it in the ACP registry (authors: Google LLC). The `agy` terminal CLI has no protocol mode. |
+| **Claude Code** | the unmodified official program in a Vader terminal | Anthropic restricts its consumer subscriptions to its own products (see the audit below). Hosting the official binary, with Anthropic's own sign-in, is the allowed shape. |
+| **Freebuff** | the official `freebuff` CLI in a Vader terminal | It has no integration protocol (checked: no ACP mode, not in the registry). |
+| Anything else | ACP, "Your own agent" | Name, program, arguments, entered by the person after a confirmation. |
 
 ## Who does what
 
-- **Sign-in is the vendor's.** An ACP agent that needs an account answers "authentication required"; Vader then asks the agent to sign the person in, which
-  opens the vendor's own page in the browser, or (for agents that ask for it) runs the vendor's login command in a Vader terminal. Terminal agents
-  ask for the login themselves on first run. Vader never receives, stores or forwards a password or token, and has no code that reads the vendor's credential files.
-- **The agent keeps its own tools and its own rules.** Vader offers the agent no file or terminal services (`clientCapabilities`: `fs` off, `terminal` off);
-  the agent reads and edits files itself, with its own permission model. Whenever it asks for permission (`session/request_permission`), Vader shows
-  the question with the agent's own options in a dialog and passes the answer back. **Vader's policy engine, agent scopes, approval switches and
-  checkpoints do not apply to these agents**: they cannot, because the tool calls never pass through Vader. This is stated on the cards.
+- **Sign-in is the vendor's.** An ACP agent that needs an account answers "authentication required"; Vader then asks the agent to sign the person in, which opens
+  the vendor's own page in the browser, or (for agents that ask for it) runs the vendor's login command in a Vader terminal. Vader never receives, stores or
+  forwards a password or token, and has no code that reads the vendor's credential files.
+- **Which sign-in.** Agents list their sign-in methods in their own order, and the first is often a key: the real Codex lists "API Key" before "ChatGPT".
+  Vader uses the ids the catalog names for that agent (`authPreference`), otherwise any method that signs in with an account and never one that needs a key, a
+  cloud project or a gateway (`chooseAuthMethod`, tested with the verbatim answers of Gemini CLI and Codex). When only key-based methods exist it says so instead of guessing.
+- **The agent keeps its own tools and its own rules.** Vader offers the agent no file or terminal services (`clientCapabilities`: `fs` off, `terminal` off); the agent
+  reads and edits files itself, with its own permission model. Whenever it asks for permission (`session/request_permission`), Vader shows the question with the
+  agent's own options in a dialog and passes the answer back. **Vader's policy engine, agent scopes, approval switches and checkpoints do not apply to these agents**:
+  they cannot, because the tool calls never pass through Vader. This is stated on the cards.
 - **Usage is counted by the vendor**, on the person's account.
 
-## What is downloaded, run and checked
+## How an agent runs (and why this is the fast, safe way)
 
-Nothing happens without a click: Download / Install / Open, or sending a message.
-
-- **npm-distributed agents** (Codex, Gemini CLI) run with `npx -y <pinned package@version>`; they need Node.js (the card says so when it is missing).
-- **Binary agents** (OpenCode, Cursor) are downloaded from the host named in the ACP registry into `~/.vader-editor/agents/<id>/<version>/`. Rules, all
-  tested in `externalAgentE2E`: https only; host on a fixed list (`github.com` and GitHub's release CDNs, `downloads.cursor.com`); no credentials in the address;
-  the archive's SHA-256 must match the registry's when the registry gives one; the program path must be relative with no `..`; the download is deleted on any failure.
-- **Terminal agents** install with the vendor's documented command (`irm https://claude.ai/install.ps1 | iex`, `npm install -g freebuff`, ...). Vader shows the
-  exact command in a dialog first and then runs it in a **visible terminal** so every line can be read. `catalog: install commands only use the vendors' own addresses` is a test.
-- **Versions.** `acpRegistrySnapshot.ts` (generated by `build/lib/vader/genExternalAgents.py` from the registry) is what ships; "Check for newer agent versions" reads the
-  live registry (`cdn.agentclientprotocol.com`) and keeps only entries that pass the same rules as the snapshot (`acceptRegistryDocument`: known ids, plain
-  versions, plain npm names and arguments, allowed hosts, safe paths, `uvx` entries refused).
-- **Start-up.** Arguments are never built through a shell except for `npx.cmd` on Windows, and there every token must match `^[A-Za-z0-9@/._:=+-]+$`.
+- **npm agents (Codex, Gemini CLI)** are installed once into `~/.vader-editor/agents/<id>/<version>/` with `npm install --ignore-scripts` (no package gets to run code at
+  install time) and started with `node <the package's own script>`. Measured against the real programs: the handshake takes about **0.4 s**, it works offline, it runs exactly the
+  pinned version, and no shell is involved, so there is nothing to quote on Windows. The first design used `npx -y`, which asks the registry on every start and can take a minute the first time.
+- **Binary agents (OpenCode, Cursor, Antigravity)** are downloaded from the vendor's release location. Rules, all tested: https only; a fixed host list **and** a per-agent
+  address prefix (OpenCode only from OpenCode's own GitHub releases, Cursor only from `downloads.cursor.com`, Antigravity only from `dl.google.com/agy-extensions/`);
+  no credentials in the address; the archive's SHA-256 must match the registry's when the registry gives one (tested with a wrong checksum: refused, nothing left behind);
+  the program path must be relative with no `..`; the download is deleted on any failure.
+- **Every install is described by a `manifest.json`** (the exact command, written at install time), so an older install keeps working when Vader's own list of versions moves on, and a
+  half-finished install (no manifest, a manifest pointing outside its folder, a program that is gone) is never shown as ready. An update replaces the old version only after the new one is complete.
+- **Before anything is downloaded the person is asked**, with the package or the host named, whether a checksum protects it, and where it goes. Terminal agents show the vendor's install
+  command and then run it in a visible terminal. "Remove" deletes what was installed.
+- **One process per chat.** It is started in its own process group and stopped as a tree (`taskkill /T` on Windows), so the shell commands and language servers the agent started do not outlive it
+  (tested). A chat that is quiet for 30 minutes gives its process back; at most four run at once (the longest idle one makes room). Closing a chat closes its agent.
+- **A conversation outlives the process.** The agent's own conversation id is stored with the chat thread (`externalSession`, an optional field). When the process has to be started again
+  (idle stop, a crash, an app restart) Vader asks the agent to continue it: `session/resume`, else `session/load` (whose replay of the old conversation is not shown a second time), else a new
+  conversation, with a visible note that the earlier context could not be restored. The real Gemini CLI and Codex both advertise resume.
+- **The agent's own settings.** Models, modes and "how hard to think" are offered by the agent per conversation (ACP session config options, or the older modes); the chat shows them as drop-downs
+  and changes them with `session/set_config_option`. The models therefore are the ones the account offers, not a list written into Vader.
+- **"Test connection"** starts the program, does the protocol handshake and stops it: it shows that the install works, which sign-in methods it offers and whether it can resume, without signing in or sending a message.
+- **An expired sign-in** in the middle of a conversation is handled: the agent answers "authentication required", Vader signs in again and repeats that one message.
+- **Start-up errors are explained**: when the connection drops, the reason is the program's exit with what it printed to stderr, not "connection closed".
+- **Versions.** `acpRegistrySnapshot.ts` (generated by `build/lib/vader/genExternalAgents.py` from the registry) is what ships; "Check for newer agent versions" reads the live registry
+  (`cdn.agentclientprotocol.com`) and keeps only entries that pass the same rules as the snapshot (`acceptRegistryDocument`). A card shows the installed version and "X is available".
 
 ## In the chat
 
-When an agent is chosen ("Use in the chat" on its card, or the picker next to the chat box), chat turns go to it instead of a Vader model; no model needs to be
-configured. The agent's replies, thoughts, tool calls (shown as quoted lines) and plan are streamed into the thread; Stop sends the protocol's cancel and keeps what was shown.
-One agent process serves one chat thread (its own memory of the conversation); deleting the thread closes it. Vader's hidden helper threads (sub-agents, verification,
-research) keep using the configured models. Choosing "My models" in the picker goes back at any time.
+When an agent is chosen ("Use in the chat" on its card, or the picker next to the chat box), chat turns go to it instead of a Vader model; no model needs to be configured. Its replies, thoughts,
+tool calls (a quoted line with the file names it touches) and plan are streamed into the thread; Stop sends the protocol's cancel and keeps what was shown. Vader's hidden helper threads (sub-agents,
+verification, research) keep using the configured models. Choosing "My models" in the picker goes back at any time.
+
+## Settings files cannot add programs
+
+The commands a person added by hand and which agent is in use are this computer's own choice. **Export Settings** leaves them out and **Import Settings** keeps this computer's values whatever the file
+says (`common/helpers/settingsPortability.ts`, tested in `settingsPortabilityE2E`): a file that came from anyone cannot plant "run this program" and select it for the next chat message.
+
+## Audit of the method per agent (what was checked, 12 October 2026)
+
+- **The ACP registry** (`github.com/agentclientprotocol/registry`) lists 42 agents, every one verified by CI to answer the handshake with working `authMethods`. Entries for Codex, Gemini, OpenCode, Cursor and
+  Antigravity are used as published.
+- **Verified against the real programs** (`externalAgentLiveE2E.mjs`, needs the network, runs in a throw-away home folder): Gemini CLI 0.63.0 and Codex 2.2.2 install through npm, start in under a second and answer
+  the handshake; OpenCode 1.19.0 downloads from GitHub, passes its checksum, unpacks and answers. Codex's real first message starts the ChatGPT sign-in. **Not verified here**: Cursor and Antigravity (their
+  download hosts are not reachable from the build machine), and any complete conversation (that needs a signed-in account).
+- **Codex.** The adapter's real handshake lists `API Key` before `ChatGPT`; choosing "the first method" would have signed the person into the wrong thing. Fixed, and tested with the verbatim answer.
+- **Claude Code.** Anthropic's documentation (February 2026) says OAuth tokens of Free, Pro and Max plans are only for Claude Code and claude.ai, and that using them in other products, including the Agent SDK,
+  is not allowed; later statements softened the billing side (June 2026) but not the rule, and the situation has changed more than once. An ACP adapter for Claude exists in the registry (`claude-acp`, authors
+  Anthropic, Zed Industries, JetBrains) and uses the Agent SDK. Vader therefore keeps the conservative shape: the unmodified `claude` program in a terminal. Switching to the adapter is a catalog entry
+  if the terms are confirmed to allow it.
+- **Freebuff.** No ACP mode and no registry entry; its published npm package is a launcher for a hosted backend. Terminal is the only integration. Its logo is the organisation's official mark (the GitHub
+  avatar of CodebuffAI: a terminal frame with a sparkle and a cursor), redrawn as vector by `build/lib/vader/genProviderLogos.py` because no vector file is published.
+- **Antigravity.** The first version of this feature treated it as terminal-only because the `agy` CLI has no protocol mode. The registry shows Google's own ACP server for editors, so it is now a chat agent. Community ACP
+  bridges around `agy` exist but their authors warn that they may violate Google's terms; Vader uses none of them.
 
 ## Honest limits
 
-- The ACP agents need their program to be reachable: Codex and Gemini need Node.js; OpenCode and Cursor are downloaded.
+- The agents need what they need: Codex and Gemini CLI need Node.js (with npm) to be installed; OpenCode, Cursor and Antigravity are downloaded.
 - Free tiers, limits, ads (Freebuff) and data use are the vendors' and can change; the cards say who is responsible instead of promising anything.
+- An agent that needs a post-install script to work would not start after `--ignore-scripts`; none of the five does.
 - An edit of an earlier message in a thread does not rewrite the agent's own memory of the conversation.
-- Not verified against the vendors' live programs in this repository's tests (they need accounts); the protocol layer is tested against a stand-in that speaks the
-  same wire, and the packaged-app scenarios drive that stand-in through the real UI.
+- Windows-specific paths (the `npm.cmd` fallback, `taskkill`) are written but were exercised only on Linux in this repository's tests; the Windows E2E workflow covers them on the next build.

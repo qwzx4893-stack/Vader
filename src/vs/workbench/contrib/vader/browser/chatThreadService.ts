@@ -19,6 +19,7 @@ import { IModelRouterService } from '../common/modelRouter/modelRouterService.js
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
 import { IExternalAgentMainService, ExternalAgentEvent } from '../common/externalAgents/externalAgentTypes.js';
 import { externalAgentById } from '../common/externalAgents/externalAgentCatalog.js';
+import { baseName } from '../common/externalAgents/externalAgentProtocol.js';
 import { IExternalAgentsService } from './externalAgents/externalAgentsService.js';
 import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
@@ -201,6 +202,10 @@ export type ThreadType = {
 	// if any. undefined/null on old, pre-Vader threads and on threads never assigned one -
 	// both mean "no agent, use default Chat behavior".
 	agentId?: string | null;
+
+	// Vader addition: the conversation this thread has with an external coding agent (Settings > Coding Agents): the agent's own id of it, so that a
+	// restart of the app or of the agent's process can pick the conversation up again. Absent on every thread that never used one.
+	externalSession?: { agentId: string, sessionId: string };
 
 	// Vader addition: true for a hidden thread spun up by the delegate_subagent_task tool.
 	// Filtered out of the visible thread selector, but not deleted, so its history can
@@ -1549,14 +1554,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const lastUserMsg = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'user')
 		const text = lastUserMsg?.role === 'user' ? lastUserMsg.content : ''
 		if (!text.trim()) { return }
+		// the agent's own id of this conversation, for when its process has to be started again (it is ignored while the process is still running)
+		const earlier = this.state.allThreads[threadId]?.externalSession
+		const resumeSessionId = earlier && earlier.agentId === agentId ? earlier.sessionId : undefined
 
 		const runId = ++this._externalRunSeq
 		this._externalRunOfThread.set(threadId, runId)
 		const isCurrent = () => this._externalRunOfThread.get(threadId) === runId
-		const segments: ({ kind: 'text', text: string } | { kind: 'tool', id: string, title: string, status: string })[] = []
+		const segments: ({ kind: 'text', text: string } | { kind: 'tool', id: string, title: string, status: string, paths: readonly string[] })[] = []
 		let reasoning = ''
 		let sawTool = false
-		const display = () => segments.map(sg => sg.kind === 'text' ? sg.text : `\n\n> ${sg.title || 'Working'} (${sg.status.replace('_', ' ')})\n\n`).join('')
+		const display = () => segments.map(sg => sg.kind === 'text' ? sg.text : `\n\n> ${sg.title || 'Working'}${sg.paths.length ? ` - ${sg.paths.map(baseName).join(', ')}` : ''} (${sg.status.replace('_', ' ')})\n\n`).join('')
 		const interrupt = Promise.resolve(() => { void this._externalAgentMain.cancel(threadId) })
 		const publish = () => {
 			if (!isCurrent() || this._currentIsRunning(threadId) !== 'LLM') { return }
@@ -1573,13 +1581,19 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			else if (e.type === 'tool') {
 				sawTool = true
 				const known = segments.find(sg => sg.kind === 'tool' && sg.id === e.toolCallId)
-				if (known?.kind === 'tool') { if (e.title) { known.title = e.title } known.status = e.status }
-				else { segments.push({ kind: 'tool', id: e.toolCallId, title: e.title, status: e.status }) }
+				if (known?.kind === 'tool') { if (e.title) { known.title = e.title } known.status = e.status; if (e.paths?.length) { known.paths = e.paths } }
+				else { segments.push({ kind: 'tool', id: e.toolCallId, title: e.title, status: e.status, paths: e.paths ?? [] }) }
 			}
 			else if (e.type === 'plan') {
 				reasoning += (reasoning ? '\n' : '') + e.entries.map(p => `- [${p.status}] ${p.content}`).join('\n')
 			}
 			else if (e.type === 'status') { if (!segments.length) { reasoning = e.message } }
+			else if (e.type === 'session') {
+				if (!e.resumed && resumeSessionId) {
+					segments.push({ kind: 'text', text: `_${name} started a new conversation: it could not restore the earlier one, so it does not remember what was said before._\n\n` })
+				}
+				this._setExternalSession(threadId, agentId, e.sessionId)
+			}
 			else if (e.type === 'permission') {
 				void this._dialogService.prompt<string | null>({
 					type: 'question',
@@ -1603,7 +1617,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			return answer
 		}
 		try {
-			const { stopReason } = await this._externalAgentMain.runTurn({ sessionKey: threadId, agentId, custom, cwd, text })
+			const { stopReason } = await this._externalAgentMain.runTurn({ sessionKey: threadId, agentId, custom, cwd, text, resumeSessionId })
 			if (!isCurrent() || this._currentIsRunning(threadId) !== 'LLM') { return } // stopped by the person: abortRunning already kept what was shown
 			if (stopReason !== 'end_turn' && stopReason !== 'cancelled') { segments.push({ kind: 'text', text: `\n\n_(${name} stopped: ${stopReason.replace(/_/g, ' ')})_` }) }
 			const answer = keepPartialAnswer()
@@ -1624,6 +1638,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			listener.dispose()
 			if (isCurrent()) { this._externalRunOfThread.delete(threadId) }
 		}
+	}
+
+	private _setExternalSession(threadId: string, agentId: string, sessionId: string) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread || (thread.externalSession?.agentId === agentId && thread.externalSession.sessionId === sessionId)) { return }
+		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, externalSession: { agentId, sessionId } } }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads })
 	}
 
 	private _addCheckpoint(threadId: string, checkpoint: CheckpointEntry) {

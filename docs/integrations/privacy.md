@@ -8,7 +8,7 @@ Chromium and Electron ship background services that contact Google on their own;
 
 ## Coding agents the person adds (Settings > Coding Agents) - `electron-main/externalAgentMainService.ts`
 - Nothing is contacted until the person presses Download / Install / Open or sends a message to the chosen agent.
-- Downloads: the host named by the ACP registry, restricted to `github.com` and GitHub's release CDNs, `downloads.cursor.com`; https only; checksum compared when published.
+- Downloads: for npm agents (Codex, Gemini CLI) the npm registry, through `npm install --ignore-scripts`; for binary agents the host named by the ACP registry, restricted to each agent's own release address (`github.com/anomalyco/opencode`, `downloads.cursor.com`, `dl.google.com/agy-extensions`); https only; checksum compared when published. The person is asked first.
 - "Check for newer agent versions" (button, never automatic): `cdn.agentclientprotocol.com`.
 - The vendors' own programs then talk to their vendors with the person's account (that is the point); Vader sees only the protocol messages on the program's stdin/stdout.
 

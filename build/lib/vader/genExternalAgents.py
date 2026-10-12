@@ -11,7 +11,7 @@ import json, os, urllib.request
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..', '..'))
 OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/vader/common/externalAgents/acpRegistrySnapshot.ts')
-IDS = ['codex-acp', 'opencode', 'cursor', 'gemini']
+IDS = ['codex-acp', 'opencode', 'cursor', 'gemini', 'antigravity-acp']
 BASE = 'https://raw.githubusercontent.com/agentclientprotocol/registry/main/%s/agent.json'
 
 snap = {}

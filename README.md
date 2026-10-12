@@ -148,7 +148,7 @@ flowchart LR
 
 Every provider is its own entry in Settings with its own key and an editable gateway, and the list is searchable (`qwen`, `kimi`, `together`, `nvidia` ...). With a key, Vader asks the provider which models that key can use. The gateway URLs come from vendor documentation and are not live-verified by the project's tests (see [`PROVIDERS.md`](./PROVIDERS.md)).
 
-**Already pay for a coding agent?** *Settings > Models > Coding Agents* uses your Codex, Cursor, OpenCode or Gemini CLI account in Vader's chat, and runs Claude Code, Antigravity and Freebuff in a Vader terminal as their vendors ship them. You sign in on the vendor's own page; Vader never sees the token. The agent keeps its own tools and permission rules ([`external-agents.md`](./docs/integrations/external-agents.md)).
+**Already pay for a coding agent?** *Settings > Models > Coding Agents* uses your Codex, Cursor, OpenCode, Gemini CLI or Antigravity account in Vader's chat, and runs Claude Code and Freebuff in a Vader terminal as their vendors ship them. You sign in on the vendor's own page; Vader never sees the token. The agent keeps its own tools and permission rules ([`external-agents.md`](./docs/integrations/external-agents.md)).
 
 Keys are encrypted with your OS keychain. Models without native tool-calling (common locally) use an XML tool grammar automatically. You can pick a different model per feature (chat, Ctrl+K, autocomplete, apply, commit messages). Provider details: [`PROVIDERS.md`](./PROVIDERS.md).
 

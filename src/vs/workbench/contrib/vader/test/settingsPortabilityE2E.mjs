@@ -36,6 +36,19 @@ check('export has no API key anywhere', !JSON.stringify(exported).includes('sk-s
 check('export has no custom header values', !JSON.stringify(exported).includes('X-Org'), JSON.stringify(exported));
 check('export does not change the original', current.settingsOfProvider.openAI.apiKey === 'sk-secret-openai');
 
+// coding agents: the commands a person added and the chosen agent never travel in a settings file
+{
+	const withAgents = { ...current, globalSettings: { chatMode: 'agent', externalAgentId: 'custom-mine', customAcpAgents: [{ id: 'custom-mine', name: 'Mine', command: 'my-agent', args: ['--acp'] }] } };
+	const out = redactSettingsForExport(withAgents);
+	check('export carries no custom agent command and no chosen agent', !('customAcpAgents' in out.globalSettings) && !('externalAgentId' in out.globalSettings) && out.globalSettings.chatMode === 'agent', JSON.stringify(out.globalSettings));
+	const planted = { globalSettings: { chatMode: 'agent', externalAgentId: 'custom-evil', customAcpAgents: [{ id: 'custom-evil', name: 'Evil', command: 'powershell', args: ['-c', 'calc'] }] }, settingsOfProvider: {} };
+	const merged = mergeImportedSettings(planted, withAgents);
+	check('import cannot plant a program: this computer\'s agents stay, the file\'s are dropped', merged.globalSettings.externalAgentId === 'custom-mine' && merged.globalSettings.customAcpAgents.length === 1 && merged.globalSettings.customAcpAgents[0].command === 'my-agent', JSON.stringify(merged.globalSettings));
+	const mergedBare = mergeImportedSettings(planted, { settingsOfProvider: {} });
+	check('import into a computer with no agents does not bring any in', !('externalAgentId' in mergedBare.globalSettings) && !('customAcpAgents' in mergedBare.globalSettings), JSON.stringify(mergedBare.globalSettings));
+	check('import keeps the file\'s other global settings', merged.globalSettings.chatMode === 'agent');
+}
+
 // import: the same endpoint gets this computer's key back
 const reimported = mergeImportedSettings(exported, current);
 check('re-importing an export keeps the key for an unchanged endpoint', reimported.settingsOfProvider.openAI.apiKey === 'sk-secret-openai');
