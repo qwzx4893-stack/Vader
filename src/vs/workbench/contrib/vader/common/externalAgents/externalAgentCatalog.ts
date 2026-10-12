@@ -17,7 +17,7 @@ import { acpRegistrySnapshot, RegistryDistribution } from './acpRegistrySnapshot
 export type ExternalAgentKind = 'acp' | 'terminal'
 
 /** key of the logo in providerLogoData.ts (`agent:<name>`) */
-export type ExternalAgentLogoName = 'codex' | 'opencode' | 'cursor' | 'gemini' | 'claudecode' | 'antigravity' | 'freebuff' | 'custom'
+export type ExternalAgentLogoName = 'codex' | 'opencode' | 'cursor' | 'copilot' | 'mistral' | 'grok' | 'kimi' | 'claudecode' | 'antigravity' | 'freebuff' | 'custom'
 
 export type TerminalAgentSpec = {
 	/** the program to run once installed */
@@ -38,6 +38,11 @@ export type AcpAgentSpec = {
 	readonly authPreference?: readonly string[]
 	/** a downloaded program may only come from an address that starts with one of these (the vendor's own release location), whatever the registry says */
 	readonly archivePrefixes?: readonly string[]
+	/**
+	 * The program a person who already uses this agent has on their computer. When it is found and answers the protocol (checked with a handshake) it is used as it
+	 * is: nothing is downloaded and the sign-in it already holds counts. `args` are what make it speak ACP (the registry's own arguments for the agent).
+	 */
+	readonly local?: { readonly command: string, readonly args: readonly string[], readonly candidateDirs?: readonly string[] }
 }
 
 export type ExternalAgentDef = {
@@ -67,21 +72,42 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		tagline: 'Free models from OpenCode Zen (no card), your ChatGPT plan, or any provider key.',
 		website: 'https://opencode.ai',
 		note: 'The free models change from time to time and OpenCode may use the free-tier prompts to improve them. Limits are OpenCode\'s.',
-		acp: { registryId: 'opencode', loginNote: 'OpenCode asks which provider to use; free Zen models need no payment details.', archivePrefixes: ['https://github.com/anomalyco/opencode/releases/download/', 'https://github.com/sst/opencode/releases/download/'] },
+		acp: { registryId: 'opencode', loginNote: 'OpenCode asks which provider to use; free Zen models need no payment details.', local: { command: 'opencode', args: ['acp'], candidateDirs: ['.opencode/bin'] }, archivePrefixes: ['https://github.com/anomalyco/opencode/releases/download/', 'https://github.com/sst/opencode/releases/download/'] },
 	},
 	{
 		id: 'cursor', name: 'Cursor', kind: 'acp', logo: 'cursor',
 		tagline: 'Your Cursor subscription, through Cursor\'s own agent.',
 		website: 'https://cursor.com/docs/cli/acp',
 		note: 'You sign in with your Cursor account; Cursor counts the usage on your plan.',
-		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.', archivePrefixes: ['https://downloads.cursor.com/'] },
+		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.', local: { command: 'cursor-agent', args: ['acp'], candidateDirs: ['.local/bin'] }, archivePrefixes: ['https://downloads.cursor.com/'] },
 	},
 	{
-		id: 'gemini', name: 'Gemini CLI', kind: 'acp', logo: 'gemini',
-		tagline: 'Google\'s open-source agent CLI. Needs a Gemini API key or a company licence.',
-		website: 'https://github.com/google-gemini/gemini-cli',
-		note: 'Needs Node.js. Since 18 June 2026 Google no longer serves free personal Google-account logins in it (Antigravity replaces it for that); Vader\'s Antigravity card is the one for a Google account.',
-		acp: { registryId: 'gemini', loginNote: 'Signing in with a personal Google account no longer works for the free tier; use an API key or a Code Assist licence.', authPreference: ['oauth-personal'] },
+		id: 'copilot', name: 'GitHub Copilot', kind: 'acp', logo: 'copilot',
+		tagline: 'Your GitHub Copilot plan (a free plan exists; Pro and Pro+ for more), through GitHub\'s own Copilot CLI.',
+		website: 'https://github.com/features/copilot/cli/',
+		note: 'Needs Node.js. You sign in with your GitHub account in the terminal that opens; GitHub counts the usage on your Copilot plan.',
+		acp: { registryId: 'github-copilot-cli', loginNote: 'A terminal runs GitHub\'s own "copilot login" (a code to confirm in the browser).', local: { command: 'copilot', args: ['--acp'] } },
+	},
+	{
+		id: 'mistral-vibe', name: 'Mistral Vibe', kind: 'acp', logo: 'mistral',
+		tagline: 'Your Mistral Le Chat plan (Pro or Team), through Mistral\'s own coding agent.',
+		website: 'https://mistral.ai/products/vibe',
+		note: 'You sign in with your Mistral account; Mistral counts the usage on your plan. The free plan has only limited coding access.',
+		acp: { registryId: 'mistral-vibe', loginNote: 'A browser page opens to sign in to Mistral.', authPreference: ['browser-auth'], local: { command: 'vibe-acp', args: [] }, archivePrefixes: ['https://github.com/mistralai/mistral-vibe/releases/download/'] },
+	},
+	{
+		id: 'grok-build', name: 'Grok Build', kind: 'acp', logo: 'grok',
+		tagline: 'Your SuperGrok or X Premium+ plan, through xAI\'s own coding agent.',
+		website: 'https://x.ai/cli',
+		note: 'Needs Node.js and a paid SuperGrok or X Premium+ plan (the free Grok chat does not include it). xAI has not published usage limits.',
+		acp: { registryId: 'grok-build', loginNote: 'A browser page opens to sign in with Grok.', local: { command: 'grok', args: ['agent', 'stdio'] } },
+	},
+	{
+		id: 'kimi', name: 'Kimi Code', kind: 'acp', logo: 'kimi',
+		tagline: 'Your Kimi membership (a free tier exists), through Moonshot\'s own Kimi Code CLI.',
+		website: 'https://moonshotai.github.io/kimi-cli/',
+		note: 'You sign in with your Kimi account in the terminal that opens; Moonshot counts the usage on your membership.',
+		acp: { registryId: 'kimi', loginNote: 'A terminal runs Kimi\'s own "kimi login".', local: { command: 'kimi', args: ['acp'] }, archivePrefixes: ['https://github.com/MoonshotAI/kimi-cli/releases/download/'] },
 	},
 	{
 		id: 'claude-code', name: 'Claude Code', kind: 'terminal', logo: 'claudecode',

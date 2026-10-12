@@ -36,7 +36,7 @@ import {
 } from '../common/externalAgents/externalAgentCatalog.js';
 import { acpRegistrySnapshot, RegistryDistribution } from '../common/externalAgents/acpRegistrySnapshot.js';
 import {
-	AgentConfigOption, CustomAcpAgent, ExternalAgentEvent, ExternalAgentStatus, IExternalAgentMainService, PermissionOption, ProbeResult, RunTurnParams
+	AgentConfigOption, CustomAcpAgent, ExternalAgentEvent, ExternalAgentStatus, IExternalAgentMainService, PermissionOption, ProbeResult, RunTurnParams, SignInResult
 } from '../common/externalAgents/externalAgentTypes.js';
 import { chooseAuthMethod, flattenConfigOptions, isAuthRequiredError, modesAsConfigOption, npmBinScript, pathsOfToolCall } from '../common/externalAgents/externalAgentProtocol.js';
 
@@ -177,6 +177,8 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	private readonly _opening = new Map<string, Promise<Session>>()
 	private readonly _pendingPermissions = new Map<string, { sessionKey: string, resolve: (optionId: string | null) => void }>()
 	private _live: LiveRegistry | undefined
+	/** programs found on this computer and whether they answered the protocol, by path (and the file's modification time), so a settings page opening does not start them every time */
+	private readonly _localVerified = new Map<string, { ok: boolean, version?: string, at: number, mtime: number }>()
 
 	constructor(
 		@IRequestService private readonly _requestService: IRequestService,
@@ -229,25 +231,44 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		return undefined
 	}
 
+	/**
+	 * The program a person already has on this computer for an agent (found on the PATH or in the vendor's usual folder), when it answers the protocol.
+	 * Nothing is trusted from its name alone: it is started once for a handshake, and the answer is remembered for ten minutes.
+	 */
+	private async _localProgram(def: ExternalAgentDef): Promise<{ command: string, args: string[], version?: string } | undefined> {
+		const l = def.acp?.local
+		if (!l) { return undefined }
+		const found = await findProgram(l.command, (l.candidateDirs ?? []).map(d => path.join(homeDir(), d)))
+		if (!found) { return undefined }
+		let mtime = 0
+		try { mtime = (await fs.promises.stat(found)).mtimeMs } catch { return undefined }
+		const cached = this._localVerified.get(found)
+		if (cached && cached.mtime === mtime && Date.now() - cached.at < 10 * 60_000) { return cached.ok ? { command: found, args: [...l.args], version: cached.version } : undefined }
+		const probe = await this._probeSpec(`local:${def.id}`, { command: found, args: [...l.args] }, 20_000)
+		this._localVerified.set(found, { ok: probe.ok, version: probe.agentVersion, at: Date.now(), mtime })
+		return probe.ok ? { command: found, args: [...l.args], version: probe.agentVersion } : undefined
+	}
+
 	async getStatuses(custom: readonly CustomAcpAgent[]): Promise<ExternalAgentStatus[]> {
-		const out: ExternalAgentStatus[] = []
 		const node = await this.hasNode()
-		for (const def of externalAgentCatalog) {
+		const ofDef = async (def: ExternalAgentDef): Promise<ExternalAgentStatus> => {
 			if (def.kind === 'terminal' && def.terminal) {
 				const found = await this.resolveProgram(def.terminal.command, def.terminal.candidateDirs)
-				out.push(found ? { id: def.id, state: 'ready', detail: found }
-					: def.terminal.needsNode && !node ? { id: def.id, state: 'needs-node' } : { id: def.id, state: 'not-installed' })
-				continue
+				return found ? { id: def.id, state: 'ready', detail: found }
+					: def.terminal.needsNode && !node ? { id: def.id, state: 'needs-node' } : { id: def.id, state: 'not-installed' }
 			}
 			const dist = this._distributionOfDef(def)
-			if (!dist) { out.push({ id: def.id, state: 'unsupported' }); continue }
+			if (!dist) { return { id: def.id, state: 'unsupported' } }
 			const installed = await this._installed(def)
-			const latestVersion = installed && compareVersions(dist.version, installed.version) > 0 ? dist.version : undefined
-			if (installed) { out.push({ id: def.id, state: 'ready', installedVersion: installed.version, latestVersion }); continue }
-			if (dist.distribution.npx) { out.push({ id: def.id, state: node ? 'not-installed' : 'needs-node', detail: `version ${dist.version}` }); continue }
+			if (installed) { return { id: def.id, state: 'ready', source: 'vader', installedVersion: installed.version, latestVersion: compareVersions(dist.version, installed.version) > 0 ? dist.version : undefined } }
+			// not downloaded by Vader: a program the person already has is used as it is, so there is nothing to download
+			const local = await this._localProgram(def)
+			if (local) { return { id: def.id, state: 'ready', source: 'local', installedVersion: local.version, detail: local.command } }
+			if (dist.distribution.npx) { return { id: def.id, state: node ? 'not-installed' : 'needs-node', detail: `version ${dist.version}` } }
 			const key = platformKeyOf(process.platform, process.arch)
-			out.push(key && dist.distribution.binary?.[key] ? { id: def.id, state: 'not-installed', detail: `version ${dist.version}` } : { id: def.id, state: 'unsupported' })
+			return key && dist.distribution.binary?.[key] ? { id: def.id, state: 'not-installed', detail: `version ${dist.version}` } : { id: def.id, state: 'unsupported' }
 		}
+		const out = await Promise.all(externalAgentCatalog.map(ofDef))
 		for (const c of custom) {
 			const found = await findProgram(c.command, [])
 			out.push(found ? { id: c.id, state: 'ready', detail: found } : { id: c.id, state: 'missing-command', detail: c.command })
@@ -277,7 +298,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		const dist = this._distributionOfDef(def)
 		if (!dist) { throw new Error(`No download is known for ${def.name}.`) }
 		const existing = await this._installed(def)
-		if (existing && compareVersions(existing.version, dist.version) >= 0) { return { id: agentId, state: 'ready', installedVersion: existing.version } }
+		if (existing && compareVersions(existing.version, dist.version) >= 0) { return { id: agentId, state: 'ready', source: 'vader', installedVersion: existing.version } }
 
 		const root = path.join(agentsDir(), def.id)
 		const dir = path.join(root, dist.version)
@@ -289,7 +310,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			// only now are older versions removed: a failed update leaves the working one in place
 			for (const other of await fs.promises.readdir(root)) { if (other !== dist.version) { await fs.promises.rm(path.join(root, other), { recursive: true, force: true }).catch(() => { }) } }
 			this._progress(agentId, 'Installed.')
-			return { id: agentId, state: 'ready', installedVersion: dist.version }
+			return { id: agentId, state: 'ready', source: 'vader', installedVersion: dist.version }
 		} catch (e) {
 			await fs.promises.rm(dir, { recursive: true, force: true }).catch(() => { })
 			throw e
@@ -404,7 +425,11 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		const def = externalAgentById(agentId)
 		if (!def?.acp) { throw new Error(`Vader does not know an agent called "${agentId}".`) }
 		const installed = await this._installed(def)
-		if (!installed) { throw new Error(`${def.name} has not been downloaded yet. Use "Download" on its card in Settings > Coding Agents.`) }
+		if (!installed) {
+			const local = await this._localProgram(def)
+			if (local) { return { command: local.command, args: local.args } }
+			throw new Error(`${def.name} is not installed yet. Use "Install" on its card in Settings > Coding Agents.`)
+		}
 		const script = path.join(installed.dir, installed.command)
 		if (installed.kind === 'npm') {
 			const node = await findProgram('node', [])
@@ -419,7 +444,12 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		this._emit({ sessionKey: key, type: 'status', message: 'Starting the agent...' })
 		const stderr = { text: '' }
 		// POSIX: its own process group, so that stopping it also stops what it started
-		const proc = spawn(spec.command, spec.args, { cwd, env: { ...process.env, ...spec.env }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: !IS_WINDOWS })
+		// a program the person installed with npm is a .cmd launcher on Windows, which only the command interpreter can start; every argument is a plain token from the catalog
+		const viaShell = IS_WINDOWS && /\.(cmd|bat)$/i.test(spec.command)
+		const quote = (a: string) => /[\s&()^]/.test(a) ? `"${a}"` : a
+		const proc = viaShell
+			? spawn(process.env['ComSpec'] ?? 'cmd.exe', ['/d', '/s', '/c', `"${[spec.command, ...spec.args].map(quote).join(' ')}"`], { cwd, env: { ...process.env, ...spec.env }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, windowsVerbatimArguments: true })
+			: spawn(spec.command, spec.args, { cwd, env: { ...process.env, ...spec.env }, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, detached: !IS_WINDOWS })
 		proc.stderr?.on('data', (d: Buffer) => { stderr.text = (stderr.text + d.toString()).slice(-STDERR_TAIL_BYTES) })
 		const exited = new Promise<never>((_, reject) => {
 			proc.once('error', e => reject(new Error(`Could not start "${path.basename(spec.command)}": ${e.message}`)))
@@ -452,13 +482,12 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		]).finally(() => clearTimeout(timer))
 	}
 
-	async probe(agentId: string, custom?: CustomAcpAgent): Promise<ProbeResult> {
+	private async _probeSpec(key: string, spec: LaunchSpec, timeoutMs: number): Promise<ProbeResult> {
 		const started = Date.now()
 		let launched: ReturnType<ExternalAgentMainService['_launch']> | undefined
 		try {
-			const spec = await this._launchSpec(agentId, custom)
-			launched = this._launch(`probe:${agentId}`, spec, os.tmpdir(), { onUpdate: () => { }, onPermission: async () => null })
-			const init = await this._initialize(launched.connection, launched.exited, PROBE_TIMEOUT_MS)
+			launched = this._launch(key, spec, os.tmpdir(), { onUpdate: () => { }, onPermission: async () => null })
+			const init = await this._initialize(launched.connection, launched.exited, timeoutMs)
 			const caps = init.agentCapabilities as { loadSession?: boolean, sessionCapabilities?: { resume?: unknown } } | undefined
 			return {
 				ok: true, ms: Date.now() - started, protocolVersion: init.protocolVersion,
@@ -471,6 +500,82 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			return { ok: false, ms: Date.now() - started, error: reported instanceof Error ? reported.message : String(reported) }
 		} finally {
 			if (launched) { launched.connection.close(); killTree(launched.proc) }
+		}
+	}
+
+	async probe(agentId: string, custom?: CustomAcpAgent): Promise<ProbeResult> {
+		try {
+			return await this._probeSpec(`probe:${agentId}`, await this._launchSpec(agentId, custom), PROBE_TIMEOUT_MS)
+		} catch (e) {
+			return { ok: false, error: e instanceof Error ? e.message : String(e) }
+		}
+	}
+
+	/** runs `fn` against a short-lived copy of the agent (started, handshaken, stopped), in an empty folder of its own */
+	private async _temporary<T>(key: string, agentId: string, custom: CustomAcpAgent | undefined, fn: (a: { connection: acp.ClientConnection, init: Awaited<ReturnType<ExternalAgentMainService['_initialize']>>, exited: Promise<never>, spec: LaunchSpec, cwd: string }) => Promise<T>): Promise<T> {
+		const spec = await this._launchSpec(agentId, custom)
+		const cwd = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'vader-agent-session-'))
+		const launched = this._launch(key, spec, cwd, { onUpdate: () => { }, onPermission: async () => null })
+		try {
+			const init = await this._initialize(launched.connection, launched.exited, INIT_TIMEOUT_MS)
+			return await fn({ connection: launched.connection, init, exited: launched.exited, spec, cwd })
+		} catch (e) {
+			throw (e instanceof Error && e.message === 'SIGN_IN_IN_TERMINAL') ? e : await explainedByExit(e, launched.exited)
+		} finally {
+			launched.connection.close(); killTree(launched.proc)
+			void fs.promises.rm(cwd, { recursive: true, force: true }).catch(() => { })
+		}
+	}
+
+	async checkSignIn(agentId: string, custom?: CustomAcpAgent): Promise<SignInResult> {
+		try {
+			return await this._temporary(`check:${agentId}`, agentId, custom, async ({ connection, init, exited, cwd }) => {
+				const canSignOut = !!(init.agentCapabilities as { auth?: { logout?: unknown } } | undefined)?.auth?.logout
+				try {
+					await withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), 30_000, 'The agent did not answer.')
+					return { signedIn: true, canSignOut }
+				} catch (e) {
+					if (isAuthRequiredError(e)) { return { signedIn: false, canSignOut } }
+					throw e
+				}
+			})
+		} catch (e) {
+			return { signedIn: false, error: e instanceof Error ? e.message : String(e) }
+		}
+	}
+
+	async connect(agentId: string, custom?: CustomAcpAgent): Promise<SignInResult> {
+		const def = externalAgentById(agentId)
+		const key = `connect:${agentId}`
+		const name = def?.name ?? custom?.name ?? 'The agent'
+		try {
+			return await this._temporary(key, agentId, custom, async ({ connection, init, exited, spec, cwd }) => {
+				const canSignOut = !!(init.agentCapabilities as { auth?: { logout?: unknown } } | undefined)?.auth?.logout
+				const startConversation = () => withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), 30_000, `${name} did not answer.`)
+				try { await startConversation(); return { signedIn: true, canSignOut } } catch (e) { if (!isAuthRequiredError(e)) { throw e } }
+				try {
+					await this._signIn(key, connection, init.authMethods ?? [], def?.acp?.authPreference, name, spec, exited)
+				} catch (e) {
+					if (e instanceof Error && e.message === 'SIGN_IN_IN_TERMINAL') { return { signedIn: false, inTerminal: true, canSignOut } }
+					throw e
+				}
+				await startConversation() // the sign-in is done: the agent must be able to start a conversation now
+				return { signedIn: true, canSignOut }
+			})
+		} catch (e) {
+			return { signedIn: false, error: e instanceof Error ? e.message : String(e) }
+		}
+	}
+
+	async signOut(agentId: string, custom?: CustomAcpAgent): Promise<{ done: boolean, error?: string }> {
+		try {
+			return await this._temporary(`signout:${agentId}`, agentId, custom, async ({ connection, init, exited }) => {
+				if (!(init.agentCapabilities as { auth?: { logout?: unknown } } | undefined)?.auth?.logout) { return { done: false, error: 'This agent has no sign-out of its own. Sign out with its own program.' } }
+				await Promise.race([connection.agent.request(acp.methods.agent.logout, {}), exited])
+				return { done: true }
+			})
+		} catch (e) {
+			return { done: false, error: e instanceof Error ? e.message : String(e) }
 		}
 	}
 
@@ -550,8 +655,11 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			return
 		}
 		if (choice.kind === 'terminal') {
-			const m = choice.method as unknown as { name: string, args?: string[], env?: { [k: string]: string } }
-			this._emit({ sessionKey: key, type: 'auth-terminal', methodName: m.name, command: spec.command, args: [...spec.args, ...(m.args ?? [])], env: { ...(spec.env ?? {}), ...(m.env ?? {}) } })
+			// the agent either names the program to run (an absolute path inside its own install) or means "me, with these arguments"
+			const t = choice.terminal
+			const command = t.command ?? spec.command
+			const args = t.command ? [...t.args] : [...spec.args, ...t.args]
+			this._emit({ sessionKey: key, type: 'auth-terminal', methodName: choice.method.name, command, args, env: { ...(spec.env ?? {}), ...t.env } })
 			throw new Error('SIGN_IN_IN_TERMINAL')
 		}
 		throw new Error(`${name} needs you to sign in, but the only ways it offers need a key or a cloud setting (${choice.offered.join(', ')}). Sign in once with the vendor's own program, then try again.`)

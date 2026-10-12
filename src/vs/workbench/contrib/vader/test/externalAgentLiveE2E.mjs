@@ -3,10 +3,10 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-// The real vendor programs, not a stand-in: installs Gemini CLI and Codex (npm) and OpenCode (a GitHub release binary) the way the Settings page does,
+// The real vendor programs, not a stand-in: installs Codex, GitHub Copilot and Grok Build (npm) and OpenCode, Mistral Vibe and Kimi (GitHub release binaries) the way the Settings page does,
 // starts each one, does the protocol handshake and checks what they answer. Needs the network (npm registry, GitHub releases) and runs in a throw-away
 // home folder; nothing is signed in and no message is sent to a model. Run it before a release and whenever a vendor ships a new version:
-//   node src/vs/workbench/contrib/vader/test/externalAgentLiveE2E.mjs [gemini] [codex] [opencode]
+//   node src/vs/workbench/contrib/vader/test/externalAgentLiveE2E.mjs [codex] [opencode] [copilot] [mistral-vibe] [grok-build] [kimi] [local]
 // Agents whose download host cannot be reached from this machine (Cursor, Antigravity) are reported as skipped.
 
 import { createRequire } from 'node:module';
@@ -66,27 +66,43 @@ const want = (id) => wanted.size === 0 || wanted.has(id);
 const reachable = async (url) => { try { const r = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(15_000) }); return r.status < 500; } catch { return false; } };
 
 try {
-	// ---------- Gemini CLI (npm) ----------
-	if (want('gemini')) {
+	// ---------- the four agents added in the last round: install, start, handshake, what they offer to sign in with ----------
+	const generic = {
+		'copilot': { name: /copilot/i, auth: (ids) => ids.includes('copilot-login'), choice: (c) => c.kind === 'terminal' && !!c.terminal.command && c.terminal.args[0] === 'login' },
+		'mistral-vibe': { name: /vibe|mistral/i, auth: (ids) => ids.includes('browser-auth'), choice: (c) => c.kind === 'agent' && c.method.id === 'browser-auth' },
+		'grok-build': { name: /grok/i, auth: (ids) => ids.length > 0, choice: (c) => c.kind === 'agent' },
+		'kimi': { name: /kimi/i, auth: (ids) => ids.includes('login'), choice: (c) => c.kind === 'terminal' && !!c.terminal.command && c.terminal.args[0] === 'login' },
+	};
+	for (const [id, expect] of Object.entries(generic)) {
+		if (!want(id)) { continue; }
+		const def = m.externalAgentById(id);
+		const dist = m.distributionOf(def);
+		const key = m.platformKeyOf(process.platform, process.arch);
+		const url = dist.distribution.binary?.[key]?.archive;
+		if (url && !(await reachable(url))) { skip(id, 'its download host cannot be reached from this machine'); continue; }
 		const t0 = Date.now();
-		let before = (await svc.getStatuses([])).find(s => s.id === 'gemini');
-		check('gemini: starts out not installed', before?.state === 'not-installed', JSON.stringify(before));
-		const installed = await svc.install('gemini');
-		check('gemini: the npm install succeeds and reports its version', installed.state === 'ready' && !!installed.installedVersion, JSON.stringify(installed));
-		check('gemini: install progress is reported', statusEvents.some(e => e.sessionKey === 'install:gemini' && /npm/.test(e.message)));
+		const installed = await svc.install(id);
+		check(`${id}: the install succeeds`, installed.state === 'ready' && installed.source === 'vader', JSON.stringify(installed));
 		console.log(`  (install took ${((Date.now() - t0) / 1000).toFixed(1)}s)`);
-		const probe = await svc.probe('gemini');
-		check('gemini: the real program starts and answers the handshake', probe.ok === true && probe.protocolVersion === 1, JSON.stringify(probe));
-		check('gemini: it says what it is', /gemini/i.test(probe.agentName ?? '') && !!probe.agentVersion, JSON.stringify(probe));
-		check('gemini: it offers "Log in with Google"', probe.authMethods?.some(a => a.id === 'oauth-personal'), JSON.stringify(probe.authMethods));
-		check('gemini: it can resume a conversation', probe.canResume === true);
-		check('gemini: the handshake is fast once installed (no registry lookup)', probe.ms < 15_000, `${probe.ms} ms`);
-		const choice = m.chooseAuthMethod((probe.authMethods ?? []).map(a => ({ id: a.id, name: a.name })), m.externalAgentById('gemini').acp.authPreference);
-		check('gemini: the sign-in Vader would use is the Google account one', choice.kind === 'agent' && choice.method.id === 'oauth-personal', JSON.stringify(choice));
-		const status = (await svc.getStatuses([])).find(s => s.id === 'gemini');
-		check('gemini: the card state is ready with the installed version', status?.state === 'ready' && status.installedVersion === installed.installedVersion, JSON.stringify(status));
-		const removed = await svc.uninstall('gemini');
-		check('gemini: uninstall removes it', removed.state === 'not-installed' && (await svc.getStatuses([])).find(s => s.id === 'gemini')?.state === 'not-installed');
+		const probe = await svc.probe(id);
+		check(`${id}: the real program starts and answers the handshake`, probe.ok === true && probe.protocolVersion === 1, JSON.stringify(probe));
+		check(`${id}: it says what it is (Grok's handshake carries no name: its id then)`, expect.name.test(probe.agentName ?? id), JSON.stringify(probe));
+		const ids = (probe.authMethods ?? []).map(a => a.id);
+		check(`${id}: it offers the sign-in Vader expects`, expect.auth(ids), ids.join(','));
+		// the sign-in choice is made from the agent's own, complete answer (the probe keeps only ids and names, so ask the program again here)
+		const spec = await svc._launchSpec(id, undefined);
+		const init = await new Promise((resolve) => {
+			const { spawn } = require('node:child_process');
+			const p = spawn(spec.command, spec.args, { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ...spec.env } });
+			let buf = ''; p.stdout.on('data', d => { buf += d; const i = buf.indexOf('\n'); if (i >= 0) { try { resolve(JSON.parse(buf.slice(0, i)).result); } catch { resolve(undefined); } p.kill('SIGKILL'); } });
+			p.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, auth: { terminal: true } } } }) + '\n');
+			setTimeout(() => { p.kill('SIGKILL'); resolve(undefined); }, 30000);
+		});
+		const choice = m.chooseAuthMethod(init?.authMethods ?? [], def.acp.authPreference);
+		check(`${id}: Vader's sign-in choice for it is the account one`, expect.choice(choice), JSON.stringify(choice).slice(0, 300));
+		const signIn = await svc.checkSignIn(id);
+		check(`${id}: asked without a sign-in it says it is not signed in (and nothing is changed)`, signIn.signedIn === false && !signIn.error, JSON.stringify(signIn));
+		await svc.uninstall(id);
 	}
 
 	// ---------- Codex (npm, adapter + the platform build of Codex itself) ----------
@@ -103,6 +119,8 @@ try {
 		const guessed = m.chooseAuthMethod([{ id: 'api-key', name: 'API Key', _meta: { 'api-key': { provider: 'openai' } } }, { id: 'chat-gpt', name: 'ChatGPT' }]);
 		check('codex: even without the catalog hint, a method that needs a key is never picked by default', guessed.kind === 'agent' && guessed.method.id === 'chat-gpt', JSON.stringify(guessed));
 		check('codex: it can resume a conversation', probe.canResume === true);
+		const codexSign = await svc.checkSignIn('codex');
+		check('codex: without a ChatGPT sign-in it reports "not signed in"', codexSign.signedIn === false && !codexSign.error, JSON.stringify(codexSign));
 		// the sign-in is started with the right method (the person would complete it in the browser; here it is cancelled after it began)
 		const events = [];
 		const off = svc.onEvent(e => events.push(e));
@@ -133,6 +151,8 @@ try {
 			check('opencode: it offers a sign-in method', (probe.authMethods ?? []).length > 0, JSON.stringify(probe.authMethods));
 			const manifest = path.join(tmp, '.vader-editor', 'agents', 'opencode', installed.installedVersion, 'manifest.json');
 			check('opencode: the install is described by a manifest the launcher reads', fs.existsSync(manifest) && JSON.parse(fs.readFileSync(manifest, 'utf8')).args.includes('acp'));
+			const signIn = await svc.checkSignIn('opencode');
+			check('opencode: it can start a conversation without a sign-in (its free models), so it counts as connected', signIn.signedIn === true, JSON.stringify(signIn));
 			// a corrupted download must be refused: the same service, a registry whose checksum is wrong
 			await svc.uninstall('opencode');
 			const tampered = JSON.parse(JSON.stringify(m.acpRegistrySnapshot));
@@ -143,6 +163,34 @@ try {
 			const error = await bad.install('opencode').then(() => '', e => String(e.message));
 			check('opencode: a download whose checksum does not match is refused and leaves nothing behind', /checksum/.test(error) && (await svc.getStatuses([])).find(s => s.id === 'opencode')?.state === 'not-installed', error);
 			bad.dispose();
+		}
+	}
+
+	// ---------- a program the person already has (here: the real OpenCode, put on the PATH the way a person's own install would be) ----------
+	if (want('local')) {
+		const url = 'https://github.com/anomalyco/opencode/releases/download/v1.19.0/opencode-linux-x64.tar.gz';
+		if (process.platform !== 'linux' || !(await reachable(url))) { skip('local', 'needs Linux and the GitHub release downloads'); }
+		else {
+			const own = fs.mkdtempSync(path.join(tmp, 'own-opencode-'));
+			const res = await fetch(url, { redirect: 'follow' });
+			fs.writeFileSync(path.join(own, 'o.tgz'), Buffer.from(await res.arrayBuffer()));
+			require('node:child_process').execFileSync('tar', ['-xzf', path.join(own, 'o.tgz'), '-C', own]);
+			const oldPath = process.env.PATH; process.env.PATH = own + path.delimiter + oldPath;
+			try {
+				const before = (await svc.getStatuses([])).find(s => s.id === 'opencode');
+				check('local: the real OpenCode the person already has is found, verified with a handshake and ready, with nothing downloaded', before?.state === 'ready' && before.source === 'local' && /1\.19/.test(before.installedVersion ?? ''), JSON.stringify(before));
+				const ocDir = path.join(tmp, '.vader-editor', 'agents', 'opencode');
+				check('local: nothing was written to Vader\'s own agents folder', !fs.existsSync(ocDir) || fs.readdirSync(ocDir).length === 0);
+				const sign = await svc.checkSignIn('opencode');
+				check('local: its sign-in state comes from the program itself', sign.signedIn === true, JSON.stringify(sign));
+				const work = fs.mkdtempSync(path.join(tmp, 'work-'));
+				const events = []; const off = svc.onEvent(e => events.push(e));
+				const turn = await svc.runTurn({ sessionKey: 'live-local', agentId: 'opencode', cwd: work, text: 'hello' }).then(r => r, e => e);
+				off.dispose();
+				const sess = events.find(e => e.type === 'session');
+				check('local: a conversation can be started on it (the model list it offers comes from the program)', !!sess && events.some(e => e.type === 'config' && e.options.some(o => o.id === 'model' && o.choices.length > 0)), JSON.stringify(events.map(e => e.type)));
+				void turn; await svc.closeSession('live-local');
+			} finally { process.env.PATH = oldPath; }
 		}
 	}
 

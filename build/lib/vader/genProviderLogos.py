@@ -50,7 +50,7 @@ SRC = {
 
 # the coding agents of Settings > Models > External agents -> source (written to their own file, common/externalAgents/agentLogoData.ts)
 AGENT_SRC = {
-  'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'gemini': ('lobe', 'geminicli'),
+  'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'copilot': ('lobe', 'githubcopilot'), 'mistral': ('lobe', 'mistral'), 'grok': ('lobe', 'grok'), 'kimi': ('lobe', 'kimi'),
   'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
 }
 

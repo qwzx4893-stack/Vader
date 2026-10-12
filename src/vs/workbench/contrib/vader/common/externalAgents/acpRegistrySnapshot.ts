@@ -124,17 +124,6 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 			}
 		}
 	},
-	"gemini": {
-		"version": "0.63.0",
-		"distribution": {
-			"npx": {
-				"package": "@google/gemini-cli@0.63.0",
-				"args": [
-					"--acp"
-				]
-			}
-		}
-	},
 	"antigravity-acp": {
 		"version": "1.3.0",
 		"distribution": {
@@ -168,6 +157,108 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 				"windows-aarch64": {
 					"archive": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.3.0-windows-arm64.zip",
 					"cmd": "./agy_acp_server.exe"
+				}
+			}
+		}
+	},
+	"github-copilot-cli": {
+		"version": "1.0.95",
+		"distribution": {
+			"npx": {
+				"package": "@github/copilot@1.0.95",
+				"args": [
+					"--acp"
+				]
+			}
+		}
+	},
+	"mistral-vibe": {
+		"version": "2.26.1",
+		"distribution": {
+			"binary": {
+				"darwin-aarch64": {
+					"archive": "https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-darwin-aarch64-2.26.1.tar.gz",
+					"cmd": "./vibe-acp",
+					"sha256": "4035a97f3bf99d91589ae4b5399438fb417f6b72511a995c7c363ec4b468f10a"
+				},
+				"darwin-x86_64": {
+					"archive": "https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-darwin-x86_64-2.26.1.tar.gz",
+					"cmd": "./vibe-acp",
+					"sha256": "3acfc454ffc248826a05333e1cb2467c465308639bbba6725b47384dc9e8f757"
+				},
+				"linux-aarch64": {
+					"archive": "https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-linux-aarch64-2.26.1.tar.gz",
+					"cmd": "./vibe-acp",
+					"sha256": "147ce53d0d185148ac269e23ff285eb087167077ba00d7c9ff41492c647ad2c6"
+				},
+				"linux-x86_64": {
+					"archive": "https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-linux-x86_64-2.26.1.tar.gz",
+					"cmd": "./vibe-acp",
+					"sha256": "c8a018ca7d02eed5cebf291f6bcce1744e44323ff774b1c3fceac13794a95634"
+				},
+				"windows-x86_64": {
+					"archive": "https://github.com/mistralai/mistral-vibe/releases/download/v2.26.1/vibe-acp-windows-x86_64-2.26.1.zip",
+					"cmd": "./vibe-acp.exe",
+					"sha256": "fd192698e396470f478adda5ce57cd8fd58927a2cd5e35ec1055c7c55089d370"
+				}
+			}
+		}
+	},
+	"grok-build": {
+		"version": "1.0.52",
+		"distribution": {
+			"npx": {
+				"package": "@xai-official/grok@1.0.52",
+				"args": [
+					"agent",
+					"stdio"
+				]
+			}
+		}
+	},
+	"kimi": {
+		"version": "1.52.0",
+		"distribution": {
+			"binary": {
+				"darwin-aarch64": {
+					"archive": "https://github.com/MoonshotAI/kimi-cli/releases/download/1.52.0/kimi-1.52.0-aarch64-apple-darwin.tar.gz",
+					"cmd": "./kimi",
+					"args": [
+						"acp"
+					],
+					"sha256": "43fe091f70bbf8860974200f9021a05689a020857cc9926d56f1505f0d0d5cb8"
+				},
+				"linux-aarch64": {
+					"archive": "https://github.com/MoonshotAI/kimi-cli/releases/download/1.52.0/kimi-1.52.0-aarch64-unknown-linux-gnu.tar.gz",
+					"cmd": "./kimi",
+					"args": [
+						"acp"
+					],
+					"sha256": "9e06eea96273600aed485b1f0bedda95b7084db4f22cf28614fe20138933507a"
+				},
+				"linux-x86_64": {
+					"archive": "https://github.com/MoonshotAI/kimi-cli/releases/download/1.52.0/kimi-1.52.0-x86_64-unknown-linux-gnu.tar.gz",
+					"cmd": "./kimi",
+					"args": [
+						"acp"
+					],
+					"sha256": "a676204f7804ed5dae87652a9d66f578e0718d5026c9cb1bfa32b9a5eace4208"
+				},
+				"windows-aarch64": {
+					"archive": "https://github.com/MoonshotAI/kimi-cli/releases/download/1.52.0/kimi-1.52.0-aarch64-pc-windows-msvc.zip",
+					"cmd": "./kimi.exe",
+					"args": [
+						"acp"
+					],
+					"sha256": "7c77cd413e7a3a59416c171a45ee4ff50534869b331469138aad84b9e3acb6c0"
+				},
+				"windows-x86_64": {
+					"archive": "https://github.com/MoonshotAI/kimi-cli/releases/download/1.52.0/kimi-1.52.0-x86_64-pc-windows-msvc.zip",
+					"cmd": "./kimi.exe",
+					"args": [
+						"acp"
+					],
+					"sha256": "2c269e15e152b9f28ac1556795280f90a2c9860ff44c60c628c3fce4dd4c58a7"
 				}
 			}
 		}

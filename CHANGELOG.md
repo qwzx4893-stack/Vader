@@ -2,6 +2,11 @@
 
 ## Unreleased - Coding agents you already have an account with
 
+- **Connect, not download.** A program the person already has (OpenCode, Cursor, Copilot, Mistral Vibe, Grok, Kimi) is found, verified with a protocol handshake and used as it is: no download, the sign-in it holds counts. Each agent card has one primary
+  action: Install -> **Connect** (the vendor's own sign-in page, or its own login in a terminal) -> Use in the chat, with Test connection / Sign out / Remove under "More". Whether an agent is signed in is asked from the agent itself.
+- **Four agents added** (Copilot CLI, Mistral Vibe, Grok Build, Kimi Code, each started and handshaken for real in `externalAgentLiveE2E`) and **Gemini CLI removed** (Google ended its free personal login on 18 June 2026). The terminal logins that Copilot and Kimi describe
+  in `_meta["terminal-auth"]` are supported.
+
 - **Settings > Models > Coding Agents** (`docs/integrations/external-agents.md`): use the subscription or free tier you already have with Codex, Cursor,
   OpenCode, Gemini CLI and Antigravity inside Vader's chat (Agent Client Protocol; the vendor's own program does the work and the sign-in, Vader never sees a
   token), and open Claude Code and Freebuff in a Vader terminal exactly as the vendors ship them (Anthropic allows its subscription only in its own unmodified

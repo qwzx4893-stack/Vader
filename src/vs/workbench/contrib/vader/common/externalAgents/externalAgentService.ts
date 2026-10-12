@@ -23,6 +23,9 @@ export class ExternalAgentService implements IExternalAgentMainService {
 	getStatuses: IExternalAgentMainService['getStatuses'] = (custom) => this._main.getStatuses(custom);
 	install: IExternalAgentMainService['install'] = (id) => this._main.install(id);
 	uninstall: IExternalAgentMainService['uninstall'] = (id) => this._main.uninstall(id);
+	checkSignIn: IExternalAgentMainService['checkSignIn'] = (id, c) => this._main.checkSignIn(id, c);
+	connect: IExternalAgentMainService['connect'] = (id, c) => this._main.connect(id, c);
+	signOut: IExternalAgentMainService['signOut'] = (id, c) => this._main.signOut(id, c);
 	probe: IExternalAgentMainService['probe'] = (id, c) => this._main.probe(id, c);
 	setConfigOption: IExternalAgentMainService['setConfigOption'] = (k, o, v) => this._main.setConfigOption(k, o, v);
 	checkRegistry: IExternalAgentMainService['checkRegistry'] = () => this._main.checkRegistry();

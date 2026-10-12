@@ -54,8 +54,8 @@ const addFake = async (t, name, mode) => {
 };
 const useInChat = async (t, id) => {
 	await openAgentsTab(t);
-	await t.waitFor(async () => (await card(t, id).innerText().catch(() => '')).includes('Ready'), 20_000);
-	await card(t, id).getByRole('button', { name: 'Use in the chat' }).click();
+	await t.waitFor(async () => /Connected|Ready/.test(await card(t, id).innerText().catch(() => '')), 20_000);
+	await card(t, id).getByRole('button', { name: 'Use in the chat', exact: true }).click();
 };
 const cleanUp = async (t, id) => {
 	await openAgentsTab(t);
@@ -68,18 +68,26 @@ export const externalAgentScenarios = [
 		name: 'external agents: every agent has a card with its logo, and the terminal ones offer install / open',
 		fn: async (t) => {
 			await openAgentsTab(t);
-			const ids = ['codex', 'opencode', 'cursor', 'gemini', 'claude-code', 'antigravity', 'freebuff'];
+			const ids = ['codex', 'opencode', 'cursor', 'copilot', 'mistral-vibe', 'grok-build', 'kimi', 'claude-code', 'antigravity', 'freebuff'];
 			for (const id of ids) { t.check(`the ${id} card is shown`, await card(t, id).isVisible().catch(() => false)); }
 			t.check('each card shows a logo', (await section(t).locator('[data-agent-logo]').count()) >= ids.length, String(await section(t).locator('[data-agent-logo]').count()));
 			t.check('the card text says whose account is used and who counts the usage', /OpenAI/.test(await card(t, 'codex').innerText()) && /Anthropic/.test(await card(t, 'claude-code').innerText()));
 			t.check('the Claude Code card says it runs unchanged in a terminal and is not wired into the chat', /unmodified Claude Code/.test(await card(t, 'claude-code').innerText()));
 			await t.waitFor(async () => !/Checking/.test(await card(t, 'claude-code').innerText()), 15_000);
 			const cc = await card(t, 'claude-code').innerText();
-			t.check('a terminal agent that is not installed offers Install and not "Use in the chat"', /Install/.test(cc) && !/Use in the chat/.test(cc), cc);
-			t.check('a terminal agent can never be chosen for the chat', (await section(t).getByRole('button', { name: 'Use in the chat' }).count()) === 0 || !(await card(t, 'freebuff').innerText()).includes('Use in the chat'));
+			t.check('a terminal agent that is installed offers "Connect" (its own sign-in) and never "Use in the chat"', /Connect/.test(cc) && !/Use in the chat/.test(cc) && !/\bInstall\b/.test(cc), cc);
+			const codexText = await card(t, 'codex').innerText();
+			t.check('an agent that is not on this computer offers "Install", not "Download", and no sign-in yet', /Install/.test(codexText) && !/Download/.test(codexText) && !/Connect/.test(codexText), codexText);
+			t.check('Gemini CLI is no longer offered (its free personal login ended)', !(await card(t, 'gemini').isVisible().catch(() => false)));
+			const buttons = async (id) => (await card(t, id).getByRole('button').allInnerTexts()).map(x => x.trim());
+			t.check('a card that is not installed has exactly two buttons: Install and Website', (await buttons('mistral-vibe')).join('|') === 'Install|Website', (await buttons('mistral-vibe')).join('|'));
+			t.check('a terminal agent can never be chosen for the chat', (await section(t).getByRole('button', { name: 'Use in the chat', exact: true }).count()) === 0 || !(await card(t, 'freebuff').innerText()).includes('Use in the chat'));
 			await t.page.locator('main').first().evaluate(e => { e.scrollTop = 0; }).catch(() => { });
 			await t.sleep(300);
 			await t.shot('external-agents-settings');
+			await t.page.locator('main').first().evaluate(e => { e.scrollTop = Math.floor(e.scrollHeight / 3); }).catch(() => { });
+			await t.sleep(300);
+			await t.shot('external-agents-settings-middle');
 			await t.page.locator('main').first().evaluate(e => { e.scrollTop = e.scrollHeight; }).catch(() => { });
 			await t.sleep(300);
 			await t.shot('external-agents-settings-bottom');
@@ -141,12 +149,12 @@ export const externalAgentScenarios = [
 		timeout: 150_000,
 		fn: async (t) => {
 			const id = await addFake(t, 'Resumable Agent', 'resumable');
-			await t.waitFor(async () => (await card(t, id).innerText().catch(() => '')).includes('Ready'), 20_000);
-			await card(t, id).getByRole('button', { name: 'Test connection' }).click();
+			await t.waitFor(async () => /Connected|Ready/.test(await card(t, id).innerText().catch(() => '')), 20_000);
+			await card(t, id).getByRole('button', { name: 'Test connection', exact: true }).click();
 			const probe = t.page.locator(`[data-testid="vader-external-agent-${id}-probe"]`);
 			t.check('"Test connection" starts the program and reports what answered', await probe.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false) && /Works: Fake Agent 9\.9\.9/.test(await probe.innerText()), await probe.innerText().catch(() => ''));
 			t.check('it also says the conversation can be continued after a restart', /continue a conversation after a restart/.test(await probe.innerText().catch(() => '')));
-			await card(t, id).getByRole('button', { name: 'Use in the chat' }).click();
+			await card(t, id).getByRole('button', { name: 'Use in the chat', exact: true }).click();
 			await closeSettings(t);
 
 			await t.ui.newThread(t.page);
@@ -173,6 +181,29 @@ export const externalAgentScenarios = [
 				t.check('the new process picked the same conversation up again (its turn counter continued)', /resumed=S-\d+/.test(all) && all.includes('turn 6'), all);
 				t.check('no "started a new conversation" notice, because nothing was lost', !/started a new conversation/.test(all), all);
 			}
+			await cleanUp(t, id);
+			await closeSettings(t);
+		},
+	},
+	{
+		name: 'external agents: an agent that is not signed in shows "Connect"; connecting signs in through the agent\'s own flow and the card turns to "Connected"',
+		timeout: 120_000,
+		fn: async (t) => {
+			const authFile = path.join(t.app.userDataDir, 'fake-agent.cred');
+			await useCustomDialogs(t);
+			await openAgentsTab(t);
+			const custom = t.page.locator('[data-testid="vader-external-agent-custom"]');
+			await custom.locator('input[placeholder="Name"]').fill('Connect Agent');
+			await custom.locator('input[placeholder^="Program"]').fill(process.execPath);
+			await custom.locator('input[placeholder^="Arguments"]').fill(`${FAKE} logout-agent ${authFile}`);
+			await custom.getByRole('button', { name: 'Add', exact: true }).click();
+			await dialogButton(t, 'Add');
+			const id = 'custom-connect-agent';
+			t.check('before signing in the card says "Not connected" and offers Connect (and no way to use it yet)', await t.waitFor(async () => /Not connected/.test(await card(t, id).innerText().catch(() => '')), 30_000) && await card(t, id).getByRole('button', { name: 'Connect', exact: true }).isVisible() && !(await card(t, id).getByRole('button', { name: 'Use in the chat', exact: true }).count()), await card(t, id).innerText().catch(() => ''));
+			await card(t, id).getByRole('button', { name: 'Connect', exact: true }).click();
+			t.check('after Connect the card says "Connected" and the sign-in is stored by the agent, not by Vader', await t.waitFor(async () => /Connected/.test(await card(t, id).innerText().catch(() => '')) && fs.existsSync(authFile), 30_000), await card(t, id).innerText().catch(() => ''));
+			t.check('"Use in the chat" is offered now', await card(t, id).getByRole('button', { name: 'Use in the chat', exact: true }).isVisible());
+			await t.shot('external-agents-connected');
 			await cleanUp(t, id);
 			await closeSettings(t);
 		},

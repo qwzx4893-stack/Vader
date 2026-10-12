@@ -2,10 +2,10 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-// The renderer's side of "bring your own coding agent": what is installed, the install / test / remove / open actions behind the cards in
-// Settings > Coding Agents, what each chat's agent offers (model, mode), and the small helpers the chat uses. The work itself (downloading, starting
-// the agent, the protocol) is in the main process, electron-main/externalAgentMainService.ts; installs of terminal programs run in a visible terminal so
-// the person sees every line.
+// The renderer's side of "bring your own coding agent": what is installed (or already on this computer), whether each agent is signed in, the
+// Install / Connect / Sign out / Test / Remove actions behind the cards in Settings > Coding Agents, what each chat's agent offers (model, mode), and
+// the small helpers the chat uses. The work itself (downloading, starting the agent, the protocol) is in the main process,
+// electron-main/externalAgentMainService.ts; installs and logins that need a terminal run in a visible one so the person sees every line.
 
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { Disposable } from '../../../../../base/common/lifecycle.js';
@@ -13,21 +13,28 @@ import { isWindows } from '../../../../../base/common/platform.js';
 import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.js';
+import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { IVaderSettingsService } from '../../common/vaderSettingsService.js';
 import { distributionOf, ExternalAgentDef, externalAgentById } from '../../common/externalAgents/externalAgentCatalog.js';
 import { AgentConfigOption, CustomAcpAgent, ExternalAgentStatus, IExternalAgentMainService, ProbeResult } from '../../common/externalAgents/externalAgentTypes.js';
 import { ITerminalToolService } from '../terminalToolService.js';
 
+/** whether an agent is signed in with the vendor: `checking` while it is being asked, `unknown` when it could not be asked */
+export type SignInState = { readonly state: 'checking' | 'in' | 'out' | 'unknown', readonly canSignOut?: boolean, readonly error?: string }
+
 export type ExternalAgentsState = {
 	readonly statuses: { readonly [id: string]: ExternalAgentStatus | undefined }
-	/** what is happening to an agent right now ("Downloading... 40%"), by id */
+	/** what is happening to an agent right now ("Downloading... 40%", "Connecting..."), by id */
 	readonly busy: { readonly [id: string]: string | undefined }
 	readonly errors: { readonly [id: string]: string | undefined }
 	/** the result of "Test connection", by id */
 	readonly probes: { readonly [id: string]: ProbeResult | undefined }
+	readonly signIn: { readonly [id: string]: SignInState | undefined }
 	/** what the agent of a chat offers (its model, its mode), by thread id */
 	readonly configOfThread: { readonly [threadId: string]: readonly AgentConfigOption[] | undefined }
+	/** terminal agents the person has already opened once from here (the button then says "Open" instead of "Connect") */
+	readonly opened: { readonly [id: string]: boolean | undefined }
 }
 
 export interface IExternalAgentsService {
@@ -35,11 +42,16 @@ export interface IExternalAgentsService {
 	readonly onDidChange: Event<void>;
 	readonly state: ExternalAgentsState;
 
+	/** reads what is installed or already on this computer, then (in the background) which agents are signed in */
 	refresh(): Promise<void>;
 	/** shows what will be downloaded and from where, then downloads an ACP agent, or runs a terminal agent's installer in a terminal */
 	install(agentId: string): Promise<void>;
 	/** after asking: deletes a downloaded agent */
 	uninstall(agentId: string): Promise<void>;
+	/** signs in with the vendor: its own page opens (or its own login runs in a terminal) and the card turns to "Connected" when it is done */
+	connect(agentId: string): Promise<void>;
+	/** signs out through the agent's own `logout` */
+	signOut(agentId: string): Promise<void>;
 	/** starts the agent, does the handshake and stops it: shows that it works and what it offers, without signing in */
 	testConnection(agentId: string): Promise<void>;
 	/** a terminal agent: starts its official program in a Vader terminal, where it asks the person to sign in the first time */
@@ -61,6 +73,9 @@ export const IExternalAgentsService = createDecorator<IExternalAgentsService>('v
 
 const POLL_MS = 3000
 const POLL_LIMIT_MS = 10 * 60_000
+const SIGN_IN_POLL_MS = 4000
+const SIGN_IN_POLL_LIMIT_MS = 5 * 60_000
+const OPENED_KEY = 'vader.externalAgents.openedTerminal'
 const messageOf = (e: unknown) => e instanceof Error ? e.message : String(e)
 
 class ExternalAgentsService extends Disposable implements IExternalAgentsService {
@@ -68,7 +83,9 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	private readonly _onDidChange = this._register(new Emitter<void>());
 	readonly onDidChange = this._onDidChange.event;
 
-	state: ExternalAgentsState = { statuses: {}, busy: {}, errors: {}, probes: {}, configOfThread: {} };
+	state: ExternalAgentsState = { statuses: {}, busy: {}, errors: {}, probes: {}, signIn: {}, configOfThread: {}, opened: {} };
+	private readonly _signInCheckedAt = new Map<string, number>()
+	private _refreshing: Promise<void> | undefined
 
 	constructor(
 		@IExternalAgentMainService private readonly _main: IExternalAgentMainService,
@@ -76,16 +93,25 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 		@ITerminalToolService private readonly _terminals: ITerminalToolService,
 		@IWorkspaceContextService private readonly _workspace: IWorkspaceContextService,
 		@IDialogService private readonly _dialogs: IDialogService,
+		@IStorageService private readonly _storage: IStorageService,
 	) {
 		super()
 		this._register(this._settings.onDidChangeState(() => this._onDidChange.fire()))
+		let opened: { [id: string]: boolean } = {}
+		try { opened = JSON.parse(this._storage.get(OPENED_KEY, StorageScope.APPLICATION, '{}')) } catch { /* nothing remembered */ }
+		this.state = { ...this.state, opened }
 		this._register(this._main.onEvent(e => {
-			if (e.type === 'status' && e.sessionKey.startsWith('install:')) { this._patch('busy', e.sessionKey.slice('install:'.length), e.message) }
+			if (e.type === 'status' && (e.sessionKey.startsWith('install:') || e.sessionKey.startsWith('connect:'))) { this._patch('busy', e.sessionKey.slice(e.sessionKey.indexOf(':') + 1), e.message) }
+			else if (e.type === 'auth-terminal' && e.sessionKey.startsWith('connect:')) {
+				const id = e.sessionKey.slice('connect:'.length)
+				const name = externalAgentById(id)?.name ?? this.customAgents().find(c => c.id === id)?.name ?? id
+				void this.openSignInTerminal(name, e.command, e.args, e.env).catch(err => this._patch('errors', id, messageOf(err)))
+			}
 			else if (e.type === 'config') { this.state = { ...this.state, configOfThread: { ...this.state.configOfThread, [e.sessionKey]: e.options } }; this._onDidChange.fire() }
 		}))
 	}
 
-	private _patch(key: 'busy' | 'errors' | 'probes', id: string, value: string | ProbeResult | undefined) {
+	private _patch(key: 'busy' | 'errors' | 'probes' | 'signIn', id: string, value: string | ProbeResult | SignInState | undefined) {
 		this.state = { ...this.state, [key]: { ...this.state[key], [id]: value } }
 		this._onDidChange.fire()
 	}
@@ -104,15 +130,46 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 		return externalAgentById(id)?.name ?? this.customAgents().find(c => c.id === id)?.name ?? null
 	}
 
-	async refresh(): Promise<void> {
+	refresh(): Promise<void> {
+		// opening the page twice quickly asks once
+		this._refreshing ??= this._refresh().finally(() => { this._refreshing = undefined })
+		return this._refreshing
+	}
+
+	private async _refresh(): Promise<void> {
 		try {
 			const list = await this._main.getStatuses(this.customAgents())
 			const statuses: { [id: string]: ExternalAgentStatus } = {}
 			for (const s of list) { statuses[s.id] = s }
 			this.state = { ...this.state, statuses }
 			this._onDidChange.fire()
+			void this._checkSignIns(list)
 		} catch (e) {
 			this._patch('errors', '*', messageOf(e))
+		}
+	}
+
+	/** asks every agent that is ready (not the terminal ones: their sign-in is theirs) whether it is signed in; three at a time, each at most once a minute */
+	private async _checkSignIns(list: readonly ExternalAgentStatus[]) {
+		const todo = list.filter(s => s.state === 'ready' && externalAgentById(s.id)?.kind !== 'terminal' && Date.now() - (this._signInCheckedAt.get(s.id) ?? 0) > 60_000)
+		for (const s of todo) { this._signInCheckedAt.set(s.id, Date.now()); if (!this.state.signIn[s.id]) { this._patch('signIn', s.id, { state: 'checking' }) } }
+		const next = async (): Promise<void> => {
+			const s = todo.shift()
+			if (!s) { return }
+			await this._checkSignIn(s.id)
+			return next()
+		}
+		await Promise.all([next(), next(), next()])
+	}
+
+	private async _checkSignIn(id: string): Promise<boolean> {
+		try {
+			const r = await this._main.checkSignIn(id, this.customAgents().find(c => c.id === id))
+			this._patch('signIn', id, r.error ? { state: 'unknown', error: r.error } : { state: r.signedIn ? 'in' : 'out', canSignOut: r.canSignOut })
+			return r.signedIn
+		} catch (e) {
+			this._patch('signIn', id, { state: 'unknown', error: messageOf(e) })
+			return false
 		}
 	}
 
@@ -126,7 +183,7 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 		this._patch('busy', def.id, busyText)
 		const started = Date.now()
 		const timer = setInterval(async () => {
-			await this.refresh()
+			await this._refresh()
 			if (this.state.statuses[def.id]?.state === 'ready' || Date.now() - started > POLL_LIMIT_MS) {
 				clearInterval(timer)
 				this._patch('busy', def.id, undefined)
@@ -154,14 +211,15 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 			if (def.kind === 'acp') {
 				const isUpdate = !!this.state.statuses[agentId]?.latestVersion
 				const { confirmed } = await this._dialogs.confirm({
-					title: `${isUpdate ? 'Update' : 'Download'} ${def.name}`,
+					title: `${isUpdate ? 'Update' : 'Install'} ${def.name}`,
 					message: this._describeAcpInstall(def),
 					detail: `Source: ${def.website}\nThe program only runs when you send it a message in the chat.`,
-					primaryButton: isUpdate ? 'Update' : 'Download',
+					primaryButton: isUpdate ? 'Update' : 'Install',
 				})
 				if (!confirmed) { return }
 				this._patch('busy', agentId, 'Starting...')
 				await this._main.install(agentId)
+				this._signInCheckedAt.delete(agentId)
 				await this.refresh()
 				this._patch('busy', agentId, undefined)
 				return
@@ -192,16 +250,53 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	async uninstall(agentId: string): Promise<void> {
 		const def = externalAgentById(agentId)
 		if (!def || def.kind !== 'acp') { return }
-		const { confirmed } = await this._dialogs.confirm({ title: `Remove ${def.name}`, message: `Delete the downloaded ${def.name} from this computer?`, detail: 'Your account with the vendor is not touched. You can download it again at any time.', primaryButton: 'Remove' })
+		const { confirmed } = await this._dialogs.confirm({ title: `Remove ${def.name}`, message: `Delete the copy of ${def.name} that Vader downloaded?`, detail: 'Your account with the vendor is not touched, and a copy you installed yourself is not touched either. You can install it again at any time.', primaryButton: 'Remove' })
 		if (!confirmed) { return }
 		try {
 			if (this._settings.state.globalSettings.externalAgentId === agentId) { await this._settings.setGlobalSetting('externalAgentId', null) }
 			await this._main.uninstall(agentId)
 			this._patch('probes', agentId, undefined)
+			this._patch('signIn', agentId, undefined)
+			this._signInCheckedAt.delete(agentId)
 		} catch (e) {
 			this._patch('errors', agentId, messageOf(e))
 		}
 		await this.refresh()
+	}
+
+	async connect(agentId: string): Promise<void> {
+		this._patch('errors', agentId, undefined)
+		this._patch('busy', agentId, 'Connecting...')
+		try {
+			const result = await this._main.connect(agentId, this.customAgents().find(c => c.id === agentId))
+			if (result.error) { this._patch('errors', agentId, result.error); this._patch('signIn', agentId, { state: 'out', canSignOut: result.canSignOut }) }
+			else if (result.signedIn) { this._patch('signIn', agentId, { state: 'in', canSignOut: result.canSignOut }) }
+			else if (result.inTerminal) {
+				// the login runs in the terminal that just opened: the card turns to "Connected" by itself when it is done
+				this._patch('busy', agentId, 'Finish signing in in the terminal...')
+				const started = Date.now()
+				while (Date.now() - started < SIGN_IN_POLL_LIMIT_MS) {
+					await new Promise(r => setTimeout(r, SIGN_IN_POLL_MS))
+					if (await this._checkSignIn(agentId)) { break }
+				}
+			}
+		} catch (e) {
+			this._patch('errors', agentId, messageOf(e))
+		}
+		this._signInCheckedAt.set(agentId, Date.now())
+		this._patch('busy', agentId, undefined)
+	}
+
+	async signOut(agentId: string): Promise<void> {
+		this._patch('errors', agentId, undefined)
+		this._patch('busy', agentId, 'Signing out...')
+		try {
+			const r = await this._main.signOut(agentId, this.customAgents().find(c => c.id === agentId))
+			if (r.error) { this._patch('errors', agentId, r.error) } else { await this._checkSignIn(agentId) }
+		} catch (e) {
+			this._patch('errors', agentId, messageOf(e))
+		}
+		this._patch('busy', agentId, undefined)
 	}
 
 	async testConnection(agentId: string): Promise<void> {
@@ -225,6 +320,10 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 			const found = await this._main.resolveProgram(spec.command, spec.candidateDirs)
 			if (!found) { throw new Error(`${def.name} is not installed yet. Use Install first.`) }
 			await this._terminals.openProgramTerminal({ name: def.name, cwd: this.workingFolder(), executable: found, args: [] })
+			const opened = { ...this.state.opened, [agentId]: true }
+			this.state = { ...this.state, opened }
+			this._storage.store(OPENED_KEY, JSON.stringify(opened), StorageScope.APPLICATION, StorageTarget.MACHINE)
+			this._onDidChange.fire()
 		} catch (e) {
 			this._patch('errors', agentId, messageOf(e))
 		}

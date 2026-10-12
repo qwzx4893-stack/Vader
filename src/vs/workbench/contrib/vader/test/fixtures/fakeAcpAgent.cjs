@@ -14,9 +14,15 @@
 //   loadable       like resumable but only session/load (it replays the old conversation as updates)
 //   multi-auth     lists "API Key" before "ChatGPT" like Codex does; only ChatGPT works
 //   die-after      exits by itself after the first answer (to test restarts)
+//   auth-agent / auth-terminal-meta / logout-agent keep their sign-in in the file given as the third argument (like a vendor's credential file), so it survives
+//                  the process, as a real sign-in does: auth-terminal-meta describes a terminal login the way GitHub Copilot and Kimi do (`_meta["terminal-auth"]`),
+//                  logout-agent can sign out (`logout`)
 //   spawner        starts a child process on its first prompt and prints its pid (to test that stopping the agent stops its children too)
 
 const mode = process.argv[2] || 'basic';
+const authFile = process.argv[3] || '';
+const fs = require('fs');
+const isAuthed = () => authFile ? fs.existsSync(authFile) : authed;
 let buf = '', nextId = 1000, turn = 0, authed = false, resumedFrom = '';
 const pending = new Map();
 const send = o => process.stdout.write(JSON.stringify(o) + '\n');
@@ -32,16 +38,20 @@ async function handle(msg) {
 	if (msg.method === 'initialize') {
 		const authMethods = mode === 'auth-agent' ? [{ id: 'web', name: 'Sign in on the web', type: 'agent' }]
 			: mode === 'auth-terminal' ? [{ id: 'cli', name: 'Sign in with the CLI', type: 'terminal', args: ['login'], env: { FAKE: '1' } }]
+			: mode === 'auth-terminal-meta' ? [{ id: 'login', name: 'Login with the vendor', description: 'Run `fake login` in the terminal', _meta: { 'terminal-auth': { command: process.execPath, args: ['/fake/login.js', authFile], label: 'Fake Login', env: { FAKE_LOGIN: '1' } } } }]
+			: mode === 'logout-agent' ? [{ id: 'web', name: 'Sign in on the web', type: 'agent' }]
 			: mode === 'multi-auth' ? [{ id: 'api-key', name: 'API Key', _meta: { 'api-key': { provider: 'x' } } }, { id: 'chat-gpt', name: 'ChatGPT' }] : [];
-		const agentCapabilities = mode === 'resumable' ? { loadSession: true, sessionCapabilities: { resume: {} } } : mode === 'loadable' ? { loadSession: true } : {};
+		const agentCapabilities = mode === 'logout-agent' ? { auth: { logout: {} } } : mode === 'resumable' ? { loadSession: true, sessionCapabilities: { resume: {} } } : mode === 'loadable' ? { loadSession: true } : {};
 		return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1, agentInfo: { name: 'fake-agent', title: 'Fake Agent', version: '9.9.9' }, agentCapabilities, authMethods } });
 	}
 	if (msg.method === 'authenticate') {
 		if (mode === 'multi-auth' && msg.params.methodId !== 'chat-gpt') return send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'wrong method ' + msg.params.methodId } });
-		authed = true; return send({ jsonrpc: '2.0', id: msg.id, result: { _usedMethod: msg.params.methodId } });
+		authed = true; if (authFile) fs.writeFileSync(authFile, 'signed in');
+		return send({ jsonrpc: '2.0', id: msg.id, result: { _usedMethod: msg.params.methodId } });
 	}
+	if (msg.method === 'logout') { authed = false; if (authFile) { try { fs.unlinkSync(authFile); } catch { } } return send({ jsonrpc: '2.0', id: msg.id, result: {} }); }
 	if (msg.method === 'session/new') {
-		if ((mode === 'auth-agent' || mode === 'auth-terminal' || mode === 'multi-auth') && !authed) return send({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: 'Authentication required' } });
+		if ((mode === 'auth-agent' || mode === 'auth-terminal' || mode === 'auth-terminal-meta' || mode === 'logout-agent' || mode === 'multi-auth') && !isAuthed()) return send({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: 'Authentication required' } });
 		return send({ jsonrpc: '2.0', id: msg.id, result: rich ? { sessionId: 'S-' + process.pid, configOptions: configOptions(), modes: modes() } : { sessionId: 'S1' } });
 	}
 	if (msg.method === 'session/resume') {

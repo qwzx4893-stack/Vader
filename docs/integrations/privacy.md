@@ -7,7 +7,7 @@ The editor's own update and telemetry endpoints in `product.json` are not config
 Chromium and Electron ship background services that contact Google on their own; Vader turns them off.
 
 ## Coding agents the person adds (Settings > Coding Agents) - `electron-main/externalAgentMainService.ts`
-- Nothing is contacted until the person presses Download / Install / Open or sends a message to the chosen agent.
+- Nothing is downloaded until the person presses Install / Connect / Open or sends a message to the chosen agent. Opening the Coding Agents page looks for a few well-known program names (opencode, cursor-agent, copilot, vibe-acp, grok, kimi) in the person's own PATH and the vendor's usual folder and starts each one found once for a protocol handshake; the result is remembered for ten minutes. It also asks each ready agent whether it is signed in (a conversation is started in an empty folder; no message is sent to any model). Terminal agents are only looked for.
 - Downloads: for npm agents (Codex, Gemini CLI) the npm registry, through `npm install --ignore-scripts`; for binary agents the host named by the ACP registry, restricted to each agent's own release address (`github.com/anomalyco/opencode`, `downloads.cursor.com`, `dl.google.com/agy-extensions`); https only; checksum compared when published. The person is asked first.
 - "Check for newer agent versions" (button, never automatic): `cdn.agentclientprotocol.com`.
 - The vendors' own programs then talk to their vendors with the person's account (that is the point); Vader sees only the protocol messages on the program's stdin/stdout.

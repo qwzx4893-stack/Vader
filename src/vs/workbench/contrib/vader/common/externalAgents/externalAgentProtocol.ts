@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 // The small pure rules of the Agent Client Protocol client, kept out of the process code so they can be tested on their own with the answers real
-// agents gave (see test/externalAgentE2E.mjs: the initialize replies of Gemini CLI and Codex are in there verbatim).
+// agents gave (see test/externalAgentE2E.mjs: the initialize replies of Gemini CLI, Codex, Copilot and Kimi are in there verbatim).
 
 import { AgentConfigOption } from './externalAgentTypes.js'
 import { isSafeRelativePath } from './externalAgentCatalog.js'
@@ -18,10 +18,36 @@ const needsSecret = (m: AuthMethodLike): boolean => {
 	return /api[\s_-]?key|vertex|gateway|bedrock|azure/i.test(`${m.id} ${m.name}`)
 }
 
+/** How a terminal sign-in is started: the agent's own program with these arguments (and this environment), or another program the agent names. */
+export type TerminalAuth = { readonly command?: string, readonly args: readonly string[], readonly env: { readonly [k: string]: string } }
+
+/**
+ * Real agents describe a terminal sign-in in three ways: the protocol's `type: 'terminal'` with `args`/`env` (Claude's adapter), the earlier
+ * convention `_meta["terminal-auth"]` with `command`/`args`/`env` (GitHub Copilot, Kimi), and `_meta.type: 'terminal'` with `args` (Qwen).
+ * Kilo and OpenCode say it only in words ("Run `opencode auth login`"): nothing machine-readable, so nothing is guessed from it.
+ */
+export const terminalAuthOf = (m: AuthMethodLike): TerminalAuth | undefined => {
+	const meta = (m._meta ?? {}) as { [k: string]: unknown }
+	const strings = (v: unknown): string[] => Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+	const envOf = (v: unknown): { [k: string]: string } => {
+		const out: { [k: string]: string } = {}
+		if (v && typeof v === 'object') { for (const [k, x] of Object.entries(v as { [k: string]: unknown })) { if (typeof x === 'string') { out[k] = x } } }
+		return out
+	}
+	const t = meta['terminal-auth']
+	if (t && typeof t === 'object') {
+		const o = t as { command?: unknown, args?: unknown, env?: unknown }
+		return { command: typeof o.command === 'string' ? o.command : undefined, args: strings(o.args), env: envOf(o.env) }
+	}
+	if (m.type === 'terminal') { const o = m as unknown as { args?: unknown, env?: unknown }; return { args: strings(o.args), env: envOf(o.env) } }
+	if (meta['type'] === 'terminal') { return { args: strings(meta['args']), env: {} } }
+	return undefined
+}
+
 export type AuthChoice =
-	| { readonly kind: 'agent', readonly method: AuthMethodLike }        // the agent signs the person in itself (it opens the vendor's page)
-	| { readonly kind: 'terminal', readonly method: AuthMethodLike }     // the agent's login runs in a terminal
-	| { readonly kind: 'none', readonly offered: readonly string[] }     // only methods that need a key: say so, do not guess
+	| { readonly kind: 'agent', readonly method: AuthMethodLike }                                  // the agent signs the person in itself (it opens the vendor's page)
+	| { readonly kind: 'terminal', readonly method: AuthMethodLike, readonly terminal: TerminalAuth }  // the agent's login runs in a terminal
+	| { readonly kind: 'none', readonly offered: readonly string[] }                               // only methods that need a key (or only words): say so, do not guess
 
 /**
  * Picks the way of signing in. A real agent lists its methods in its own order and Codex lists "API Key" before "ChatGPT", so "the first one" signs
@@ -29,16 +55,19 @@ export type AuthChoice =
  * (nothing that needs a key), the agent's own page before a terminal.
  */
 export const chooseAuthMethod = (methods: readonly AuthMethodLike[], preferredIds: readonly string[] = []): AuthChoice => {
-	const kindOf = (m: AuthMethodLike): 'agent' | 'terminal' => m.type === 'terminal' ? 'terminal' : 'agent'
+	const choiceOf = (m: AuthMethodLike): AuthChoice | undefined => {
+		const terminal = terminalAuthOf(m)
+		return terminal ? { kind: 'terminal', method: m, terminal } : { kind: 'agent', method: m }
+	}
 	for (const id of preferredIds) {
 		const m = methods.find(x => x.id === id)
-		if (m) { return { kind: kindOf(m), method: m } }
+		const c = m && choiceOf(m)
+		if (c) { return c }
 	}
 	const accountMethods = methods.filter(m => !needsSecret(m))
-	const own = accountMethods.find(m => kindOf(m) === 'agent')
+	const own = accountMethods.find(m => !terminalAuthOf(m))
 	if (own) { return { kind: 'agent', method: own } }
-	const terminal = accountMethods.find(m => kindOf(m) === 'terminal')
-	if (terminal) { return { kind: 'terminal', method: terminal } }
+	for (const m of accountMethods) { const c = choiceOf(m); if (c) { return c } }
 	return { kind: 'none', offered: methods.map(m => m.name) }
 }
 

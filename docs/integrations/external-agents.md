@@ -1,12 +1,12 @@
 # Coding agents you already have an account with
 
-**Settings > Models > Coding Agents** lets a person use the subscription or free tier they already have with Codex, Cursor, OpenCode, Gemini CLI,
-Antigravity, Claude Code or Freebuff inside Vader, or add any other program that speaks the Agent Client Protocol. One card per agent, with its logo.
+**Settings > Models > Coding Agents** lets a person use the subscription or free tier they already have with Codex, Cursor, OpenCode, GitHub Copilot, Mistral Vibe,
+Grok Build, Kimi, Antigravity, Claude Code or Freebuff inside Vader, or add any other program that speaks the Agent Client Protocol. One card per agent, with its logo.
 
 Code: `common/externalAgents/` (catalog, types, protocol rules, the registry snapshot, logos), `electron-main/externalAgentMainService.ts` (install, start,
 protocol), `browser/externalAgents/externalAgentsService.ts` (status, install / test / remove actions, per-chat settings), `browser/chatThreadService.ts`
 (`_runExternalAgentTurn`), `browser/react/src/vader-settings-tsx/ExternalAgents.tsx` (cards and the chat picker).
-Tests: `test/externalAgentE2E.mjs` (95 checks against `test/fixtures/fakeAcpAgent.cjs`), `test/externalAgentLiveE2E.mjs` (the **real** vendor programs),
+Tests: `test/externalAgentE2E.mjs` (120 checks against `test/fixtures/fakeAcpAgent.cjs`), `test/externalAgentLiveE2E.mjs` (46 checks against the **real** vendor programs),
 `test/e2e/scenarios/externalAgents.mjs` (the real app).
 
 ## Two ways in, chosen by what each vendor officially supports
@@ -14,13 +14,31 @@ Tests: `test/externalAgentE2E.mjs` (95 checks against `test/fixtures/fakeAcpAgen
 | Agent | Way | Why this way (checked, see the audit below) |
 |---|---|---|
 | **Codex** | ACP, `@agentclientprotocol/codex-acp` (npm) | The Agent Client Protocol (the one Zed and JetBrains use) is the standard way an editor drives a coding agent; the adapter is in the public ACP registry. |
-| **Gemini CLI** | ACP, `gemini --acp` (npm) | Google's own CLI speaks ACP natively. |
+| **GitHub Copilot** | ACP, `@github/copilot` (npm, `--acp`) | GitHub's own CLI speaks ACP (listed in the registry). Its login is a terminal command (`copilot login`) that the agent describes in `_meta["terminal-auth"]`. |
+| **Mistral Vibe** | ACP, `vibe-acp` (GitHub release binary) | Mistral's own ACP build; browser sign-in; the registry publishes a checksum for every platform. |
+| **Grok Build** | ACP, `@xai-official/grok` (npm, `agent stdio`) | xAI's own CLI; "Sign in with Grok" through the agent's own page; paid SuperGrok or X Premium+ only. |
+| **Kimi** | ACP, `kimi acp` (GitHub release binary) | Moonshot's own CLI; terminal login (`kimi login`); checksum published. |
 | **OpenCode** | ACP, `opencode acp` (GitHub release binary) | Native ACP mode; the registry publishes a checksum. |
 | **Cursor** | ACP, `cursor-agent acp` (binary from downloads.cursor.com) | Cursor's own CLI speaks ACP. The registry publishes no checksum for it. |
 | **Antigravity** | ACP, `agy_acp_server` (binary from dl.google.com) | Google ships an agent server for editors and lists it in the ACP registry (authors: Google LLC). The `agy` terminal CLI has no protocol mode. |
 | **Claude Code** | the unmodified official program in a Vader terminal | Anthropic restricts its consumer subscriptions to its own products (see the audit below). Hosting the official binary, with Anthropic's own sign-in, is the allowed shape. |
 | **Freebuff** | the official `freebuff` CLI in a Vader terminal | It has no integration protocol (checked: no ACP mode, not in the registry). |
 | Anything else | ACP, "Your own agent" | Name, program, arguments, entered by the person after a confirmation. |
+
+## Detect, install, connect: what a card does
+
+1. **Detect.** Before a card offers anything to download, Vader looks for the program on this computer (the PATH and the vendor's usual folder). A program that is found is started once for the protocol handshake: only
+   one that answers is used (`source: 'local'`, "Found on this computer: nothing is downloaded", the sign-in it already holds counts). The answer is remembered for ten minutes. This starts a few well-known program names
+   from the person's own PATH when the Coding Agents page opens, and nothing else; a program with the right name that does not speak the protocol (an old version, another tool) is not used and the card offers "Install".
+   Terminal agents (Claude Code, Freebuff) are only looked for, never started by the page.
+2. **Install** (only when nothing usable was found): shows what will be downloaded and from where, asks, installs into Vader's own folder. A copy installed by Vader is the only one Vader updates or removes.
+3. **Connect.** The page asks every ready agent whether it can start a conversation without a sign-in (`session/new` in an empty folder; nothing is sent to a model). "Not connected" shows the **Connect** button: the agent's own
+   sign-in is started (the vendor's page opens, or the vendor's own login runs in a terminal); the card turns to **Connected** when it is done. Terminal logins are watched for up to five minutes. **Sign out** (under "More") calls the agent's
+   own `logout` when it has one.
+4. **Use in the chat.**
+
+Buttons per card, one primary at a time: `Install` → `Connect` → `Use in the chat` (or `Use my models instead` when it is in use), plus `Website`, plus `More` (Test connection, Sign out, Remove) for installed chat agents and `Update to X`
+when Vader's own copy is behind. Terminal agents have one button: `Connect` (it opens the vendor's program in a terminal, where its first run signs in) which says `Open in a terminal` afterwards.
 
 ## Who does what
 
@@ -81,12 +99,11 @@ says (`common/helpers/settingsPortability.ts`, tested in `settingsPortabilityE2E
   the handshake; OpenCode 1.19.0 downloads from GitHub, passes its checksum, unpacks and answers. Codex's real first message starts the ChatGPT sign-in. **Not verified here**: Cursor and Antigravity (their
   download hosts are not reachable from the build machine), and any complete conversation (that needs a signed-in account).
 - **Codex.** The adapter's real handshake lists `API Key` before `ChatGPT`; choosing "the first method" would have signed the person into the wrong thing. Fixed, and tested with the verbatim answer.
-- **Gemini CLI.** Google ended free Gemini CLI access for personal Google accounts and AI Pro/Ultra on 18 June 2026 (announced at I/O on 19 May; Antigravity CLI replaces it; the package itself ships a migration skill to Antigravity CLI).
-  It still starts and answers the handshake, but the account route that made it worth listing is gone, so its card says so; the Antigravity card is the Google-account one. Removing it is a catalog deletion.
+- **Gemini CLI was removed from the page.** Google ended free Gemini CLI access for personal Google accounts and AI Pro/Ultra on 18 June 2026 (announced at I/O on 19 May; Antigravity CLI replaces it; the package itself ships a migration skill to Antigravity CLI). It still starts, but the account route that made it worth listing is gone; the Antigravity card is the Google-account one.
 - **Claude Code (Anthropic's current text, `code.claude.com/docs/en/legal-and-compliance`).** Preinstalling or running Claude Code *in a product* needs Anthropic's Commercial Terms and an unmodified binary, and each end user must use their own
   plan or key; and, verbatim, the rules "do not prevent an end user from signing in to the unmodified Claude Code binary with their own Claude subscription, including where a platform hosts Claude Code". Developers on the Agent SDK are told to use API keys,
   and "may not collect, store, or intermediate Claude.ai credentials or session tokens". Vader's shape is the clearly allowed one: the person installs Anthropic's own program with Anthropic's own installer, Vader only opens a terminal for it,
-  nothing is bundled, modified or intercepted. The Claude Code name may be used in plain text; Anthropic's text says its names and logos may not be used beyond that without written permission. The card shows Claude Code's mark to identify the program (the owner of this project chose to keep it); if Anthropic objects, swapping it for a neutral glyph is one line in `build/lib/vader/genProviderLogos.py`.
+  nothing is bundled, modified or intercepted. The Claude Code name may be used in plain text; Anthropic's text says its names and logos may not be used beyond that without written permission. The card shows Claude Code's mark to identify the program (the owner of this project chose to keep it; Anthropic's trademark page says use is limited to what they permit and approve in advance, and names marketing@anthropic.com for written permission); if Anthropic objects, swapping it for a neutral glyph is one line in `build/lib/vader/genProviderLogos.py`.
   Install needs no administrator rights; Git for Windows is optional; the free claude.ai plan does not include Claude Code (the card says so). The earlier text of this paragraph (February 2026) says OAuth tokens of Free, Pro and Max plans are only for Claude Code and claude.ai, and that using them in other products, including the Agent SDK,
   is not allowed; later statements softened the billing side (June 2026) but not the rule, and the situation has changed more than once. An ACP adapter for Claude exists in the registry (`claude-acp`, authors
   Anthropic, Zed Industries, JetBrains) and uses the Agent SDK. Vader therefore keeps the conservative shape: the unmodified `claude` program in a terminal. Switching to the adapter is a catalog entry

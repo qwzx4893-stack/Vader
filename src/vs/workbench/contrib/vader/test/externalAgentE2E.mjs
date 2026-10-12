@@ -52,7 +52,7 @@ const svc = new m.ExternalAgentMainService({ request: async () => { throw new Er
 const events = [];
 svc.onEvent(e => events.push(e));
 const workDir = fs.mkdtempSync(path.join(tmp, 'work-'));
-const custom = (mode) => ({ id: 'custom-' + mode, name: 'Fake ' + mode, command: process.execPath, args: [agentFile, mode] });
+const custom = (mode, ...extra) => ({ id: 'custom-' + mode, name: 'Fake ' + mode, command: process.execPath, args: [agentFile, mode, ...extra] });
 const turn = (mode, key, textIn = 'hello') => svc.runTurn({ sessionKey: key, agentId: 'custom-' + mode, custom: custom(mode), cwd: workDir, text: textIn });
 const eventsOf = (key, type) => events.filter(e => e.sessionKey === key && (!type || e.type === type));
 
@@ -267,7 +267,7 @@ try {
 		const stops = await svc.probe('custom-y', { id: 'custom-y', name: 'Y', command: process.execPath, args: ['-e', 'process.stderr.write("not an agent"); process.exit(2)'] });
 		check('probe: a program that is not an ACP agent is reported with what it printed', stops.ok === false && /not an agent/.test(stops.error), JSON.stringify(stops));
 		const notInstalled = await svc.probe('opencode');
-		check('probe: an agent that is not downloaded says so', notInstalled.ok === false && /not been downloaded/.test(notInstalled.error), JSON.stringify(notInstalled));
+		check('probe: an agent that is not downloaded says so', notInstalled.ok === false && /is not installed yet/.test(notInstalled.error), JSON.stringify(notInstalled));
 	}
 
 	// ---------- what is installed on disk ----------
@@ -299,6 +299,75 @@ try {
 		check('uninstall removes the folder', gone.state === 'not-installed' && !fs.existsSync(path.join(agents, 'opencode')));
 	}
 
+
+	// ---------- Connect: "is it signed in?", signing in through the vendor, signing out ----------
+	{
+		const authFile = path.join(tmp, 'auth-agent.cred');
+		const c = custom('auth-agent', authFile);
+		let r = await svc.checkSignIn('custom-auth-agent', c);
+		check('check: an agent that cannot start a conversation without a sign-in is "not signed in" (and nothing was changed)', r.signedIn === false && !r.error && !fs.existsSync(authFile), JSON.stringify(r));
+		const connected = await svc.connect('custom-auth-agent', c);
+		check('connect: the agent\'s own sign-in runs and the person is signed in afterwards', connected.signedIn === true && fs.existsSync(authFile), JSON.stringify(connected));
+		check('connect: the progress is reported ("sign in with the page that opened")', eventsOf('connect:custom-auth-agent', 'status').some(e => /Sign in with the page/.test(e.message)));
+		r = await svc.checkSignIn('custom-auth-agent', c);
+		check('check: the sign-in outlives the process, like a vendor\'s credential file', r.signedIn === true, JSON.stringify(r));
+		check('connect: when already signed in nothing is asked again', (await svc.connect('custom-auth-agent', c)).signedIn === true);
+		const chat = await svc.runTurn({ sessionKey: 'k-after-connect', agentId: 'custom-auth-agent', custom: c, cwd: workDir, text: 'hi' });
+		check('after connecting, the chat works without a sign-in step', chat.stopReason === 'end_turn' && !eventsOf('k-after-connect', 'status').some(e => /Sign in/.test(e.message)));
+		await svc.closeSession('k-after-connect');
+
+		const outFile = path.join(tmp, 'logout-agent.cred');
+		const lo = custom('logout-agent', outFile);
+		await svc.connect('custom-logout-agent', lo);
+		let st = await svc.checkSignIn('custom-logout-agent', lo);
+		check('sign out: an agent that can sign out says so', st.signedIn === true && st.canSignOut === true, JSON.stringify(st));
+		const out = await svc.signOut('custom-logout-agent', lo);
+		check('sign out: the agent\'s own logout runs and the person is signed out', out.done === true && (await svc.checkSignIn('custom-logout-agent', lo)).signedIn === false, JSON.stringify(out));
+		const noLogout = await svc.signOut('custom-auth-agent', c);
+		check('sign out: an agent without a logout says to use its own program', noLogout.done === false && /no sign-out/.test(noLogout.error), JSON.stringify(noLogout));
+
+		// a terminal login the way GitHub Copilot and Kimi describe it
+		const metaFile = path.join(tmp, 'meta-agent.cred');
+		const mc = custom('auth-terminal-meta', metaFile);
+		events.length = 0;
+		const viaTerminal = await svc.connect('custom-auth-terminal-meta', mc);
+		const term = eventsOf('connect:custom-auth-terminal-meta', 'auth-terminal')[0];
+		check('connect: a login described in _meta["terminal-auth"] is opened in a terminal with the agent\'s own command, arguments and environment', viaTerminal.inTerminal === true && term?.command === process.execPath && term.args.join() === '/fake/login.js,' + metaFile && term.env.FAKE_LOGIN === '1', JSON.stringify([viaTerminal, term]));
+		fs.writeFileSync(metaFile, 'done in the terminal');
+		check('check: once the person finished in the terminal the agent is signed in', (await svc.checkSignIn('custom-auth-terminal-meta', mc)).signedIn === true);
+	}
+
+	// ---------- an agent the person already has on this computer is used as it is ----------
+	if (process.platform !== 'win32') {
+		const bin = path.join(tmp, 'bin'); fs.mkdirSync(bin, { recursive: true });
+		const script = (name, body) => { const f = path.join(bin, name); fs.writeFileSync(f, '#!/bin/sh\n' + body + '\n', { mode: 0o755 }); return f; };
+		// "opencode" that really is an ACP agent (the stand-in), and "cursor-agent" that is not
+		script('opencode', `exec "${process.execPath}" "${agentFile}" resumable`);
+		script('cursor-agent', 'echo "this is not an ACP agent" >&2; exit 2');
+		const oldPath = process.env.PATH; process.env.PATH = bin + path.delimiter + oldPath;
+		try {
+			const statuses = await svc.getStatuses([]);
+			const oc = statuses.find(x => x.id === 'opencode'), cu = statuses.find(x => x.id === 'cursor');
+			check('local: a program the person already has, which answers the protocol, is ready with nothing to download', oc?.state === 'ready' && oc.source === 'local' && oc.installedVersion === '9.9.9' && oc.detail === path.join(bin, 'opencode'), JSON.stringify(oc));
+			check('local: a program with the right name that does not speak the protocol is not offered as ready', cu?.state === 'not-installed' && cu.source === undefined, JSON.stringify(cu));
+			const key = 'k-local';
+			const r = await svc.runTurn({ sessionKey: key, agentId: 'opencode', cwd: workDir, text: 'use what I have' });
+			check('local: the chat runs on that program', r.stopReason === 'end_turn' && eventsOf(key, 'text').map(e => e.text).join('').includes('use what I have'));
+			await svc.closeSession(key);
+			const sign = await svc.checkSignIn('opencode');
+			check('local: its sign-in state is asked from the program itself', sign.signedIn === true, JSON.stringify(sign));
+			const gone = await svc.uninstall('opencode');
+			check('local: "remove" never deletes a program the person installed themselves', fs.existsSync(path.join(bin, 'opencode')) && gone.state === 'not-installed');
+			// once the person installs it through Vader, Vader's own copy is the one that runs
+			fs.mkdirSync(path.join(process.env.HOME, '.vader-editor', 'agents', 'opencode', '1.0.0'), { recursive: true });
+			fs.copyFileSync(path.join(bin, 'opencode'), path.join(process.env.HOME, '.vader-editor', 'agents', 'opencode', '1.0.0', 'opencode'));
+			fs.writeFileSync(path.join(process.env.HOME, '.vader-editor', 'agents', 'opencode', '1.0.0', 'manifest.json'), JSON.stringify({ id: 'opencode', version: '1.0.0', kind: 'binary', command: 'opencode', args: ['acp'] }));
+			const both = (await svc.getStatuses([])).find(x => x.id === 'opencode');
+			check('local: a copy installed by Vader takes precedence over the one found', both.source === 'vader' && both.installedVersion === '1.0.0', JSON.stringify(both));
+			await svc.uninstall('opencode');
+		} finally { process.env.PATH = oldPath; }
+	}
+
 	// ---------- an agent that cannot start ----------
 	{
 		let error = '';
@@ -310,7 +379,7 @@ try {
 	{
 		let error = '';
 		try { await svc.runTurn({ sessionKey: 'k-cat', agentId: 'opencode', cwd: workDir, text: 'hi' }); } catch (e) { error = String(e.message ?? e); }
-		check('a downloaded-binary agent that is not downloaded says to download it', /not been downloaded|no build for this computer/.test(error), error);
+		check('an agent that is not installed says to install it', /is not installed yet|no build for this computer/.test(error), error);
 		let terminalError = '';
 		try { await svc.runTurn({ sessionKey: 'k-term', agentId: 'claude-code', cwd: workDir, text: 'hi' }); } catch (e) { terminalError = String(e.message ?? e); }
 		check('a terminal-only agent is refused for chat turns', terminalError.length > 0, terminalError);
@@ -376,6 +445,32 @@ const goodBinary = { id: 'opencode', version: '1.2.3', distribution: { binary: {
 	check('registry: OpenCode may only come from OpenCode\'s own GitHub releases', !!m.acceptRegistryDocument(good('opencode', 'https://github.com/anomalyco/opencode/releases/download/v1/x.tgz')).opencode && !m.acceptRegistryDocument(good('opencode', 'https://github.com/someone-else/opencode/releases/download/v1/x.tgz')).opencode);
 	check('registry: Cursor only from downloads.cursor.com, Antigravity only from dl.google.com/agy-extensions', !!m.acceptRegistryDocument(good('cursor', 'https://downloads.cursor.com/lab/1/x.tgz')).cursor && !m.acceptRegistryDocument(good('cursor', 'https://github.com/a/b/x.tgz')).cursor
 		&& !!m.acceptRegistryDocument(good('antigravity-acp', 'https://dl.google.com/agy-extensions/releases/linux/x.zip'))['antigravity-acp'] && !m.acceptRegistryDocument(good('antigravity-acp', 'https://dl.google.com/other/x.zip'))['antigravity-acp']);
+}
+
+
+{
+	// the sign-in descriptions of the real agents, as they answered the handshake (12 October 2026)
+	const copilot = [{ id: 'copilot-login', name: 'Log in with Copilot CLI', description: 'Run `copilot login` in the terminal', _meta: { 'terminal-auth': { command: '/x/copilot', args: ['login'], label: 'Copilot Login' } } }];
+	const kimi = [{ id: 'login', name: 'Login with Kimi account', _meta: { 'terminal-auth': { command: '/x/kimi', args: ['login'], label: 'Kimi Code Login', env: {}, type: 'terminal' } } }];
+	const qwen = [{ id: 'openai', name: 'Use OpenAI API key', description: 'Requires setting the `OPENAI_API_KEY` environment variable', _meta: { type: 'terminal', args: ['--auth-type=openai'] } }];
+	const opencode = [{ id: 'opencode-login', name: 'Login with opencode', description: 'Run `opencode auth login` in the terminal' }];
+	const claude = [{ id: 'claude-login', name: 'Log in with Claude', description: 'Run `claude /login` in the terminal', type: 'terminal', args: ['--cli'] }];
+	const mistral = [{ id: 'browser-auth', name: 'Browser authentication' }];
+	const droid = [{ id: 'device-pairing', name: 'Login' }, { id: 'factory-api-key', name: 'Factory API Key' }];
+	const grok = [{ id: 'grok.com', name: 'Grok', description: 'Sign in with Grok' }];
+	let c = m.chooseAuthMethod(copilot);
+	check('auth: Copilot -> its terminal login with the command and arguments it names', c.kind === 'terminal' && c.terminal.command === '/x/copilot' && c.terminal.args.join() === 'login', JSON.stringify(c));
+	c = m.chooseAuthMethod(kimi);
+	check('auth: Kimi -> its terminal login', c.kind === 'terminal' && c.terminal.command === '/x/kimi' && c.terminal.args[0] === 'login');
+	c = m.chooseAuthMethod(claude);
+	check('auth: the Claude adapter -> its program with the --cli argument (type terminal)', c.kind === 'terminal' && c.terminal.command === undefined && c.terminal.args.join() === '--cli');
+	c = m.chooseAuthMethod(qwen);
+	check('auth: Qwen -> a key-based method is never chosen on its own', c.kind === 'none' || c.kind === 'terminal' && /api/i.test(qwen[0].name) === false, JSON.stringify(c));
+	c = m.chooseAuthMethod(opencode);
+	check('auth: OpenCode describes its login only in words -> the agent is asked to authenticate (it also needs no sign-in for its free models)', c.kind === 'agent' && c.method.id === 'opencode-login');
+	check('auth: Mistral, Grok and Factory use the agent\'s own page (device pairing, not the key)', m.chooseAuthMethod(mistral).kind === 'agent' && m.chooseAuthMethod(grok).method.id === 'grok.com' && m.chooseAuthMethod(droid).method.id === 'device-pairing');
+	check('auth: the prefered method wins even when it is a terminal one', m.chooseAuthMethod([{ id: 'a', name: 'Browser' }, copilot[0]], ['copilot-login']).kind === 'terminal');
+	check('terminalAuthOf: nothing for a plain method', m.terminalAuthOf({ id: 'a', name: 'A' }) === undefined);
 }
 
 // ---------- the catalog's own invariants ----------

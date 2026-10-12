@@ -19,7 +19,9 @@ export type ExternalAgentStatus = {
 	readonly id: string
 	readonly state: ExternalAgentState
 	readonly detail?: string
-	/** the version that is installed (or, for a program found on the PATH, nothing) */
+	/** where the program that will be started comes from: Vader's own download, or a program the person already had on this computer (checked: it answers the protocol) */
+	readonly source?: 'vader' | 'local'
+	/** the version that is installed (or, for a program found on the PATH, the version it reported) */
 	readonly installedVersion?: string
 	/** a newer version is known (live registry) than the installed one */
 	readonly latestVersion?: string
@@ -35,6 +37,16 @@ export type AgentConfigOption = {
 	readonly type: 'select' | 'boolean'
 	readonly value: string | boolean
 	readonly choices?: readonly { readonly value: string, readonly name: string, readonly description?: string }[]
+}
+
+/** What "Connect" / "check sign-in" found out. `signedIn` is only known when the agent could be asked (it can create a conversation without asking for a sign-in). */
+export type SignInResult = {
+	readonly signedIn: boolean
+	/** the agent's sign-in runs in a terminal: it was opened (an `auth-terminal` event), finish there and check again */
+	readonly inTerminal?: boolean
+	readonly error?: string
+	/** the agent can sign the person out itself (`logout`) */
+	readonly canSignOut?: boolean
 }
 
 export type ProbeResult = {
@@ -87,6 +99,12 @@ export interface IExternalAgentMainService {
 	install(agentId: string): Promise<ExternalAgentStatus>;
 	/** deletes what `install` put on disk */
 	uninstall(agentId: string): Promise<ExternalAgentStatus>;
+	/** asks the agent whether it can start a conversation without asking for a sign-in; changes nothing */
+	checkSignIn(agentId: string, custom?: CustomAcpAgent): Promise<SignInResult>;
+	/** signs the person in with the vendor: the agent opens the vendor's own page (or asks for its terminal login), Vader waits for the result; progress is reported as `status` events with the session key `connect:<id>` */
+	connect(agentId: string, custom?: CustomAcpAgent): Promise<SignInResult>;
+	/** signs out through the agent's own `logout`, when it has one */
+	signOut(agentId: string, custom?: CustomAcpAgent): Promise<{ readonly done: boolean, readonly error?: string }>;
 	/** starts the agent, does the protocol handshake and stops it again: proves the program works and reports what it is, without signing in or sending a prompt */
 	probe(agentId: string, custom?: CustomAcpAgent): Promise<ProbeResult>;
 	/** reads the live ACP registry for newer versions of the agents in the catalog; the snapshot built into Vader stays as the fallback */
