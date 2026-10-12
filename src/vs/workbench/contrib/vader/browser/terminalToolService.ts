@@ -38,6 +38,9 @@ export interface ITerminalToolService {
 
 	getPersistentTerminal(terminalId: string): ITerminalInstance | undefined
 	getTemporaryTerminal(terminalId: string): ITerminalInstance | undefined
+
+	/** opens a visible terminal that runs one program (no shell involved, so nothing needs quoting) and stays open after it ends so its output can be read */
+	openProgramTerminal(opts: { name: string, cwd: string | null, executable: string, args: readonly string[], env?: { readonly [k: string]: string } }): Promise<void>
 }
 export const ITerminalToolService = createDecorator<ITerminalToolService>('TerminalToolService');
 
@@ -179,6 +182,21 @@ class TerminalToolService extends Disposable implements ITerminalToolService {
 		const terminal = await this._createTerminal({ cwd, config, })
 		this.persistentTerminalInstanceOfId[terminalId] = terminal
 		return terminalId
+	}
+
+	openProgramTerminal: ITerminalToolService['openProgramTerminal'] = async ({ name, cwd, executable, args, env }) => {
+		// Windows starts .cmd/.bat launchers (how npm installs programs) only through cmd.exe
+		const isLauncher = /\.(cmd|bat)$/i.test(executable)
+		const config = {
+			name, title: name,
+			executable: isLauncher ? 'cmd.exe' : executable,
+			args: isLauncher ? ['/d', '/c', executable, ...args] : [...args],
+			env: env ? { ...env } : undefined,
+			waitOnExit: true,
+		}
+		const terminal = await this._createTerminal({ cwd, config })
+		this.terminalService.setActiveInstance(terminal)
+		await this.terminalService.focusActiveInstance()
 	}
 
 	async killPersistentTerminal(terminalId: string) {

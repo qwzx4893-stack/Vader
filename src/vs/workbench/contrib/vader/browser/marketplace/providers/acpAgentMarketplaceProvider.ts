@@ -9,21 +9,13 @@ import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem } fro
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
 //
-// IMPORTANT semantic note (per the mission's own explicit warning): ACP (Zed's Agent Client
-// Protocol) is a PROTOCOL, not a registry. There is no official ACP agent registry to search
-// against - inventing one here would be exactly the "fake ACP Registry" the mission
-// explicitly says not to build. What genuinely exists in this codebase is the External Agent
-// Adapter boundary (IExternalAgentAdapterRegistry, common/externalAgent/) - an in-process
-// registry of adapters that have actually been implemented and registered (today: one
-// reference adapter backed by Vader's own runtime - see vaderNativeExternalAgentAdapter.ts).
-// This provider surfaces exactly that: `search`/`listInstalled` both just return whatever is
-// currently registered there. There is deliberately no network search, no "browse available
-// ACP agents" list, and no install action - an ACP agent is wired up by writing and
-// registering an IExternalAgentAdapter implementation (a code change), not something a user
-// clicks "Install" on from a marketplace. Manual-add (per the mission's "implement genuine
-// ACP-agent discovery sources plus manual-add") is future, separately-scoped work if/when a
-// real third-party ACP-speaking agent binary exists in this environment to shell out to - see
-// docs/integrations/external-agent-adapter.md for why none does today.
+// This provider lists only what is registered in the in-process External Agent Adapter boundary
+// (IExternalAgentAdapterRegistry, common/externalAgent/) - today the reference adapter backed by Vader's
+// own runtime. No network search and no install action here.
+//
+// The coding agents a person can bring from outside (Codex, OpenCode, Cursor, Gemini, ...) are a separate
+// feature with their own page: Settings > Coding Agents, backed by the public ACP Agent Registry and the
+// ACP client in electron-main/externalAgentMainService.ts - see docs/integrations/external-agents.md.
 class ACPAgentMarketplaceProvider implements IMarketplaceProvider {
 	readonly id = 'acp-agents';
 	readonly displayName = 'ACP Agents';

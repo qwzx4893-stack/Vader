@@ -16,6 +16,10 @@ import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict }
 import { getModelCapabilities } from '../common/modelCapabilities.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
+import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
+import { IExternalAgentMainService, ExternalAgentEvent } from '../common/externalAgents/externalAgentTypes.js';
+import { externalAgentById } from '../common/externalAgents/externalAgentCatalog.js';
+import { IExternalAgentsService } from './externalAgents/externalAgentsService.js';
 import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
 import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
@@ -479,6 +483,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IMemoryService private readonly _memoryService: IMemoryService,
 		@IModelRouterService private readonly _modelRouterService: IModelRouterService,
 		@IAgentRuntimeRegistryService private readonly _agentRuntimeRegistryService: IAgentRuntimeRegistryService,
+		@IExternalAgentMainService private readonly _externalAgentMain: IExternalAgentMainService,
+		@IExternalAgentsService private readonly _externalAgents: IExternalAgentsService,
+		@IDialogService private readonly _dialogService: IDialogService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -1376,6 +1383,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// vaderAgentModel.ts/clineToolAdapter.ts/clineRuntimeAdapter.ts for the three pieces this
 	// assembles, and docs/integrations/agent-runtime.md for the full design this implements.
 	private async _runChatAgentImpl(threadId: string, modelSelection: ModelSelection | null, modelSelectionOptions: ModelSelectionOptions | undefined): Promise<void> {
+		// Vader addition: when the person chose an external coding agent (Settings > Models), their chat turns go to that agent and not to a Vader model.
+		// The hidden threads Vader starts for itself (sub-agents, verification, research) keep using the configured models.
+		const externalAgentId = this._settingsService.state.globalSettings.externalAgentId
+		const thisThread = this.state.allThreads[threadId]
+		if (externalAgentId && !thisThread?.isSubagentThread && !thisThread?.isVerificationThread && !thisThread?.routerCategoryOverride) {
+			return this._runExternalAgentTurn(threadId, externalAgentId)
+		}
+
 		// Fail fast and clearly if Cline itself can't even initialize, rather than letting a
 		// deep, possibly confusing construction error surface from inside createClineAgentRuntime.
 		// There is no other runtime to fall back to, so this is the whole story.
@@ -1516,6 +1531,100 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 	}
 
+
+	private _externalRunOfThread = new Map<string, number>()
+	private _externalRunSeq = 0
+
+	// Vader addition: one turn with an external agent speaking the Agent Client Protocol (docs/integrations/external-agents.md). The agent keeps its own
+	// tools, its own files access and its own account; Vader shows what it says and does, and asks the person whenever the agent asks for permission.
+	private async _runExternalAgentTurn(threadId: string, agentId: string): Promise<void> {
+		const custom = this._settingsService.state.globalSettings.customAcpAgents.find(c => c.id === agentId)
+		const def = externalAgentById(agentId)
+		const name = def?.name ?? custom?.name ?? agentId
+		if ((!def && !custom) || def?.kind === 'terminal') {
+			throw new Error(`${name} cannot take part in the chat: it runs in its own terminal (Settings > Models > External agents > Open). Choose another agent or a model.`)
+		}
+		const cwd = this._externalAgents.workingFolder()
+		if (!cwd) { throw new Error(`${name} works inside the folder you have open. Open a folder first (File > Open Folder), then send your message again.`) }
+		const lastUserMsg = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'user')
+		const text = lastUserMsg?.role === 'user' ? lastUserMsg.content : ''
+		if (!text.trim()) { return }
+
+		const runId = ++this._externalRunSeq
+		this._externalRunOfThread.set(threadId, runId)
+		const isCurrent = () => this._externalRunOfThread.get(threadId) === runId
+		const segments: ({ kind: 'text', text: string } | { kind: 'tool', id: string, title: string, status: string })[] = []
+		let reasoning = ''
+		let sawTool = false
+		const display = () => segments.map(sg => sg.kind === 'text' ? sg.text : `\n\n> ${sg.title || 'Working'} (${sg.status.replace('_', ' ')})\n\n`).join('')
+		const interrupt = Promise.resolve(() => { void this._externalAgentMain.cancel(threadId) })
+		const publish = () => {
+			if (!isCurrent() || this._currentIsRunning(threadId) !== 'LLM') { return }
+			this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: display(), reasoningSoFar: reasoning, toolCallSoFar: null }, interrupt })
+		}
+
+		const listener = this._externalAgentMain.onEvent((e: ExternalAgentEvent) => {
+			if (e.sessionKey !== threadId || !isCurrent()) { return }
+			if (e.type === 'text') {
+				const last = segments[segments.length - 1]
+				if (last?.kind === 'text') { last.text += e.text } else { segments.push({ kind: 'text', text: e.text }) }
+			}
+			else if (e.type === 'thought') { reasoning += e.text }
+			else if (e.type === 'tool') {
+				sawTool = true
+				const known = segments.find(sg => sg.kind === 'tool' && sg.id === e.toolCallId)
+				if (known?.kind === 'tool') { if (e.title) { known.title = e.title } known.status = e.status }
+				else { segments.push({ kind: 'tool', id: e.toolCallId, title: e.title, status: e.status }) }
+			}
+			else if (e.type === 'plan') {
+				reasoning += (reasoning ? '\n' : '') + e.entries.map(p => `- [${p.status}] ${p.content}`).join('\n')
+			}
+			else if (e.type === 'status') { if (!segments.length) { reasoning = e.message } }
+			else if (e.type === 'permission') {
+				void this._dialogService.prompt<string | null>({
+					type: 'question',
+					message: `${name} asks for permission`,
+					detail: e.title,
+					buttons: e.options.map(o => ({ label: o.name, run: () => o.id })),
+					cancelButton: { label: 'Dismiss', run: () => null },
+				}).then(r => this._externalAgentMain.answerPermission(e.requestId, r.result ?? null))
+					.catch(() => this._externalAgentMain.answerPermission(e.requestId, null))
+			}
+			else if (e.type === 'auth-terminal') {
+				void this._externalAgents.openSignInTerminal(name, e.command, e.args, e.env).catch(err => this._notificationService.warn(getErrorMessage(err)))
+			}
+			publish()
+		})
+
+		this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: '', toolCallSoFar: null }, interrupt })
+		const keepPartialAnswer = () => {
+			const answer = display().trim()
+			if (answer || reasoning) { this._addMessageToThread(threadId, { role: 'assistant', displayContent: answer, reasoning, anthropicReasoning: null }) }
+			return answer
+		}
+		try {
+			const { stopReason } = await this._externalAgentMain.runTurn({ sessionKey: threadId, agentId, custom, cwd, text })
+			if (!isCurrent() || this._currentIsRunning(threadId) !== 'LLM') { return } // stopped by the person: abortRunning already kept what was shown
+			if (stopReason !== 'end_turn' && stopReason !== 'cancelled') { segments.push({ kind: 'text', text: `\n\n_(${name} stopped: ${stopReason.replace(/_/g, ' ')})_` }) }
+			const answer = keepPartialAnswer()
+			if (!answer && !sawTool) {
+				this._setStreamState(threadId, { isRunning: undefined, error: { message: `${name} finished without an answer. Send the message again.`, fullError: null } })
+			} else {
+				this._setStreamState(threadId, undefined)
+			}
+			this._addUserCheckpoint({ threadId })
+		} catch (error) {
+			const message = getErrorMessage(error)
+			if (isCurrent() && this._currentIsRunning(threadId) === 'LLM') { keepPartialAnswer() }
+			if (message.includes('SIGN_IN_IN_TERMINAL')) {
+				throw new Error(`${name} needs you to sign in. A terminal opened for it: finish the sign-in there, then send your message again.`)
+			}
+			throw error
+		} finally {
+			listener.dispose()
+			if (isCurrent()) { this._externalRunOfThread.delete(threadId) }
+		}
+	}
 
 	private _addCheckpoint(threadId: string, checkpoint: CheckpointEntry) {
 		this._addMessageToThread(threadId, checkpoint)
@@ -2270,6 +2379,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 			this._pendingInlineApprovals.delete(threadId)
 			pendingInline('rejected')
 		}
+		this._externalRunOfThread.delete(threadId)
+		void this._externalAgentMain.closeSession(threadId).catch(() => { /* no agent was running for this thread */ })
 
 		// delete the thread
 		const newThreads = { ...currentThreads };

@@ -48,6 +48,12 @@ SRC = {
   'githubModels': ('lobe', 'github'),
 }
 
+# the coding agents of Settings > Models > External agents -> source (written to their own file, common/externalAgents/agentLogoData.ts)
+AGENT_SRC = {
+  'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'gemini': ('lobe', 'geminicli'),
+  'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('letterF', ''), 'custom': ('generic', ''),
+}
+
 TAGS = {'g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline', 'line', 'mask', 'defs', 'clipPath'}
 ATTRS = {  # svg name -> react name
   'd': 'd', 'cx': 'cx', 'cy': 'cy', 'r': 'r', 'rx': 'rx', 'ry': 'ry', 'x': 'x', 'y': 'y', 'width': 'width', 'height': 'height', 'points': 'points',
@@ -134,17 +140,28 @@ def generic():
         {'t': 'path', 'a': {**stroke, 'd': 'M13.5 5 10.5 19'}, 'k': []},
     ]
 
-logos = {}
-for key, (kind, name) in SRC.items():
-    if kind == 'lobe': vb, kids = parse(os.path.join(args.lobe, name + '.svg'))
-    elif kind == 'modelsdev': vb, kids = parse(os.path.join(args.modelsdev, 'providers', name, 'logo.svg'))
-    elif kind == 'litellm': vb, kids = parse(args.litellm)
-    elif kind == 'requesty': vb, kids = requesty()
-    else: vb, kids = generic()
-    if kind not in ('requesty', 'generic'): flatten_colours(kids)
-    if not kids: raise SystemExit(f'{key}: empty logo')
-    for n in kids: strip(n)
-    logos[key] = {'vb': vb, 'els': kids}
+def letter_f():
+    # Freebuff publishes no vector mark: a neutral "F" monogram drawn here, not their logo
+    stroke = {'stroke': 'currentColor', 'strokeWidth': '2.4', 'strokeLinecap': 'round', 'strokeLinejoin': 'round', 'fill': 'none'}
+    return '0 0 24 24', [{'t': 'path', 'a': {**stroke, 'd': 'M17 5H8v14M8 12h7'}, 'k': []}]
+
+def load(table):
+    out = {}
+    for key, (kind, name) in table.items():
+        if kind == 'lobe': vb, kids = parse(os.path.join(args.lobe, name + '.svg'))
+        elif kind == 'modelsdev': vb, kids = parse(os.path.join(args.modelsdev, 'providers', name, 'logo.svg'))
+        elif kind == 'litellm': vb, kids = parse(args.litellm)
+        elif kind == 'requesty': vb, kids = requesty()
+        elif kind == 'letterF': vb, kids = letter_f()
+        else: vb, kids = generic()
+        if kind not in ('requesty', 'generic', 'letterF'): flatten_colours(kids)
+        if not kids: raise SystemExit(f'{key}: empty logo')
+        for n in kids: strip(n)
+        out[key] = {'vb': vb, 'els': kids}
+    return out
+
+logos = load(SRC)
+agent_logos = load(AGENT_SRC)
 
 def ts_node(n):
     attrs = ', '.join(f'{k}: {json.dumps(v)}' for k, v in n['a'].items())
@@ -175,6 +192,27 @@ export type ProviderLogoName = keyof typeof providerLogos
 '''
 open(OUT, 'w').write(out)
 print('wrote', OUT, len(logos), 'logos', len(out) // 1024, 'KB')
+
+agent_lines = '\n'.join(f'\t{key}: {{ vb: {json.dumps(lg["vb"])}, els: [' + ', '.join(ts_node(n) for n in lg['els']) + '] },' for key, lg in agent_logos.items())
+agent_out = f'''/*--------------------------------------------------------------------------------------
+ *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
+ *--------------------------------------------------------------------------------------*/
+
+// GENERATED - do not edit by hand. Regenerate with build/lib/vader/genProviderLogos.py.
+//
+// The logo of every coding agent offered in Settings > Models > External agents, in the same one-colour form as providerLogoData.ts. The marks
+// remain the property of their owners and are shown only to name the agent the person's own account belongs to. Freebuff publishes no vector
+// mark and Custom has no brand: both use a neutral glyph drawn here.
+
+import type {{ ProviderLogoData }} from '../providerLogoData.js'
+
+export const agentLogos = {{
+{agent_lines}
+}} as const satisfies {{ readonly [agentLogo: string]: ProviderLogoData }}
+'''
+AGENT_OUT = os.path.join(ROOT, 'src/vs/workbench/contrib/vader/common/externalAgents/agentLogoData.ts')
+open(AGENT_OUT, 'w').write(agent_out)
+print('wrote', AGENT_OUT, len(agent_logos), 'logos')
 
 if args.sheet:  # contact sheet for eyeballing
     cells = ''.join(f'<div style="display:inline-block;width:110px;text-align:center;margin:8px;font:11px sans-serif"><svg viewBox="{lg["vb"]}" width="48" height="48" fill="currentColor">' + ''.join(

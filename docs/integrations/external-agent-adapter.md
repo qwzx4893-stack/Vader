@@ -1,3 +1,5 @@
+> **Update:** third-party ACP agents (Codex, OpenCode, Cursor, Gemini, your own) are now reached by a separate client, documented in [`external-agents.md`](./external-agents.md). This page describes the older in-process adapter boundary, which is unchanged.
+
 # External Agent Adapter
 
 **Contract:** `common/externalAgent/externalAgentAdapterTypes.ts` (`IExternalAgentAdapter`, `IExternalAgentSession`, `ExternalAgentEvent`). **Registry:** `common/externalAgent/externalAgentAdapterRegistry.ts`. **Reference implementation:** `browser/vaderNativeExternalAgentAdapter.ts`.

@@ -166,6 +166,8 @@ import { IGitWorktreeMainService } from '../../workbench/contrib/vader/common/wo
 import { GitWorktreeMainService } from '../../workbench/contrib/vader/electron-main/gitWorktreeMainService.js';
 import { IVisionMainService } from '../../workbench/contrib/vader/common/vision/visionQueryTypes.js';
 import { VisionMainService } from '../../workbench/contrib/vader/electron-main/visionMainService.js';
+import { IExternalAgentMainService } from '../../workbench/contrib/vader/common/externalAgents/externalAgentTypes.js';
+import { ExternalAgentMainService } from '../../workbench/contrib/vader/electron-main/externalAgentMainService.js';
 type OSProxyConfigEvent = {
 	readonly success: boolean;
 	readonly durationMs: number;
@@ -1328,6 +1330,7 @@ export class CodeApplication extends Disposable {
 		services.set(IBrowserToolMainService, new SyncDescriptor(BrowserToolMainService, undefined, false));
 		services.set(IGitWorktreeMainService, new SyncDescriptor(GitWorktreeMainService, undefined, false));
 		services.set(IVisionMainService, new SyncDescriptor(VisionMainService, undefined, false));
+		services.set(IExternalAgentMainService, new SyncDescriptor(ExternalAgentMainService, undefined, false));
 
 		// Default Extensions Profile Init
 		services.set(IExtensionsProfileScannerService, new SyncDescriptor(ExtensionsProfileScannerService, undefined, true));
@@ -1526,6 +1529,10 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const visionChannel = ProxyChannel.fromService(accessor.get(IVisionMainService), disposables);
 		mainProcessElectronServer.registerChannel('vader-channel-vision', visionChannel);
+
+		// Vader added this
+		const externalAgentChannel = ProxyChannel.fromService(accessor.get(IExternalAgentMainService), disposables);
+		mainProcessElectronServer.registerChannel('vader-channel-externalAgent', externalAgentChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

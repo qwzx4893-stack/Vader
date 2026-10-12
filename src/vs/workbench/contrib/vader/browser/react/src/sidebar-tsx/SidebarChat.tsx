@@ -15,6 +15,7 @@ import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
 import { BlockCode, TextAreaFns, VaderCustomDropdownBox, VaderInputBox2, VaderSlider, VaderSwitch, VaderDiffEditor, VaderButtonBgDarken } from '../util/inputs.js';
 import { ModelDropdown, } from '../vader-settings-tsx/ModelDropdown.js';
+import { ExternalAgentChatPicker } from '../vader-settings-tsx/ExternalAgents.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
 import { VADER_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
@@ -390,6 +391,7 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-vader-fg-3 bg-vader-bg-1 border border-vader-border-2 rounded py-0.5 px-1' />}
+							{featureName === 'Chat' && <ExternalAgentChatPicker className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />}
 							<ModelDropdown featureName={featureName} className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />
 						</div>
 					</div>
@@ -3003,7 +3005,8 @@ export const SidebarChat = () => {
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 
-	const isDisabled = instructionsAreEmpty || !!isFeatureNameDisabled('Chat', settingsState)
+	// a coding agent chosen for the chat brings its own model, so no model has to be configured
+	const isDisabled = instructionsAreEmpty || (!settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState))
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)

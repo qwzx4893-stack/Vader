@@ -83,6 +83,9 @@ export const ModelDropdown = ({ featureName, className }: { featureName: Feature
 
 	const { emptyMessage } = modelFilterOfFeatureName[featureName]
 
+	// a coding agent chosen for the chat takes the place of the model: the picker next to this box shows which one
+	if (featureName === 'Chat' && settingsState.globalSettings.externalAgentId) return null
+
 	const isDisabled = isFeatureNameDisabled(featureName, settingsState)
 	if (isDisabled)
 		return <WarningBox onClick={openSettings} text={

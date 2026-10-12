@@ -83,6 +83,10 @@ import '../common/vaderUpdateService.js'
 // model service
 import '../common/vaderModelService.js'
 
+// external coding agents (Codex, OpenCode, Cursor, Gemini through ACP): the renderer's handle on the main-process service
+import '../common/externalAgents/externalAgentService.js'
+import './externalAgents/externalAgentsService.js'
+
 // Vader agent platform: hard policy engine (see ARCHITECTURE.md)
 import '../common/policy/policyService.js'
 

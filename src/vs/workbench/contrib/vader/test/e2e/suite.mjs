@@ -20,6 +20,7 @@ import { toleranceScenarios } from './scenarios/tolerance.mjs';
 import { noWorkspaceScenarios } from './scenarios/noWorkspace.mjs';
 import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { realLlmTaskScenarios, oracleTaskScenarios } from './scenarios/realLlmTasks.mjs';
+import { externalAgentScenarios } from './scenarios/externalAgents.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
 import { runPersistenceGroup } from './scenarios/persistence.mjs';
 
@@ -30,6 +31,7 @@ await runGroup({ name: 'xml-tools', model: 'qwen2.5-coder', scenarios: xmlScenar
 await runGroup({ name: 'unknown-model', model: 'my-local-model', scenarios: unknownModelScenarios });
 await runGroup({ name: 'providers', model: 'gpt-4o', scenarios: providerScenarios });
 await runGroup({ name: 'robustness', model: 'gpt-4o', scenarios: robustnessScenarios });
+await runGroup({ name: 'external-agents', model: 'gpt-4o', scenarios: externalAgentScenarios });
 await runGroup({ name: 'no-workspace', model: 'gpt-4o', noWorkspace: true, scenarios: noWorkspaceScenarios });
 await runGroup({ name: 'agent-tasks', model: 'gpt-4o', scenarios: oracleTaskScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });

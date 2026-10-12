@@ -531,6 +531,10 @@ export type GlobalSettings = {
 	isOnboardingComplete: boolean;
 	disableSystemMessage: boolean;
 	autoAcceptLLMChanges: boolean;
+	/** which external coding agent answers in the chat (see common/externalAgents); null = Vader's own agent with the models set up here */
+	externalAgentId: string | null;
+	/** agents added by hand: any program that speaks the Agent Client Protocol */
+	customAcpAgents: { id: string, name: string, command: string, args: string[] }[];
 	autoCheckUpdates: boolean; // look for a newer GitHub release in the background (off by default: nothing contacts the network on its own)
 }
 
@@ -548,6 +552,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	isOnboardingComplete: false,
 	disableSystemMessage: false,
 	autoAcceptLLMChanges: false,
+	externalAgentId: null,
+	customAcpAgents: [],
 	autoCheckUpdates: false,
 }
 

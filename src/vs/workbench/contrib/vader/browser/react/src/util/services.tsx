@@ -64,6 +64,7 @@ import { IModelRouterService, ModelRouterState } from '../../../../common/modelR
 import { ISkillService, SkillRecord } from '../../../../common/skills/skillService.js'
 import { IMemoryService, MemoryRecord } from '../../../../common/memory/memoryService.js'
 import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestrationService.js'
+import { IExternalAgentsService, ExternalAgentsState } from '../../../externalAgents/externalAgentsService.js'
 import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
 import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
 
@@ -112,6 +113,9 @@ const skillsStateListeners: Set<(s: SkillRecord[]) => void> = new Set()
 let memoryState: { project: MemoryRecord[]; agent: MemoryRecord[] }
 const memoryStateListeners: Set<(s: { project: MemoryRecord[]; agent: MemoryRecord[] }) => void> = new Set()
 
+let externalAgentsState: ExternalAgentsState
+const externalAgentsStateListeners: Set<(s: ExternalAgentsState) => void> = new Set()
+
 let orchestrationRunsState: ParallelRunState[]
 const orchestrationRunsStateListeners: Set<(s: ParallelRunState[]) => void> = new Set()
 
@@ -139,9 +143,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		skillService: accessor.get(ISkillService),
 		memoryService: accessor.get(IMemoryService),
 		orchestrationService: accessor.get(IAgentOrchestrationService),
+		externalAgentsService: accessor.get(IExternalAgentsService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService, externalAgentsService } = stateServices
 
 
 
@@ -263,6 +268,14 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	externalAgentsState = externalAgentsService.state
+	disposables.push(
+		externalAgentsService.onDidChange(() => {
+			externalAgentsState = externalAgentsService.state
+			externalAgentsStateListeners.forEach(l => l(externalAgentsState))
+		})
+	)
+
 	orchestrationRunsState = orchestrationService.runs
 	disposables.push(
 		orchestrationService.onDidChangeOrchestration(() => {
@@ -334,6 +347,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		ISkillService: accessor.get(ISkillService),
 		IMemoryService: accessor.get(IMemoryService),
 		IAgentOrchestrationService: accessor.get(IAgentOrchestrationService),
+		IExternalAgentsService: accessor.get(IExternalAgentsService),
 		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
 		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
 
@@ -581,6 +595,19 @@ export const useMemoryState = () => {
 		const listener = (newState: { project: MemoryRecord[]; agent: MemoryRecord[] }) => { ss(newState) }
 		memoryStateListeners.add(listener);
 		return () => { memoryStateListeners.delete(listener) };
+	}, []);
+	return s
+}
+
+
+export const useExternalAgentsState = () => {
+	const accessor = useAccessor()
+	const externalAgentsService = accessor.get('IExternalAgentsService')
+	const [s, ss] = useState(externalAgentsService.state)
+	useEffect(() => {
+		const listener = (newState: ExternalAgentsState) => { ss(newState) }
+		externalAgentsStateListeners.add(listener);
+		return () => { externalAgentsStateListeners.delete(listener) };
 	}, []);
 	return s
 }

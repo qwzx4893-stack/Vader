@@ -6,6 +6,12 @@ gallery (Open VSX), the public list of Vader releases on GitHub (`api.github.com
 The editor's own update and telemetry endpoints in `product.json` are not configured. The same list is shown to the user in **Settings > Privacy & Network**.
 Chromium and Electron ship background services that contact Google on their own; Vader turns them off.
 
+## Coding agents the person adds (Settings > Coding Agents) - `electron-main/externalAgentMainService.ts`
+- Nothing is contacted until the person presses Download / Install / Open or sends a message to the chosen agent.
+- Downloads: the host named by the ACP registry, restricted to `github.com` and GitHub's release CDNs, `downloads.cursor.com`; https only; checksum compared when published.
+- "Check for newer agent versions" (button, never automatic): `cdn.agentclientprotocol.com`.
+- The vendors' own programs then talk to their vendors with the person's account (that is the point); Vader sees only the protocol messages on the program's stdin/stdout.
+
 ## Electron (main process, workbench windows) - `src/main.ts`
 - `--disable-features=...` extended with the optimization-hints, model-download, media-router, autofill, CT-list, translate and feed features.
 - `app.on('session-created')` disables the spell checker and points its dictionary download at a dead address (Electron otherwise

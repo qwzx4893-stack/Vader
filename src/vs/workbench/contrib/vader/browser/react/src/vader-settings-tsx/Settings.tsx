@@ -10,9 +10,10 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VaderButtonBgDarken, VaderCustomDropdownBox, VaderInputBox2, VaderSimpleInputBox, VaderSwitch } from '../util/inputs.js'
 import { filterProviders } from '../../../../common/providerSearch.js'
 import { useAccessor, useIsDark, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info } from 'lucide-react'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info, Terminal } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
+import { ExternalAgentsSection } from './ExternalAgents.js'
 import { redactSettingsForExport, mergeImportedSettings } from '../../../../common/helpers/settingsPortability.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
 import { WarningBox } from './WarningBox.js'
@@ -31,6 +32,7 @@ import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js
 
 type Tab =
 	| 'models'
+	| 'externalAgents'
 	| 'localProviders'
 	| 'providers'
 	| 'agent'
@@ -1626,6 +1628,7 @@ const PrivacySection = () => {
 		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure (or localhost for local models)' },
 		{ who: 'Extension registry', when: 'When you browse, search or install extensions.', host: 'open-vsx.org' },
 		{ who: 'Release check', when: autoCheckUpdates ? 'Now on: a quiet check for a newer Vader release every few hours, plus the manual button.' : 'Only when you press "Check for Updates". The background check is off.', host: 'api.github.com' },
+		{ who: 'Coding agents you add', when: 'Only after you pick one in Settings > Coding Agents and press Download or Install, or send it a message. The vendor\'s own program then talks to the vendor with your account; Vader does not see the sign-in.', host: 'the vendor of that agent (github.com for downloads)' },
 		{ who: 'Pages the agent opens', when: 'Only when the agent uses its browser tool, and only the sites it was told to visit.', host: 'the sites in question' },
 	]
 
@@ -1720,6 +1723,7 @@ export const Settings = () => {
 	const navGroups: { title: string | null; items: { tab: Tab; label: string; Icon: typeof Brain }[] }[] = [
 		{ title: 'Models', items: [
 			{ tab: 'models', label: 'Models', Icon: Brain },
+			{ tab: 'externalAgents', label: 'Coding Agents', Icon: Terminal },
 			{ tab: 'localProviders', label: 'Local Providers', Icon: HardDrive },
 			{ tab: 'providers', label: 'Main Providers', Icon: Cloud },
 		] },
@@ -1862,6 +1866,13 @@ export const Settings = () => {
 									<div className='w-full h-[1px] my-4' />
 									<AutoDetectLocalModelsToggle />
 									<RefreshableModels />
+								</ErrorBoundary>
+							</div>
+
+							{/* Coding agents the person already has an account with */}
+							<div className={shouldShowTab('externalAgents') ? `` : 'hidden'}>
+								<ErrorBoundary>
+									<ExternalAgentsSection />
 								</ErrorBoundary>
 							</div>
 

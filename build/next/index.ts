@@ -612,6 +612,7 @@ function inlineMinimistPlugin(): esbuild.Plugin {
  * stays external exactly as with `packages: 'external'`.
  */
 const VADER_BUNDLED_PACKAGES = [
+	'@agentclientprotocol/sdk',
 	'@anthropic-ai/sdk',
 	'@google/genai',
 	'@mistralai/mistralai',
