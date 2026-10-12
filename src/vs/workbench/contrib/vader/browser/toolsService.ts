@@ -85,11 +85,21 @@ const validateURIWith = (uriStr: unknown, workspaceRoot: URI | undefined, userHo
 	// - /home/user/file.txt (local file path, will be converted to file://)
 	// - C:\Users\file.txt (Windows local path, will be converted to file://)
 	// - src/app.js, ./app.js, . (relative to the open folder), ~/notes.txt (home folder)
+	// Network shares (`\\host\share`, `//host/share`, `file://host/share`): on Windows, opening one makes the computer try to log in to that host and hand
+	// over the user's password hash. A file tool can be told to do that by text it read (a prompt injection), with no approval asked for a read.
+	if (/^[\\/]{2}[^\\/]/.test(uriStr.trim()) && !/^file:/i.test(uriStr.trim())) {
+		throw new Error(`"${uriStr}" is a network share path (\\\\host\\share), which Vader's file tools do not open. Use a path on this computer.`)
+	}
 	if (uriStr.includes('://')) {
 		try {
 			const uri = URI.parse(uriStr)
+			if (uri.scheme === 'file' && uri.authority && uri.authority.toLowerCase() !== 'localhost') {
+				throw new Error(`"${uriStr}" points at another computer (file://${uri.authority}/...), which Vader's file tools do not open. Use a path on this computer.`)
+			}
+			if (uri.scheme === 'file' && uri.authority) return URI.from({ scheme: 'file', path: uri.path }) // file://localhost/x is the same file as file:///x
 			return uri
 		} catch (e) {
+			if (e instanceof Error && /do not open/.test(e.message)) throw e
 			// If parsing fails, it's a malformed URI
 			throw new Error(`Invalid URI format: ${uriStr}. Error: ${e}`)
 		}

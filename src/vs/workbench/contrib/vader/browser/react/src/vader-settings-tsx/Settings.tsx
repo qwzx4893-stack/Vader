@@ -13,6 +13,7 @@ import { useAccessor, useIsDark, useRefreshModelListener, useRefreshModelState, 
 import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
+import { redactSettingsForExport, mergeImportedSettings } from '../../../../common/helpers/settingsPortability.js'
 import { ChatMarkdownRender } from '../markdown/ChatMarkdownRender.js'
 import { WarningBox } from './WarningBox.js'
 import { os } from '../../../../common/helpers/systemInfo.js'
@@ -1759,7 +1760,8 @@ export const Settings = () => {
 		}
 		else if (t === 'Settings') {
 			// Export user settings
-			dataStr = JSON.stringify(vaderSettingsService.state, null, 2)
+			// API keys and custom headers are left out: the file is made to be shared (bug reports, a colleague's computer)
+			dataStr = JSON.stringify(redactSettingsForExport(vaderSettingsService.state), null, 2)
 			downloadName = 'vader-settings.json'
 		}
 		else {
@@ -1798,7 +1800,8 @@ export const Settings = () => {
 					chatThreadsService.dangerousSetState(json as any)
 				}
 				else if (t === 'Settings') {
-					vaderSettingsService.dangerousSetState(json as any)
+					// keys already on this computer stay for providers whose endpoint is unchanged; a file can never move them to another server
+					vaderSettingsService.dangerousSetState(mergeImportedSettings(json, vaderSettingsService.state as any) as any)
 				}
 
 				notificationService.info(`${t} imported successfully!`)
@@ -2159,6 +2162,7 @@ Alternatively, place a \`.vaderrules\` file in the root of your workspace.
 											<VaderButtonBgDarken className='px-4 py-1 w-full' onClick={() => onDownload('Settings')}>
 												Export Settings
 											</VaderButtonBgDarken>
+											<div className='text-vader-fg-3 text-xs'>API keys are not written to the file.</div>
 											<ConfirmButton className='px-4 py-1 w-full' onConfirm={() => { vaderSettingsService.resetState(); }}>
 												Reset Settings
 											</ConfirmButton>

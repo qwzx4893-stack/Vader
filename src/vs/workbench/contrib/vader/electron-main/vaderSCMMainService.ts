@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { safeGitConfigArgs, SAFE_DIFF_FLAGS } from './safeGit.js'
 import { promisify } from 'util'
 import { execFile as _execFile } from 'child_process'
 import { IVaderSCMService } from '../common/vaderSCMTypes.js'
@@ -24,7 +25,7 @@ const GIT_MAX_BUFFER = 16 * 1024 * 1024
 // Arguments are passed as an array and never through a shell: file names come from the opened
 // repository and can contain quotes, `;`, `$()` or backticks (a hostile repo could otherwise run commands).
 const git = async (args: string[], path: string): Promise<string> => {
-	const { stdout, stderr } = await execFile('git', args, {
+	const { stdout, stderr } = await execFile('git', [...safeGitConfigArgs(), ...args], {
 		cwd: path,
 		timeout: GIT_TIMEOUT_MS,
 		maxBuffer: GIT_MAX_BUFFER,
@@ -57,17 +58,17 @@ const parseNumStatZ = (output: string): NumStat[] => {
 }
 
 const getNumStat = async (path: string, useStagedChanges: boolean): Promise<NumStat[]> => {
-	const output = await git(['diff', '--numstat', '-z', ...(useStagedChanges ? ['--staged'] : [])], path)
+	const output = await git(['diff', ...SAFE_DIFF_FLAGS, '--numstat', '-z', ...(useStagedChanges ? ['--staged'] : [])], path)
 	return parseNumStatZ(output)
 }
 
 const getSampledDiff = async (file: string, path: string, useStagedChanges: boolean): Promise<string> => {
-	const diff = await git(['diff', '--unified=0', '--no-color', ...(useStagedChanges ? ['--staged'] : []), '--', file], path)
+	const diff = await git(['diff', ...SAFE_DIFF_FLAGS, '--unified=0', '--no-color', ...(useStagedChanges ? ['--staged'] : []), '--', file], path)
 	return diff.slice(0, MAX_DIFF_LENGTH)
 }
 
 const hasStagedChanges = async (path: string): Promise<boolean> => {
-	const output = await git(['diff', '--staged', '--name-only'], path)
+	const output = await git(['diff', ...SAFE_DIFF_FLAGS, '--staged', '--name-only'], path)
 	return output.length > 0
 }
 
@@ -76,7 +77,7 @@ export class VaderSCMService implements IVaderSCMService {
 
 	async gitStat(path: string): Promise<string> {
 		const useStagedChanges = await hasStagedChanges(path)
-		return git(['diff', '--stat', ...(useStagedChanges ? ['--staged'] : [])], path)
+		return git(['diff', ...SAFE_DIFF_FLAGS, '--stat', ...(useStagedChanges ? ['--staged'] : [])], path)
 	}
 
 	async gitSampledDiffs(path: string): Promise<string> {

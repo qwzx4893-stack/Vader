@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { safeGitConfigArgs, SAFE_DIFF_FLAGS } from './safeGit.js';
 import { promisify } from 'util';
 import { execFile as _execFile } from 'child_process';
 import * as path from 'path';
@@ -24,7 +25,7 @@ const execFile = promisify(_execFile);
 const GIT_TIMEOUT_MS = 60_000;
 const git = async (args: string[], cwd: string): Promise<string> => {
 	try {
-		const { stdout } = await execFile('git', args, { cwd, timeout: GIT_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+		const { stdout } = await execFile('git', [...safeGitConfigArgs(), ...args], { cwd, timeout: GIT_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
 		return stdout.trim();
 	} catch (e) {
 		if (e && typeof e === 'object' && 'killed' in e && (e as { killed?: boolean }).killed && 'signal' in e && (e as { signal?: string }).signal === 'SIGTERM') {
@@ -59,7 +60,7 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 	async getWorktreeDiffStat(worktreePath: string): Promise<string> {
 		try {
 			await git(['add', '-A'], worktreePath);
-			return await git(['diff', '--cached', '--stat'], worktreePath);
+			return await git(['diff', ...SAFE_DIFF_FLAGS, '--cached', '--stat'], worktreePath);
 		} catch (e) {
 			return `(failed to compute diff: ${e instanceof Error ? e.message : String(e)})`;
 		}

