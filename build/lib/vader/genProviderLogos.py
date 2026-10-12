@@ -51,7 +51,7 @@ SRC = {
 # the coding agents of Settings > Models > External agents -> source (written to their own file, common/externalAgents/agentLogoData.ts)
 AGENT_SRC = {
   'codex': ('lobe', 'codex'), 'opencode': ('lobe', 'opencode'), 'cursor': ('lobe', 'cursor'), 'gemini': ('lobe', 'geminicli'),
-  'claudecode': ('prompt', ''), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
+  'claudecode': ('lobe', 'claudecode'), 'antigravity': ('lobe', 'antigravity'), 'freebuff': ('freebuff', ''), 'custom': ('generic', ''),
 }
 
 TAGS = {'g', 'path', 'circle', 'rect', 'ellipse', 'polygon', 'polyline', 'line', 'mask', 'defs', 'clipPath'}
@@ -140,15 +140,6 @@ def generic():
         {'t': 'path', 'a': {**stroke, 'd': 'M13.5 5 10.5 19'}, 'k': []},
     ]
 
-def prompt_glyph():
-    # Anthropic's terms for Claude Code (code.claude.com/docs/en/legal-and-compliance) allow saying in plain text that a product runs Claude Code but
-    # do not allow their names or logos beyond that without written permission, so its card uses this neutral terminal prompt instead of their mark.
-    stroke = {'stroke': 'currentColor', 'strokeWidth': '2', 'strokeLinecap': 'round', 'strokeLinejoin': 'round', 'fill': 'none'}
-    return '0 0 24 24', [
-        {'t': 'path', 'a': {**stroke, 'd': 'm5 7 5 5-5 5'}, 'k': []},
-        {'t': 'path', 'a': {**stroke, 'd': 'M13 17h6'}, 'k': []},
-    ]
-
 def freebuff():
     # Freebuff's own mark, as the person who owns the project supplied it: two nested corner shapes that together make an "F", white on a black
     # rounded tile. Only the glyph is kept (every logo here is one colour, currentColor, without a tile, so it follows the theme); the geometry is
@@ -166,9 +157,8 @@ def load(table):
         elif kind == 'litellm': vb, kids = parse(args.litellm)
         elif kind == 'requesty': vb, kids = requesty()
         elif kind == 'freebuff': vb, kids = freebuff()
-        elif kind == 'prompt': vb, kids = prompt_glyph()
         else: vb, kids = generic()
-        if kind not in ('requesty', 'generic', 'freebuff', 'prompt'): flatten_colours(kids)
+        if kind not in ('requesty', 'generic', 'freebuff'): flatten_colours(kids)
         if not kids: raise SystemExit(f'{key}: empty logo')
         for n in kids: strip(n)
         out[key] = {'vb': vb, 'els': kids}
