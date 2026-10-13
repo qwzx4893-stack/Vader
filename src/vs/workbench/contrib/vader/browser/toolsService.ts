@@ -10,6 +10,7 @@ import { QueryBuilder } from '../../../services/search/common/queryBuilder.js'
 import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
+import { withUriAlias } from '../common/toolArgAliases.js'
 import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
 import { IVaderModelService } from '../common/vaderModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
@@ -551,6 +552,12 @@ export class ToolsService implements IToolsService {
 
 		}
 
+
+		// a model that writes the file argument as `path`/`file_path` (what other coding tools call it) is understood: see common/toolArgAliases.ts
+		for (const toolName of Object.keys(this.validateParams) as BuiltinToolName[]) {
+			const validate = this.validateParams[toolName] as (params: RawToolParamsObj) => unknown
+			;(this.validateParams as Record<string, (params: RawToolParamsObj) => unknown>)[toolName] = (params: RawToolParamsObj) => validate(withUriAlias(params))
+		}
 
 		this.callTool = {
 			read_file: async ({ uri, startLine, endLine, pageNumber }) => {

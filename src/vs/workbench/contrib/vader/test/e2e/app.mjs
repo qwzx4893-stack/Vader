@@ -14,6 +14,17 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
+/** A debugging port nobody is listening on. With several suites running side by side a random pick from a small range collides, and Playwright would then attach to ANOTHER run's window. */
+async function freePort() {
+	const net = await import('node:net');
+	for (let i = 0; i < 50; i++) {
+		const candidate = 9300 + Math.floor(Math.random() * 20000);
+		const ok = await new Promise(res => { const s = net.createServer(); s.once('error', () => res(false)); s.listen(candidate, '127.0.0.1', () => s.close(() => res(true))); });
+		if (ok) { return candidate; }
+	}
+	throw new Error('no free debugging port found');
+}
+
 export function loadPlaywright() {
 	return require(process.env.PW_CORE || 'playwright-core');
 }
@@ -24,7 +35,7 @@ export function loadPlaywright() {
  */
 export async function launchApp(opts) {
 	const { chromium } = loadPlaywright();
-	const port = opts.port ?? (9300 + Math.floor(Math.random() * 500));
+	const port = opts.port ?? await freePort();
 	const userDataDir = opts.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-ud-'));
 	const extensionsDir = opts.extensionsDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-ext-'));
 	const args = [

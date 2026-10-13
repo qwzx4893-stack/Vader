@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased - Measuring the agent, and three robustness fixes it exposed
+
+- **A public-style benchmark through the real app.** `test/e2e/polyglotBench.mjs` runs Aider's polyglot exercises (225 Exercism exercises in six languages, two attempts, graded by the tests in Docker) through the packaged Vader, with a local cost-guarded proxy (`llmProxy.mjs`) and a grader check against the reference solutions (`polyglotOracle.mjs`). Method, protocol differences from Aider, first results and their limits: `docs/integrations/agent-benchmark.md`. First readings are small-sample and not comparable with Aider's leaderboard yet.
+- **A file argument written as `path`/`file_path` is understood** (`common/toolArgAliases.ts`): it failed with "Provided uri must be a string".
+- **A call to a tool that does not exist is answered with the real tool names and the one that was probably meant** (`common/toolNameHints.ts`), instead of "Unknown tool: shell".
+- **A loop that alternates between a few calls is stopped** (`common/loopDetection.ts`): the "same call 8 times in a row" guard never caught `cd build` / `cmake ..` / `cd ..` going round.
+- Tests: `agentRobustnessE2E.mjs` (30 checks, added to CI). The test harness picks a free debugging port (two parallel runs could attach to each other's window).
+- Not done, found by the same runs: unknown model names on the OpenAI-compatible provider get XML tool calls in text; `&&` fails in Windows PowerShell 5.1; `Edit file` sometimes receives no Search/Replace blocks.
+
 ## Unreleased - Sharper logo and icons, calmer dark interface
 
 - **Logo and icons from a clean source.** The original artwork (1280 px, JPEG) was run through Real-ESRGAN x4, an open-source super-resolution network; the result

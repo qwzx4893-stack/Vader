@@ -11,6 +11,8 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
+import { RepeatedCallDetector } from '../common/loopDetection.js';
+import { unknownToolMessage } from '../common/toolNameHints.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
 import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
 import { getModelCapabilities } from '../common/modelCapabilities.js';
@@ -1438,6 +1440,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// user tokens for nothing. The runtime's own iteration cap only trips after dozens of turns.
 		let lastCallKey = ''
 		let identicalCallsInARow = 0
+		// ...and the second guard: a loop that alternates between a few calls never repeats the same call twice in a row (common/loopDetection.ts)
+		const repeatedCalls = new RepeatedCallDetector()
 		let loopStopMessage: string | undefined
 		let lastTurnWasEmpty: { hadReasoning: boolean } | null = null
 		const unsubscribe = runtime.subscribe((event) => {
@@ -1445,6 +1449,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const key = event.toolCall.toolName + '\u0000' + JSON.stringify(event.toolCall.input ?? {})
 				identicalCallsInARow = key === lastCallKey ? identicalCallsInARow + 1 : 1
 				lastCallKey = key
+				const cycle = repeatedCalls.push(event.toolCall.toolName, event.toolCall.input)
+				if (cycle.stuck && !loopStopMessage) {
+					loopStopMessage = `The model went round in circles: its last ${cycle.window} tool calls used only ${cycle.distinct} different calls, so Vader stopped the run instead of spending more tokens. Rephrase the request, or pick a different model.`
+					runtime.abort()
+				}
 				if (identicalCallsInARow >= MAX_IDENTICAL_TOOL_CALLS_IN_A_ROW && !loopStopMessage) {
 					loopStopMessage = `The model made the same "${event.toolCall.toolName}" call ${identicalCallsInARow} times in a row without making progress, so Vader stopped the run. Rephrase the request or pick a different model.`
 					runtime.abort()
@@ -1466,7 +1475,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const thread = this.state.allThreads[threadId]
 				if (result?.isError && thread && !thread.messages.some(m => m.role === 'tool' && m.id === result.toolCallId)) {
 					const out = result.output
-					const errorText = typeof out === 'string' ? out : (out && typeof out === 'object' && typeof (out as { error?: unknown }).error === 'string') ? (out as { error: string }).error : JSON.stringify(out)
+					const rawErrorText = typeof out === 'string' ? out : (out && typeof out === 'object' && typeof (out as { error?: unknown }).error === 'string') ? (out as { error: string }).error : JSON.stringify(out)
+					// "Unknown tool: shell" tells a model nothing: say which tools exist and which one it probably meant (common/toolNameHints.ts)
+					const unknownTool = /^Unknown tool:\s*(.+?)\s*$/i.exec(rawErrorText)
+					const errorText = unknownTool ? unknownToolMessage(unknownTool[1], tools.map(t => t.name)) : rawErrorText
 					const input = event.toolCall.input
 					const rawParams = (input && typeof input === 'object' && !Array.isArray(input)) ? input as RawToolParamsObj : {}
 					this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams, result: null, name: result.toolName as ToolName, content: errorText, id: result.toolCallId, mcpServerName: undefined })
