@@ -75,7 +75,8 @@ export const externalAgentScenarios = [
 			t.check('the Claude Code card says it runs unchanged in a terminal and is not wired into the chat', /unmodified Claude Code/.test(await card(t, 'claude-code').innerText()));
 			await t.waitFor(async () => !/Checking/.test(await card(t, 'claude-code').innerText()), 15_000);
 			const cc = await card(t, 'claude-code').innerText();
-			t.check('a terminal agent that is installed offers "Connect" (its own sign-in) and never "Use in the chat"', /Connect/.test(cc) && !/Use in the chat/.test(cc) && !/\bInstall\b/.test(cc), cc);
+			// whether Claude Code exists on the machine running the suite is not ours to decide: an installed one offers "Connect", a missing one "Install"
+			t.check('a terminal agent offers either "Connect" (installed, its own sign-in) or "Install" (missing), and never "Use in the chat"', (/Connect/.test(cc) ? !/\bInstall\b/.test(cc) : /Install/.test(cc)) && !/Use in the chat/.test(cc), cc);
 			const codexText = await card(t, 'codex').innerText();
 			t.check('an agent that is not on this computer offers "Install", not "Download", and no sign-in yet', /Install/.test(codexText) && !/Download/.test(codexText) && !/Connect/.test(codexText), codexText);
 			t.check('Gemini CLI is no longer offered (its free personal login ended)', !(await card(t, 'gemini').isVisible().catch(() => false)));

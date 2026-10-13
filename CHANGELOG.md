@@ -10,6 +10,9 @@
   frame, quieter edges, the chat request as a card, soft tool-call rows, checkpoints as a hairline, a larger floating composer, settings cards with a status dot and a divided action row, grouped model list.
   Same greys, same blue, same fonts and logo; the send button is unchanged. Everything is scoped to the dark theme: light and high-contrast themes keep their own look. "Modern UI" can be switched off in Settings.
 
+- **Extensions install again in the packaged app.** The download step runs in a separate process that never loaded the setting's default (`extensions.verifySignature` = off), so it treated the unset value as "verify" and refused every Open VSX
+  extension with "Signature verification was not executed". An unset value now means off in that process too, as it does in the settings page; a person who switches the setting on still gets verification.
+
 ## Unreleased - Coding agents you already have an account with
 
 - **Connect, not download.** A program the person already has (OpenCode, Cursor, Copilot, Mistral Vibe, Grok, Kimi) is found, verified with a protocol handshake and used as it is: no download, the sign-in it holds counts. Each agent card has one primary
