@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - A project's AGENTS.md (and CLAUDE.md) is read like .vaderrules
+
+- **The gap:** Vader read only `.vaderrules`. `AGENTS.md` is the convention shared by Codex, OpenCode, Cursor, Copilot, Cline and others, and `CLAUDE.md` is Claude Code's; a project that already had one of them gave Vader nothing. Now, per workspace folder, the first of `.vaderrules`, `AGENTS.md`, `CLAUDE.md` is used (`common/instructions/workspaceRulesFiles.ts`), cut at 24,000 characters with a note, framed as possibly written by someone else (it guides, it never grants permission), and picked up when created after the folder was opened.
+- The policy rule that asks before the agent edits the files that steer later turns now covers `AGENTS.md` and `CLAUDE.md` too (an agent asked to write one will ask for approval, as for `.vaderrules`).
+- Tests: `test/workspaceRulesE2E.mjs` (10 checks, in CI).
+
 ## Unreleased - Provider gateways checked against the real servers
 
 - **Every gateway probed live (2026-10-13, no key, nothing sent but empty requests):** `GET {endpoint}/models` and `POST {endpoint}/chat/completions` for all 29 vendor providers and the 6 hosted original ones with a fixed address (OpenAI, xAI, DeepSeek, Groq, Mistral, OpenRouter), plus MiniMax, Alibaba, Moonshot, OpenCode Zen, Anthropic's and Gemini's native routes. The data had been recorded from documentation only because the build sandbox could not reach these hosts. Result: every host answers, 401/403 means the route exists and wants a key.

@@ -110,7 +110,7 @@ class InstructionsService implements IInstructionsService {
 			{ name: 'systemInvariants', label: 'System invariants', content: SYSTEM_INVARIANTS },
 			{ name: 'policy', label: 'Policy engine (hard rules)', content: this._policySummary() },
 			{ name: 'globalUser', label: 'Global AI Instructions (Settings)', content: (input.globalUser ?? '').trim() },
-			{ name: 'workspace', label: 'Workspace rules (.vaderrules)', content: (input.workspace ?? '').trim() },
+			{ name: 'workspace', label: 'Workspace rules (.vaderrules, AGENTS.md or CLAUDE.md)', content: (input.workspace ?? '').trim() },
 			{ name: 'projectMemory', label: 'Project memory', content: (input.projectMemory ?? '').trim() },
 			{ name: 'agent', label: 'Agent instructions', content: (input.agent ?? '').trim() },
 			{ name: 'agentMemory', label: 'Agent memory', content: (input.agentMemory ?? '').trim() },

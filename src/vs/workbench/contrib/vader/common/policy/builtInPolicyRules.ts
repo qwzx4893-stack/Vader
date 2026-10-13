@@ -175,6 +175,8 @@ export const builtInPolicyRules: PolicyRule[] = [
 			'**/mcp.json',
 			'**/.mcp.json',
 			'**/.vaderrules',
+			'**/AGENTS.md',
+			'**/CLAUDE.md',
 			'**/.bashrc',
 			'**/.bash_profile',
 			'**/.bash_login',

@@ -25,6 +25,7 @@ import { findLast } from '../../../../base/common/arraysFind.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { ISkillService } from '../common/skills/skillService.js';
 import { inputBudgetChars, prunedOutputNote } from '../common/contextBudget.js';
+import { WORKSPACE_RULES_FILES, limitWorkspaceRules } from '../common/instructions/workspaceRulesFiles.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -595,20 +596,20 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		}).join('\n\n');
 	}
 
-	// Read .vaderrules files from workspace folders
+	// Read the rules file of each workspace folder: .vaderrules, else AGENTS.md, else CLAUDE.md (common/instructions/workspaceRulesFiles.ts)
 	private _getVaderRulesFileContents(): string {
 		try {
 			const workspaceFolders = this.workspaceContextService.getWorkspace().folders;
 			let vaderRules = '';
 			for (const folder of workspaceFolders) {
 				let model: ReturnType<typeof this.vaderModelService.getModel>['model'] | null = null
-				for (const filename of ['.vaderrules']) {
+				for (const filename of WORKSPACE_RULES_FILES) {
 					const uri = URI.joinPath(folder.uri, filename)
 					model = this.vaderModelService.getModel(uri).model
 					if (model) break
 				}
 				if (!model) continue
-				vaderRules += model.getValue(EndOfLinePreference.LF) + '\n\n';
+				vaderRules += limitWorkspaceRules(model.getValue(EndOfLinePreference.LF)) + '\n\n';
 			}
 			return vaderRules.trim();
 		}

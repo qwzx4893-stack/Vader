@@ -9,6 +9,7 @@ import { IWorkspaceContextService } from '../../../../platform/workspace/common/
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IFileService, FileChangeType } from '../../../../platform/files/common/files.js';
 import { IVaderModelService } from '../common/vaderModelService.js';
+import { WORKSPACE_RULES_FILES } from '../common/instructions/workspaceRulesFiles.js';
 
 class ConvertContribWorkbenchContribution extends Disposable implements IWorkbenchContribution {
 	static readonly ID = 'workbench.contrib.vader.convertcontrib'
@@ -23,8 +24,8 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 
 		const initializeURI = (uri: URI) => {
 			this.workspaceContext.getWorkspace()
-			// .vaderrules is the workspace instructions file
-			for (const filename of ['.vaderrules']) {
+			// .vaderrules, AGENTS.md or CLAUDE.md is the workspace instructions file
+			for (const filename of WORKSPACE_RULES_FILES) {
 				this.vaderModelService.initializeModel(URI.joinPath(uri, filename))
 			}
 		}
@@ -39,7 +40,7 @@ class ConvertContribWorkbenchContribution extends Disposable implements IWorkben
 		// because the file did not exist), so pick it up when it appears
 		this._register(this.fileService.onDidFilesChange(e => {
 			for (const folder of this.workspaceContext.getWorkspace().folders) {
-				for (const filename of ['.vaderrules']) {
+				for (const filename of WORKSPACE_RULES_FILES) {
 					const uri = URI.joinPath(folder.uri, filename)
 					if (e.contains(uri, FileChangeType.ADDED)) { this.vaderModelService.initializeModel(uri) }
 				}
