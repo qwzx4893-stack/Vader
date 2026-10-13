@@ -83,6 +83,17 @@ check('an unrelated name gets the list but no guess', !/use "/.test(msg('frobnic
 check('no guess for a tool that is not offered (read-only mode)', !/use "run_command"/.test(unknownToolMessage('shell', ['read_file', 'ls_dir'])));
 check('it names the tool that was called', msg('shell').includes('"shell"'));
 
+// ---- untrusted instruction layers are framed (a planted line in .vaderrules or in a saved note must not read as the user's own order)
+{
+	const { UNTRUSTED_LAYER_FRAMING } = await load('../common/instructions/instructionsService.ts', 'i.mjs');
+	for (const layer of ['workspace', 'projectMemory', 'agentMemory']) {
+		check(`${layer} text is framed as possibly written by someone else`, typeof UNTRUSTED_LAYER_FRAMING[layer] === 'string' && /run commands/.test(UNTRUSTED_LAYER_FRAMING[layer]) && /send data/.test(UNTRUSTED_LAYER_FRAMING[layer]));
+	}
+	for (const layer of ['systemInvariants', 'policy', 'globalUser', 'agent', 'skill', 'task']) {
+		check(`${layer} is not framed (the user's own text stays plain)`, UNTRUSTED_LAYER_FRAMING[layer] === undefined);
+	}
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

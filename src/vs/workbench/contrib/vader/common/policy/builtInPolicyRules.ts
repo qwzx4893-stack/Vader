@@ -248,10 +248,38 @@ export const builtInPolicyRules: PolicyRule[] = [
 		kinds: ['terminal-command'],
 		commandPatterns: [
 			String.raw`\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(sh|bash|zsh|python[0-9.]*|node)\b`,
+			// the Windows spellings (Vader is Windows-first): download-and-evaluate in PowerShell, `bash <(curl ...)`, `sh -c "$(curl ...)"`, .NET WebClient strings
+			String.raw`\b(iwr|irm|invoke-webrequest|invoke-restmethod|curl|wget)\b[^\n|]*\|\s*(iex|invoke-expression)\b`,
+			String.raw`\b(iex|invoke-expression)\b[^\n]*\b(downloadstring|invoke-webrequest|invoke-restmethod|iwr|irm|net\.webclient)\b`,
+			String.raw`\b(sh|bash|zsh|source)\b\s+(-c\s+)?["']?(<\(|\$\()\s*(curl|wget)\b`,
+			String.raw`\b(curl|wget)\b[^\n|]*\|\s*(sudo\s+)?(powershell|pwsh)(\.exe)?\b`,
 		],
 		builtIn: true,
 		locked: false,
-		neverBypassAutonomous: false,
+		// the classic remote-code-execution step of a prompt injection: asking has to survive autonomous mode too
+		neverBypassAutonomous: true,
+		enabled: true,
+	},
+	{
+		// The terminal inherits the environment Vader was started with, which is where people keep API keys and tokens (OPENROUTER_API_KEY, GH_TOKEN...).
+		// A command that dumps it (or prints a variable whose name says it is a secret) hands those to the model, and from there to anything the model can reach.
+		id: 'vader.ask.dump-environment',
+		description: 'This prints the environment variables, or a variable that looks like a secret (key, token, password), which often hold API keys.',
+		effect: 'ask',
+		kinds: ['terminal-command'],
+		commandPatterns: [
+			String.raw`(^|[;&|]\s*|\bsudo\s+|\bcmd(\.exe)?\s+/c\s+)(printenv|env|export\s+-p|declare\s+-x|set)\s*($|[;&|>])`,
+			String.raw`\b(get-childitem|gci|ls|dir)\s+(-path\s+)?env:`,
+			String.raw`\b(gc|get-content|cat|type)\s+env:`,
+			String.raw`\[(system\.)?environment\]::(getenvironmentvariables|getenvironmentvariable\()`,
+			String.raw`\b(echo|printf|write-host|write-output|print)\b[^\n;&|]*(\$\{?env:|\$\{?|%)[a-z0-9_]*(key|token|secret|passw(or)?d|credential)[a-z0-9_]*`,
+			String.raw`\bprintenv\s+\S*(key|token|secret|passw|credential)`,
+			// a script one-liner that prints the whole environment, or a variable other than the harmless ones
+			String.raw`\b(print|console\.log|json\.dumps|echo)\b[^\n]*\b(os\.environ|process\.env)\b(?![.\[]\s*["']?(PATH|HOME|NODE_ENV|PORT|TERM|SHELL|LANG|USER|DEBUG|CI|PWD)\b)`,
+		],
+		builtIn: true,
+		locked: false,
+		neverBypassAutonomous: true,
 		enabled: true,
 	},
 ];

