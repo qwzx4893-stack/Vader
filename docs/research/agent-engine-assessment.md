@@ -37,6 +37,21 @@ The loop is sound in design and strong where governance matters; it is average i
 | Prompt caching | Anthropic requests (5 files) | Cline, Roo, opencode | partial |
 | Instructions | rewritten 2026-10-13 from published guidance (`docs/integrations/agent-behavior.md`) | Codex's prompt, the guides of Anthropic and OpenAI | **not measured**; the old text was weaker than all of these |
 
+## What was done about it (same day, after the review; every item in its own commit, none measured with a real model yet)
+
+| Finding | Result | Where |
+|---|---|---|
+| (new, found by reading the code) the blind cut of oversized requests (120 characters per message) ran before the careful summary: it started at half of the window, the summary at 70% measured with tool results capped at 2,000 characters | one yardstick for prune, summarise and cut; simulated session: the old rules sent a request over the cut line in 71% to 98% of 600 steps, the new ones in 0 | `common/contextBudget.ts`, `test/contextBudgetE2E.mjs` |
+| no pruning of old tool output | prune from 50% of the budget, no model call, the chat still shows the full result | same |
+| no content-repetition detector | 50-character window repeated 12 times and a periodic tail; 0 false positives on 255 of Vader's own files | `common/loopDetection.ts` |
+| (new) an exact edit match was not checked for uniqueness, and a match inside a line replaced the whole line | unique, exact-character replacement; one whitespace/typography-tolerant step on whole lines; marker variants (SEARCH/REPLACE ...) read | `common/editMatching.ts`, `test/editMatchingE2E.mjs` |
+| unknown model names got XML tools | native tools first, XML fallback when the server refuses, remembered | `common/toolSupport.ts` |
+| no task list | tool `update_task_list` | `common/taskList.ts` |
+| no repo map | tool `repo_map` (line patterns, PageRank, budget) | `common/repoMap.ts` |
+| (new) 50-turn cap ended long jobs with a bare SDK error | 100 turns, plain message, "continue" resumes | `common/loopDetection.ts` |
+
+Not done, on purpose: the terminal sandbox (a product decision, see candidate 9), autocomplete (needs its own measurement first), a model-based edit repair (costs tokens and hides model errors), `apply_patch` for OpenAI-family models (wait for the benchmark), shadow-git checkpoints. Nothing above has been seen working in a rebuilt app: that needs a Windows build, which needs the owner's approval; the Windows E2E suite has the new scenarios.
+
 ## What follows from it
 
 In order of value for the effort: (1) measure the new instructions (the A/B is built and waits for a quota); (2) tool-output pruning before compaction and a content-repetition detector (both small, pure, testable);
