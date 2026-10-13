@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Provider gateways checked against the real servers
+
+- **Every gateway probed live (2026-10-13, no key, nothing sent but empty requests):** `GET {endpoint}/models` and `POST {endpoint}/chat/completions` for all 29 vendor providers and the 6 hosted original ones with a fixed address (OpenAI, xAI, DeepSeek, Groq, Mistral, OpenRouter), plus MiniMax, Alibaba, Moonshot, OpenCode Zen, Anthropic's and Gemini's native routes. The data had been recorded from documentation only because the build sandbox could not reach these hosts. Result: every host answers, 401/403 means the route exists and wants a key.
+- **Removed Hyperbolic:** its serverless inference API is retired (`api.hyperbolic.xyz` answers "This inference endpoint has been decommissioned", and its docs say so). The provider would have shown a working-looking entry that cannot answer. 48 providers now. Hyperbolic's models are still reachable through the Hugging Face router.
+- **Perplexity has no `/models` route** (HTTP 404 on 2026-10-13): this is already handled (the app says it has no list it can ask for and takes a model added by name); kept as it was.
+- Cloudflare Workers AI needs the person's account id in the endpoint (`.../accounts/ACCOUNT_ID/ai/v1`): a placeholder answers 404 until it is replaced, by design.
+
 ## Unreleased - The model picker in the chat box: providers that open into their models, with logos and search
 
 - **What the owner asked for:** with one provider set up, the picker shows that provider's live list of models; with several, it shows the providers and a click on one opens its models; every provider shows its real logo, in Settings and in the small picker.

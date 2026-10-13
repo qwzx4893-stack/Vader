@@ -44,7 +44,7 @@ SRC = {
   'siliconflow': ('lobe', 'siliconcloud'), 'volcengine': ('lobe', 'volcengine'), 'stepfun': ('lobe', 'stepfun'), 'vercel': ('lobe', 'vercel'),
   'requesty': ('requesty', ''), 'ai21': ('lobe', 'ai21'), 'upstage': ('lobe', 'upstage'), 'inception': ('lobe', 'inception'),
   'llama': ('lobe', 'meta'), 'baseten': ('lobe', 'baseten'), 'scaleway': ('modelsdev', 'scaleway'), 'ovhcloud': ('modelsdev', 'ovhcloud'),
-  'venice': ('lobe', 'venice'), 'xiaomi': ('lobe', 'xiaomimimo'), 'sambanova': ('lobe', 'sambanova'), 'hyperbolic': ('lobe', 'hyperbolic'),
+  'venice': ('lobe', 'venice'), 'xiaomi': ('lobe', 'xiaomimimo'), 'sambanova': ('lobe', 'sambanova'),
   'githubModels': ('lobe', 'github'),
 }
 

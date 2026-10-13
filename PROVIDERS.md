@@ -2,10 +2,10 @@
 
 Vader's provider layer is inherited from the editor this project was forked from (`src/vs/workbench/contrib/vader/common/sendLLMMessageService.ts`, `electron-main/llmMessage/sendLLMMessage.impl.ts`). This document describes what's actually implemented, not an aspirational list.
 
-## Supported providers: 49, all native in Settings
+## Supported providers: 48, all native in Settings
 
 Every provider below appears in Settings and in the first-run setup as its own entry with its own key and endpoint field. Nothing needs OpenRouter
-as a middleman (OpenRouter is simply one more entry). The list has a search box ("Search 49 providers"), so `qwen`, `kimi`, `together` or `nvidia` find
+as a middleman (OpenRouter is simply one more entry). The list has a search box ("Search 48 providers"), so `qwen`, `kimi`, `together` or `nvidia` find
 their entry at once.
 
 ### Original integrations (20)
@@ -65,7 +65,6 @@ with "Add model". Models without native tool-calling fall back to the XML tool g
 | [Venice](https://venice.ai/settings/api) | `https://api.venice.ai/api/v1` | 8 | yes |
 | [Xiaomi MiMo](https://platform.xiaomimimo.com) | `https://api.xiaomimimo.com/v1` | 6 | no list route: catalogue + Add model |
 | [SambaNova](https://cloud.sambanova.ai/apis) | `https://api.sambanova.ai/v1` | none until a key works | yes |
-| [Hyperbolic](https://app.hyperbolic.xyz/settings) | `https://api.hyperbolic.xyz/v1` | none until a key works | yes |
 | [GitHub Models](https://github.com/settings/personal-access-tokens) | `https://models.github.ai/inference` | 4 | no list route: catalogue + Add model |
 
 **What is verified and what is not.** The code that serves these providers is tested for every one of them (`vendorProvidersE2E`: 172 checks across the table,
@@ -92,3 +91,7 @@ Provider API keys are encrypted at rest via `IEncryptionService` (OS keychain/`s
 
 - Only one tool call per model turn is supported, across every provider path - a structural limit in how `sendLLMMessage.impl.ts` and `chatThreadService.ts` are written, not per-provider.
 - MCP tool results that aren't plain text (image/audio/resource content types) aren't handled - `electron-main/mcpChannel.ts` throws for these; text-only MCP tools work.
+
+## Removed
+
+- **Hyperbolic** (removed 2026-10-13): its serverless inference API was retired. `api.hyperbolic.xyz` answers every chat request with "This inference endpoint has been decommissioned and is no longer available" (checked by a live request), and its documentation says the serverless inference API and playground were retired. Hyperbolic models are still reachable through Hugging Face's router (the Hugging Face provider).

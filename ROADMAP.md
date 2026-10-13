@@ -7,7 +7,7 @@ For the honest list of what is thin today, read [`docs/PRODUCT_ASSESSMENT.md`](.
 
 - A real agent runtime with 43 tools, plan mode, checkpoints, sub-agents, permanent agents with scopes, MCP and a skills marketplace
 - A hard policy engine in front of every tool call (locked rules cannot be switched off), with symbolic-link and `..` resolution
-- 49 model providers, each native in Settings, searchable, with live model lists where the vendor has one
+- 48 model providers, each native in Settings, searchable, with live model lists where the vendor has one
 - No telemetry, measured with a network trace in the test suite
 - Windows build, installer and an end-to-end suite that drives the installed app; zero known advisories across all lockfiles, enforced in CI
 

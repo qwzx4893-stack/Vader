@@ -54,7 +54,7 @@ const existing = types.providerNames.filter(p => !vendorProviderNames.includes(p
 const titles = types.providerNames.map(p => types.displayInfoOfProviderName(p).title);
 check('every provider (old and new) has a unique display title', new Set(titles).size === titles.length, titles.filter((t, i) => titles.indexOf(t) !== i).join(', '));
 check('the original providers are all still there', ['anthropic', 'openAI', 'gemini', 'xAI', 'groq', 'mistral', 'deepseek', 'openRouter', 'ollama', 'vLLM', 'lmStudio', 'liteLLM', 'openAICompatible', 'googleVertex', 'microsoftAzure', 'awsBedrock', 'minimax', 'alibaba', 'moonshot', 'openCodeZen'].every(p => existing.includes(p)), existing.join());
-for (const must of ['together', 'fireworks', 'cerebras', 'cohere', 'zai', 'perplexity', 'nvidia', 'huggingface', 'deepinfra', 'nebius', 'cloudflare', 'siliconflow', 'vercel', 'sambanova', 'hyperbolic', 'githubModels'])
+for (const must of ['together', 'fireworks', 'cerebras', 'cohere', 'zai', 'perplexity', 'nvidia', 'huggingface', 'deepinfra', 'nebius', 'cloudflare', 'siliconflow', 'vercel', 'sambanova', 'githubModels'])
 	check(`${must} is a first-class provider`, vendorProviderNames.includes(must));
 for (const k of vendorProviderNames) {
 	const v = vendorProviders[k];
@@ -73,7 +73,7 @@ for (const k of vendorProviderNames) {
 	check(`${cloudListedProviderNames.length} providers that can list their models start with none (the key decides what appears)`, withNames.length === 0, withNames.join(','));
 	const anyNames = Object.keys(types.defaultSettingsOfProvider).filter(p => types.defaultSettingsOfProvider[p].models.length > 0);
 	check(`all ${Object.keys(types.defaultSettingsOfProvider).length} providers start with no model names written into the app (what appears is what the provider says, or what the person adds)`, anyNames.length === 0, anyNames.join(','));
-	check('every vendor provider asks its own /models route', vendorProviderNames.every(k => vendorProviders[k].liveList && cloudListedProviderNames.includes(k)), vendorProviderNames.filter(k => !vendorProviders[k].liveList).join(','));
+	check('every vendor provider asks its own /models route (Perplexity has none, probed 2026-10-13: HTTP 404; the app then says so and takes a model added by name)', vendorProviderNames.every(k => vendorProviders[k].liveList && cloudListedProviderNames.includes(k)), vendorProviderNames.filter(k => !vendorProviders[k].liveList).join(','));
 }
 
 // ================================================================ every provider has its real logo, as safe one-colour data
@@ -154,7 +154,7 @@ for (const k of vendorProviderNames) {
 	const req = stub.chatRequests()[0];
 	const hasTools = Array.isArray(req?.body.tools) && req.body.tools.some(t => t.function?.name === 'read_file');
 	const listed = vendorProviders[k].models[modelName];
-	const wantTools = listed ? !!listed.tools : true; // a model the catalog does not list (sambanova and hyperbolic ship no list: it comes live) is offered native tools first (common/toolSupport.ts)
+	const wantTools = listed ? !!listed.tools : true; // a model the catalog does not list (sambanova ships no list: it comes live) is offered native tools first (common/toolSupport.ts)
 	check(`${k}: a chat request streams through the real SDK to the endpoint setting, with the key, the model and ${wantTools ? 'native tools' : 'no native tools'}`,
 		r.final?.fullText === `hello from ${k}` && req?.path.endsWith('/chat/completions') && req.headers.authorization === `Bearer ${KEY}` && req.body.model === modelName && req.body.stream === true && (wantTools ? hasTools : !hasTools),
 		JSON.stringify(r.error ?? { path: req?.path, auth: !!req?.headers.authorization, model: req?.body.model, hasTools }));

@@ -11,7 +11,7 @@
 </p>
 
 <p align="center">
-  Bring any model &middot; 49 providers, local or hosted &middot; No telemetry &middot; Apache-2.0
+  Bring any model &middot; 48 providers, local or hosted &middot; No telemetry &middot; Apache-2.0
 </p>
 
 <p align="center">
@@ -62,7 +62,7 @@ Vader is a desktop IDE built for software teams and individuals who want the spe
 2. **An autonomous coding agent.** It reads and edits files, runs commands, drives a real browser, uses MCP servers and skills, and delegates work to sub-agents isolated in git worktrees.
 3. **A policy engine that the agent cannot talk its way past.** Every tool call is evaluated by deterministic rules before it runs: dangerous actions are denied outright, sensitive ones need your approval, and the rest flow freely. The check lives in code, not in a prompt.
 
-You choose the model. Vader speaks natively to 49 providers (OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Qwen, Kimi, NVIDIA, and many more, plus Ollama, LM Studio and vLLM for fully local use), lists the models your key can actually use, and sends nothing to anyone but the provider you configured.
+You choose the model. Vader speaks natively to 48 providers (OpenAI, Anthropic, Google, xAI, DeepSeek, Mistral, Qwen, Kimi, NVIDIA, and many more, plus Ollama, LM Studio and vLLM for fully local use), lists the models your key can actually use, and sends nothing to anyone but the provider you configured.
 
 ## Why Vader
 
@@ -75,7 +75,7 @@ Vader is built around the opposite rule: **never trust, always gate.** The agent
 | | |
 |---|---|
 | **43** built-in agent tools | files, search, terminal, browser, verification, MCP and skill discovery, memory, sub-agents |
-| **49** model providers | each native in Settings (not only through OpenRouter), searchable, any OpenAI-compatible endpoint besides |
+| **48** model providers | each native in Settings (not only through OpenRouter), searchable, any OpenAI-compatible endpoint besides |
 | **0** telemetry | no analytics, no phone-home, checked with a network trace in the test suite |
 | **0** known advisories | enforced by a test across all 58 lockfiles, including build tooling |
 | **~23** regression suites on every push | policy bypass attempts, provider wire formats, privacy flags, packaged-import checks |
@@ -141,7 +141,7 @@ flowchart LR
 | | |
 |---|---|
 | **Frontier labs** | OpenAI · Anthropic · Google Gemini · xAI · Mistral · DeepSeek · Cohere · Z.AI (GLM) · Moonshot (Kimi) · Alibaba (Qwen) · MiniMax · StepFun · Xiaomi MiMo · Perplexity · AI21 · Upstage · Inception · Meta Llama API |
-| **Inference platforms** | Together AI · Fireworks · Groq · Cerebras · SambaNova · NVIDIA NIM · Hugging Face · DeepInfra · Nebius · Cloudflare Workers AI · Novita · SiliconFlow · Volcengine Ark · Baseten · Scaleway · OVHcloud · Venice · Hyperbolic · GitHub Models |
+| **Inference platforms** | Together AI · Fireworks · Groq · Cerebras · SambaNova · NVIDIA NIM · Hugging Face · DeepInfra · Nebius · Cloudflare Workers AI · Novita · SiliconFlow · Volcengine Ark · Baseten · Scaleway · OVHcloud · Venice · GitHub Models |
 | **Gateways and clouds** | OpenRouter · Vercel AI Gateway · Requesty · OpenCode Zen · LiteLLM · Azure OpenAI · AWS Bedrock · Google Vertex AI |
 | **Local** | Ollama · LM Studio · vLLM (no key, models auto-detected) |
 | **Anything else** | any OpenAI-compatible endpoint with a custom base URL |

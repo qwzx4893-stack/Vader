@@ -48,7 +48,6 @@ V = [
   ('xiaomi',      'xiaomi',                'Xiaomi MiMo',               'https://api.xiaomimimo.com/v1',                       'https://platform.xiaomimimo.com',                      'sk-...',      True,  ''),
   # not in models.dev: endpoints from the vendors' documentation (see LiteLLM's provider list); the model list comes from the live /models call
   ('sambanova',   None,                    'SambaNova',                 'https://api.sambanova.ai/v1',                         'https://cloud.sambanova.ai/apis',                      'key...',      True,  'No built-in model list: enter the key and pick from the live list.'),
-  ('hyperbolic',  None,                    'Hyperbolic',                'https://api.hyperbolic.xyz/v1',                       'https://app.hyperbolic.xyz/settings',                  'key...',      True,  'No built-in model list: enter the key and pick from the live list.'),
   ('githubModels', None,                   'GitHub Models',             'https://models.github.ai/inference',                  'https://github.com/settings/personal-access-tokens',   'github_pat_...', True,  'Use a fine-grained token with the `models:read` permission. Model ids are `publisher/name`.'),
 ]
 MANUAL = {  # vendors without a catalog entry that cannot list models live

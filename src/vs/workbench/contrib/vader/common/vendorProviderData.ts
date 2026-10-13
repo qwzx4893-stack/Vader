@@ -264,8 +264,6 @@ export const vendorProviders = {
 	} },
 	sambanova: { title: "SambaNova", endpoint: "https://api.sambanova.ai/v1", keyUrl: "https://cloud.sambanova.ai/apis", keyPlaceholder: "key...", liveList: true, note: "No built-in model list: enter the key and pick from the live list.", models: {
 	} },
-	hyperbolic: { title: "Hyperbolic", endpoint: "https://api.hyperbolic.xyz/v1", keyUrl: "https://app.hyperbolic.xyz/settings", keyPlaceholder: "key...", liveList: true, note: "No built-in model list: enter the key and pick from the live list.", models: {
-	} },
 	githubModels: { title: "GitHub Models", endpoint: "https://models.github.ai/inference", keyUrl: "https://github.com/settings/personal-access-tokens", keyPlaceholder: "github_pat_...", liveList: true, note: "Use a fine-grained token with the `models:read` permission. Model ids are `publisher/name`.", models: {
 		"openai/gpt-4.1": { ctx: 1048576, out: 32768, tools: true, vision: true, reasoning: false, cost: { input: 0, output: 0 } },
 		"openai/gpt-4.1-mini": { ctx: 1048576, out: 32768, tools: true, vision: true, reasoning: false, cost: { input: 0, output: 0 } },
@@ -277,4 +275,4 @@ export const vendorProviders = {
 export type VendorProviderName = keyof typeof vendorProviders
 export const vendorProviderNames = Object.keys(vendorProviders) as VendorProviderName[]
 export const isVendorProviderName = (p: string): p is VendorProviderName => Object.prototype.hasOwnProperty.call(vendorProviders, p)
-export const vendorLiveListedNames = ["together", "fireworks", "cerebras", "cohere", "zai", "perplexity", "nvidia", "huggingface", "deepinfra", "nebius", "cloudflare", "novita", "siliconflow", "volcengine", "stepfun", "vercel", "requesty", "ai21", "upstage", "inception", "llama", "baseten", "scaleway", "ovhcloud", "venice", "xiaomi", "sambanova", "hyperbolic", "githubModels"] as const satisfies readonly VendorProviderName[]
+export const vendorLiveListedNames = ["together", "fireworks", "cerebras", "cohere", "zai", "perplexity", "nvidia", "huggingface", "deepinfra", "nebius", "cloudflare", "novita", "siliconflow", "volcengine", "stepfun", "vercel", "requesty", "ai21", "upstage", "inception", "llama", "baseten", "scaleway", "ovhcloud", "venice", "xiaomi", "sambanova", "githubModels"] as const satisfies readonly VendorProviderName[]

@@ -2,7 +2,7 @@
 
 **Is Vader free?** Yes, it is open source under Apache-2.0. You pay your model provider directly, or nothing with a local model.
 
-**Which providers are supported?** 49: every one is its own entry in Settings (search box included), not only through OpenRouter. See [`PROVIDERS.md`](../PROVIDERS.md).
+**Which providers are supported?** 48: every one is its own entry in Settings (search box included), not only through OpenRouter. See [`PROVIDERS.md`](../PROVIDERS.md).
 
 **Do I need OpenRouter?** No. OpenRouter is one entry among the others. Use your vendor's key directly.
 
