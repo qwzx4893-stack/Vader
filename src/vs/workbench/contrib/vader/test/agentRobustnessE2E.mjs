@@ -24,7 +24,7 @@ const load = async (rel, name) => {
 	return import(pathToFileURL(path.join(tmp, name)).href);
 };
 const { withUriAlias } = await load('../common/toolArgAliases.ts', 'a.mjs');
-const { RepeatedCallDetector, TextRepetitionDetector } = await load('../common/loopDetection.ts', 'l.mjs');
+const { RepeatedCallDetector, TextRepetitionDetector, explainRunFailure, MAX_AGENT_TURNS } = await load('../common/loopDetection.ts', 'l.mjs');
 const { unknownToolMessage } = await load('../common/toolNameHints.ts', 'h.mjs');
 
 let passed = 0, failed = 0;
@@ -117,6 +117,15 @@ check('it names the tool that was called', msg('shell').includes('"shell"'));
 	// a new, shorter text starts afresh; and memory stays bounded on a very long answer that ends in a loop
 	const d = new TextRepetitionDetector(); d.update('x'.repeat(10)); check('a shorter text is a new text', !d.update('short').stuck);
 	check('a loop after 300,000 characters of varied text is still caught', !!feed(prose + prose + prose + chant, 997));
+}
+
+// ---- the turn cap of one request
+{
+	check('a request may take 100 turns (it was 50, too few for a refactor)', MAX_AGENT_TURNS === 100);
+	const msg = explainRunFailure('Agent runtime exceeded maxIterations (100)');
+	check('the SDK\'s bare cap error is explained: how many steps, work kept, what to do', /all 100 steps/.test(msg) && /continue/.test(msg) && !/maxIterations/.test(msg), msg);
+	check('other errors pass through unchanged', explainRunFailure('401 Incorrect API key') === '401 Incorrect API key');
+	check('the adapter uses the shared cap', /MAX_AGENT_TURNS/.test(fs.readFileSync(path.join(here, '../browser/agentRuntime/clineRuntimeAdapter.ts'), 'utf8')));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

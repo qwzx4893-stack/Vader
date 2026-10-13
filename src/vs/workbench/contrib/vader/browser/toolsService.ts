@@ -36,6 +36,12 @@ import { IUnifiedMarketplaceService } from '../common/marketplace/marketplaceTyp
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js'
 import { IVisionMainService } from '../common/vision/visionQueryService.js'
 import { MAX_TASKS, parseTaskList, summariseTaskList, taskListResultText } from '../common/taskList.js'
+import { buildRepoMap, isMappedFile, RepoFile, REPO_MAP_INCLUDE_GLOB } from '../common/repoMap.js'
+
+const REPO_MAP_MAX_FILES = 6000 // files listed
+const REPO_MAP_MAX_FILE_BYTES = 300_000 // a larger file is generated or data, not source worth mapping
+const REPO_MAP_READ_BATCH = 24
+const REPO_MAP_TIME_BUDGET_MS = 10_000
 
 
 // tool use for AI
@@ -526,6 +532,12 @@ export class ToolsService implements IToolsService {
 				return { providerId, itemName }
 			},
 
+			repo_map: (params: RawToolParamsObj) => {
+				const focus = validateOptionalStr('focus', params.focus)
+				const maxTokens = Math.min(8000, Math.max(500, validateNumber(params.max_tokens, { default: 2500 }) ?? 2500))
+				return { focus, maxTokens }
+			},
+
 			update_task_list: (params: RawToolParamsObj) => {
 				const tasks = validateStr('tasks', params.tasks)
 				const parsed = parseTaskList(tasks)
@@ -921,6 +933,33 @@ export class ToolsService implements IToolsService {
 				return { result: { itemName: item.name, providerId: item.providerId, actionTaken: item.installMethod } }
 			},
 
+			repo_map: async ({ focus, maxTokens }) => {
+				const folders = workspaceContextService.getWorkspace().folders
+				if (folders.length === 0) throw new Error('repo_map needs an open folder. Open a folder first (File > Open Folder).')
+				const started = Date.now()
+				const query = queryBuilder.file(folders.map(f => f.uri), { includePattern: REPO_MAP_INCLUDE_GLOB, maxResults: REPO_MAP_MAX_FILES, sortByScore: false })
+				const found = await searchService.fileSearch(query, CancellationToken.None)
+				const uris = found.results.map(r => r.resource).filter(u => isMappedFile(u.path))
+				const label = (u: URI) => {
+					const folder = workspaceContextService.getWorkspaceFolder(u)
+					const rel = folder ? u.path.slice(folder.uri.path.length).replace(/^\//, '') : u.path
+					return folders.length > 1 && folder ? folder.name + '/' + rel : rel
+				}
+				const files: RepoFile[] = []
+				let timedOut = false
+				for (let i = 0; i < uris.length; i += REPO_MAP_READ_BATCH) {
+					if (Date.now() - started > REPO_MAP_TIME_BUDGET_MS) { timedOut = true; break }
+					const batch = await Promise.all(uris.slice(i, i + REPO_MAP_READ_BATCH).map(async u => {
+						try { return { path: label(u), text: (await fileService.readFile(u, { limits: { size: REPO_MAP_MAX_FILE_BYTES } })).value.toString() } }
+						catch { return null } // too large, unreadable, deleted meanwhile: left out
+					}))
+					for (const f of batch) { if (f) files.push(f) }
+				}
+				const focusPaths = (focus ?? '').split(/[\n,]/).map(s => s.trim()).filter(Boolean)
+				const map = buildRepoMap(files, { maxChars: maxTokens * 4, focusPaths })
+				return { result: { text: map.text, shownFiles: map.shownFiles, mappedFiles: map.mappedFiles, scannedFiles: uris.length, timedOut } }
+			},
+
 			update_task_list: async ({ tasks }) => {
 				const parsed = parseTaskList(tasks)
 				const { total, done } = summariseTaskList(parsed)
@@ -1137,6 +1176,11 @@ export class ToolsService implements IToolsService {
 			},
 			install_marketplace_capability: (params, result) => {
 				return `${result.actionTaken} succeeded for "${result.itemName}" (${result.providerId}).`;
+			},
+			repo_map: (params, result) => {
+				if (!result.text) return 'No source files in a language the map covers (TypeScript, JavaScript, Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP, C, C++) were found in this project.'
+				const head = `Project map: ${result.shownFiles} of ${result.mappedFiles} source files shown, most depended-on first. Each line is "line number: definition".${result.timedOut ? ' Reading was cut short by a time limit, so some files are missing.' : ''}`
+				return head + '\n\n' + result.text
 			},
 			update_task_list: (params, result) => {
 				return result.text

@@ -7,6 +7,17 @@
 // A run of many calls that only ever uses a handful of distinct (tool, arguments) pairs is that kind of loop: real work changes the arguments
 // (another file, other content), so it keeps producing new pairs.
 
+// How many model turns one request may take. The SDK stops at its cap with the bare error "Agent runtime exceeded maxIterations (N)" and leaves the work half done; 50 was too few
+// for a refactor that reads before it edits (a turn may batch several calls), and the three loop guards in this file stop a model that goes round in circles long before a cap matters.
+export const MAX_AGENT_TURNS = 100
+
+/** The error text of a failed run, in words the person can act on. Other errors pass through unchanged. */
+export const explainRunFailure = (message: string): string => {
+	const m = /exceeded maxIterations \((\d+)\)/i.exec(message)
+	if (!m) { return message }
+	return `The agent used all ${m[1]} steps it is allowed for one request and stopped before it was finished. Its work so far is kept: send "continue" to let it carry on from where it stopped, or split the request into smaller parts.`
+}
+
 export const LOOP_WINDOW = 20 // how many of the latest calls are looked at
 export const LOOP_MAX_DISTINCT = 4 // at most this many different calls inside a full window means the agent is stuck
 

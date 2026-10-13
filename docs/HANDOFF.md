@@ -12,7 +12,7 @@ Contents: 1 project and owner · 2 standing rules · 3 decisions already made ·
 - **Vader**: an AI-native IDE, a fork of Void on VS Code **1.136.2** (Electron 42.11.10). Repo `qwzx4893-stack/Vader`, default branch `main`. `product.json`: `nameShort` Vader,
   `applicationName` vader, `dataFolderName` `.vader-editor`, `vaderVersion` **0.1.0** (this number names the release and the installer `Vader-Setup-x64-0.1.0.exe`).
   Windows is the only platform built in CI. Vader's own code is in `src/vs/workbench/contrib/vader/` (about 40k lines of TypeScript/TSX, plus tests); the rest is the VS Code base.
-- Agent loop: `@cline/agents` behind Vader's own gate (policy engine, approvals, agent scope). **49 providers**, **38 built-in tools** (files, search, terminal and persistent terminals,
+- Agent loop: `@cline/agents` behind Vader's own gate (policy engine, approvals, agent scope). **49 providers**, **39 built-in tools** (files, search, terminal and persistent terminals,
   browser via Playwright, verification, MCP/skill discovery, agents and sub-agents), MCP, permanent agents and sub-agents, plan mode, checkpoints, verification pipeline,
   memory/compaction, model router, marketplace (extensions, MCP, SkillNet), first-run welcome then import-settings then editor, a full-window Settings page
   (Models, Coding Agents, Local/Main Providers, Agent & Permissions, Context & Instructions, MCP, Editor Features, Extensions, Privacy & Network, Data & Backup, About & Updates).

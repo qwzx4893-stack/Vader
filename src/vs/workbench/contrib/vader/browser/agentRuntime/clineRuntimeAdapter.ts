@@ -5,6 +5,7 @@
 // Not '@cline/agents' directly: the sandboxed renderer cannot resolve bare specifiers (see clineBundle/build.mjs).
 import { AgentRuntime, type AgentRuntimeConfig } from './clineBundle/index.js';
 import type { AgentModel, AgentTool } from '@cline/shared';
+import { MAX_AGENT_TURNS } from '../../common/loopDetection.js';
 
 // Vader addition, part of the Cline Main Agent Runtime integration (see
 // docs/integrations/agent-runtime.md). `@cline/agents`/`@cline/shared` are real, installed
@@ -57,7 +58,7 @@ export function createClineAgentRuntime(opts: {
 		model: opts.model,
 		tools: opts.tools,
 		clientName: 'vader',
-		maxIterations: opts.maxIterations ?? 50,
+		maxIterations: opts.maxIterations ?? MAX_AGENT_TURNS,
 	};
 	return new AgentRuntime(config);
 }

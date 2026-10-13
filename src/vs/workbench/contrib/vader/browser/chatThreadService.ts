@@ -11,7 +11,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { RepeatedCallDetector, TextRepetitionDetector } from '../common/loopDetection.js';
+import { RepeatedCallDetector, TextRepetitionDetector, explainRunFailure } from '../common/loopDetection.js';
 import { unknownToolMessage } from '../common/toolNameHints.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
 import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
@@ -1573,7 +1573,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				return
 			}
 			if (result.status === 'failed') {
-				const message = result.error?.message ?? 'Cline runtime run failed for an unknown reason.'
+				const message = explainRunFailure(result.error?.message ?? 'Cline runtime run failed for an unknown reason.')
 				this._setStreamState(threadId, { isRunning: undefined, error: { message, fullError: result.error ?? null } })
 				this._addUserCheckpoint({ threadId })
 				return

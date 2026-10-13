@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased - A map of the repository (tool `repo_map`)
+
+- **The gap:** the Context Engine only knows the files the person mentioned or has open; in a large project the agent had to find its way by searching and reading, which Aider's repo map, Continue and others answer with a ranked overview.
+- **New tool `repo_map`** (`common/repoMap.ts`, tool in `browser/toolsService.ts`): definitions are found per line for TypeScript/JavaScript, Python, Go, Rust, Java, Kotlin, C#, Scala, Swift, Dart, Ruby, PHP, C and C++ (no parser, no wasm, no native module); files and the names they define form a graph (a file points at the files that define what it mentions), PageRank orders the files, a word found in more than 12% of the files is ignored as language, not a pointer, and the result is cut to a token budget (default 2,500 tokens, at most 8,000). `focus` (files or folders) moves the task's files up and lists more of their definitions. It is a tool the agent calls when it needs it, not text added to every turn, so a small task pays nothing. Idea from Aider's `repomap.py` (Apache-2.0), reimplemented; no code copied.
+- Bounds: 6,000 files listed, files over 300 KB skipped, reading stops after 10 s (the answer says when that happened). Read-only, no approval; offered in Gather and Plan mode too.
+- Tests: `test/repoMapE2E.mjs` (44 checks, in CI): every language's patterns, ranking on a small project, budgets, and Vader's own 216 source files (built in under 100 ms; the files the rest depends on come first). Two real-app scenarios (`scenarios/core.mjs`) call `repo_map` and `update_task_list` end to end; **they could not be run here**, the Windows E2E will. The tool count is now 39.
+- Honest limits: line patterns are less exact than a parser (a method written over several lines, or a definition behind a macro, can be missed); the ranking was judged by eye and by a test on Vader's own tree only; whether the map makes the agent finish more tasks is not measured.
+
 ## Unreleased - A task list for long jobs
 
 - **New tool `update_task_list`** (`common/taskList.ts`): the agent writes its whole list on every call, one task per line marked `[ ]` / `[~]` / `[x]`, keeps one in progress and marks each done when finished and checked; the result is shown in the chat (the generic tool card) and echoed back to the model, with a nudge when two tasks are in progress, none is, or all are done ("check the result, then report"). Plain lines instead of JSON because small models write them reliably; many spellings of the marks are accepted. The idea is the todo tool of opencode (MIT), Roo Code (Apache-2.0) and Codex `update_plan` (Apache-2.0); text and format are Vader's own.

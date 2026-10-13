@@ -45,6 +45,38 @@ export const coreScenarios = [
 		},
 	},
 	{
+		name: 'agent: repo_map lists the workspace source files and their definitions',
+		fn: async (t) => {
+			t.use(seq([
+				{ text: 'Let me map the project.', toolCalls: [{ name: 'repo_map', args: {} }] },
+				(c) => ({ text: `Mapped: ${(c.lastToolResult ?? '').includes('src/app.js') ? 'found app.js' : '(no app.js)'}` }),
+			]));
+			await t.send('give me an overview of this project');
+			t.check('agent returns to idle', await t.idle());
+			const headers = await t.ui.toolHeaders(t.page);
+			t.check('a "Mapped the project" tool call is shown in the chat', headers.some(h => /mapped the project/i.test(h)), JSON.stringify(headers));
+			const result = t.server.chatRequests()[1]?.ctx.lastToolResult ?? '';
+			t.check('the map names the source file and its function, with a line number', /src\/app\.js:\s*\n\s*1: function add/.test(result), result.slice(0, 300));
+			t.check('...and says how many files it shows', /Project map: \d+ of \d+ source files shown/.test(result), result.slice(0, 120));
+			t.check('...files in other languages (the markdown readme) are not in it', !/README/.test(result));
+		},
+	},
+	{
+		name: 'agent: update_task_list keeps the list and tells the model how it stands',
+		fn: async (t) => {
+			t.use(seq([
+				{ text: 'Planning.', toolCalls: [{ name: 'update_task_list', args: { tasks: '[x] Find the bug\n[~] Fix it\n[ ] Run the tests' } }] },
+				(c) => ({ text: `List: ${(c.lastToolResult ?? '').split('\n')[0]}` }),
+			]));
+			await t.send('fix the bug and tell me when the tests pass');
+			t.check('agent returns to idle', await t.idle());
+			const headers = await t.ui.toolHeaders(t.page);
+			t.check('an "Updated the task list" tool call is shown in the chat', headers.some(h => /updated the task list/i.test(h)), JSON.stringify(headers));
+			const result = t.server.chatRequests()[1]?.ctx.lastToolResult ?? '';
+			t.check('the model gets the list back with the count', result.includes('Task list updated (1 of 3 done)') && result.includes('[~] Fix it'), result.slice(0, 200));
+		},
+	},
+	{
 		name: 'agent: read_file tool call is executed and its result reaches the model',
 		fn: async (t) => {
 			const file = t.abs('notes.txt');

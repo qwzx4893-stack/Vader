@@ -161,6 +161,8 @@ export type BuiltinToolCallParams = {
 	'remember': { content: string, label: string, scope: 'project' | 'agent', agentName: string | null },
 	// Vader addition: the agent's task list for a long job (common/taskList.ts). `tasks` is the whole list, one task per line, marked [ ] / [~] / [x].
 	'update_task_list': { tasks: string },
+	// Vader addition: a map of the project's source files and what other files depend on (common/repoMap.ts). `focus` lists files or folders the task is about.
+	'repo_map': { focus: string | null, maxTokens: number },
 	// Vader addition: install a skill you already have the instructions text for (via
 	// fetch_skill_instructions, or your own distilled instructions) - see common/skills/.
 	// Installed skills start disabled and 'review_required'; the user enables/trusts them.
@@ -225,6 +227,7 @@ export type BuiltinToolResultType = {
 	},
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
 	'update_task_list': { text: string, total: number, done: number },
+	'repo_map': { text: string, shownFiles: number, mappedFiles: number, scannedFiles: number, timedOut: boolean },
 	'install_skill': { skillId: string },
 	'install_marketplace_capability': { itemName: string, providerId: string, actionTaken: string },
 }
