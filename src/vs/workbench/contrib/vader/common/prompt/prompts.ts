@@ -511,22 +511,18 @@ export const builtinTools: {
 
 	repo_map: {
 		name: 'repo_map',
-		description: `Returns a map of the project: its most important source files, ranked by how many other files depend on them, each with the lines of its main definitions (classes, functions, types). Use it at the start of a task in a project you do not know yet, or a large one, to find where things live before you search and read; it is much cheaper than reading files. Give focus (file or folder paths, comma separated) when you already know what the task is about, and the files around it are shown in more detail. It covers TypeScript, JavaScript, Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP, C and C++; other files are not in it.`,
+		description: `A map of the project: the most depended-on source files, each with its main definitions and line numbers. Use it first in a large or unfamiliar project, before searching and reading. Covers common programming languages only.`,
 		params: {
-			focus: { description: `Optional. Files or folders the task is about, comma separated, for example "src/auth, src/api/login.ts". Leave empty for an overview of the whole project.` },
-			max_tokens: { description: `Optional. Size of the map in tokens (default 2500, at most 8000).` },
+			focus: { description: `Optional. Files or folders the task is about, comma separated. Empty for the whole project.` },
+			max_tokens: { description: `Optional. Map size in tokens (default 2500, max 8000).` },
 		}
 	},
 
 	update_task_list: {
 		name: 'update_task_list',
-		description: `Keeps your task list for a longer job and shows it to the user. Use it when the work has three or more distinct steps, touches several files, or the user gave you several things to do; do not use it for a single edit, a question or a one-command task. Write the whole list on every call (it replaces the previous one), one task per line, each starting with a mark: [ ] not started, [~] in progress, [x] done. Keep exactly one task in progress, the one you are working on; mark a task done as soon as it is finished and checked, not later; add or change tasks when you learn something new. Make the tasks concrete and checkable ("make the parser reject empty input", not "improve the parser"), and keep the last one for checking the result (run the tests or the build).`,
+		description: `Your task list for a job with several steps (not for a small task). Write the whole list on every call, one task per line: [ ] not started, [~] in progress, [x] done. Keep one task in progress; mark it done as soon as it is finished and checked. Make tasks concrete, and end with checking the result.`,
 		params: {
-			tasks: { description: `The complete list, one task per line, for example:
-[x] Find where the redirect after login is set
-[~] Change the redirect to use the saved page
-[ ] Update the login tests
-[ ] Run the tests and fix failures` },
+			tasks: { description: `The complete list, one task per line, e.g. "[x] Find the redirect", "[~] Change it", "[ ] Run the tests".` },
 		}
 	},
 
