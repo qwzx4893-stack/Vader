@@ -162,10 +162,10 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 		}
 	},
 	"github-copilot-cli": {
-		"version": "1.0.95",
+		"version": "1.0.97",
 		"distribution": {
 			"npx": {
-				"package": "@github/copilot@1.0.95",
+				"package": "@github/copilot@1.0.97",
 				"args": [
 					"--acp"
 				]
@@ -205,10 +205,10 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 		}
 	},
 	"grok-build": {
-		"version": "1.0.52",
+		"version": "1.0.55",
 		"distribution": {
 			"npx": {
-				"package": "@xai-official/grok@1.0.52",
+				"package": "@xai-official/grok@1.0.55",
 				"args": [
 					"agent",
 					"stdio"
