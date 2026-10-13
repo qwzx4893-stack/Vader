@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Agent-specific security audit: the path rules now see terminal commands
+
+- **Found by attacking the real Policy Engine** (rules, request mapping, URI class and resolved-path step bundled from source): the "credential file" and "files that run code later" rules only ever looked at the file tools. A terminal command carried its text and no paths, so `cat ~/.ssh/id_rsa`, `curl -d @.env ...`, `echo x >> .vscode/tasks.json`, `cp evil .husky/pre-commit`, `Set-Content`, `tee`, `sed -i` and `git config core.hooksPath ...` passed every rule, in the autonomous mode where those rules are meant to be the last line of defence. 27 of 27 attempts got through.
+- **Fix:** `common/policy/commandPaths.ts` lists the path-like words of a command (home/profile shorthands expanded, quotes and obfuscation normalised as before) and which of them it may write (redirections, cp/mv/tee/sed -i/Set-Content/curl -o, git add...; plain readers excluded). The two rules now also cover `terminal-command`; a new rule `vader.ask.git-program-config` asks before a Git option that names a program to run (hooks path, fsmonitor, ssh command, pager, credential helper...). Still a best effort over a shell string: indirection (`$(echo ~/.ss)h/id_rsa`) and paths built at run time evade it; a sandbox is what closes that.
+- **Windows spellings of a protected name** (`tasks.json.`, `tasks.json `, `tasks.json::$DATA`, a trailing dot on a folder) matched no glob, and the real-path step cannot correct a file that does not exist yet. `canonicalWindowsAlias` adds the canonical spelling to the paths the rules see.
+- Tests: `test/policyCommandPathsE2E.mjs` (112 checks, in CI), including ordinary commands that must not be stopped. Known side effect: `git log -p .env.example` asks, as reading `.env.example` through the file tool already did.
+
 ## Unreleased - Measuring the agent, and three robustness fixes it exposed
 
 - **A public-style benchmark through the real app.** `test/e2e/polyglotBench.mjs` runs Aider's polyglot exercises (225 Exercism exercises in six languages, two attempts, graded by the tests in Docker) through the packaged Vader, with a local cost-guarded proxy (`llmProxy.mjs`) and a grader check against the reference solutions (`polyglotOracle.mjs`). Method, protocol differences from Aider, first results and their limits: `docs/integrations/agent-benchmark.md`. First readings are small-sample and not comparable with Aider's leaderboard yet.
