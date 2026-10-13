@@ -2,6 +2,8 @@
 
 This is guidance for an AI agent (Vader's own, or any other coding agent) asked to modify, extend, or replace part of the agent platform described in `ARCHITECTURE.md`. Read that file first for the subsystem map; this one is about how to make a change safely.
 
+Picking up the project mid-stream (current state, owner's standing rules, decisions already made, open items, release procedure)? Read `docs/HANDOFF.md` first.
+
 ## Before changing anything
 
 1. Read `ARCHITECTURE.md`'s subsystem table and find which subsystem owns the thing you're touching.
