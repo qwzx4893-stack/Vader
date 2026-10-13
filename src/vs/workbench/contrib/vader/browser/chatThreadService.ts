@@ -11,7 +11,7 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { RepeatedCallDetector } from '../common/loopDetection.js';
+import { RepeatedCallDetector, TextRepetitionDetector } from '../common/loopDetection.js';
 import { unknownToolMessage } from '../common/toolNameHints.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
 import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
@@ -1463,6 +1463,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		let identicalCallsInARow = 0
 		// ...and the second guard: a loop that alternates between a few calls never repeats the same call twice in a row (common/loopDetection.ts)
 		const repeatedCalls = new RepeatedCallDetector()
+		// ...and the third: text that repeats itself (a small model chanting one sentence, in its answer or its reasoning) makes no tool call at all
+		const textLoop = new TextRepetitionDetector()
+		const reasoningLoop = new TextRepetitionDetector()
+		const stopForRepeatedText = (where: 'answer' | 'reasoning', sample: string | undefined) => {
+			if (loopStopMessage) { return }
+			loopStopMessage = `The model kept repeating the same text in its ${where}${sample ? ` ("${sample.slice(0, 60)}")` : ''}, so Vader stopped the run instead of spending more tokens. Rephrase the request, or pick a different model.`
+			runtime.abort()
+		}
 		let loopStopMessage: string | undefined
 		let lastTurnWasEmpty: { hadReasoning: boolean } | null = null
 		const unsubscribe = runtime.subscribe((event) => {
@@ -1482,10 +1490,14 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			}
 			else if (event.type === 'assistant-text-delta') {
 				textSoFar = event.accumulatedText
+				const repeated = textLoop.update(textSoFar)
+				if (repeated.stuck) { stopForRepeatedText('answer', repeated.sample) }
 				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
 			}
 			else if (event.type === 'assistant-reasoning-delta') {
 				reasoningSoFar = event.accumulatedText
+				const repeated = reasoningLoop.update(reasoningSoFar)
+				if (repeated.stuck) { stopForRepeatedText('reasoning', repeated.sample) }
 				this._setStreamState(threadId, { isRunning: 'LLM', llmInfo: { displayContentSoFar: textSoFar, reasoningSoFar, toolCallSoFar: null }, interrupt: Promise.resolve(() => runtime.abort()) })
 			}
 			else if (event.type === 'tool-finished') {
@@ -1519,6 +1531,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				this._maybeCaptureThreadPlan(threadId, text)
 				textSoFar = ''
 				reasoningSoFar = ''
+				textLoop.reset()
+				reasoningLoop.reset()
 			}
 		})
 

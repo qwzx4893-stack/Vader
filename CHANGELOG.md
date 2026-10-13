@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased - A model that repeats the same text is stopped
+
+- **Text-repetition guard** (`common/loopDetection.ts` `TextRepetitionDetector`, hooked into the agent loop for the answer and for the reasoning): small and local models sometimes chant one sentence until the output limit; they make no tool call, so the call-based guards never saw it. A 50-character window that comes back 12 times at short intervals **and** a text tail that is periodic (the idea is Gemini CLI's "chanting" check, Apache-2.0, reimplemented with the periodic-tail condition added) stops the run with a message that quotes the repeated text.
+- Windows made of one or two distinct characters (rules, indentation) never count. The first version, without the periodic-tail condition, flagged 3 of 255 of Vader's own source and doc files (repeated boilerplate), which is the reason for that condition; now none are flagged, and a chant is caught within 15 repeats.
+- Tests: 12 more checks in `test/agentRobustnessE2E.mjs` (in CI).
+
 ## Unreleased - Long sessions: old tool output is pruned and the summary now comes before the blind cut
 
 - **Found by reading the code against the engine review (`docs/research/agent-engine-assessment.md`):** the three safeguards against a full context window used different yardsticks, and the worst one fired first.

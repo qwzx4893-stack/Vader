@@ -24,7 +24,7 @@ const load = async (rel, name) => {
 	return import(pathToFileURL(path.join(tmp, name)).href);
 };
 const { withUriAlias } = await load('../common/toolArgAliases.ts', 'a.mjs');
-const { RepeatedCallDetector } = await load('../common/loopDetection.ts', 'l.mjs');
+const { RepeatedCallDetector, TextRepetitionDetector } = await load('../common/loopDetection.ts', 'l.mjs');
 const { unknownToolMessage } = await load('../common/toolNameHints.ts', 'h.mjs');
 
 let passed = 0, failed = 0;
@@ -92,6 +92,31 @@ check('it names the tool that was called', msg('shell').includes('"shell"'));
 	for (const layer of ['systemInvariants', 'policy', 'globalUser', 'agent', 'skill', 'task']) {
 		check(`${layer} is not framed (the user's own text stays plain)`, UNTRUSTED_LAYER_FRAMING[layer] === undefined);
 	}
+}
+
+// ---- text that repeats itself (a small model chanting one sentence, in its answer or its reasoning)
+{
+	const feed = (text, step = 7) => { const d = new TextRepetitionDetector(); for (let n = step; n <= text.length + step; n += step) { const r = d.update(text.slice(0, Math.min(n, text.length))); if (r.stuck) return { at: Math.min(n, text.length), sample: r.sample }; } return null; };
+	const chant = 'I will now try again with the same approach. '.repeat(200);
+	const hit = feed(chant);
+	check('a sentence repeated over and over is caught', !!hit);
+	check('...within about 15 repeats of it, not at the end of a long answer', hit && hit.at < 15 * 45, `at ${hit?.at}`);
+	check('a good answer followed by a loop is caught', !!feed('Here is what I found in the project. The login page sets the redirect in router.ts, then the guard checks the session. ' + chant));
+	check('...also when it loops in two alternating sentences', !!feed('Let me check the file. Now let me read it again. '.repeat(120)));
+	// real text must never be flagged: prose, tables, rules, indentation, and a whole source tree
+	check('long dashes, equals signs and spaces are ignored', ['-'.repeat(6000), '='.repeat(6000), ' '.repeat(6000), '| --- | --- | --- |\n'.repeat(300)].every(t => !feed(t)));
+	let seed = 12345; const rnd = () => (seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+	const words = ('the of and to in is that for it as was with be by on not he this are or his from at which but have an had they you were their one all we can her has there been if more when will would who so no').split(' ');
+	const prose = Array.from({ length: 8000 }, () => words[Math.floor(rnd() * words.length)]).join(' ');
+	check('90,000 characters of varied prose are not flagged', !feed(prose, 40));
+	const files = [];
+	const walk = (dir) => { for (const e of fs.readdirSync(dir, { withFileTypes: true })) { const f = path.join(dir, e.name); if (e.isDirectory()) { if (e.name !== 'node_modules' && e.name !== 'out') walk(f); } else if (/\.(ts|tsx|md)$/.test(e.name)) files.push(f); } };
+	walk(path.join(here, '..')); walk(path.join(here, '../../../../../../docs'));
+	const flagged = files.filter(f => feed(fs.readFileSync(f, 'utf8'), 200));
+	check(`${files.length} source and doc files: none looks like a loop`, flagged.length === 0, flagged.slice(0, 3).join(', '));
+	// a new, shorter text starts afresh; and memory stays bounded on a very long answer that ends in a loop
+	const d = new TextRepetitionDetector(); d.update('x'.repeat(10)); check('a shorter text is a new text', !d.update('short').stuck);
+	check('a loop after 300,000 characters of varied text is still caught', !!feed(prose + prose + prose + chant, 997));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });
