@@ -22,7 +22,7 @@ import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { realLlmTaskScenarios, oracleTaskScenarios } from './scenarios/realLlmTasks.mjs';
 import { externalAgentScenarios } from './scenarios/externalAgents.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
-import { runPersistenceGroup } from './scenarios/persistence.mjs';
+import { runPersistenceGroup, runUpgradeGroup } from './scenarios/persistence.mjs';
 
 if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missing or not found: ${config.exe}`); process.exit(2); }
 
@@ -36,6 +36,7 @@ await runGroup({ name: 'no-workspace', model: 'gpt-4o', noWorkspace: true, scena
 await runGroup({ name: 'agent-tasks', model: 'gpt-4o', scenarios: oracleTaskScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
 await runPersistenceGroup();
+await runUpgradeGroup();
 await runPrivacyGroup();
 
 if (process.env.REAL_LLM_MODEL) {

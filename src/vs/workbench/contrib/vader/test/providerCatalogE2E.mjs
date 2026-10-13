@@ -77,7 +77,7 @@ const listing = fs.readFileSync(path.join(here, '../electron-main/llmMessage/mod
 const baseUrls = [...impl.matchAll(/baseURL:\s*'(https?:\/\/[^']+)'/g)].map(m => m[1]).sort();
 const reviewedBaseUrls = ['https://api.deepseek.com/v1', 'https://api.groq.com/openai/v1', 'https://api.mistral.ai/v1', 'https://api.x.ai/v1', 'https://openrouter.ai/api/v1'].sort();
 check('chat requests to fixed hosts go to exactly the reviewed base URLs', JSON.stringify(baseUrls) === JSON.stringify(reviewedBaseUrls), baseUrls.join(', '));
-const reviewedList = ['https://api.openai.com', 'https://api.anthropic.com', 'https://generativelanguage.googleapis.com', 'https://api.x.ai', 'https://api.groq.com', 'https://api.mistral.ai', 'https://api.deepseek.com', 'https://openrouter.ai'].sort();
+const reviewedList = ['https://api.openai.com', 'https://api.anthropic.com', 'https://generativelanguage.googleapis.com', 'https://api.x.ai', 'https://api.groq.com', 'https://api.mistral.ai', 'https://api.deepseek.com', 'https://openrouter.ai', 'https://models.github.ai'].sort();
 const listHosts = [...new Set([...listing.matchAll(/'(https:\/\/[a-z0-9.-]+)\//g)].map(m => m[1]))].sort();
 check('model-list requests to fixed hosts go only to the reviewed provider hosts', JSON.stringify(listHosts) === JSON.stringify(reviewedList), listHosts.join(', '));
 check('Bedrock defaults to the native OpenAI-compatible endpoint', /bedrock-runtime\.\$\{[^}]+\}\.amazonaws\.com\/openai\/v1/.test(impl));

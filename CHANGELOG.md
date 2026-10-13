@@ -10,6 +10,11 @@
   frame, quieter edges, the chat request as a card, soft tool-call rows, checkpoints as a hairline, a larger floating composer, settings cards with a status dot and a divided action row, grouped model list.
   Same greys, same blue, same fonts and logo; the send button is unchanged. Everything is scoped to the dark theme: light and high-contrast themes keep their own look. "Modern UI" can be switched off in Settings.
 
+- **A clean start for the first public release.** Settings (welcome state, model picks, stored model lists, API keys) and chat history moved to new storage keys (`...III`), so an earlier pre-release install no longer decides what the new
+  one shows: the welcome screen appears, no old chat comes back, and the old keys are deleted from disk on startup. A chat that was closed while a tool request still waited for approval now opens with that request closed as rejected
+  (before, the thread stayed locked on an approval that belonged to a run that no longer existed and a new message could not be sent). The real-app suite covers both on Windows.
+- **No model names written into the app.** Every provider starts with an empty list: what can be picked is what the provider itself says the key may use (all vendor providers now ask their own `/models` route, GitHub Models its catalogue route),
+  what a local server reports, or a model added by name. A provider with no such route says so (HTTP 404/405/501 -> "no model list that Vader can ask for") instead of showing a built-in catalogue.
 - **Extensions install again in the packaged app.** The download step runs in a separate process that never loaded the setting's default (`extensions.verifySignature` = off), so it treated the unset value as "verify" and refused every Open VSX
   extension with "Signature verification was not executed". An unset value now means off in that process too, as it does in the settings page; a person who switches the setting on still gets verification.
 

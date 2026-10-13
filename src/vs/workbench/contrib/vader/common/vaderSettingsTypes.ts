@@ -4,7 +4,6 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-import { isCloudListedProvider } from './cloudModelListTypes.js';
 import { isVendorProviderName, vendorProviders, vendorProviderNames, VendorProviderName } from './vendorProviderData.js';
 import { defaultModelsOfProvider, defaultProviderSettings, ModelOverrides } from './modelCapabilities.js';
 import { ToolApprovalType } from './toolsServiceTypes.js';
@@ -422,12 +421,13 @@ const _defaultSettingsOfProvider: SettingsOfProvider = {
 	}])) as { [K in VendorProviderName]: SettingsAtProvider<K> }),
 }
 
-// A hosted provider that can list what the user's key may use starts with NO models: the list is whatever the provider says once a working key is
-// typed in (common/refreshModelService.ts), never names written here. Providers without such a route (Azure/Vertex/Bedrock deployments, a few
-// vendors, any generic endpoint) keep their catalogue models, and "Add model" accepts any id.
+// No provider starts with a list of model names written into the app. What a person can pick is what the provider says their key may use
+// (common/refreshModelService.ts asks it once a working key is typed in; local servers are detected), plus any model added by name with
+// "Add model" for the ones that publish no list (Azure/Vertex/Bedrock deployments, a generic endpoint). The catalogue in modelCapabilities.ts and
+// vendorProviderData.ts only describes models (context window, tools, price) once one is in use; it is never shown as a choice.
 export const defaultSettingsOfProvider: SettingsOfProvider = Object.fromEntries(
-	Object.entries(_defaultSettingsOfProvider).map(([name, settings]) => [name, isCloudListedProvider(name) ? { ...settings, models: [] } : settings])
-) as SettingsOfProvider
+	Object.entries(_defaultSettingsOfProvider).map(([name, settings]) => [name, { ...settings, models: [] }])
+) as unknown as SettingsOfProvider
 
 
 export type ModelSelection = { providerName: ProviderName, modelName: string }

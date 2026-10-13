@@ -71,9 +71,9 @@ for (const k of vendorProviderNames) {
 {
 	const withNames = cloudListedProviderNames.filter(p => types.defaultSettingsOfProvider[p].models.length > 0);
 	check(`${cloudListedProviderNames.length} providers that can list their models start with none (the key decides what appears)`, withNames.length === 0, withNames.join(','));
-	const kept = Object.keys(types.defaultSettingsOfProvider).filter(p => !cloudListedProviderNames.includes(p) && types.defaultSettingsOfProvider[p].models.length > 0);
-	const noRoute = vendorProviderNames.filter(k => !vendorProviders[k].liveList);
-	check(`the ${noRoute.length} vendors without a list route keep their catalogue so they stay usable`, noRoute.length > 0 && noRoute.every(k => kept.includes(k)), noRoute.filter(k => !kept.includes(k)).join(','));
+	const anyNames = Object.keys(types.defaultSettingsOfProvider).filter(p => types.defaultSettingsOfProvider[p].models.length > 0);
+	check(`all ${Object.keys(types.defaultSettingsOfProvider).length} providers start with no model names written into the app (what appears is what the provider says, or what the person adds)`, anyNames.length === 0, anyNames.join(','));
+	check('every vendor provider asks its own /models route', vendorProviderNames.every(k => vendorProviders[k].liveList && cloudListedProviderNames.includes(k)), vendorProviderNames.filter(k => !vendorProviders[k].liveList).join(','));
 }
 
 // ================================================================ every provider has its real logo, as safe one-colour data
@@ -184,7 +184,7 @@ check('every vendor with a /models route is in the live-list set, and nobody els
 	const server = http.createServer((req, res) => { seen.push({ url: req.url, auth: req.headers.authorization }); res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); });
 	await new Promise(r => server.listen(0, '127.0.0.1', r));
 	const base = `http://127.0.0.1:${server.address().port}`;
-	for (const k of vendorLiveListedNames) {
+	for (const k of vendorLiveListedNames.filter(k => k !== 'githubModels')) {
 		seen.length = 0;
 		const settings = { [k]: { apiKey: KEY, endpoint: `${base}/v9` } };
 		const r = await listCloudModels(k, settings);
@@ -195,9 +195,18 @@ check('every vendor with a /models route is in the live-list set, and nobody els
 	body = [{ id: 'meta-llama/x', created: 1 }, { id: 'qwen/y', created: 3 }];
 	const t = await listCloudModels('together', { together: { apiKey: KEY, endpoint: `${base}/v1` } });
 	check('together: a bare JSON array (its real answer shape) is understood too', t.ok && t.models.join() === 'qwen/y,meta-llama/x', JSON.stringify(t));
-	const none = await listCloudModels('perplexity', { perplexity: { apiKey: KEY, endpoint: base } });
-	check('a vendor without a /models route reports "unsupported" instead of calling out', !none.ok && none.reason === 'unsupported');
+	// GitHub Models keeps its catalogue at /catalog/models, away from the inference endpoint
+	body = [{ id: 'openai/gpt-x', created: 1 }, { id: 'meta/llama-y', created: 2 }];
+	seen.length = 0;
+	const gh = await listCloudModels('githubModels', { githubModels: { apiKey: KEY, endpoint: 'https://models.github.ai/inference' } }, { baseUrlOverride: base });
+	check('githubModels: lists models from its catalogue route with the key as a bearer token', gh.ok && gh.models.length === 2 && seen.length === 1 && seen[0].url === '/catalog/models' && seen[0].auth === `Bearer ${KEY}`, JSON.stringify({ gh, seen }));
 	await new Promise(r => server.close(r));
+	// a provider that has no such route (HTTP 404) is not an error with the key: the list is typed in by name
+	const missing = http.createServer((req, res) => { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not found"}'); });
+	await new Promise(r => missing.listen(0, '127.0.0.1', r));
+	const none = await listCloudModels('perplexity', { perplexity: { apiKey: KEY, endpoint: `http://127.0.0.1:${missing.address().port}` } });
+	check('a provider whose /models route does not exist (HTTP 404) reports "unsupported", not a key or network problem', !none.ok && none.reason === 'unsupported', JSON.stringify(none));
+	await new Promise(r => missing.close(r));
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

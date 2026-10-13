@@ -709,11 +709,11 @@ const CloudModelListStatus = ({ providerName }: { providerName: ProviderName }) 
 	const refreshModelService = accessor.get('IRefreshModelService')
 	const cloudState = useCloudModelListState()
 	if (!isCloudListedProvider(providerName)) {
-		// providers without a list route keep their catalogue; say so instead of implying the list is live
-		if (providerName === 'ollama' || providerName === 'vLLM' || providerName === 'lmStudio') return null // local servers are detected
+		// no list to ask for here: local servers are detected, everything else is typed in by name
+		if (providerName === 'ollama' || providerName === 'vLLM' || providerName === 'lmStudio') return null
 		return <div className='py-1 px-3 text-sm opacity-70' data-testid='vader-no-live-list'>
 			{providerName === 'openAICompatible' ? 'This endpoint has no model catalogue here: add the models it serves with "Add model".'
-				: 'This provider has no model-list API Vader can ask, so the models shown are its catalogue; add any other model by name with "Add model".'}
+				: 'This provider publishes no list of models that Vader can ask for: add the model or deployment you use with "Add model".'}
 		</div>
 	}
 	const st = cloudState[providerName]
@@ -724,7 +724,7 @@ const CloudModelListStatus = ({ providerName }: { providerName: ProviderName }) 
 		{st.status === 'ok' && <><Check className='size-3 text-green-500' /><span className='opacity-80'>Key works - {st.count} model{st.count === 1 ? '' : 's'} available to you.</span></>}
 		{st.status === 'error' && <>
 			<X className='size-3 text-red-500' />
-			<span className='opacity-80'>{st.message}{st.reason === 'unauthorized' ? '' : ' No models are listed until the provider answers; you can still add a model by name.'}</span>
+			<span className='opacity-80'>{st.message}{st.reason === 'unauthorized' ? '' : st.reason === 'unsupported' ? ' Add the model you use by name with "Add model".' : ' No models are listed until the provider answers; you can still add a model by name.'}</span>
 			<button className='underline opacity-70 hover:opacity-100' onClick={() => refreshModelService.refreshCloudModels(providerName)}>Retry</button>
 		</>}
 	</div>

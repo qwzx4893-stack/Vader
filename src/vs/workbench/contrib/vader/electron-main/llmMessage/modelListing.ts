@@ -124,6 +124,8 @@ const specOf: { [p in CloudListedProviderName]: Spec } = {
 	openCodeZen: { url: s => `${trimSlash(s.openCodeZen.endpoint)}/models`, headers: bearer, parse: openAIShaped() },
 	// the vendor providers (common/vendorProviderData.ts): every one with an OpenAI-style /models route, on the endpoint the user configured
 	...(Object.fromEntries(vendorLiveListedNames.map(k => [k, { url: (s: SettingsOfProvider) => `${trimSlash(s[k].endpoint)}/models`, headers: bearer, parse: openAIShaped(id => !NON_CHAT.test(id)) } as Spec])) as { [K in typeof vendorLiveListedNames[number]]: Spec }),
+	// GitHub Models keeps its catalogue next to, not under, the inference endpoint
+	githubModels: { url: () => 'https://models.github.ai/catalog/models', headers: key => ({ ...bearer(key), 'X-GitHub-Api-Version': '2022-11-28' }), parse: openAIShaped(id => !NON_CHAT.test(id)) },
 }
 
 function trimSlash(u: string) { return (u || '').replace(/\/+$/, '') }
@@ -174,6 +176,8 @@ export async function listCloudModels(providerName: ProviderName, settingsOfProv
 			return { ok: false, reason: 'unauthorized', message: 'The provider rejected this API key.' }
 		}
 		if (res.status === 429) return { ok: false, reason: 'rate-limited', message: 'The provider is rate-limiting requests right now. Try again in a minute.' }
+		// the route does not exist at this provider (Perplexity, some gateways): nothing is wrong with the key, the list just has to be typed in
+		if ([404, 405, 501].includes(res.status)) return { ok: false, reason: 'unsupported', message: 'This provider has no model list that Vader can ask for.' }
 		if (!res.ok) return { ok: false, reason: 'http', message: `The provider answered with HTTP ${res.status}.` }
 
 		const parsed = spec.parse(body)

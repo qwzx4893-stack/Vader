@@ -7,16 +7,23 @@
 // 'vader.settingsServiceStorage'
 // 'vader.settingsServiceStorageI' // 1.0.2
 
-// 1.0.3
-export const VADER_SETTINGS_STORAGE_KEY = 'vader.settingsServiceStorageII'
+// 'vader.settingsServiceStorageII' // before the first public release: onboarding flag, keys and model lists written by pre-release builds
+
+// first public release: starts clean, so a pre-release install never feeds its welcome state, model picks or stored model lists into this one
+export const VADER_SETTINGS_STORAGE_KEY = 'vader.settingsServiceStorageIII'
 
 
 // past values:
 // 'vader.chatThreadStorage'
 // 'vader.chatThreadStorageI' // 1.0.2
 
-// 1.0.3
-export const THREAD_STORAGE_KEY = 'vader.chatThreadStorageII'
+// 'vader.chatThreadStorageII' // before the first public release
+
+// first public release (see above)
+export const THREAD_STORAGE_KEY = 'vader.chatThreadStorageIII'
+
+/** the keys the first public release replaced: deleted on startup so the old data (including encrypted API keys) does not stay on disk unread */
+export const VADER_RETIRED_STORAGE_KEYS = ['vader.settingsServiceStorageII', 'vader.chatThreadStorageII'] as const
 
 
 

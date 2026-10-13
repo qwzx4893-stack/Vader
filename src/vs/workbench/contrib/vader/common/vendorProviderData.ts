@@ -58,7 +58,7 @@ export const vendorProviders = {
 		"command-a-translate-08-2025": { ctx: 8000, out: 8000, tools: true, vision: false, reasoning: false, cost: { input: 2.5, output: 10 } },
 		"command-a-reasoning-08-2025": { ctx: 256000, out: 32000, tools: true, vision: false, reasoning: true, cost: { input: 2.5, output: 10 } },
 	} },
-	zai: { title: "Z.AI (GLM)", endpoint: "https://api.z.ai/api/paas/v4", keyUrl: "https://z.ai/manage-apikey/apikey-list", keyPlaceholder: "key...", liveList: false, note: "Mainland China accounts should change the Endpoint above to `https://open.bigmodel.cn/api/paas/v4`.", models: {
+	zai: { title: "Z.AI (GLM)", endpoint: "https://api.z.ai/api/paas/v4", keyUrl: "https://z.ai/manage-apikey/apikey-list", keyPlaceholder: "key...", liveList: true, note: "Mainland China accounts should change the Endpoint above to `https://open.bigmodel.cn/api/paas/v4`.", models: {
 		"glm-5.3-flashx": { ctx: 1000000, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.37, output: 1.25 } },
 		"glm-5.3-flash": { ctx: 1000000, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.15, output: 0.5 } },
 		"glm-5.3": { ctx: 1000000, out: 131072, tools: true, vision: false, reasoning: true, cost: { input: 1.4, output: 4.4 } },
@@ -68,7 +68,7 @@ export const vendorProviders = {
 		"glm-5-turbo": { ctx: 200000, out: 131072, tools: true, vision: false, reasoning: true, cost: { input: 1.2, output: 4 } },
 		"glm-5": { ctx: 204800, out: 131072, tools: true, vision: false, reasoning: true, cost: { input: 1, output: 3.2 } },
 	} },
-	perplexity: { title: "Perplexity", endpoint: "https://api.perplexity.ai", keyUrl: "https://www.perplexity.ai/settings/api", keyPlaceholder: "pplx-...", liveList: false, note: "Sonar models search the web and do not call tools, so they answer in chat but cannot drive the agent.", models: {
+	perplexity: { title: "Perplexity", endpoint: "https://api.perplexity.ai", keyUrl: "https://www.perplexity.ai/settings/api", keyPlaceholder: "pplx-...", liveList: true, note: "Sonar models search the web and do not call tools, so they answer in chat but cannot drive the agent.", models: {
 		"sonar-deep-research": { ctx: 128000, out: 32768, tools: false, vision: false, reasoning: true, cost: { input: 2, output: 8 } },
 		"sonar-pro": { ctx: 200000, out: 8192, tools: false, vision: true, reasoning: false, cost: { input: 3, output: 15 } },
 		"sonar": { ctx: 128000, out: 4096, tools: false, vision: false, reasoning: false, cost: { input: 1, output: 1 } },
@@ -114,7 +114,7 @@ export const vendorProviders = {
 		"deepseek-ai/DeepSeek-V4-Flash-0731": { ctx: 1024000, out: 1024000, tools: true, vision: false, reasoning: true, cost: { input: 0.14, output: 0.28 } },
 		"moonshotai/Kimi-K3": { ctx: 1048576, out: 8000, tools: true, vision: false, reasoning: true, cost: { input: 3, output: 15 } },
 	} },
-	cloudflare: { title: "Cloudflare Workers AI", endpoint: "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1", keyUrl: "https://dash.cloudflare.com/profile/api-tokens", keyPlaceholder: "key...", liveList: false, note: "Replace `ACCOUNT_ID` in the Endpoint above with your Cloudflare account id.", models: {
+	cloudflare: { title: "Cloudflare Workers AI", endpoint: "https://api.cloudflare.com/client/v4/accounts/ACCOUNT_ID/ai/v1", keyUrl: "https://dash.cloudflare.com/profile/api-tokens", keyPlaceholder: "key...", liveList: true, note: "Replace `ACCOUNT_ID` in the Endpoint above with your Cloudflare account id.", models: {
 		"@cf/zai-org/glm-5.3-flash": { ctx: 1048576, out: 1048576, tools: true, vision: true, reasoning: true, cost: { input: 0.15, output: 0.5 } },
 		"@cf/zai-org/glm-5.3": { ctx: 1048576, out: 1048576, tools: true, vision: false, reasoning: true, cost: { input: 1.4, output: 4.4 } },
 		"@cf/qwen/qwen3.8-27b": { ctx: 262144, out: 262144, tools: true, vision: true, reasoning: true, cost: { input: 0.45, output: 3.2 } },
@@ -124,7 +124,7 @@ export const vendorProviders = {
 		"@cf/moonshotai/kimi-k2.7-code": { ctx: 262144, out: 262144, tools: true, vision: true, reasoning: true, cost: { input: 0.95, output: 4 } },
 		"@cf/moonshotai/kimi-k2.6": { ctx: 262144, out: 256000, tools: true, vision: true, reasoning: true, cost: { input: 0.95, output: 4 } },
 	} },
-	novita: { title: "Novita AI", endpoint: "https://api.novita.ai/openai", keyUrl: "https://novita.ai/settings/key-management", keyPlaceholder: "sk_...", liveList: false, note: "", models: {
+	novita: { title: "Novita AI", endpoint: "https://api.novita.ai/openai", keyUrl: "https://novita.ai/settings/key-management", keyPlaceholder: "sk_...", liveList: true, note: "", models: {
 		"moonshotai/kimi-k3": { ctx: 1048576, out: 1048576, tools: true, vision: true, reasoning: true, cost: { input: 3, output: 15 } },
 		"zai-org/glm-5.2": { ctx: 1048576, out: 131072, tools: true, vision: false, reasoning: true, cost: { input: 1.4, output: 4.4 } },
 		"moonshotai/kimi-k2.7-code": { ctx: 262144, out: 262144, tools: true, vision: true, reasoning: true, cost: { input: 0.95, output: 4 } },
@@ -144,7 +144,7 @@ export const vendorProviders = {
 		"moonshotai/Kimi-K3": { ctx: 1048576, out: 262000, tools: true, vision: true, reasoning: true, cost: { input: 2.7, output: 13.5 } },
 		"tencent/Hy3": { ctx: 262144, out: 262144, tools: true, vision: false, reasoning: true, cost: { input: 0.132, output: 0.528 } },
 	} },
-	volcengine: { title: "Volcengine Ark (Doubao)", endpoint: "https://ark.cn-beijing.volces.com/api/v3", keyUrl: "https://console.volcengine.com/ark", keyPlaceholder: "key...", liveList: false, note: "Models are addressed by your endpoint id (`ep-...`) or model id from the Ark console: add it with \"Add model\".", models: {
+	volcengine: { title: "Volcengine Ark (Doubao)", endpoint: "https://ark.cn-beijing.volces.com/api/v3", keyUrl: "https://console.volcengine.com/ark", keyPlaceholder: "key...", liveList: true, note: "Models are addressed by your endpoint id (`ep-...`) or model id from the Ark console: add it with \"Add model\".", models: {
 		"glm-5-3-flash-260828": { ctx: 1000000, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.11875, output: 0.41563 } },
 		"deepseek-v4-pro-ga-260813": { ctx: 1000000, out: 384000, tools: true, vision: false, reasoning: true, cost: { input: 1.3359, output: 4.00771 } },
 		"deepseek-v4-flash-ga-260731": { ctx: 1000000, out: 384000, tools: true, vision: false, reasoning: true, cost: { input: 0.4453, output: 1.3359 } },
@@ -190,11 +190,11 @@ export const vendorProviders = {
 		"mimo-v2.6-flash": { ctx: 1048576, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.14, output: 0.28 } },
 		"mimo-v2.6-pro": { ctx: 1048576, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.43, output: 0.87 } },
 	} },
-	ai21: { title: "AI21 Labs (Jamba)", endpoint: "https://api.ai21.com/studio/v1", keyUrl: "https://studio.ai21.com/account/api-key", keyPlaceholder: "key...", liveList: false, note: "", models: {
+	ai21: { title: "AI21 Labs (Jamba)", endpoint: "https://api.ai21.com/studio/v1", keyUrl: "https://studio.ai21.com/account/api-key", keyPlaceholder: "key...", liveList: true, note: "", models: {
 		"jamba-mini": { ctx: 256000, out: 4096, tools: true, vision: false, reasoning: false, cost: { input: 0.2, output: 0.4 } },
 		"jamba-large": { ctx: 256000, out: 4096, tools: true, vision: false, reasoning: false, cost: { input: 2, output: 8 } },
 	} },
-	upstage: { title: "Upstage (Solar)", endpoint: "https://api.upstage.ai/v1/solar", keyUrl: "https://console.upstage.ai/api-keys", keyPlaceholder: "up_...", liveList: false, note: "", models: {
+	upstage: { title: "Upstage (Solar)", endpoint: "https://api.upstage.ai/v1/solar", keyUrl: "https://console.upstage.ai/api-keys", keyPlaceholder: "up_...", liveList: true, note: "", models: {
 		"solar-pro4": { ctx: 524288, out: 131072, tools: true, vision: false, reasoning: true, cost: { input: 0.3, output: 1.2 } },
 		"solar-pro3": { ctx: 131072, out: 8192, tools: true, vision: false, reasoning: true, cost: { input: 0.25, output: 0.25 } },
 		"solar-pro2": { ctx: 65536, out: 8192, tools: true, vision: false, reasoning: true, cost: { input: 0.25, output: 0.25 } },
@@ -254,7 +254,7 @@ export const vendorProviders = {
 		"aion-labs-aion-3-5": { ctx: 262144, out: 32768, tools: true, vision: false, reasoning: true, cost: { input: 3.75, output: 7.5 } },
 		"openai-gpt-6-luna": { ctx: 1050000, out: 128000, tools: true, vision: true, reasoning: true, cost: { input: 0.125, output: 0.625 } },
 	} },
-	xiaomi: { title: "Xiaomi MiMo", endpoint: "https://api.xiaomimimo.com/v1", keyUrl: "https://platform.xiaomimimo.com", keyPlaceholder: "sk-...", liveList: false, note: "", models: {
+	xiaomi: { title: "Xiaomi MiMo", endpoint: "https://api.xiaomimimo.com/v1", keyUrl: "https://platform.xiaomimimo.com", keyPlaceholder: "sk-...", liveList: true, note: "", models: {
 		"mimo-v2.6-flash": { ctx: 1048576, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.14, output: 0.28 } },
 		"mimo-v2.6-pro": { ctx: 1048576, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 0.435, output: 0.87 } },
 		"mimo-v2.6-pro-ultraspeed": { ctx: 1048576, out: 131072, tools: true, vision: true, reasoning: true, cost: { input: 4.35, output: 8.7 } },
@@ -266,7 +266,7 @@ export const vendorProviders = {
 	} },
 	hyperbolic: { title: "Hyperbolic", endpoint: "https://api.hyperbolic.xyz/v1", keyUrl: "https://app.hyperbolic.xyz/settings", keyPlaceholder: "key...", liveList: true, note: "No built-in model list: enter the key and pick from the live list.", models: {
 	} },
-	githubModels: { title: "GitHub Models", endpoint: "https://models.github.ai/inference", keyUrl: "https://github.com/settings/personal-access-tokens", keyPlaceholder: "github_pat_...", liveList: false, note: "Use a fine-grained token with the `models:read` permission. Model ids are `publisher/name`.", models: {
+	githubModels: { title: "GitHub Models", endpoint: "https://models.github.ai/inference", keyUrl: "https://github.com/settings/personal-access-tokens", keyPlaceholder: "github_pat_...", liveList: true, note: "Use a fine-grained token with the `models:read` permission. Model ids are `publisher/name`.", models: {
 		"openai/gpt-4.1": { ctx: 1048576, out: 32768, tools: true, vision: true, reasoning: false, cost: { input: 0, output: 0 } },
 		"openai/gpt-4.1-mini": { ctx: 1048576, out: 32768, tools: true, vision: true, reasoning: false, cost: { input: 0, output: 0 } },
 		"meta/Llama-3.3-70B-Instruct": { ctx: 131072, out: 4096, tools: true, vision: false, reasoning: false, cost: { input: 0, output: 0 } },
@@ -277,4 +277,4 @@ export const vendorProviders = {
 export type VendorProviderName = keyof typeof vendorProviders
 export const vendorProviderNames = Object.keys(vendorProviders) as VendorProviderName[]
 export const isVendorProviderName = (p: string): p is VendorProviderName => Object.prototype.hasOwnProperty.call(vendorProviders, p)
-export const vendorLiveListedNames = ["together", "fireworks", "cerebras", "cohere", "nvidia", "huggingface", "deepinfra", "nebius", "siliconflow", "stepfun", "vercel", "requesty", "inception", "llama", "baseten", "scaleway", "ovhcloud", "venice", "sambanova", "hyperbolic"] as const satisfies readonly VendorProviderName[]
+export const vendorLiveListedNames = ["together", "fireworks", "cerebras", "cohere", "zai", "perplexity", "nvidia", "huggingface", "deepinfra", "nebius", "cloudflare", "novita", "siliconflow", "volcengine", "stepfun", "vercel", "requesty", "ai21", "upstage", "inception", "llama", "baseten", "scaleway", "ovhcloud", "venice", "xiaomi", "sambanova", "hyperbolic", "githubModels"] as const satisfies readonly VendorProviderName[]

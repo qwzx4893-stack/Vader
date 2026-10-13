@@ -12,7 +12,7 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
-import { VADER_SETTINGS_STORAGE_KEY } from './storageKeys.js';
+import { VADER_RETIRED_STORAGE_KEYS, VADER_SETTINGS_STORAGE_KEY } from './storageKeys.js';
 import { defaultSettingsOfProvider, FeatureName, ProviderName, ModelSelectionOfFeature, SettingsOfProvider, SettingName, providerNames, ModelSelection, modelSelectionsEqual, featureNames, VaderStatefulModelInfo, GlobalSettings, GlobalSettingName, defaultGlobalSettings, ModelSelectionOptions, OptionsOfModelSelection, ChatMode, OverridesOfModel, defaultOverridesOfModel, MCPUserStateOfName as MCPUserStateOfName, MCPUserState } from './vaderSettingsTypes.js';
 
 
@@ -256,6 +256,9 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 		let resolver: () => void = () => { }
 		this.waitForInitState = new Promise((res, rej) => resolver = res)
 		this._resolver = resolver
+
+		// data a pre-release build left under the keys this release replaced is not read any more, so do not leave it (and its encrypted API keys) on disk
+		for (const key of VADER_RETIRED_STORAGE_KEYS) this._storageService.remove(key, StorageScope.APPLICATION)
 
 		this.readAndInitializeState()
 	}
