@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - The model picker in the chat box: providers that open into their models, with logos and search
+
+- **What the owner asked for:** with one provider set up, the picker shows that provider's live list of models; with several, it shows the providers and a click on one opens its models; every provider shows its real logo, in Settings and in the small picker.
+- `ProviderModelPicker.tsx` replaces the flat list (it used to print every model with its provider's name at the right): one provider -> its models directly, with a footer naming the provider and the count; several providers -> one row per provider (chevron, logo, name, number of models), the chosen provider open, one open at a time; a search box appears above 8 models and searches model names and provider names across all providers (words in any order, case and `- _ : / .` ignored; the matches stay under their provider); the closed button shows the provider's logo and the model; arrow keys, Escape, rows are real buttons with listbox roles. It is used for every feature that picks a model (chat, autocomplete, apply, commit messages). Logos are the existing real ones (`providerLogoData.ts`, 49 providers, generated from lobe-icons and models.dev, one colour so they follow the theme).
+- The arrangement is a pure module (`common/modelPickerGroups.ts`); the component takes plain props, so it was rendered standalone in a browser from the real source and checked by screenshot before anything was built. A saved model choice that is no longer offered still moves to the first model offered (as before).
+- Tests: `test/modelPickerE2E.mjs` (25 checks, in CI; 800 models search in well under 16 ms). **Not seen inside the packaged app yet.**
+
 ## Unreleased - A map of the repository (tool `repo_map`)
 
 - **The gap:** the Context Engine only knows the files the person mentioned or has open; in a large project the agent had to find its way by searching and reading, which Aider's repo map, Continue and others answer with a ranked overview.

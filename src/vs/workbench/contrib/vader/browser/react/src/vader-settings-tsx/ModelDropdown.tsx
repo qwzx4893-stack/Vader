@@ -4,9 +4,10 @@
  *--------------------------------------------------------------------------------------*/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js'
+import { displayInfoOfProviderName, FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js'
 import { useSettingsState, useRefreshModelState, useAccessor } from '../util/services.js'
-import { _VaderSelectBox, VaderCustomDropdownBox } from '../util/inputs.js'
+import { _VaderSelectBox } from '../util/inputs.js'
+import { ProviderModelPicker } from './ProviderModelPicker.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
 import { IconWarning } from '../sidebar-tsx/SidebarChat.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID, VADER_TOGGLE_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
@@ -33,16 +34,20 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 		vaderSettingsService.setModelSelectionOfFeature(featureName, newOption.selection)
 	}, [vaderSettingsService, featureName])
 
-	return <VaderCustomDropdownBox
-		options={options}
-		selectedOption={selectedOption}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(option) => option.selection.modelName}
-		getOptionDropdownName={(option) => option.selection.modelName}
-		getOptionDropdownDetail={(option) => option.selection.providerName}
-		getOptionsEqual={(a, b) => optionsEqual([a], [b])}
+	// a saved choice that is not among the models offered here (a provider was removed, or the feature needs a kind of model) moves to the first one offered
+	useEffect(() => {
+		if (options.length === 0 || selectedOption !== undefined && options.some(o => modelSelectionsEqual(o.selection, selectedOption.selection))) return
+		onChangeOption(options[0])
+	}, [options, selectedOption, onChangeOption])
+
+	// the picker shows one provider's live list flat, and several providers as a list of providers that open into their models (ProviderModelPicker)
+	const pickerOptions = useMemo(() => options.map(o => ({ selection: o.selection, providerName: o.selection.providerName, providerTitle: displayInfoOfProviderName(o.selection.providerName).title, modelName: o.selection.modelName })), [options])
+
+	return <ProviderModelPicker
+		options={pickerOptions}
+		selected={selectedOption?.selection}
+		onChange={(o) => onChangeOption({ name: o.modelName, selection: o.selection })}
 		className={className}
-		matchInputWidth={false}
 	/>
 }
 
