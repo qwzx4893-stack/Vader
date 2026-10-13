@@ -12,9 +12,9 @@
 import fs from 'node:fs';
 import http from 'node:http';
 
-export async function createLlmProxy({ apiKey, upstream = 'https://openrouter.ai/api/v1', model, fallbackModel, budgetUsd = 0, logFile, maxRetries = 6 }) {
+export async function createLlmProxy({ apiKey, upstream = 'https://openrouter.ai/api/v1', model, fallbackModel, budgetUsd = 0, logFile, maxRetries = 6, transform }) {
 	if (!apiKey) { throw new Error('createLlmProxy: apiKey is required'); }
-	const state = { spentUsd: 0, requests: 0, promptTokens: 0, completionTokens: 0, byModel: {}, retries: 0, failures: 0, lastActivityAt: Date.now(), inFlight: 0 };
+	const state = { spentUsd: 0, requests: 0, promptTokens: 0, completionTokens: 0, byModel: {}, retries: 0, failures: 0, lastActivityAt: Date.now(), inFlight: 0, swapped: 0 };
 	const log = (o) => { if (logFile) { try { fs.appendFileSync(logFile, JSON.stringify({ t: new Date().toISOString(), ...o }) + '\n'); } catch { /* best effort */ } } };
 	const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 	const refuse = (res, message) => { res.writeHead(429, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: { message, code: 429 } })); log({ kind: 'refused', message }); };
@@ -35,6 +35,7 @@ export async function createLlmProxy({ apiKey, upstream = 'https://openrouter.ai
 		if (isChat) {
 			try {
 				const j = JSON.parse(raw.toString('utf8'));
+				if (transform) { state.swapped += transform(j) || 0; } // e.g. promptSwap.mjs: the source tree's instructions in place of the installed app's
 				const wantsPaid = !!model && !model.endsWith(':free');
 				if (state.dailyFreeExhausted && (!wantsPaid || !paidAllowed()) && (fallbackModel ?? model ?? '').endsWith(':free')) { return refuse(res, 'proxy: the free-model daily quota is exhausted'); }
 				if (wantsPaid && !paidAllowed() && !fallbackModel) { state.budgetExhausted = true; return refuse(res, 'proxy: the benchmark budget is spent'); } // never spend past the budget

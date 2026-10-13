@@ -11,6 +11,7 @@ import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
 import { ChatMode } from '../vaderSettingsTypes.js';
+import { agentBehavior, untrustedContentNote } from './agentBehavior.js'
 
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
@@ -117,11 +118,13 @@ ${searchReplaceBlockTemplate}
 
 2. The ORIGINAL code in each SEARCH/REPLACE block must EXACTLY match lines in the original file. Do not add or remove any whitespace or comments from the original code.
 
-3. Each ORIGINAL text must be large enough to uniquely identify the change. However, bias towards writing as little as possible.
+3. Each ORIGINAL text must be large enough to uniquely identify the change (usually the lines to change plus one or two neighbouring lines), and no larger.
 
 4. Each ORIGINAL text must be DISJOINT from all other ORIGINAL text.
 
-5. This field is a STRING (not an array).`
+5. Keep the indentation and line endings of the file in both parts. A block whose ORIGINAL text does not appear in the file, or appears more than once, is rejected.
+
+6. Write the blocks exactly in the format above, with the lines <<<<<<< ORIGINAL, =======, and >>>>>>> UPDATED, one block after the other. This field is a STRING (not an array) and contains nothing else.`
 
 
 // ======================================================== tools ========================================================
@@ -171,7 +174,7 @@ const paginationParam = {
 
 
 
-const terminalDescHelper = `You can use this tool to run any command: sed, grep, etc. Do not edit any files with this tool; use edit_file instead. When working with git and other tools that open an editor (e.g. git diff), you should pipe to cat to get all results and not get stuck in vim.`
+const terminalDescHelper = `Use it to build, test, lint, run scripts and use git, and for searching only when the search tools do not fit. Do not edit files with it; use edit_file. Run one command per call, non-interactively: pass flags that skip prompts, and pipe commands that open a pager or an editor (for example git diff) to cat. Long output is cut, so filter it when you only need part. The result ends with the exit code.`
 
 const cwdHelper = 'Optional. The directory in which to run the command. Defaults to the first workspace folder.'
 
@@ -203,11 +206,11 @@ export const builtinTools: {
 
 	read_file: {
 		name: 'read_file',
-		description: `Returns full contents of a given file.`,
+		description: `Returns the contents of a file. A large file comes back in pages (use page_number), or read just the part you need with start_line and end_line, for example around a line that search_in_file or search_for_files found.`,
 		params: {
 			...uriParam('file'),
-			start_line: { description: 'Optional. Do NOT fill this field in unless you were specifically given exact line numbers to search. Defaults to the beginning of the file.' },
-			end_line: { description: 'Optional. Do NOT fill this field in unless you were specifically given exact line numbers to search. Defaults to the end of the file.' },
+			start_line: { description: 'Optional. The first line to return (1-based), to read only part of a file. Defaults to the beginning of the file.' },
+			end_line: { description: 'Optional. The last line to return (1-based). Defaults to the end of the file.' },
 			...paginationParam,
 		},
 	},
@@ -247,7 +250,7 @@ export const builtinTools: {
 
 	search_for_files: {
 		name: 'search_for_files',
-		description: `Returns a list of file names whose content matches the given query. The query can be any substring or regex.`,
+		description: `Returns the files whose content matches the query (a substring or a regex): use it to find where something is defined or used across the project. To see the matching lines inside one file, use search_in_file.`,
 		params: {
 			query: { description: `Your query for the search.` },
 			search_in_folder: { description: 'Optional. Leave as blank by default. ONLY fill this in if your previous search with the same query was truncated. Searches descendants of this folder only.' },
@@ -259,7 +262,7 @@ export const builtinTools: {
 	// add new search_in_file tool
 	search_in_file: {
 		name: 'search_in_file',
-		description: `Returns an array of all the start line numbers where the content appears in the file.`,
+		description: `Returns the line numbers where the query appears in one file. Then read those lines with read_file (start_line, end_line) instead of reading the whole file.`,
 		params: {
 			...uriParam('file'),
 			query: { description: 'The string or regex to search for in the file.' },
@@ -424,7 +427,7 @@ export const builtinTools: {
 
 	edit_file: {
 		name: 'edit_file',
-		description: `Edit the contents of a file. You must provide the file's URI as well as a SINGLE string of SEARCH/REPLACE block(s) that will be used to apply the edit.`,
+		description: `Changes part of an existing file. This is the tool for almost every edit. Give the file's path and ONE string holding one or more SEARCH/REPLACE blocks; each block replaces a piece of the file that you copy exactly from a recent read_file result. Several changes to the same file go in one call. If the edit is rejected, re-read the file and copy the text again exactly as it is now.`,
 		params: {
 			...uriParam('file'),
 			search_replace_blocks: { description: replaceTool_description }
@@ -433,7 +436,7 @@ export const builtinTools: {
 
 	rewrite_file: {
 		name: 'rewrite_file',
-		description: `Edits a file, deleting all the old contents and replacing them with your new contents. Use this tool if you want to edit a file you just created.`,
+		description: `Replaces the whole contents of a file with new_content. Use it for a new file (create it with create_file_or_folder first) or when nearly every line changes; for any other change use edit_file. new_content must be the complete file: never write placeholders such as "rest of the file unchanged".`,
 		params: {
 			...uriParam('file'),
 			new_content: { description: `The new contents of the file. Must be a string.` }
@@ -703,25 +706,19 @@ ${contextEngineBlock}
 	if (mode === 'agent' || mode === 'gather' || mode === 'plan') {
 		details.push(`Only call tools if they help you accomplish the user's goal. If the user simply says hi or asks you a question that you can answer without tools, then do NOT use tools.`)
 		details.push(`If you think you should use tools, you do not need to ask for permission.`)
-		details.push(includeXMLToolDefinitions
+		if (mode !== 'agent') details.push(includeXMLToolDefinitions
 			? 'Only use ONE tool call at a time.'
 			: 'When several tool calls do not depend on each other (reading several files, running several searches), make them together in one turn. Make calls one at a time only when a later call needs the result of an earlier one.')
-		details.push(`NEVER say something like "I'm going to use \`tool_name\`". Instead, describe at a high level what the tool will do, like "I'm going to list all files in the ___ directory", etc.`)
+		if (mode !== 'agent') details.push(`NEVER say something like "I'm going to use \`tool_name\`". Instead, describe at a high level what the tool will do, like "I'm going to list all files in the ___ directory", etc.`)
 		details.push(`Many tools only work if the user has a workspace open.`)
+		if (mode !== 'agent') details.push(untrustedContentNote)
 	}
 	else {
 		details.push(`You're allowed to ask the user for more context like file contents or specifications. If this comes up, tell them to reference files and folders by typing @.`)
 	}
 
 	if (mode === 'agent') {
-		details.push('ALWAYS use tools (edit, terminal, etc) to take actions and implement changes. For example, if you would like to edit a file, you MUST use a tool.')
-		details.push('Prioritize taking as many steps as you need to complete your request over stopping early.')
-		details.push(`You will OFTEN need to gather context before making a change. Do not immediately make a change unless you have ALL relevant context.`)
-		details.push(`ALWAYS have maximal certainty in a change BEFORE you make it. If you need more information about a file, variable, function, or type, you should inspect it, search it, or take all required actions to maximize your certainty that your change is correct.`)
-		details.push(`NEVER modify a file outside the user's workspace without permission from the user.`)
-		details.push(`After you change code, verify it: when the project has tests, a build or a linter, run them (run_verification, or run_command), read the output and fix what fails before you say you are done. If you could not verify a change, say so instead of implying it works.`)
-		details.push(`Change existing files with edit_file and keep the change minimal and in the style of the surrounding code; use rewrite_file only for new files or complete rewrites. Do not modify tests to make them pass unless the user asked you to.`)
-		details.push(`If a tool result is an error, read it and change your approach; do not repeat the identical call expecting a different result.`)
+		// the agent's behaviour is written as sections in common/prompt/agentBehavior.ts (what it is built from, and why: docs/integrations/agent-behavior.md)
 	}
 
 	if (mode === 'gather') {
@@ -777,6 +774,7 @@ ${details.map((d, i) => `${i + 1}. ${d}`).join('\n\n')}`)
 	ansStrs.push(header)
 	ansStrs.push(sysInfo)
 	if (toolDefinitions) ansStrs.push(toolDefinitions)
+	if (mode === 'agent') ansStrs.push(agentBehavior({ singleToolCall: includeXMLToolDefinitions }))
 	ansStrs.push(importantDetails)
 	ansStrs.push(fsInfo)
 	if (contextEngineInfo) ansStrs.push(contextEngineInfo)

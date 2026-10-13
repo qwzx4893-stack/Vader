@@ -200,7 +200,24 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 		return { id, entry: this._pages.get(id)! };
 	}
 
+	/**
+	 * The address policy is checked when the model names a URL (`navigate`), but a page can end up somewhere else on its own: a redirect, a link the model clicked, a script.
+	 * `https://example.com/x` answering `302 http://169.254.169.254/latest/meta-data/` was followed and its text handed to the model. Whatever is on screen is checked
+	 * again before the model is given any of it; a page that is somewhere the policy does not allow is reset to a blank page.
+	 */
+	private async _assertPageAllowed(page: Page): Promise<void> {
+		const current = page.url() || 'about:blank';
+		if (current.startsWith('chrome-error:')) { return; } // a failed load: there is no content to hand over
+		try {
+			assertNavigableUrl(current);
+		} catch (e) {
+			await page.goto('about:blank').catch(() => { });
+			throw new Error(`The page ended up at an address the browser tool does not open (${e instanceof Error ? e.message : String(e)}), so it was reset to a blank page. Nothing from it was read.`);
+		}
+	}
+
 	private async _computeSnapshot(pageId: string, page: Page): Promise<BrowserSnapshot> {
+		await this._assertPageAllowed(page);
 		const snapshotText = await page.ariaSnapshot({ mode: 'ai' }).catch(() => '(could not compute an accessibility snapshot of this page)');
 		return { pageId, url: page.url(), title: await page.title(), snapshotText };
 	}
@@ -291,6 +308,7 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 
 	async screenshot(pageId?: string): Promise<string> {
 		const { entry } = await this._resolvePage(pageId);
+		await this._assertPageAllowed(entry.page);
 		const buf = await entry.page.screenshot({ type: 'png' });
 		return buf.toString('base64');
 	}

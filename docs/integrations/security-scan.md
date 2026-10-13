@@ -115,4 +115,17 @@ The scanners above find coding mistakes; they cannot see the attack classes that
 | MCP config from the opened project | not a finding: `mcp.json` is read from the user's own folder, never from the workspace | read from code | none needed |
 | Scanners (CodeQL, Semgrep, gitleaks, OSV, zizmor, Electronegativity) | already in `security-scan.yml`, zero in Vader's own code per this file | | none |
 
+### Second pass (the parts not examined in the first)
+
+| Part | Result | Evidence | Status |
+|---|---|---|---|
+| Path spellings, at scale | the hand-picked Windows spellings were too few: a seeded fuzz of 4,000 spellings of protected files (case, trailing dots/spaces, `::$DATA`, `./`, `//`, `..` detours, slashes) got **1,264 through on the code before the fixes**, among them deletes of a system file that the locked rule exists to block (`C:\\windows././SYStem32/.\\cmD.exe`); 0 after | `test/policyPathFuzzE2E.mjs`, run on both versions | fixed; the fuzz is a regression test in CI |
+| The agent's browser follows redirects | the address policy was checked when the model named a URL; a page that redirected (`302 http://169.254.169.254/...`), or a link or script the model triggered, led somewhere the policy would not allow and its text was handed to the model | read from code (`navigate` checked, `_computeSnapshot` did not) | fixed: every snapshot and screenshot re-checks the page's address and resets a page that is somewhere the policy does not allow. Not exercised against a live page |
+| API keys at rest | not a finding: a distinctive key typed into the real app is in no file of its data folder as plain text (79 files, 20 MB scanned; OS-level encryption works in the packaged app) | `audit` probe of the real app | none needed |
+| External-agent installer | not a finding: allow-listed download addresses per agent, SHA-256 checked when the registry has one, safe relative paths, `npm --ignore-scripts`, tar `--no-same-owner`; downloads and starts only after a click; the confirmation text says when there is no checksum | read from `externalAgentMainService.ts` | none needed |
+| Update checker | not a finding: compares a tag and opens a link only if it starts with this repository's address; downloads and runs nothing | read | none needed |
+| Electron window | not a finding: no `--no-sandbox`, no disabled web security, no node integration in Vader's changes; the base's sandbox and context isolation are unchanged | grep over the window setup | none needed |
+| Skill search over plain `http` | `api-skillnet.openkg.cn` answers only on http (https does not connect), so a network attacker can change the results | measured | accepted: the results are untrusted by design (the docs say so) and installing anything needs an approval that survives autonomous mode |
+| Registry responses without a size cap | `discoveryMainService` reads whole responses of two fixed hosts | read | low, not changed |
+
 Limits that stay: a regex over a shell string is not a sandbox. `cat $(echo ~/.ss)h/id_rsa`, an encoded payload or a script that builds a path at run time still evades the command rules, and network egress of non-secret files is not gated. A real boundary needs a sandbox (a container or restricted token for the terminal), which is a product decision, not a rule. Not audited yet: the main-process IPC channels one by one, the external-agent installer's download and unpack path, dynamic testing of the file-tool validators with a fuzzer, and a human review of the Electron window configuration beyond what Electronegativity reports.

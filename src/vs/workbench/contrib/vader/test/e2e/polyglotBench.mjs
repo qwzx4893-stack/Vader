@@ -146,7 +146,10 @@ function gradeInDocker(ex, ws, testFiles) {
 const clip = (s, n = 7000) => { s = s.replace(/\x1b\[[0-9;]*m/g, ''); return s.length > n ? '...\n' + s.slice(-n) : s; };
 
 const proxyLog = path.join(config.out, `${RUN}-requests.jsonl`);
-const proxy = await createLlmProxy({ apiKey: env.OPENROUTER_API_KEY, model: MODEL, fallbackModel: env.POLY_FALLBACK_MODEL, budgetUsd: Number(env.POLY_BUDGET_USD ?? 0), logFile: proxyLog });
+// POLY_PROMPT=source: measure the INSTALLED app with the agent instructions and tool descriptions of the SOURCE tree (promptSwap.mjs), to compare instructions without a rebuild
+const PROMPT = env.POLY_PROMPT ?? 'app';
+const promptSwap = PROMPT === 'source' ? await (await import('./promptSwap.mjs')).loadPromptSwap(env.VADER_SRC ?? process.cwd()) : null;
+const proxy = await createLlmProxy({ apiKey: env.OPENROUTER_API_KEY, model: MODEL, fallbackModel: env.POLY_FALLBACK_MODEL, budgetUsd: Number(env.POLY_BUDGET_USD ?? 0), logFile: proxyLog, transform: promptSwap?.swap });
 console.log(`proxy: ${proxy.url} (model ${MODEL}; fallback ${env.POLY_FALLBACK_MODEL ?? 'none'}; paid budget $${env.POLY_BUDGET_USD ?? 0})`);
 
 const scenarios = todo.map(ex => ({
@@ -259,7 +262,7 @@ const summary = {
 		attempts_with_renderer_errors: latest.reduce((a, r) => a + r.attempts.filter(x => x.obs?.rendererProblems?.length).length, 0),
 		attempts_with_main_process_errors: latest.reduce((a, r) => a + r.attempts.filter(x => x.obs?.mainLog?.length).length, 0),
 	},
-	mode: MODE, tests_hidden_from_agent: HIDE_TESTS,
+	mode: MODE, tests_hidden_from_agent: HIDE_TESTS, instructions: PROMPT === 'source' ? 'source tree (promptSwap)' : 'installed app', requests_with_swapped_instructions: proxy.state.swapped,
 	method: `Aider polyglot protocol, 2 attempts, tests in Docker; Vader is an agent (reads the folder and the tests); ${MODE === 'edit-only' ? 'commands the agent asks to run are rejected (Aider models cannot run code either)' : 'the agent may run commands on this Windows machine, which lacks the C++/Go/Rust/Java toolchains'}; .meta/.docs removed from the workspace; CMakeLists.txt/Cargo.toml restored before grading`,
 };
 fs.writeFileSync(path.join(config.out, `${RUN}-summary.json`), JSON.stringify(summary, null, 2));

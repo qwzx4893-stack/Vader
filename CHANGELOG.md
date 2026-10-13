@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased - Security audit, second pass: path fuzz and the browser's redirects
+
+- **Path spellings at scale.** A seeded fuzz of 4,000 spellings of protected files (case, trailing dots and spaces, `::$DATA`, `./`, `//`, `..` detours, slashes) got 1,264 through on the code before the earlier fixes, among them deletes of a system file the locked rule exists to block; 0 after. `test/policyPathFuzzE2E.mjs` runs it in CI.
+- **The agent's browser follows redirects.** The address policy was checked only when the model named a URL: a page that redirected to `http://169.254.169.254/...`, or a link or script the model triggered, ended somewhere the policy does not allow and its text was given to the model. Every snapshot and screenshot now re-checks the page's address and resets the page if it is not allowed (`browserToolMainService.ts`). Not exercised against a live page.
+- Examined and found sound (details in `docs/integrations/security-scan.md`): API keys at rest (not plain text in any file of the app's data folder), the external-agent installer, the update checker, the Electron window setup. Accepted: SkillNet answers only on plain http (results are untrusted by design, installs need an approval).
+
+## Unreleased - The agent's instructions rewritten from the published guidance
+
+- **New agent behaviour** (`common/prompt/agentBehavior.ts`, wired into `chat_systemMessage`): nine short tagged sections instead of the flat "Important notes" list inherited from upstream. Built from OpenAI's Codex prompting guide and Codex CLI's prompt, Anthropic's prompting guidance for Claude, Claude Code's published prompt fragments and Anthropic's context-engineering and tool-writing articles (sources and the reasoning for every choice, including where they disagree: `docs/integrations/agent-behavior.md`). Persistence until the task is verified and reported, minimal-change rules, no special-casing to pass a test, a verification loop that stops after the same fix fails twice, git safety on a worktree that may hold the user's own work, no way around a block, outside text is data, an outcome-first honest report. Calm wording: emphatic ALWAYS/NEVER makes current models over-trigger. Removed: "ALWAYS have maximal certainty", "ALWAYS use tools" and similar, which push a model to over-explore.
+- **Tool descriptions rewritten where it matters** (edit_file and its block format, rewrite_file, read_file, the two search tools, the terminal): `read_file` no longer tells the model not to use line ranges; `rewrite_file` no longer says "use it to edit a file you just created"; the edit tool says what to do when a block is rejected.
+- Gather and Plan modes: the rule that outside text is information, not instructions.
+- Tests: `test/agentPromptE2E.mjs` (54 checks, in CI). Measuring: `test/e2e/promptSwap.mjs` runs an installed Vader with the source's instructions (A/B on the same binary, model and exercises); `polyglotBench.mjs` takes `POLY_PROMPT=app|source`. **Not measured yet**: a prompt change can make a model worse; release it on the A/B result, not on the review.
+
 ## Unreleased - Agent-specific security audit: the path rules now see terminal commands
 
 - **Found by attacking the real Policy Engine** (rules, request mapping, URI class and resolved-path step bundled from source): the "credential file" and "files that run code later" rules only ever looked at the file tools. A terminal command carried its text and no paths, so `cat ~/.ssh/id_rsa`, `curl -d @.env ...`, `echo x >> .vscode/tasks.json`, `cp evil .husky/pre-commit`, `Set-Content`, `tee`, `sed -i` and `git config core.hooksPath ...` passed every rule, in the autonomous mode where those rules are meant to be the last line of defence. 27 of 27 attempts got through.
