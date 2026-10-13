@@ -16,6 +16,7 @@ import { unknownToolMessage } from '../common/toolNameHints.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
 import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
 import { getModelCapabilities } from '../common/modelCapabilities.js';
+import { looksLikeToolsRejected } from '../common/toolSupport.js';
 import { planContextReduction, prunedOutputNote, SizedMessage } from '../common/contextBudget.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
@@ -1408,6 +1409,21 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 	}
 
+	// A model name Vader does not recognise is first offered native tool calling (common/modelCapabilities.ts). When the server refuses the tools, remember that for this model
+	// (an override that reads as "no native tools", so the prompt describes the tools as XML from now on) and say that the request may be sent again. Only for a model that was
+	// never configured by hand, and only for a message that is really about tools being unsupported (common/toolSupport.ts).
+	private async _fallBackToXmlTools(modelSelection: ModelSelection | null, errorMessage: string): Promise<boolean> {
+		if (!modelSelection) { return false }
+		const { providerName, modelName } = modelSelection
+		const { overridesOfModel } = this._settingsService.state
+		const caps = getModelCapabilities(providerName, modelName, overridesOfModel)
+		if (!caps.isUnrecognizedModel || !caps.specialToolFormat) { return false }
+		if (overridesOfModel[providerName]?.[modelName]?.specialToolFormat !== undefined) { return false } // the person (or an earlier fallback) already decided
+		if (!looksLikeToolsRejected(errorMessage)) { return false }
+		await this._settingsService.setOverridesOfModel(providerName, modelName, { specialToolFormat: null })
+		return true
+	}
+
 	// Vader addition: drives one Main Agent turn through @cline/agents' AgentRuntime. See
 	// vaderAgentModel.ts/clineToolAdapter.ts/clineRuntimeAdapter.ts for the three pieces this
 	// assembles, and docs/integrations/agent-runtime.md for the full design this implements.
@@ -1450,6 +1466,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			modelSelection,
 			modelSelectionOptions,
 			overridesOfModel: this._settingsService.state.overridesOfModel,
+			getOverridesOfModel: () => this._settingsService.state.overridesOfModel,
+			onNativeToolsRejected: (errorMessage) => this._fallBackToXmlTools(modelSelection, errorMessage),
 			loggingName: `Chat - ${chatMode} (Cline)`,
 		})
 

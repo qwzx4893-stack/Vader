@@ -40,6 +40,8 @@ import { classifyProviderError, userFacingProviderError } from '../../common/pro
  * `AgentTool`s (see clineToolAdapter.ts), which is where Vader's Policy Engine actually gates
  * them (via `_runToolCallInline`) - this class has no tool-execution responsibility at all.
  */
+type HeldError = { heldError?: { event: AgentModelEvent, message: string } };
+
 export class VaderAgentModel implements AgentModel {
 	constructor(
 		private readonly _llmMessageService: ILLMMessageService,
@@ -52,12 +54,30 @@ export class VaderAgentModel implements AgentModel {
 			modelSelection: ModelSelection | null;
 			modelSelectionOptions: ModelSelectionOptions | undefined;
 			overridesOfModel: OverridesOfModel | undefined;
+			/** the settings as they are now (an override written during the run must reach the next request) */
+			getOverridesOfModel?: () => OverridesOfModel | undefined;
+			/** the server refused the first request; true means the model's tool format was changed and the request should be sent again (common/toolSupport.ts) */
+			onNativeToolsRejected?: (errorMessage: string) => Promise<boolean>;
 			loggingName: string;
 		},
 	) { }
 
 	async *stream(request: AgentModelRequest): AsyncIterable<AgentModelEvent> {
 		await this._opts.maybeCompactThread();
+
+		// A model name Vader does not know is first offered native tool calling; if the server refuses the `tools` field, the request is sent again once, with the tools
+		// described in the prompt (XML) instead. The first error is held back until we know whether a second try is possible.
+		const first: HeldError = {};
+		yield* this._streamOnce(request, first);
+		if (!first.heldError) { return; }
+		if (await this._opts.onNativeToolsRejected?.(first.heldError.message)) {
+			yield* this._streamOnce(request, null);
+		} else {
+			yield first.heldError.event;
+		}
+	}
+
+	private async *_streamOnce(request: AgentModelRequest, held: HeldError | null): AsyncIterable<AgentModelEvent> {
 
 		const chatMessages = this._opts.getThreadMessages();
 		const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
@@ -75,6 +95,7 @@ export class VaderAgentModel implements AgentModel {
 
 		let prevTextLen = 0;
 		let prevReasoningLen = 0;
+		let sawOutput = false; // a refusal of the tools comes before any output; an error after some output is not retried
 
 		const cancelToken = this._llmMessageService.sendLLMMessage({
 			messagesType: 'chatMessages',
@@ -82,17 +103,19 @@ export class VaderAgentModel implements AgentModel {
 			messages,
 			modelSelection: this._opts.modelSelection,
 			modelSelectionOptions: this._opts.modelSelectionOptions,
-			overridesOfModel: this._opts.overridesOfModel,
+			overridesOfModel: this._opts.getOverridesOfModel?.() ?? this._opts.overridesOfModel,
 			logging: { loggingName: this._opts.loggingName },
 			separateSystemMessage,
 			onText: ({ fullText, fullReasoning }) => {
 				if (fullText.length > prevTextLen) {
 					push({ type: 'text-delta', text: fullText.slice(prevTextLen) });
 					prevTextLen = fullText.length;
+					sawOutput = true;
 				}
 				if (fullReasoning.length > prevReasoningLen) {
 					push({ type: 'reasoning-delta', text: fullReasoning.slice(prevReasoningLen) });
 					prevReasoningLen = fullReasoning.length;
+					sawOutput = true;
 				}
 			},
 			onFinalMessage: ({ toolCalls }) => {
@@ -118,7 +141,9 @@ export class VaderAgentModel implements AgentModel {
 				// on top of that.
 				const { category, retryable } = classifyProviderError(message, fullError)
 				const errorClass: ProviderErrorClass = category === 'AUTHENTICATION' ? 'auth' : category === 'CONTEXT_LIMIT' ? 'context_window_exceeded' : 'unknown'
-				push({ type: 'finish', reason: 'error', error: userFacingProviderError(category, message), errorClass, errorRetryable: retryable })
+				const errorEvent: AgentModelEvent = { type: 'finish', reason: 'error', error: userFacingProviderError(category, message), errorClass, errorRetryable: retryable }
+				if (held && this._opts.onNativeToolsRejected && !sawOutput) { held.heldError = { event: errorEvent, message }; finish(); return }
+				push(errorEvent)
 				finish();
 			},
 			onAbort: () => {

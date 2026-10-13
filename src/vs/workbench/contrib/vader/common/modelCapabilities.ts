@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { FeatureName, ModelSelectionOptions, OverridesOfModel, ProviderName } from './vaderSettingsTypes.js';
+import { nativeToolFormatToTry } from './toolSupport.js';
 import { curatedModelFacts, curatedModelNames } from './providerModelData.js';
 import { vendorProviders, VendorProviderName, vendorProviderNames, isVendorProviderName, VendorModelFacts } from './vendorProviderData.js';
 
@@ -154,7 +155,7 @@ export type VaderStaticModelInfo = { // not stateful
 	reservedOutputTokenSpace: number | null; // reserve this much space in the context window for output, defaults to 4096 if null
 
 	supportsSystemMessage: false | 'system-role' | 'developer-role' | 'separated'; // typically you should use 'system-role'. 'separated' means the system message is passed as a separate field (e.g. anthropic)
-	specialToolFormat?: 'openai-style' | 'anthropic-style' | 'gemini-style', // typically you should use 'openai-style'. null means "can't call tools by default", and asks the LLM to output XML in agent mode
+	specialToolFormat?: 'openai-style' | 'anthropic-style' | 'gemini-style' | null, // typically you should use 'openai-style'. null or undefined means "can't call tools by default", and asks the LLM to output XML in agent mode. As an override, null also wins over the native format an unrecognised model is offered (common/toolSupport.ts)
 	supportsFIM: boolean; // whether the model was specifically designed for autocomplete or "FIM" ("fill-in-middle" format)
 
 	additionalOpenAIPayload?: { [key: string]: string } // additional payload in the message body for requests that are openai-compatible (ollama, vllm, openai, openrouter, etc)
@@ -1838,7 +1839,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VaderStaticProv
 // ---------------- exports ----------------
 
 // returns the capabilities and the adjusted modelName if it was a fallback
-export const getModelCapabilities = (
+const _getModelCapabilities = (
 	providerName: ProviderName,
 	modelName: string,
 	overridesOfModel: OverridesOfModel | undefined
@@ -1875,7 +1876,22 @@ export const getModelCapabilities = (
 	// num_ctx; if a server's real window is smaller the provider reports a context-length error, which is visible
 	// and fixable in settings, unlike a silently crippled prompt.
 	const contextWindow = providerName === 'ollama' ? defaultModelOptions.contextWindow : 32_000
-	return { modelName, ...defaultModelOptions, contextWindow, ...overrides, isUnrecognizedModel: true };
+	// ...and the same kind of fix for tools: such a model is offered the provider's native tool calling first (XML in the prompt made weak models answer with JSON text and run nothing);
+	// a server that refuses `tools` makes Vader fall back to XML and write `specialToolFormat: null` into this model's overrides (VaderAgentModel, common/toolSupport.ts)
+	return { modelName, ...defaultModelOptions, contextWindow, specialToolFormat: nativeToolFormatToTry(providerName), ...overrides, isUnrecognizedModel: true };
+}
+
+// An override of `specialToolFormat: null` ("this model cannot do native tool calls", written when a server refused them) reads as no native format everywhere else.
+export const getModelCapabilities = (
+	providerName: ProviderName,
+	modelName: string,
+	overridesOfModel: OverridesOfModel | undefined
+): Omit<ReturnType<typeof _getModelCapabilities>, 'specialToolFormat'> & { specialToolFormat?: NonNullable<VaderStaticModelInfo['specialToolFormat']> } & (
+	| { recognizedModelName: string; isUnrecognizedModel: false }
+	| { recognizedModelName?: undefined; isUnrecognizedModel: true }
+) => {
+	const caps = _getModelCapabilities(providerName, modelName, overridesOfModel)
+	return { ...caps, specialToolFormat: caps.specialToolFormat ?? undefined } as ReturnType<typeof getModelCapabilities>
 }
 
 // Vader addition, part of the real vision/multimodal pipeline (docs/integrations/model-router.md).

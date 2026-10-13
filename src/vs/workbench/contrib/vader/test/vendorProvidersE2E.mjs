@@ -120,7 +120,7 @@ for (const k of vendorProviderNames) {
 }
 {
 	const c = caps.getModelCapabilities('together', 'some-model-not-in-the-catalog', undefined);
-	check('a model that is not in the catalog still works with sane defaults (32k window, XML tools)', c.isUnrecognizedModel && c.contextWindow >= 32000 && !c.specialToolFormat);
+	check('a model that is not in the catalog still works with sane defaults (32k window, native tools offered first)', c.isUnrecognizedModel && c.contextWindow >= 32000 && c.specialToolFormat === 'openai-style');
 }
 
 // ================================================================ search
@@ -153,7 +153,8 @@ for (const k of vendorProviderNames) {
 	const r = await send(k, modelName, stub.url);
 	const req = stub.chatRequests()[0];
 	const hasTools = Array.isArray(req?.body.tools) && req.body.tools.some(t => t.function?.name === 'read_file');
-	const wantTools = !!vendorProviders[k].models[modelName]?.tools; // a model the catalog does not list (sambanova and hyperbolic ship no list: it comes live) uses the XML tool format
+	const listed = vendorProviders[k].models[modelName];
+	const wantTools = listed ? !!listed.tools : true; // a model the catalog does not list (sambanova and hyperbolic ship no list: it comes live) is offered native tools first (common/toolSupport.ts)
 	check(`${k}: a chat request streams through the real SDK to the endpoint setting, with the key, the model and ${wantTools ? 'native tools' : 'no native tools'}`,
 		r.final?.fullText === `hello from ${k}` && req?.path.endsWith('/chat/completions') && req.headers.authorization === `Bearer ${KEY}` && req.body.model === modelName && req.body.stream === true && (wantTools ? hasTools : !hasTools),
 		JSON.stringify(r.error ?? { path: req?.path, auth: !!req?.headers.authorization, model: req?.body.model, hasTools }));

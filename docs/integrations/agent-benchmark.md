@@ -36,12 +36,12 @@ Invalid trials are dropped: in 8 records no request reached the run's proxy beca
 
 | Finding | Evidence | Status |
 |---|---|---|
-| A model name Vader does not know, on the OpenAI-compatible provider, gets XML tool calls in text; weak models then answer with JSON text and nothing runs | the same model failed twice that way and passed with a known name | NOT changed: needs a decision (try native tools first, fall back to XML if the server rejects `tools`) |
+| A model name Vader does not know, on the OpenAI-compatible provider, gets XML tool calls in text; weak models then answer with JSON text and nothing runs | the same model failed twice that way and passed with a known name | fixed: native tools first, XML when the server refuses them, remembered (`common/toolSupport.ts`); not yet re-measured |
 | Loop that alternates between a few calls (`cd build`, `cmake ..`, `cd ..`...) was never caught by the "same call 8 times" guard | run stuck until the time limit | fixed: `common/loopDetection.ts`, 20 calls with at most 4 distinct |
 | File argument written as `path`/`file_path` fails with "Provided uri must be a string" | 4 occurrences | fixed: `common/toolArgAliases.ts` |
 | Call to a non-existent tool (`shell`, 11 times) answered with "Unknown tool", shown as an MCP call | transcripts | fixed: `common/toolNameHints.ts` (lists the real tools and the one meant) |
-| `&&` is not valid in Windows PowerShell 5.1, the default shell | transcripts | NOT changed |
-| `Edit file ... No Search/Replace blocks were received` | recurring | NOT changed |
+| `&&` is not valid in Windows PowerShell 5.1, the default shell | transcripts | fixed earlier by the shell hint in the system prompt (`prompts.ts`); not re-measured |
+| `Edit file ... No Search/Replace blocks were received` | recurring | fixed: marker variants are read (`common/editMatching.ts`); not re-measured |
 
 The fixes are covered by `test/agentRobustnessE2E.mjs` (30 checks, run in CI) and type-check clean in `contrib/vader`. They have NOT been seen working inside a rebuilt app: that needs a Windows build.
 

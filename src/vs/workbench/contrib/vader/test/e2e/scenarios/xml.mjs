@@ -119,23 +119,52 @@ export const xmlScenarios = [
 	},
 ];
 
-// A model name Vader does not recognise (a local model with a custom id). It used to get a 4k context window, which cut
-// the tool list to a few read-only tools mid-sentence; all tools must be present now.
+// A model name Vader does not recognise (a local model with a custom id). Two things were wrong with it before: it got a 4k context window, which cut the tool list to a few
+// read-only tools mid-sentence (all tools must be present now), and it was sent tools as XML in the prompt, which weak models answer with JSON text (it is now offered native tool
+// calling first, and falls back to XML, remembered, when the server refuses the `tools` field - common/toolSupport.ts). The two scenarios run in this order on purpose: the second
+// one writes the remembered fallback into the settings of 'my-local-model'.
 export const unknownModelScenarios = [
 	{
-		name: 'unknown model name: the full tool list is in the prompt and tools work',
+		name: 'unknown model name, the server accepts tools: native tool calling is used',
 		fn: async (t) => {
 			t.use(seq([
-				{ text: `Reading.\n${xml('read_file', { uri: t.abs('notes.txt') })}` },
+				{ text: 'Reading.', toolCalls: [{ name: 'read_file', args: { uri: t.abs('notes.txt') } }] },
+				(c) => ({ text: c.lastMessageText.includes('hello world') ? 'Got the file natively.' : 'No file.' }),
+			]));
+			await t.send('read notes.txt');
+			t.check('agent returns to idle', await t.idle());
+			const first = t.server.chatRequests()[0];
+			t.check('native tools are sent', (first?.body.tools?.length ?? 0) > 0, JSON.stringify(first?.body.tools?.length));
+			t.check('...and the prompt does not describe them as XML', !(first?.ctx.allText ?? '').includes('<read_file>'));
+			t.check('the tool call worked end to end', (await t.ui.assistantTexts(t.page)).some(x => x.includes('Got the file natively.')));
+		},
+	},
+	{
+		name: 'unknown model name, the server refuses tools: Vader falls back to XML once, with the full tool list, and remembers it',
+		fn: async (t) => {
+			t.use(seq([
+				{ error: { status: 400, code: 'invalid_request_error', message: 'registry.ollama.ai/library/my-local-model does not support tools' } },
+				{ text: `Reading.
+${xml('read_file', { uri: t.abs('notes.txt') })}` },
 				(c) => ({ text: c.lastMessageText.includes('hello world') ? 'Got the file.' : 'No file.' }),
 			]));
 			await t.send('read notes.txt');
 			t.check('agent returns to idle', await t.idle());
-			const all = t.server.chatRequests()[0]?.ctx.allText ?? '';
+			const reqs = t.server.chatRequests();
+			t.check('the first request carried native tools (and was refused)', (reqs[0]?.body.tools?.length ?? 0) > 0);
+			t.check('the second request carries none', (reqs[1]?.body.tools?.length ?? 0) === 0, JSON.stringify(reqs[1]?.body.tools?.length));
+			const all = reqs[1]?.ctx.allText ?? '';
 			const needed = ['read_file', 'edit_file', 'rewrite_file', 'create_file_or_folder', 'run_command', 'search_for_files'];
 			t.check('the editing and terminal tools are in the prompt (not trimmed away)', needed.every(n => all.includes(`<${n}>`)), needed.filter(n => !all.includes(`<${n}>`)).join(','));
 			t.check('the prompt is not cut off mid-description', !/\.\.\.\s*<\/SYSTEM_MESSAGE>/.test(all));
+			t.check('the refusal is not shown to the person as an error', !(await t.ui.errorTexts?.(t.page) ?? []).some(x => /does not support tools/i.test(x)));
 			t.check('the tool call worked end to end', (await t.ui.assistantTexts(t.page)).some(x => x.includes('Got the file.')));
+			// remembered: the next message goes out as XML straight away
+			t.use(() => ({ text: 'Done again.' }));
+			await t.send('and again');
+			t.check('agent returns to idle', await t.idle());
+			const last = t.server.chatRequests().at(-1);
+			t.check('the next message is sent without native tools', (last?.body.tools?.length ?? 0) === 0 && (last?.ctx.allText ?? '').includes('<read_file>'));
 		},
 	},
 ];
