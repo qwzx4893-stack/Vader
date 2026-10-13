@@ -35,6 +35,7 @@ import { IVerificationService } from '../common/verification/verificationTypes.j
 import { IUnifiedMarketplaceService } from '../common/marketplace/marketplaceTypes.js'
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js'
 import { IVisionMainService } from '../common/vision/visionQueryService.js'
+import { MAX_TASKS, parseTaskList, summariseTaskList, taskListResultText } from '../common/taskList.js'
 
 
 // tool use for AI
@@ -525,6 +526,14 @@ export class ToolsService implements IToolsService {
 				return { providerId, itemName }
 			},
 
+			update_task_list: (params: RawToolParamsObj) => {
+				const tasks = validateStr('tasks', params.tasks)
+				const parsed = parseTaskList(tasks)
+				if (parsed.length === 0) throw new Error(`update_task_list needs at least one task, one per line, each starting with [ ], [~] or [x].`)
+				if (parsed.length > MAX_TASKS) throw new Error(`update_task_list takes at most ${MAX_TASKS} tasks (you gave ${parsed.length}). Merge small steps into one task.`)
+				return { tasks }
+			},
+
 			remember: (params: RawToolParamsObj) => {
 				const { content: contentUnknown, label: labelUnknown, scope: scopeUnknown, agent_name: agentNameUnknown } = params
 				const content = validateStr('content', contentUnknown)
@@ -912,6 +921,12 @@ export class ToolsService implements IToolsService {
 				return { result: { itemName: item.name, providerId: item.providerId, actionTaken: item.installMethod } }
 			},
 
+			update_task_list: async ({ tasks }) => {
+				const parsed = parseTaskList(tasks)
+				const { total, done } = summariseTaskList(parsed)
+				return { result: { text: taskListResultText(parsed), total, done } }
+			},
+
 			remember: async ({ content, label, scope, agentName }) => {
 				if (scope === 'agent') {
 					const agent = agentName ? this.agentsService.state.agents.find(a => a.name === agentName) : undefined
@@ -1122,6 +1137,9 @@ export class ToolsService implements IToolsService {
 			},
 			install_marketplace_capability: (params, result) => {
 				return `${result.actionTaken} succeeded for "${result.itemName}" (${result.providerId}).`;
+			},
+			update_task_list: (params, result) => {
+				return result.text
 			},
 			remember: (params, result) => {
 				return `Saved to ${result.scope} memory (id=${result.memoryId}). It will be included in future conversations${result.scope === 'agent' ? ` run as ${params.agentName}` : ' in this workspace'}.`;

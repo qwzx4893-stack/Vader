@@ -159,6 +159,8 @@ export type BuiltinToolCallParams = {
 	// visible to every future thread in this workspace; 'agent' memory requires agentName
 	// and is visible only to threads running as that permanent agent.
 	'remember': { content: string, label: string, scope: 'project' | 'agent', agentName: string | null },
+	// Vader addition: the agent's task list for a long job (common/taskList.ts). `tasks` is the whole list, one task per line, marked [ ] / [~] / [x].
+	'update_task_list': { tasks: string },
 	// Vader addition: install a skill you already have the instructions text for (via
 	// fetch_skill_instructions, or your own distilled instructions) - see common/skills/.
 	// Installed skills start disabled and 'review_required'; the user enables/trusts them.
@@ -222,6 +224,7 @@ export type BuiltinToolResultType = {
 		tasks: { task: string, status: string, conclusion: string | null, changedFilePaths: string[], mergeOutcome: string | null, errorMessage: string | null }[],
 	},
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
+	'update_task_list': { text: string, total: number, done: number },
 	'install_skill': { skillId: string },
 	'install_marketplace_capability': { itemName: string, providerId: string, actionTaken: string },
 }

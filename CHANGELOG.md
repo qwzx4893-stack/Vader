@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - A task list for long jobs
+
+- **New tool `update_task_list`** (`common/taskList.ts`): the agent writes its whole list on every call, one task per line marked `[ ]` / `[~]` / `[x]`, keeps one in progress and marks each done when finished and checked; the result is shown in the chat (the generic tool card) and echoed back to the model, with a nudge when two tasks are in progress, none is, or all are done ("check the result, then report"). Plain lines instead of JSON because small models write them reliably; many spellings of the marks are accepted. The idea is the todo tool of opencode (MIT), Roo Code (Apache-2.0) and Codex `update_plan` (Apache-2.0); text and format are Vader's own.
+- It needs no approval (it changes nothing but the conversation), is also offered in Gather/Plan mode, and its results are exempt from the pruning of old tool output. The instructions tell the agent when to use it (several steps or files) and when not (a small task).
+- Not done: a dedicated progress panel (the list is shown as an ordinary tool card, and the newest one is the current one); a persistent per-thread field would need a format change for saved chats.
+- Tests: `test/taskListE2E.mjs` (21 checks, in CI). The tool count is now 38.
+
 ## Unreleased - A model name Vader does not know gets native tool calling, with a fallback
 
 - **The defect (from the benchmark):** a model whose name Vader does not recognise (a new release, a fine-tune, a local tag, a gateway alias; common now that model lists are live) was sent its tools as XML written into the prompt. A weak model answers with JSON text and nothing runs; the same model passed under a name Vader knew.

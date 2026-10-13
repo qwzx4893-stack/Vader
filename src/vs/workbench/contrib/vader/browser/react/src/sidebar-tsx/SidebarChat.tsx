@@ -1453,6 +1453,7 @@ const titleOfBuiltinToolName = {
 	'install_skill': { done: 'Installed skill', proposed: 'Install skill', running: loadingTitleWrapper('Installing skill') },
 	'install_marketplace_capability': { done: 'Installed capability', proposed: 'Install capability', running: loadingTitleWrapper('Installing capability') },
 	'remember': { done: 'Saved to memory', proposed: 'Save to memory', running: loadingTitleWrapper('Saving to memory') },
+	'update_task_list': { done: 'Updated the task list', proposed: 'Update the task list', running: loadingTitleWrapper('Updating the task list') },
 	'delegate_parallel_tasks': { done: 'Ran parallel tasks', proposed: 'Run parallel tasks', running: loadingTitleWrapper('Running parallel tasks') },
 	'delegate_subagent_task': { done: 'Delegated to subagent', proposed: 'Delegate to subagent', running: loadingTitleWrapper('Delegating to subagent') },
 	'delegate_research_task': { done: 'Ran research task', proposed: 'Run research task', running: loadingTitleWrapper('Running research task') },

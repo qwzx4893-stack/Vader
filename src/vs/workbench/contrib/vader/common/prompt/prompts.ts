@@ -509,6 +509,18 @@ export const builtinTools: {
 		}
 	},
 
+	update_task_list: {
+		name: 'update_task_list',
+		description: `Keeps your task list for a longer job and shows it to the user. Use it when the work has three or more distinct steps, touches several files, or the user gave you several things to do; do not use it for a single edit, a question or a one-command task. Write the whole list on every call (it replaces the previous one), one task per line, each starting with a mark: [ ] not started, [~] in progress, [x] done. Keep exactly one task in progress, the one you are working on; mark a task done as soon as it is finished and checked, not later; add or change tasks when you learn something new. Make the tasks concrete and checkable ("make the parser reject empty input", not "improve the parser"), and keep the last one for checking the result (run the tests or the build).`,
+		params: {
+			tasks: { description: `The complete list, one task per line, for example:
+[x] Find where the redirect after login is set
+[~] Change the redirect to use the saved page
+[ ] Update the login tests
+[ ] Run the tests and fix failures` },
+		}
+	},
+
 	remember: {
 		name: 'remember',
 		description: `Writes a fact/decision/preference to persistent memory so it's available in every future conversation, not just this one - use it for durable things worth not re-discovering (a project convention, a constraint the user stated, a subtlety about the codebase), not for anything already recoverable by reading the code, and not for anything task-specific that won't matter once this task is done.`,

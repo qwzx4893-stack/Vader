@@ -1201,7 +1201,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (m.role === 'assistant') return { role: 'assistant', size: m.displayContent.length }
 		if (m.role === 'tool') {
 			if (m.outputPruned) return { role: 'tool', size: prunedOutputNote(m.name, m.content.length).length }
-			return { role: 'tool', size: m.content.length, prunable: m.type === 'success', toolName: m.name }
+			return { role: 'tool', size: m.content.length, prunable: m.type === 'success' && m.name !== 'update_task_list', toolName: m.name } // the task list is small and is the model's own plan: it stays
 		}
 		if (m.role === 'compacted_summary') return { role: 'compacted_summary', size: Object.values(m.summary).join('\n').length }
 		return { role: m.role, size: 0 }
