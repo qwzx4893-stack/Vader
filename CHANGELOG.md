@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased - Edits land where the model meant them
+
+- **Two silent defects in how an edit was located** (found by reading `editCodeService.ts` against other editors' edit tools): an exact match was never checked for uniqueness, so a search text that occurs three times edited the *first* one; and the replacement was always whole lines, so ORIGINAL `timeout: 5000` inside `const opts = { timeout: 5000, retries: 3 }` turned the entire line into the new fragment. `common/editMatching.ts` `locateEdit`: an exact match replaces exactly the characters that matched and must be unique ("Not unique" tells the model to add context); when there is no exact match, one tolerant step is tried: the same lines compared without whitespace and with typographic quotes, dashes and non-breaking spaces made plain, in order, unique. No similarity scores and no anchors: opencode dropped its looser cascade because it edits the wrong place.
+- **Block markers written a little differently are understood** (`normaliseBlockMarkers`): `SEARCH`/`OLD` for ORIGINAL, `REPLACE`/`FINAL`/`NEW` for UPDATED, another number of `<` or `>`, spaces, Windows line ends. "No Search/Replace blocks were received" was the most frequent edit failure in the benchmark runs. A line of `=====` is left alone (it can be a Markdown heading). Streaming stays monotonic (checked character by character).
+- Tests: `test/editMatchingE2E.mjs` (33 checks, in CI). The streaming Ctrl+K/Apply paths keep the old `findTextInCode`.
+- Not measured with a real model: whether these edits fail less often in a benchmark run.
+
 ## Unreleased - A model that repeats the same text is stopped
 
 - **Text-repetition guard** (`common/loopDetection.ts` `TextRepetitionDetector`, hooked into the agent loop for the answer and for the reasoning): small and local models sometimes chant one sentence until the output limit; they make no tool call, so the call-based guards never saw it. A 50-character window that comes back 12 times at short intervals **and** a text tail that is periodic (the idea is Gemini CLI's "chanting" check, Apache-2.0, reimplemented with the periodic-tail condition added) stops the run with a message that quotes the repeated text.

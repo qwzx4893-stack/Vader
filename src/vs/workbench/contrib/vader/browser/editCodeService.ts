@@ -31,6 +31,7 @@ import { VADER_ACCEPT_DIFF_ACTION_ID, VADER_REJECT_DIFF_ACTION_ID } from './acti
 import { mountCtrlK } from './react/out/quick-edit-tsx/index.js'
 import { QuickEditPropsType } from './quickEditActions.js';
 import { IModelContentChangedEvent } from '../../../../editor/common/textModelEvents.js';
+import { locateEdit } from '../common/editMatching.js';
 import { extractCodeFromFIM, extractCodeFromRegular, ExtractedSearchReplaceBlock, extractSearchReplaceBlocks } from '../common/helpers/extractCodeFromResult.js';
 import { INotificationService, } from '../../../../platform/notification/common/notification.js';
 import { EditorOption } from '../../../../editor/common/config/editorOptions.js';
@@ -1623,37 +1624,21 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		const { model } = this._vaderModelService.getModel(uri)
 		if (!model) throw new Error(`Error applying Search/Replace blocks: File does not exist.`)
 		const modelStr = model.getValue(EndOfLinePreference.LF)
-		// .split('\n').map(l => '\t' + l).join('\n') // for testing purposes only, remember to remove this
-		const modelStrLines = modelStr.split('\n')
 
-
-
-
+		// where each block's text sits (common/editMatching.ts): exactly the characters that matched, unique in the file, else the same lines ignoring whitespace
 		const replacements: { origStart: number; origEnd: number; block: ExtractedSearchReplaceBlock }[] = []
 		for (const b of blocks) {
-			const res = findTextInCode(b.orig, modelStr, true, { returnType: 'lines' })
+			const res = locateEdit(b.orig, modelStr)
 			if (typeof res === 'string')
 				throw new Error(this._errContentOfInvalidStr(res, b.orig))
-			let [startLine, endLine] = res
-			startLine -= 1 // 0-index
-			endLine -= 1
-
-			// including newline before start
-			const origStart = (startLine !== 0 ?
-				modelStrLines.slice(0, startLine).join('\n') + '\n'
-				: '').length
-
-			// including endline at end
-			const origEnd = modelStrLines.slice(0, endLine + 1).join('\n').length - 1
-
-			replacements.push({ origStart, origEnd, block: b });
+			replacements.push({ origStart: res.start, origEnd: res.end, block: b });
 		}
 		// sort in increasing order
 		replacements.sort((a, b) => a.origStart - b.origStart)
 
-		// ensure no overlap
+		// ensure no overlap (end is exclusive)
 		for (let i = 1; i < replacements.length; i++) {
-			if (replacements[i].origStart <= replacements[i - 1].origEnd) {
+			if (replacements[i].origStart < replacements[i - 1].origEnd) {
 				throw new Error(this._errContentOfInvalidStr('Has overlap', replacements[i]?.block?.orig))
 			}
 		}
@@ -1662,7 +1647,7 @@ class EditCodeService extends Disposable implements IEditCodeService {
 		let newCode: string = modelStr
 		for (let i = replacements.length - 1; i >= 0; i--) {
 			const { origStart, origEnd, block } = replacements[i]
-			newCode = newCode.slice(0, origStart) + block.final + newCode.slice(origEnd + 1, Infinity)
+			newCode = newCode.slice(0, origStart) + block.final + newCode.slice(origEnd)
 		}
 
 		this._writeURIText(uri, newCode,

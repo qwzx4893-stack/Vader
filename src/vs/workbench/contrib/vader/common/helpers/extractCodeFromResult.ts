@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import { DIVIDER, FINAL, ORIGINAL } from '../prompt/prompts.js'
+import { normaliseBlockMarkers } from '../editMatching.js'
 export class SurroundingsRemover {
 	readonly originalS: string
 	i: number
@@ -184,7 +185,10 @@ export const endsWithAnyPrefixOf = (str: string, anyPrefix: string) => {
 }
 
 // guarantees if you keep adding text, array length will strictly grow and state will progress without going back
-export const extractSearchReplaceBlocks = (str: string) => {
+export const extractSearchReplaceBlocks = (strAsWritten: string) => {
+
+	// markers written a little differently (SEARCH/REPLACE, another number of < or >, Windows line ends) are read as the real ones (common/editMatching.ts)
+	const str = normaliseBlockMarkers(strAsWritten)
 
 	const ORIGINAL_ = ORIGINAL + `\n`
 	const DIVIDER_ = '\n' + DIVIDER + `\n`
