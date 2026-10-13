@@ -24,6 +24,7 @@ import { IContextEngineService } from './contextEngineService.js';
 import { findLast } from '../../../../base/common/arraysFind.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { ISkillService } from '../common/skills/skillService.js';
+import { inputBudgetChars, prunedOutputNote } from '../common/contextBudget.js';
 
 export const EMPTY_MESSAGE = '(empty message)'
 
@@ -60,7 +61,6 @@ type SimpleLLMMessage = {
 
 
 
-const CHARS_PER_TOKEN = 4 // assume abysmal chars per token
 const TRIM_TO_LEN = 120
 
 
@@ -296,10 +296,8 @@ const prepareOpenAIOrAnthropicMessages = ({
 	reservedOutputTokenSpace: number | null | undefined,
 }): { messages: AnthropicOrOpenAILLMMessage[], separateSystemMessage: string | undefined } => {
 
-	reservedOutputTokenSpace = Math.max(
-		contextWindow * 1 / 2, // reserve at least 1/4 of the token window length
-		reservedOutputTokenSpace ?? 4_096 // defaults to 4096
-	)
+	// the room kept for the answer and the budget for the request come from one place, shared with the pruning and the summary (common/contextBudget.ts);
+	// this blind cut is only the last resort and must fire after both. (It used to reserve half of the window while saying a quarter, and so ran first.)
 	let messages: (SimpleLLMMessage | { role: 'system', content: string })[] = deepClone(messages_)
 
 	// ================ system message ================
@@ -363,10 +361,7 @@ const prepareOpenAIOrAnthropicMessages = ({
 
 	let totalLen = 0
 	for (const m of messages) { totalLen += m.content.length }
-	const charsNeedToTrim = totalLen - Math.max(
-		(contextWindow - reservedOutputTokenSpace) * CHARS_PER_TOKEN, // can be 0, in which case charsNeedToTrim=everything, bad
-		5_000 // ensure we don't trim at least 5k chars (just a random small value)
-	)
+	const charsNeedToTrim = totalLen - inputBudgetChars(contextWindow, reservedOutputTokenSpace)
 
 
 	// <----------------------------------------->
@@ -723,7 +718,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 			else if (m.role === 'tool') {
 				simpleLLMMessages.push({
 					role: m.role,
-					content: m.content,
+					// the output of an old call that was pruned to save context (common/contextBudget.ts); the chat still shows the full result
+					content: m.outputPruned ? prunedOutputNote(m.name, m.content.length) : m.content,
 					name: m.name,
 					id: m.id,
 					rawParams: m.rawParams,

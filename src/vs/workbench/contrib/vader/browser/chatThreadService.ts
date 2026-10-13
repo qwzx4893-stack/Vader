@@ -16,6 +16,7 @@ import { unknownToolMessage } from '../common/toolNameHints.js';
 import { chat_userMessageContent, contextCompaction_systemMessage, contextCompaction_userMessage, isABuiltinToolName, verificationAgent_userMessage } from '../common/prompt/prompts.js';
 import { VerificationFinding, VerificationFindingSeverity, VerificationVerdict } from '../common/verification/verificationTypes.js';
 import { getModelCapabilities } from '../common/modelCapabilities.js';
+import { planContextReduction, prunedOutputNote, SizedMessage } from '../common/contextBudget.js';
 import { IMemoryService } from '../common/memory/memoryService.js';
 import { IModelRouterService } from '../common/modelRouter/modelRouterService.js';
 import { IDialogService } from '../../../../platform/dialogs/common/dialogs.js';
@@ -1189,10 +1190,21 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	// it cuts with no structure and no way back. This runs earlier, with a safety margin,
 	// and replaces older messages with a structured summary instead - see
 	// contextCompaction_systemMessage in prompts.ts for exactly what it preserves.
-	private static readonly COMPACTION_SAFETY_MARGIN_FRACTION = 0.7 // compact once usage crosses 70% of the model's usable window
+	// When to prune old tool output and when to summarise is decided in common/contextBudget.ts (one yardstick shared with that blind cut, measured on what is really sent).
 	private static readonly COMPACTION_TAIL_MESSAGES_TO_KEEP = 6 // always keep the most recent messages in full, uncompacted
 	private static readonly COMPACTION_MIN_MESSAGES_TO_COMPACT = 6 // not worth an LLM call to compact a handful of short messages
-	private static readonly COMPACTION_CHARS_PER_TOKEN_ESTIMATE = 4
+
+	/** Characters a message adds to the request the model receives (what contextBudget measures), not what is shown in the chat. */
+	private _sizeOfMessageForRequest(m: ChatMessage): SizedMessage {
+		if (m.role === 'user') return { role: 'user', size: m.content.length }
+		if (m.role === 'assistant') return { role: 'assistant', size: m.displayContent.length }
+		if (m.role === 'tool') {
+			if (m.outputPruned) return { role: 'tool', size: prunedOutputNote(m.name, m.content.length).length }
+			return { role: 'tool', size: m.content.length, prunable: m.type === 'success', toolName: m.name }
+		}
+		if (m.role === 'compacted_summary') return { role: 'compacted_summary', size: Object.values(m.summary).join('\n').length }
+		return { role: m.role, size: 0 }
+	}
 
 	private _renderMessageForCompaction(m: ChatMessage): string {
 		if (m.role === 'user') return `USER: ${m.displayContent || m.content}`
@@ -1255,19 +1267,28 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null): Promise<void> {
 		if (!modelSelection) return
-		const thread = this.state.allThreads[threadId]
+		let thread = this.state.allThreads[threadId]
 		if (!thread) return
 
 		const { overridesOfModel } = this._settingsService.state
 		const { contextWindow, reservedOutputTokenSpace } = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, overridesOfModel)
-		const usableChars = Math.max(0, contextWindow - (reservedOutputTokenSpace ?? 4096)) * ChatThreadService.COMPACTION_CHARS_PER_TOKEN_ESTIMATE
 
+		// step 1, no model call: replace the output of old tool calls by a note (the chat keeps showing the full result)
+		const plan = planContextReduction(thread.messages.map(m => this._sizeOfMessageForRequest(m)), { contextWindow, reservedOutputTokenSpace })
+		if (plan.pruneIndexes.length > 0) {
+			const toPrune = new Set(plan.pruneIndexes)
+			const prunedThread = { ...thread, messages: thread.messages.map((m, i) => (toPrune.has(i) && m.role === 'tool') ? { ...m, outputPruned: true } : m) }
+			const prunedThreads = { ...this.state.allThreads, [threadId]: prunedThread }
+			this._storeAllThreads(prunedThreads)
+			this._setState({ allThreads: prunedThreads })
+			thread = prunedThread
+		}
+		if (!plan.summarise) return // plenty of room left - the common case, checked cheaply every turn
+
+		// step 2: a structured summary of the older messages
 		const lastSummaryIdx = findLastIdx(thread.messages, m => m.role === 'compacted_summary') ?? -1
 		const compactableRange = thread.messages.slice(lastSummaryIdx + 1)
 		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
-
-		const totalChars = thread.messages.reduce((n, m) => n + this._renderMessageForCompaction(m).length, 0)
-		if (totalChars < usableChars * ChatThreadService.COMPACTION_SAFETY_MARGIN_FRACTION) return // plenty of room left - the common case, checked cheaply every turn
 
 		const toCompact = compactableRange.slice(0, compactableRange.length - ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP)
 		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return

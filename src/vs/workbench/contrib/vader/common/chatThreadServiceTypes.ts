@@ -14,6 +14,7 @@ export type ToolMessage<T extends ToolName> = {
 	id: string;
 	rawParams: RawToolParamsObj;
 	mcpServerName: string | undefined; // the server name at the time of the call
+	outputPruned?: boolean; // optional so saved chats stay valid: the model is sent a note instead of the result (common/contextBudget.ts); `content` keeps the full text
 } & (
 		// in order of events:
 		| { type: 'invalid_params', result: null, name: T, }

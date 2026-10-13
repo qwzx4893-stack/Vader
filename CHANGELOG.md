@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased - Long sessions: old tool output is pruned and the summary now comes before the blind cut
+
+- **Found by reading the code against the engine review (`docs/research/agent-engine-assessment.md`):** the three safeguards against a full context window used different yardsticks, and the worst one fired first.
+  The blind cut in `convertToLLMMessageService.ts` (it shrinks a message to 120 characters, no way back) started at **half** of the window, because the reserve for the answer was `contextWindow / 2` while the comment said a quarter.
+  The careful summary started only at 70% of the window, and measured every tool result as at most 2,000 characters, so a thread full of file reads looked small to it.
+  Simulated on a tool-heavy session (600 steps, 32k to 1M windows) the old rules sent a request over the blind-cut line in 71% to 98% of the steps.
+- **One yardstick, three steps** (`common/contextBudget.ts`, pure): from 50% of the budget the output of *old* tool calls is replaced by a one-line note (no model call; the newest quarter of the budget and the last 8 messages are kept; only when it frees at least 8%, so the provider's prompt cache is not broken for nothing);
+  from 70% (measured after pruning, on what is really sent, system prompt included) the older messages become the structured summary; the blind cut stays as the last resort above 100%, and the reserve is now a quarter of the window as its comment always said.
+  The chat keeps showing the full tool result: only what the model is sent changes (`outputPruned`, an optional field on tool messages, so saved chats stay valid). The pruning idea follows opencode's session compaction (MIT), reimplemented.
+- Tests: `test/contextBudgetE2E.mjs` (31 checks, in CI), including a 600-step simulation for four window sizes in which the request never exceeds the budget.
+- **Not measured with a real model yet:** the effect on task success in long sessions. Run the benchmark before and after (`docs/integrations/agent-benchmark.md`) before calling this an improvement in quality; the mechanism itself is tested.
+
 ## Unreleased - Security audit, second pass: path fuzz and the browser's redirects
 
 - **Path spellings at scale.** A seeded fuzz of 4,000 spellings of protected files (case, trailing dots and spaces, `::$DATA`, `./`, `//`, `..` detours, slashes) got 1,264 through on the code before the earlier fixes, among them deletes of a system file the locked rule exists to block; 0 after. `test/policyPathFuzzE2E.mjs` runs it in CI.
