@@ -85,7 +85,9 @@ export const builtInPolicyRules: PolicyRule[] = [
 		id: 'vader.ask.secrets-and-keys',
 		description: 'This touches a file that commonly holds credentials or private keys (.env, SSH keys, cloud credentials, certificates).',
 		effect: 'ask',
-		kinds: ['file-read', 'file-write', 'file-delete'],
+		// 'terminal-command': a command that names such a file (`cat ~/.ssh/id_rsa`) is the same access through another tool (commandPaths.ts)
+		kinds: ['file-read', 'file-write', 'file-delete', 'terminal-command'],
+		terminalPathScope: 'any',
 		pathGlobs: [
 			'**/.env',
 			'**/.env.*',
@@ -155,7 +157,9 @@ export const builtInPolicyRules: PolicyRule[] = [
 		id: 'vader.ask.autorun-config',
 		description: 'This writes a file that can run code on its own later (editor tasks/settings, git hooks, .envrc, shell startup files, MCP/devcontainer config, workspace AI rules).',
 		effect: 'ask',
-		kinds: ['file-write', 'file-delete'],
+		// 'terminal-command': `echo x >> .vscode/tasks.json`, `cp evil .husky/pre-commit`, `Set-Content ...` write the same file without a file tool (commandPaths.ts)
+		kinds: ['file-write', 'file-delete', 'terminal-command'],
+		terminalPathScope: 'write',
 		pathGlobs: [
 			'**/.vscode/tasks.json',
 			'**/.vscode/settings.json',
@@ -204,6 +208,23 @@ export const builtInPolicyRules: PolicyRule[] = [
 		effect: 'ask',
 		kinds: ['terminal-command'],
 		commandPatterns: [String.raw`\bsudo\b`, String.raw`\brunas\b`],
+		builtIn: true,
+		locked: false,
+		neverBypassAutonomous: true,
+		enabled: true,
+	},
+	{
+		// Git settings that name a program to run: `core.hooksPath` (any script as every hook), `core.fsmonitor`, `core.sshCommand`, `core.pager`, `core.editor`,
+		// `credential.helper`, `diff.external`, `gpg.program`, filters and aliases starting with `!`. Setting one by command (or `git -c`) is code execution later,
+		// the same as editing .git/config, which the autorun rule already asks about.
+		id: 'vader.ask.git-program-config',
+		description: 'This sets a Git option that names a program to run (hooks path, fsmonitor, ssh command, pager, credential helper...), which runs it later.',
+		effect: 'ask',
+		kinds: ['terminal-command'],
+		commandPatterns: [
+			// (a read - `--get`, `--get-all`, `--list`, `-l`, `--show-origin` - sets nothing, so a command that only asks is left alone)
+			String.raw`\bgit\b(?![^\n;&|]*\sconfig\b[^\n;&|]*\s(?:--get(?:-all|-regexp|-urlmatch)?|--list|-l|--show-origin|--show-scope)\b)[^\n;&|]*?(?:\bconfig\b|\s-c\b)[^\n;&|]*\b(?:core\.(?:hooksPath|fsmonitor|sshCommand|pager|editor|askPass|gitProxy)|credential\.[\w.]*helper|diff\.[\w.]*(?:external|textconv)|merge\.[\w.]*driver|filter\.[\w.]*(?:clean|smudge|process)|gpg\.[\w.]*program|sequence\.editor|alias\.[\w-]+)`,
+		],
 		builtIn: true,
 		locked: false,
 		neverBypassAutonomous: true,

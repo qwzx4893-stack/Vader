@@ -70,7 +70,8 @@ export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	if (!rule.kinds.includes(req.kind)) return false;
 
 	if (rule.pathGlobs && rule.pathGlobs.length) {
-		const paths = req.filePaths ?? [];
+		// a terminal command has no filePaths: the paths found in its text stand in for them (see commandPaths.ts)
+		const paths = req.kind === 'terminal-command' ? ((rule.terminalPathScope === 'write' ? req.commandWritePaths : req.commandPaths) ?? []) : (req.filePaths ?? []);
 		if (paths.length === 0) return false;
 		// Case-insensitive on every platform: on Windows the file system is, and URI.fsPath lowercases the
 		// drive letter (`c:`), so a case-sensitive `C:/Windows/**` rule never matched any real path.

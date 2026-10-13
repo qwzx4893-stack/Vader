@@ -25,6 +25,10 @@ export interface IPolicyRequest {
 	readonly filePaths?: string[];
 	/** the literal command string, for terminal-command */
 	readonly command?: string;
+	/** for terminal-command: every path-like word in the command (common/policy/commandPaths.ts), so path rules can see what a command touches */
+	readonly commandPaths?: string[];
+	/** for terminal-command: the subset a command may WRITE to or delete (redirections, cp/mv/tee/sed -i/Set-Content...; read-only viewers excluded) */
+	readonly commandWritePaths?: string[];
 	/** which MCP server this call would go to, for mcp-tool */
 	readonly mcpServerName?: string;
 	/** the permanent agent (if any) making this request, for per-agent scoping */
@@ -45,6 +49,8 @@ export interface PolicyRule {
 	readonly kinds: PolicyRequestKind[];
 	/** glob patterns (vs/base/common/glob syntax) matched against absolute fs paths */
 	readonly pathGlobs?: string[];
+	/** for a rule that lists 'terminal-command' among its kinds together with pathGlobs: match the globs against every path in the command ('any', the default) or only against the ones it may write ('write') */
+	readonly terminalPathScope?: 'any' | 'write';
 	/** regex source strings (case-insensitive) matched against the terminal command */
 	readonly commandPatterns?: string[];
 	/** regex source strings (case-insensitive) matched against mcpServerName, for kind 'mcp-tool'. Omitted = matches every MCP server (a deliberate, legitimate blanket rule for this kind only - see policyService.ts's ruleMatches). */

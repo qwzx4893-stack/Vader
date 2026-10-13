@@ -5,6 +5,14 @@
 import { URI } from '../../../../../base/common/uri.js';
 import { BuiltinToolCallParams, BuiltinToolName, ToolCallParams, ToolName } from '../toolsServiceTypes.js';
 import { IPolicyRequest } from './policyServiceTypes.js';
+import { pathsInCommand } from './commandPaths.js';
+
+/** A terminal command, with the paths its text names, so that the path rules (credential files, files that run code on their own) see it too. */
+const terminalRequest = (toolName: string, command: unknown, agentId: string | undefined): IPolicyRequest => {
+	const text = typeof command === 'string' ? command : '';
+	const { all, writes } = pathsInCommand(text);
+	return { kind: 'terminal-command', toolName, command: text || undefined, commandPaths: all, commandWritePaths: writes, agentId };
+};
 
 const isURI = (v: unknown): v is URI => !!v && typeof v === 'object' && URI.isUri(v as any);
 
@@ -48,7 +56,7 @@ export function policyRequestOfToolCall(
 
 		case 'run_command':
 		case 'run_persistent_command':
-			return { kind: 'terminal-command', toolName, command: (p as any).command, agentId };
+			return terminalRequest(toolName, (p as any).command, agentId);
 
 		// Installing a skill or a marketplace item (an extension or an MCP server) can run arbitrary code or change every future prompt. Their
 		// approval bucket is 'edits', which users commonly auto-approve, so without this request nothing would ever stop an injected model installing one.

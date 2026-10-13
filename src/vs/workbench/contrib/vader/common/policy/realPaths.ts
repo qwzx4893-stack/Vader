@@ -62,6 +62,18 @@ export function normalizeDotSegments(fsPath: string): string {
 	return (drive ?? '') + (absolute ? sep : '') + out.join(sep);
 }
 
+/**
+ * The path as Windows itself reads it. Win32 drops trailing dots and spaces from every name and treats `name::$DATA` as the file's own data, so
+ * `.vscode\tasks.json.`, `.vscode\tasks.json ` and `.vscode\tasks.json::$DATA` are all `.vscode\tasks.json`, while `.git\hooks.\pre-commit` is in
+ * `.git\hooks`; and `\\?\C:\x` is `C:\x`. A glob written for the plain name matches none of the spellings, and for a file that does not exist yet
+ * the real-path step below cannot correct them (it only resolves what exists). Matching the canonical spelling as well closes that.
+ */
+export function canonicalWindowsAlias(fsPath: string): string {
+	let p = fsPath.replace(/^[\\/]{2}\?[\\/]/, '');
+	p = p.replace(/(?<=[^\\/:]):(?:[^\\/:]*)(?::\$?[A-Za-z_]+)?$/, (m, offset: number) => (offset <= 1 && /^[A-Za-z]$/.test(p.slice(0, offset))) ? m : ''); // alternate data stream: `file:stream:$DATA`, never the `C:` of a drive
+	return p.split(/([\\/]+)/).map(part => (part === '.' || part === '..' || /^[\\/]*$/.test(part)) ? part : part.replace(/[. ]+$/, '')).join('');
+}
+
 /** `fsPaths` plus the resolved form of each one that differs, so that a rule or a scope matching either one applies. Never throws, never waits more than a few seconds. */
 export async function withResolvedPaths(realpath: RealpathFn, fsPaths: string[]): Promise<string[]> {
 	const out = [...fsPaths];
@@ -69,7 +81,8 @@ export async function withResolvedPaths(realpath: RealpathFn, fsPaths: string[])
 	const timeout = new Promise<undefined>(res => { timer = setTimeout(() => res(undefined), RESOLVE_TIMEOUT_MS); });
 	try {
 		for (const p of fsPaths) {
-			const lexical = normalizeDotSegments(p);
+			const lexical = normalizeDotSegments(canonicalWindowsAlias(p));
+			if (normalizeDotSegments(p) !== p && !out.includes(normalizeDotSegments(p))) { out.push(normalizeDotSegments(p)); }
 			if (lexical !== p && !out.includes(lexical)) { out.push(lexical); }
 			const real = await Promise.race([resolveRealFsPath(realpath, lexical).catch(() => undefined), timeout]);
 			if (real && !out.includes(real)) { out.push(real); }
