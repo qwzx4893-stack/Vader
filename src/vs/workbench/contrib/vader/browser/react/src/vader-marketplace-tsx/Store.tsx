@@ -30,17 +30,18 @@ export function formatBytes(n: number | undefined): string {
 	return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
-const LEVEL_WORD = { high: 'High trust', medium: 'Read it first', low: 'Risky' } as const
+const LEVEL_WORD = { high: 'High trust', medium: 'Read first', low: 'Risky' } as const
 
 // The colours are written inline in each className on purpose: the build that scopes Tailwind to Vader's own UI rewrites class names
 // it finds inside className attributes, not ones kept in a constant, and a rewritten name is the one the stylesheet defines.
 export const TrustMeter = ({ score, large }: { score: TrustScore, large?: boolean }) => {
 	const level = trustLevelOf(score.score)
-	return <div className={`flex flex-col items-end gap-1 shrink-0 ${large ? 'w-20' : 'w-14'}`} title={`${LEVEL_WORD[level]}: ${score.score} out of 100`} aria-label={`Trust ${score.score} percent, ${LEVEL_WORD[level]}`}>
+	return <div className={`flex flex-col items-end gap-1 shrink-0 ${large ? 'w-24' : 'w-20'}`} title={`${LEVEL_WORD[level]}: ${score.score} out of 100`} aria-label={`Trust ${score.score} percent, ${LEVEL_WORD[level]}`}>
 		<span className={`font-semibold tabular-nums leading-none ${level === 'high' ? 'text-green-500' : level === 'medium' ? 'text-yellow-500' : 'text-red-500'} ${large ? 'text-3xl' : 'text-root'}`}>{score.score}%</span>
 		<div className={`rounded-full bg-black/10 dark:bg-white/10 overflow-hidden ${large ? 'h-1.5 w-16' : 'h-1 w-12'}`}>
 			<div className={`h-full rounded-full ${level === 'high' ? 'bg-green-500' : level === 'medium' ? 'bg-yellow-500' : 'bg-red-500'}`} style={{ width: `${score.score}%` }} />
 		</div>
+		<span className={`text-xs leading-none whitespace-nowrap ${level === 'high' ? 'text-green-500' : level === 'medium' ? 'text-yellow-500' : 'text-red-500'}`}>{LEVEL_WORD[level]}</span>
 	</div>
 }
 
@@ -122,7 +123,7 @@ const ItemCard = ({ item, selected, busy, onSelect, onAction }: { item: Marketpl
 	</div>
 }
 
-const DetailPane = ({ item, busy, error, onAction, onClose }: { item: MarketplaceItem, busy: boolean, error?: string, onAction: () => void, onClose: () => void }) => {
+const DetailPane = ({ item, busy, error, onAction, onActionAndEnable, onClose }: { item: MarketplaceItem, busy: boolean, error?: string, onAction: () => void, onActionAndEnable?: () => void, onClose: () => void }) => {
 	const instructions = typeof item.metadata.instructions === 'string' ? item.metadata.instructions : ''
 	const stars = typeof item.metadata.stars === 'number' ? item.metadata.stars : undefined
 	return <div className='flex flex-col gap-4 p-4 border-l border-vader-border-3 min-w-0 overflow-y-auto'>
@@ -141,6 +142,7 @@ const DetailPane = ({ item, busy, error, onAction, onClose }: { item: Marketplac
 				: item.installMethod ? <button disabled={busy} className='px-3 py-1 rounded-sm bg-vader-fg-1 text-vader-bg-1 font-medium disabled:opacity-50' onClick={onAction}>
 					{busy ? 'Working...' : item.type === 'SKILL' ? 'Install, switched off' : ACTION_LABEL[item.installMethod] ?? item.installMethod}
 				</button> : null}
+			{!item.installed && item.type === 'SKILL' && item.installMethod && onActionAndEnable ? <button disabled={busy} className='px-3 py-1 rounded-sm border border-vader-border-1 text-vader-fg-1 disabled:opacity-50' title='Install it and switch it on. You can still read it afterwards.' onClick={onActionAndEnable}>Install and switch on</button> : null}
 			{error ? <span className='text-red-500'>{error}</span> : null}
 		</div>
 		<div className='text-vader-fg-2 leading-relaxed'>{item.description || 'This source gives no description.'}</div>
@@ -203,6 +205,15 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 		}
 	}, [marketplace, reload])
 
+	// install a skill and switch it on in one step; a skill with a low score never gets this shortcut
+	const actAndEnable = useCallback(async (item: MarketplaceItem) => {
+		await act(item)
+		const skillService = accessor.get('ISkillService')
+		const url = String(item.metadata.repositoryUrl ?? item.id)
+		const installed = skillService.list().find(s => s.source.repositoryUrl === url)
+		if (installed) skillService.setEnabled(installed.id, true)
+	}, [act, accessor])
+
 	const wide = layout === 'wide'
 	return <div className='flex flex-col gap-3 min-w-0 text-root'>
 		{showSearch ? <label className='flex items-center gap-2 px-3 py-1.5 rounded-md border border-vader-border-2 bg-vader-bg-1'>
@@ -227,10 +238,10 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 				{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{query.trim() ? `Nothing matches "${query.trim()}".` : 'Nothing to show yet.'}</div> : null}
 				{shown.map(item => <React.Fragment key={keyOf(item)}>
 					<ItemCard item={item} selected={keyOf(item) === selectedKey} busy={busyKey === keyOf(item)} onSelect={() => setSelectedKey(keyOf(item) === selectedKey ? null : keyOf(item))} onAction={() => act(item)} />
-					{!wide && keyOf(item) === selectedKey ? <DetailPane item={item} busy={busyKey === keyOf(item)} error={errorOf[keyOf(item)]} onAction={() => act(item)} onClose={() => setSelectedKey(null)} /> : null}
+					{!wide && keyOf(item) === selectedKey ? <DetailPane item={item} busy={busyKey === keyOf(item)} error={errorOf[keyOf(item)]} onAction={() => act(item)} onActionAndEnable={item.trustScore && item.trustScore.level !== 'low' ? () => actAndEnable(item) : undefined} onClose={() => setSelectedKey(null)} /> : null}
 				</React.Fragment>)}
 			</div>
-			{wide && selected ? <DetailPane item={selected} busy={busyKey === keyOf(selected)} error={errorOf[keyOf(selected)]} onAction={() => act(selected)} onClose={() => setSelectedKey(null)} /> : null}
+			{wide && selected ? <DetailPane item={selected} busy={busyKey === keyOf(selected)} error={errorOf[keyOf(selected)]} onAction={() => act(selected)} onActionAndEnable={selected.trustScore && selected.trustScore.level !== 'low' ? () => actAndEnable(selected) : undefined} onClose={() => setSelectedKey(null)} /> : null}
 		</div>
 	</div>
 }

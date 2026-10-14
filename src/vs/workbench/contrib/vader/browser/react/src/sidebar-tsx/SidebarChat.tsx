@@ -36,6 +36,7 @@ import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
+import { formatUsd } from '../../../../common/usageAccounting.js';
 
 
 
@@ -322,6 +323,35 @@ interface VaderChatAreaProps {
 	featureName: FeatureName;
 }
 
+// Vader addition: Pause or resume a running chat, and what this chat and today have cost (read from the providers' own token counts, see common/usageAccounting.ts)
+const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	const settingsState = useSettingsState()
+	const threadId = chatThreadsService.state.currentThreadId
+	useChatThreadsStreamState(threadId) // renders again when the run starts, stops, pauses or resumes
+	const [, tick] = useState(0)
+	useEffect(() => {
+		const d = chatThreadsService.onDidChangeUsage(() => tick(n => n + 1))
+		return () => d.dispose()
+	}, [chatThreadsService])
+
+	const usage = chatThreadsService.getThreadUsage(threadId)
+	const today = chatThreadsService.getUsageToday()
+	const limit = settingsState.globalSettings.dailySpendLimitUsd
+	const pause = chatThreadsService.getPause(threadId)
+	const unpriced = (usage?.unpricedTurns ?? 0) > 0
+
+	return <div className='flex items-center gap-x-2 text-xs text-vader-fg-3 text-nowrap'>
+		{pause ? <span className='text-yellow-600'>{pause.reason === 'budget' ? `Paused: the daily limit of ${formatUsd(limit ?? 0)} is reached` : 'Paused'}</span> : null}
+		{isStreaming ? (pause
+			? <button data-testid='vader-resume' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.resumeRun(threadId)}>{pause.reason === 'budget' ? 'Go on anyway' : 'Resume'}</button>
+			: <button data-testid='vader-pause' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.pauseRun(threadId)}>Pause</button>) : null}
+		{usage && usage.turns > 0 ? <span title={unpriced ? `${usage.unpricedTurns} answer(s) came from a model whose price Vader does not know, so they are not in this amount` : 'What this chat has cost'}>{formatUsd(usage.costUsd)}{unpriced ? '+' : ''} this chat</span> : null}
+		{today.costUsd > 0 ? <span title='What every chat has cost today'>{formatUsd(today.costUsd)} today</span> : null}
+	</div>
+}
+
 export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	children,
 	onSubmit,
@@ -389,6 +419,7 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 					<div className='flex flex-col gap-y-1'>
 						<ReasoningOptionSlider featureName={featureName} />
 
+						{featureName === 'Chat' && <RunControls isStreaming={isStreaming} />}
 						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-vader-fg-3 bg-vader-bg-1 border border-vader-border-2 rounded py-0.5 px-1' />}
 							{featureName === 'Chat' && <ExternalAgentChatPicker className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />}
@@ -1625,6 +1656,15 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		} catch (e) { console.error('Error while approving message in chat:', e) }
 	}, [chatThreadsService, agentGatewayService, metricsService])
 
+	// "Allow in this project": approves this call and stops asking about this exact command (or MCP tool) in this project. Not offered when the Policy Engine asked.
+	const canRemember = chatThreadsService.canRememberForProject(chatThreadsService.state.currentThreadId)
+	const onAcceptForProject = useCallback(() => {
+		try {
+			agentGatewayService.approveToolRequest(chatThreadsService.state.currentThreadId, { rememberForProject: true })
+			metricsService.capture('Tool Request Accepted For Project', {})
+		} catch (e) { console.error('Error while approving message in chat:', e) }
+	}, [chatThreadsService, agentGatewayService, metricsService])
+
 	const onReject = useCallback(() => {
 		try {
 			const threadId = chatThreadsService.state.currentThreadId
@@ -1674,6 +1714,7 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 
 	return <div className="flex gap-2 mx-0.5 items-center">
 		{approveButton}
+		{canRemember ? <button data-testid='vader-tool-approve-project' onClick={onAcceptForProject} className='px-2 py-1 rounded text-sm border border-vader-border-1 text-vader-fg-1 hover:bg-vader-bg-2-hover' title='Approve this, and do not ask about this exact command in this project again'>Allow in this project</button> : null}
 		{cancelButton}
 		{approvalToggle}
 	</div>

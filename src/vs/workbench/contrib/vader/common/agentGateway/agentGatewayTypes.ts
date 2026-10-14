@@ -86,7 +86,8 @@ export interface IAgentGatewayService {
 	cancelTask(threadId: string): Promise<void>;
 
 	/** Resolve a pending tool-approval request for a task. */
-	approveToolRequest(threadId: string): void;
+	/** rememberForProject: also stop asking about this exact command or MCP tool in this project (never offered when the Policy Engine itself asked) */
+	approveToolRequest(threadId: string, opts?: { rememberForProject?: boolean }): void;
 	rejectToolRequest(threadId: string): void;
 
 	/** Clear a surfaced run error so callers stop reporting it as active. */

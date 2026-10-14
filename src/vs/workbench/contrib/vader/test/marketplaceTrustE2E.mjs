@@ -69,5 +69,14 @@ check('a folded description is joined onto one line', folded.description === 'A 
 check('text without front matter gives nothing', JSON.stringify(G.parseSkillFrontmatter('# Just a heading')) === '{}');
 check('the folder address is one rawSkillInstructionUrls understands', (await load('../common/discovery/githubSkillUrl.ts', 'u.mjs')).rawSkillInstructionUrls(G.skillFolderUrl({ owner: 'anthropics', repo: 'skills' }, 'main', 'skills/pdf'))?.[0] === 'https://raw.githubusercontent.com/anthropics/skills/main/skills/pdf/SKILL.md');
 
+// ---- an extension
+const popular = T.computeTrust({ kind: 'extension', publisher: 'microsoft', publisherVerified: true, installs: 60_000_000, rating: 4.3, ratingCount: 120 });
+const obscure = T.computeTrust({ kind: 'extension', publisher: 'nobody', installs: 40, rating: 2.1, ratingCount: 12 });
+check('a popular, verified, well-rated extension is high', popular.level === 'high', JSON.stringify(popular));
+check('an obscure, poorly rated one is not', obscure.level !== 'high' && obscure.score < popular.score, JSON.stringify(obscure));
+check('the gallery flagging an extension as malicious gives 0', T.computeTrust({ kind: 'extension', publisher: 'microsoft', publisherVerified: true, installs: 9e9, flaggedMalicious: true }).score === 0);
+check('every extension is told it runs code inside the editor', popular.factors.some(f => /runs code/i.test(f.label)));
+check('too few ratings do not move the score', T.computeTrust({ kind: 'extension', publisher: 'x', installs: 5000, rating: 1, ratingCount: 3 }).factors.every(f => !/rated/i.test(f.label)));
+
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

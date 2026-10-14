@@ -7,16 +7,24 @@ import { useMemo, useState } from 'react';
 import { CopyButton, IconShell1 } from '../markdown/ApplyBlockHoverButtons.js';
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useFullChatThreadsStreamState, useSettingsState } from '../util/services.js';
 import { IconX } from './SidebarChat.js';
-import { Check, Copy, Icon, LoaderCircle, MessageCircleQuestion, Trash2, UserCheck, X } from 'lucide-react';
+import { Check, ChevronRight, Copy, Icon, LoaderCircle, MessageCircleQuestion, Pause, Trash2, UserCheck, X } from 'lucide-react';
+import { projectDisplayNames } from '../../../../common/threadProjects.js';
 import { IsRunningType, ThreadType } from '../../../chatThreadService.js';
 
 
 const numInitialThreads = 3
 
-export const PastThreadsList = ({ className = '' }: { className?: string }) => {
-	const [showAll, setShowAll] = useState(false);
+// Vader addition: the conversations under the project they were started in (like the sidebar of Claude Code or Codex), the open project first.
+// Conversations from before projects were remembered are under "Chats". A conversation shows where it stands: waiting for you, working,
+// paused, stopped by an error, or with changes ready to read.
+const THREADS_SHOWN_PER_PROJECT = 5
 
+export const PastThreadsList = ({ className = '' }: { className?: string }) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
 	const [hoveredIdx, setHoveredIdx] = useState<number | null>(null)
+	const [expanded, setExpanded] = useState<{ [groupKey: string]: boolean }>({})
+	const [collapsed, setCollapsed] = useState<{ [groupKey: string]: boolean }>({})
 
 	const threadsState = useChatThreadsState()
 	const { allThreads } = threadsState
@@ -33,57 +41,50 @@ export const PastThreadsList = ({ className = '' }: { className?: string }) => {
 		return <div key="error" className="p-1">{`Error accessing chat history.`}</div>;
 	}
 
-	// sorted by most recent to least recent
-	const sortedThreadIds = Object.keys(allThreads ?? {})
-		.sort((threadId1, threadId2) => (allThreads[threadId1]?.lastModified ?? 0) > (allThreads[threadId2]?.lastModified ?? 0) ? -1 : 1)
-		.filter(threadId => (allThreads![threadId]?.messages.length ?? 0) !== 0)
-		// Vader: hidden threads spun up by delegate_subagent_task don't clutter the thread list;
-		// they're still on disk and reachable by threadId (e.g. via the tool's result) if needed.
-		.filter(threadId => !allThreads![threadId]?.isSubagentThread)
-
-	// Get only first 5 threads if not showing all
-	const hasMoreThreads = sortedThreadIds.length > numInitialThreads;
-	const displayThreads = showAll ? sortedThreadIds : sortedThreadIds.slice(0, numInitialThreads);
+	// hidden threads made by the sub-agent tools, and empty ones, are left out by listProjectGroups
+	const groups = chatThreadsService.listProjectGroups()
+	const names = projectDisplayNames(groups)
+	let idx = 0
 
 	return (
 		<div className={`flex flex-col mb-2 gap-2 w-full text-nowrap text-vader-fg-3 select-none relative ${className}`}>
-			{displayThreads.length === 0 // this should never happen
-				? <></>
-				: displayThreads.map((threadId, i) => {
-					const pastThread = allThreads[threadId];
-					if (!pastThread) {
-						return <div key={i} className="p-1">{`Error accessing chat history.`}</div>;
-					}
-
-					return (
-						<PastThreadElement
-							key={pastThread.id}
-							pastThread={pastThread}
-							idx={i}
-							hoveredIdx={hoveredIdx}
-							setHoveredIdx={setHoveredIdx}
-							isRunning={runningThreadIds[pastThread.id]}
-						/>
-					);
-				})
-			}
-
-			{hasMoreThreads && !showAll && (
-				<div
-					className="text-vader-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer p-1 text-xs"
-					onClick={() => setShowAll(true)}
-				>
-					Show {sortedThreadIds.length - numInitialThreads} more...
+			{groups.map(group => {
+				const groupKey = group.key ?? '__chats__'
+				const isCollapsed = !!collapsed[groupKey]
+				const showAll = !!expanded[groupKey]
+				const shown = showAll ? group.threadIds : group.threadIds.slice(0, THREADS_SHOWN_PER_PROJECT)
+				const hidden = group.threadIds.length - shown.length
+				return <div key={groupKey} className='flex flex-col gap-1'>
+					<div
+						className='flex items-center gap-1 px-1 text-xs cursor-pointer hover:text-vader-fg-1'
+						onClick={() => setCollapsed(c => ({ ...c, [groupKey]: !isCollapsed }))}
+						data-tooltip-id='vader-tooltip'
+						data-tooltip-content={group.key ?? 'Conversations that were not started in a project'}
+						data-tooltip-place='top'
+					>
+						<ChevronRight size={12} className={isCollapsed ? '' : 'rotate-90'} />
+						<span className='font-medium truncate'>{names.get(group.key) ?? group.name}</span>
+						<span className='opacity-60'>{group.threadIds.length}</span>
+					</div>
+					{isCollapsed ? null : <>
+						{shown.map(threadId => {
+							const pastThread = allThreads[threadId];
+							if (!pastThread) { return null }
+							const myIdx = idx++
+							return <PastThreadElement
+								key={pastThread.id}
+								pastThread={pastThread}
+								idx={myIdx}
+								hoveredIdx={hoveredIdx}
+								setHoveredIdx={setHoveredIdx}
+								isRunning={runningThreadIds[pastThread.id]}
+							/>
+						})}
+						{hidden > 0 ? <div className="text-vader-fg-3 opacity-80 hover:opacity-100 cursor-pointer p-1 text-xs" onClick={() => setExpanded(e => ({ ...e, [groupKey]: true }))}>Show {hidden} more...</div> : null}
+						{showAll && group.threadIds.length > THREADS_SHOWN_PER_PROJECT ? <div className="text-vader-fg-3 opacity-80 hover:opacity-100 cursor-pointer p-1 text-xs" onClick={() => setExpanded(e => ({ ...e, [groupKey]: false }))}>Show less</div> : null}
+					</>}
 				</div>
-			)}
-			{hasMoreThreads && showAll && (
-				<div
-					className="text-vader-fg-3 opacity-80 hover:opacity-100 hover:brightness-115 cursor-pointer p-1 text-xs"
-					onClick={() => setShowAll(false)}
-				>
-					Show less
-				</div>
-			)}
+			})}
 		</div>
 	);
 };
@@ -171,6 +172,17 @@ const TrashButton = ({ threadId }: { threadId: string }) => {
 	)
 }
 
+// the state of a conversation that is not running right now: waiting for you, paused, stopped by an error, or with changes to read
+const ThreadStatusMarker = ({ threadId }: { threadId: string }) => {
+	const accessor = useAccessor()
+	const status = accessor.get('IChatThreadService').getThreadStatus(threadId)
+	if (status === 'needs_you') return <span title='Needs you' className='w-2 h-2 rounded-full bg-yellow-500 flex-shrink-0' />
+	if (status === 'paused') return <Pause size={12} className='flex-shrink-0' />
+	if (status === 'error') return <span title='Stopped by an error' className='w-2 h-2 rounded-full bg-red-500 flex-shrink-0' />
+	if (status === 'review') return <span title='Changes ready to review' className='w-2 h-2 rounded-full border border-vader-fg-3 flex-shrink-0' />
+	return null
+}
+
 const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunning }: {
 	pastThread: ThreadType,
 	idx: number,
@@ -251,7 +263,7 @@ const PastThreadElement = ({ pastThread, idx, hoveredIdx, setHoveredIdx, isRunni
 					:
 					isRunning === 'awaiting_user' ? <MessageCircleQuestion className="bg-vader-stroke-1 flex-shrink-0 flex-grow-0" size={14} />
 						:
-						null}
+						<ThreadStatusMarker threadId={pastThread.id} />}
 				{/* name */}
 				<span className="truncate overflow-hidden text-ellipsis"
 					data-tooltip-id='vader-tooltip'

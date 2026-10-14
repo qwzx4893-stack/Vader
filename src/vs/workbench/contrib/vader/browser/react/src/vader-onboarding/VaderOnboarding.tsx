@@ -10,7 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { useAccessor, useIsDark, useSettingsState } from '../util/services.js';
+import { useAccessor, useIsDark, usePolicyServiceState, useSettingsState } from '../util/services.js';
 import { OneClickSwitchButton } from '../vader-settings-tsx/Settings.js';
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js';
 import { VaderLogo } from '../util/VaderLogo.js'
@@ -56,6 +56,8 @@ const OnboardingPages = () => {
 	const accessor = useAccessor()
 	const vaderSettingsService = accessor.get('IVaderSettingsService')
 	const vaderMetricsService = accessor.get('IMetricsService')
+	const policyService = accessor.get('IPolicyService')
+	const policyState = usePolicyServiceState()
 	const vaderSettingsState = useSettingsState()
 	const [page, setPage] = useState<'welcome' | 'import'>('welcome')
 
@@ -90,6 +92,25 @@ const OnboardingPages = () => {
 			<div className='mt-6 text-vader-fg-3 max-w-lg'>Copy your settings, keybindings and extensions from the editor you used before. Nothing is changed in the original editor, and you can skip this.</div>
 			<div data-testid='vader-import-editors' className='mt-8 grid gap-3 w-full max-w-3xl px-6' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))' }}>
 				{transferEditorTypes.map(editor => <OneClickSwitchButton key={editor} className='w-full px-4 py-3' fromEditor={editor} />)}
+			</div>
+			{/* how much the agent asks first: the permission mode, which can be changed any time in Settings */}
+			<div data-testid='vader-onboarding-safety' className='mt-10 w-full max-w-3xl px-6 text-left'>
+				<div className='text-vader-fg-1 mb-2'>How much should Vader ask before it acts?</div>
+				<div className='grid gap-3' style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))' }}>
+					{([
+						{ mode: 'safe', title: 'Safe', text: 'Asks before every change and every command.' },
+						{ mode: 'balanced', title: 'Balanced', text: 'Edits go through. Commands and sensitive files ask.' },
+						{ mode: 'autonomous', title: 'Autonomous', text: 'Runs without asking, except what is locked.' },
+					] as const).map(o => <button
+						key={o.mode} type='button' data-testid={`vader-onboarding-mode-${o.mode}`}
+						onClick={() => policyService.setMode(o.mode)}
+						className={`text-left px-3 py-2 rounded-md border ${policyState.mode === o.mode ? 'border-vader-fg-1 bg-vader-bg-2' : 'border-vader-border-3 hover:border-vader-border-1'}`}
+					>
+						<div className='font-medium text-vader-fg-1'>{o.title}</div>
+						<div className='text-vader-fg-3 text-sm'>{o.text}</div>
+					</button>)}
+				</div>
+				<div className='text-vader-fg-3 text-sm mt-2'>Some rules are locked in every mode, such as never touching your keys or system files. You can change this later in Settings.</div>
 			</div>
 			<div className='mt-10 flex items-center gap-6'>
 				<button type='button' data-testid='vader-import-skip' onClick={finish} className='text-vader-fg-3 underline hover:brightness-125'>Skip</button>

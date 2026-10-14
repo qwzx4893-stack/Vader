@@ -70,8 +70,8 @@ class AgentGatewayService extends Disposable implements IAgentGatewayService {
 		await this._chatThreadService.abortRunning(threadId);
 	}
 
-	approveToolRequest(threadId: string): void {
-		this._chatThreadService.approveLatestToolRequest(threadId);
+	approveToolRequest(threadId: string, opts?: { rememberForProject?: boolean }): void {
+		this._chatThreadService.approveLatestToolRequest(threadId, opts);
 	}
 
 	rejectToolRequest(threadId: string): void {

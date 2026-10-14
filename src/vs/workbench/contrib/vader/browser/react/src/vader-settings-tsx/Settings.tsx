@@ -30,6 +30,7 @@ import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
 import { StoreView, TrustMeter } from '../vader-marketplace-tsx/Store.js';
+import { formatUsd, formatTokens } from '../../../../common/usageAccounting.js';
 import { computeTrust } from '../../../../common/marketplace/trustScore.js';
 
 type Tab =
@@ -977,6 +978,64 @@ const ROUTER_CATEGORIES: { category: RouterCategory, label: string, desc: string
 const DEFAULT_ROUTER_OPTION = '(default: Chat model)'
 
 // Vader addition: AUTO/MANUAL Model Router. See common/modelRouter/.
+// Vader addition: today's spending, an optional daily limit, and the commands and tools allowed in this project without asking again.
+export const SpendingAndProjectSection = () => {
+	const accessor = useAccessor()
+	const chatThreadService = accessor.get('IChatThreadService')
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const settingsState = useSettingsState()
+	const [, tick] = useState(0)
+	useEffect(() => {
+		const a = chatThreadService.onDidChangeUsage(() => tick(n => n + 1))
+		const b = chatThreadService.onDidChangeProjectApprovals(() => tick(n => n + 1))
+		return () => { a.dispose(); b.dispose() }
+	}, [chatThreadService])
+
+	const limit = settingsState.globalSettings.dailySpendLimitUsd
+	const [limitText, setLimitText] = useState(limit === null ? '' : String(limit))
+	const today = chatThreadService.getUsageToday()
+	const projectKey = chatThreadService.getCurrentProjectKey()
+	const approvals = chatThreadService.listProjectApprovals(projectKey)
+	const saveLimit = (text: string) => {
+		const n = Number(text)
+		vaderSettingsService.setGlobalSetting('dailySpendLimitUsd', text.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : n)
+	}
+
+	return <div className='max-w-[600px]'>
+		<h2 className={`text-3xl mb-2`}>Spending and approvals</h2>
+		<h4 className={`text-vader-fg-3 mb-4`}>What the agent has cost, read from each provider's own token counts, and the commands you chose to stop being asked about.</h4>
+
+		<div className='border border-vader-border-3 rounded p-2 mb-4'>
+			<div className='flex items-center justify-between'>
+				<span className='font-medium'>Today</span>
+				<span>{formatUsd(today.costUsd)}{today.unpricedTurns > 0 ? ' +' : ''} <span className='text-vader-fg-3 text-xs'>{formatTokens(today.inputTokens)} in, {formatTokens(today.outputTokens)} out</span></span>
+			</div>
+			{today.unpricedTurns > 0 ? <div className='text-vader-fg-3 text-xs mt-1'>{today.unpricedTurns} answer(s) came from a model whose price Vader does not know; they are not in the amount. Local models are free.</div> : null}
+			<div className='flex items-center justify-between gap-3 mt-3'>
+				<div className='flex flex-col'>
+					<span>Daily limit</span>
+					<span className='text-vader-fg-3 text-xs'>At the limit a running task pauses and asks before it goes on. Empty means no limit.</span>
+				</div>
+				<div className='flex items-center gap-1'>
+					<span className='text-vader-fg-3'>$</span>
+					<input className='w-20 px-2 py-0.5 rounded-sm border border-vader-border-2 bg-vader-bg-1 text-vader-fg-1 outline-none' inputMode='decimal' value={limitText} placeholder='none' onChange={e => setLimitText(e.target.value)} onBlur={() => saveLimit(limitText)} onKeyDown={e => { if (e.key === 'Enter') saveLimit(limitText) }} />
+				</div>
+			</div>
+		</div>
+
+		<div className='text-vader-fg-3 text-sm mb-2'>Allowed in this project{projectKey ? <span className='font-mono'> ({projectKey})</span> : null}</div>
+		{!projectKey ? <div className='text-vader-fg-3 text-xs'>Open a folder to keep approvals for it.</div> : approvals.length === 0 ? <div className='text-vader-fg-3 text-xs'>Nothing yet. When the agent asks to run a command, "Allow in this project" remembers that exact command here. Rules that always ask (keys, installs, sudo) are never skipped.</div> : <div className='flex flex-col gap-y-1'>
+			{approvals.map(a => <div key={a.key} className='border border-vader-border-3 rounded p-2 flex items-center justify-between gap-2'>
+				<div className='flex flex-col min-w-0'>
+					<span className='font-mono text-xs truncate'>{a.label}</span>
+					<span className='text-vader-fg-3 text-xs'>{a.kind === 'mcp' ? 'MCP tool' : 'Command'}, allowed {new Date(a.addedAt).toLocaleDateString()}</span>
+				</div>
+				<VaderButtonBgDarken className='px-2 py-0.5 text-xs shrink-0' onClick={() => { if (projectKey) chatThreadService.revokeProjectApproval(projectKey, a.key) }}>Revoke</VaderButtonBgDarken>
+			</div>)}
+		</div>}
+	</div>
+}
+
 export const ModelRouterSection = () => {
 	const accessor = useAccessor()
 	const modelRouterService = accessor.get('IModelRouterService')
@@ -1257,6 +1316,28 @@ const RuntimeStatusBlock = () => {
 	</div>
 }
 
+// Vader addition: a task whose branch conflicts with the current branch. Keep one side where the two differ, or let an agent merge them in the task's worktree.
+const ConflictButtons = ({ runId, taskId, files }: { runId: string, taskId: string, files: string[] | undefined }) => {
+	const accessor = useAccessor()
+	const orchestrationService = accessor.get('IAgentOrchestrationService')
+	const [busy, setBusy] = useState<string | null>(null)
+	const [problem, setProblem] = useState('')
+	const go = async (choice: 'target' | 'branch' | 'agent') => {
+		setBusy(choice); setProblem('')
+		try { const r = await orchestrationService.resolveConflict(runId, taskId, choice); if (!r.ok) setProblem(r.reason) }
+		finally { setBusy(null) }
+	}
+	return <div className='mt-1 flex flex-col gap-y-1'>
+		{files?.length ? <div className='text-vader-fg-3'>Both sides changed: {files.join(', ')}</div> : null}
+		<div className='flex flex-wrap gap-x-1'>
+			<VaderButtonBgDarken className='px-2 py-0.5 text-xs' disabled={!!busy} onClick={() => go('agent')}>{busy === 'agent' ? 'Merging...' : 'Let an agent merge them'}</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-2 py-0.5 text-xs' disabled={!!busy} onClick={() => go('target')}>Keep the current version</VaderButtonBgDarken>
+			<VaderButtonBgDarken className='px-2 py-0.5 text-xs' disabled={!!busy} onClick={() => go('branch')}>Keep this task's version</VaderButtonBgDarken>
+		</div>
+		{problem ? <div className='text-red-500'>{problem}</div> : null}
+	</div>
+}
+
 export const AgentManagerSection = () => {
 	const runs = useOrchestrationRunsState()
 
@@ -1285,6 +1366,7 @@ export const AgentManagerSection = () => {
 									{t.changedFilePaths?.length ? ` · ${t.changedFilePaths.length} file(s) changed` : ''}
 								</div>
 								{t.errorMessage ? <div className='text-red-500'>{t.errorMessage}</div> : null}
+									{t.mergeOutcome === 'conflict' ? <ConflictButtons runId={run.id} taskId={t.id} files={t.conflictFiles} /> : null}
 							</div>
 						))}
 					</div>
@@ -1797,12 +1879,12 @@ export const Settings = () => {
 	const navGroups: { title: string | null; items: { tab: Tab; label: string; Icon: typeof Brain }[] }[] = [
 		{ title: 'Models', items: [
 			{ tab: 'models', label: 'Models', Icon: Brain },
-			{ tab: 'externalAgents', label: 'Coding Agents', Icon: Terminal },
+			{ tab: 'externalAgents', label: 'Connected agents', Icon: Terminal },
 			{ tab: 'localProviders', label: 'Local Providers', Icon: HardDrive },
 			{ tab: 'providers', label: 'Main Providers', Icon: Cloud },
 		] },
 		{ title: 'Agent', items: [
-			{ tab: 'agent', label: 'Agent & Permissions', Icon: Bot },
+			{ tab: 'agent', label: 'Permissions and saved agents', Icon: Bot },
 			{ tab: 'context', label: 'Context & Instructions', Icon: BookOpen },
 			{ tab: 'skills', label: 'Skills', Icon: Sparkles },
 			{ tab: 'mcp', label: 'MCP', Icon: Plug },
@@ -1818,6 +1900,25 @@ export const Settings = () => {
 			{ tab: 'all', label: 'All Settings', Icon: List },
 		] },
 	];
+	const [navQuery, setNavQuery] = useState('')
+	// words people look for, besides the page's own name
+	const navKeywords: { [tab in Tab]?: string } = {
+		models: 'model provider key api openai anthropic gemini openrouter ollama autocomplete apply commit',
+		externalAgents: 'coding agent codex copilot cursor opencode claude acp',
+		localProviders: 'ollama lm studio vllm local',
+		providers: 'cloud provider key',
+		agent: 'approve permission safe balanced autonomous spend cost limit budget approval project agent',
+		context: 'instructions rules memory agents.md',
+		skills: 'skill store install trust sources github skillnet',
+		mcp: 'mcp server tools registry',
+		featureOptions: 'autocomplete editor quick edit apply fast',
+		extensions: 'extension marketplace open vsx vsix',
+		privacy: 'privacy network telemetry contact',
+		data: 'export import backup chats switch editor',
+		about: 'update version release licence credits',
+	}
+	const navNeedle = navQuery.trim().toLowerCase()
+	const shownNavGroups = navNeedle ? navGroups.map(g => ({ ...g, items: g.items.filter(it => it.tab !== 'all' && (it.label + ' ' + (navKeywords[it.tab] ?? '')).toLowerCase().includes(navNeedle)) })).filter(g => g.items.length > 0) : navGroups
 	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
@@ -1899,8 +2000,10 @@ export const Settings = () => {
 		<div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', display: 'flex' }} data-testid='vader-settings-page'>
 			{/* ──────────────  SIDEBAR  ────────────── */}
 			<aside className='w-60 shrink-0 h-full flex flex-col border-r border-vader-border-2 bg-vader-bg-2 py-4 px-3 select-none'>
+				<input data-testid='vader-settings-search' className='mb-3 w-full px-3 py-1.5 rounded-md border border-vader-border-2 bg-vader-bg-1 text-vader-fg-1 text-sm outline-none select-text' placeholder='Search settings' value={navQuery} onChange={e => setNavQuery(e.target.value)} />
+				{navNeedle && shownNavGroups.length === 0 ? <div className='px-3 text-vader-fg-3 text-sm'>Nothing in Settings matches that.</div> : null}
 				<nav className='flex flex-col gap-1 flex-1 overflow-y-auto' aria-label='Settings sections'>
-					{navGroups.map((group, gi) => (
+					{shownNavGroups.map((group, gi) => (
 						<div key={gi} className='flex flex-col gap-1'>
 							{group.title && <div className={`px-3 ${gi === 0 ? '' : 'mt-3'} mb-0.5 text-[10px] uppercase tracking-wider text-vader-fg-3`}>{group.title}</div>}
 							{!group.title && <div className='h-px bg-vader-border-2 my-2 mx-1' />}
@@ -2164,6 +2267,7 @@ export const Settings = () => {
 										
 								</div>
 								<AgentsAndPolicySection />
+								<SpendingAndProjectSection />
 								<ModelRouterSection />
 								<AgentManagerSection />
 							</div>

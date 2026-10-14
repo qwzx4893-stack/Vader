@@ -16,7 +16,7 @@ const FAKE = path.join(here, '..', '..', 'fixtures', 'fakeAcpAgent.cjs');
 
 const openAgentsTab = async (t) => {
 	await t.ui.runCommand(t.page, 'Vader: Open Settings');
-	await t.page.getByText('Coding Agents', { exact: true }).first().click({ timeout: 20_000 });
+	await t.page.getByText('Connected agents', { exact: true }).first().click({ timeout: 20_000 });
 	await t.sleep(600);
 };
 const section = (t) => t.page.locator('[data-testid="vader-settings-external-agents"]');

@@ -7,6 +7,7 @@ import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase 
 import { IExtension, IExtensionsWorkbenchService } from '../../../../extensions/common/extensions.js';
 import { EnablementState, IWorkbenchExtensionEnablementService } from '../../../../../services/extensionManagement/common/extensionManagement.js';
 import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem } from '../../../common/marketplace/marketplaceTypes.js';
+import { computeTrust } from '../../../common/marketplace/trustScore.js';
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
 // Wraps this codebase's EXISTING extension gallery/workbench services unmodified - every
@@ -41,6 +42,7 @@ class ExtensionGalleryMarketplaceProvider implements IMarketplaceProvider {
 			// provider is gallery-endpoint-agnostic, same as the service it wraps.
 			trust: ext.isMalicious ? 'blocked' : 'unknown',
 			installed,
+			trustScore: computeTrust({ kind: 'extension', publisher: ext.publisher, publisherVerified: !!ext.publisherDomain?.verified, installs: ext.installCount, rating: ext.rating, ratingCount: ext.ratingCount, flaggedMalicious: ext.isMalicious }),
 			enabled: installed ? this._enablementService.isEnabled(ext.local!) : undefined,
 			capabilities: [...ext.categories, ...ext.tags].slice(0, 10),
 			installMethod: ext.isMalicious ? null : installed ? (ext.outdated ? 'update' : null) : 'install',

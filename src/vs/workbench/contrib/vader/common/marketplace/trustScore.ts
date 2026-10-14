@@ -29,7 +29,7 @@ export type TrustScore = {
 
 export type TrustInputs = {
 	/** 'skill' text is instructions the model reads; 'mcp' and 'agent' run code on this computer */
-	readonly kind: 'skill' | 'mcp' | 'agent';
+	readonly kind: 'skill' | 'mcp' | 'agent' | 'extension';
 	/** owner or organisation, for example "anthropics" for github.com/anthropics/skills */
 	readonly publisher?: string;
 	/** stars of the repository it comes from, when known */
@@ -42,6 +42,15 @@ export type TrustInputs = {
 	readonly runsLocalCode?: boolean;
 	/** the instructions changed since the user last reviewed them */
 	readonly changedSinceReview?: boolean;
+	// for an extension (what the gallery says about it)
+	/** the publisher proved it owns its domain */
+	readonly publisherVerified?: boolean;
+	/** how many times it was installed */
+	readonly installs?: number;
+	readonly rating?: number;
+	readonly ratingCount?: number;
+	/** the gallery flagged it as malicious */
+	readonly flaggedMalicious?: boolean;
 	/** an explicit decision by the user always wins */
 	readonly userTrustState?: 'trusted' | 'review_required' | 'blocked';
 };
@@ -87,8 +96,8 @@ function requestedFrom(text: string): { fs: boolean; terminal: boolean; network:
 }
 
 export function computeTrust(i: TrustInputs): TrustScore {
-	if (i.userTrustState === 'blocked') {
-		return { score: 0, level: 'low', factors: [{ label: 'You blocked it', points: 0 }] };
+	if (i.userTrustState === 'blocked' || i.flaggedMalicious) {
+		return { score: 0, level: 'low', factors: [{ label: i.flaggedMalicious ? 'The gallery flags it as malicious' : 'You blocked it', points: 0 }] };
 	}
 	const factors: TrustFactor[] = [{ label: 'Starting point', points: TRUST_BASE }];
 	let score = TRUST_BASE;
@@ -99,8 +108,22 @@ export function computeTrust(i: TrustInputs): TrustScore {
 	else if (KNOWN_PUBLISHERS.has(publisher)) add(`Published by ${i.publisher}, a known organisation`, 20);
 	else add(`Published by ${i.publisher}, not on the known list`, -5);
 
+	if (i.publisherVerified) add('The publisher proved it owns its domain', 12);
 	if (i.signatureVerified) add('Signature was verified', 5);
-	else if (i.kind !== 'skill') add('No signature to check', -5);
+	else if (i.kind !== 'skill' && i.kind !== 'extension') add('No signature to check', -5); // an extension's signature is the gallery's business; the settings page says that checking is off for Open VSX
+
+	if (i.kind === 'extension') {
+		if (typeof i.installs === 'number') {
+			if (i.installs >= 1_000_000) add(`Installed ${formatCount(i.installs)} times`, 8);
+			else if (i.installs >= 100_000) add(`Installed ${formatCount(i.installs)} times`, 4);
+			else if (i.installs < 1000) add(`Installed only ${i.installs} times`, -8);
+		}
+		if (typeof i.rating === 'number' && (i.ratingCount ?? 0) >= 10) {
+			if (i.rating >= 4) add(`Rated ${i.rating.toFixed(1)} by ${i.ratingCount} people`, 4);
+			else if (i.rating < 3) add(`Rated only ${i.rating.toFixed(1)} by ${i.ratingCount} people`, -6);
+		}
+		add('Runs code inside the editor', -5);
+	}
 
 	if (typeof i.stars === 'number') {
 		if (i.stars >= 1000) add(`${formatCount(i.stars)} stars`, 5);
@@ -118,8 +141,8 @@ export function computeTrust(i: TrustInputs): TrustScore {
 		if (i.instructions.length > 100_000) add('Very long instructions are hard to read in full', -5);
 		if (!req.terminal && !req.network && !RISKY_PATTERNS.some(p => p.re.test(i.instructions!))) add('Plain instructions, nothing unusual', 4);
 	}
-	if (i.kind !== 'skill' && i.runsLocalCode) add('Runs a program on this computer', -8);
-	if (i.kind !== 'skill' && i.runsLocalCode === false) add('Remote server, nothing runs here', 5);
+	if (i.kind !== 'skill' && i.kind !== 'extension' && i.runsLocalCode) add('Runs a program on this computer', -8);
+	if (i.kind !== 'skill' && i.kind !== 'extension' && i.runsLocalCode === false) add('Remote server, nothing runs here', 5);
 	if (i.changedSinceReview) add('Changed since you last read it', -15);
 	if (i.userTrustState === 'trusted') add('You marked it as trusted', 10);
 
