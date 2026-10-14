@@ -124,6 +124,7 @@ import './marketplace/providers/extensionGalleryProvider.js'
 import './marketplace/providers/skillMarketplaceProvider.js'
 import './marketplace/providers/mcpMarketplaceProvider.js'
 import './marketplace/providers/acpAgentMarketplaceProvider.js'
+import './marketplace/providers/connectedAgentsProvider.js'
 // The reference external-agent adapter registers itself with the registry the ACP provider above lists from
 // (docs/integrations/external-agent-adapter.md); without this import it was never registered.
 import './vaderNativeExternalAgentAdapter.js'

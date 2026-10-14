@@ -5,6 +5,8 @@
 import React from 'react'
 import type { MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
 import { StoreView } from './Store.js'
+import { useAccessor } from '../util/services.js'
+import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js'
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
 // Mounted as an additive ViewPane inside the EXISTING Extensions view container (see
@@ -18,7 +20,13 @@ import { StoreView } from './Store.js'
 const NON_EXTENSION_TYPES: MarketplaceItemType[] = ['SKILL', 'MCP_SERVER', 'ACP_AGENT', 'LANGUAGE_SERVER', 'DEBUG_ADAPTER', 'FORMATTER', 'TREE_SITTER_GRAMMAR', 'JUPYTER_KERNEL']
 
 export const Marketplace = ({ query }: { query?: string }) => {
+	const commandService = useAccessor().get('ICommandService')
 	return <div className='p-2'>
+		{/* the old place of the store, kept for now: the page people should use is Add-ons (the package icon in the chat title) */}
+		<div className='flex items-center gap-2 pb-2'>
+			<span className='text-vader-fg-2 flex-1'>The store has a page of its own now.</span>
+			<button data-testid='vader-open-addons-from-old-pane' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 font-medium' onClick={() => commandService.executeCommand(VADER_OPEN_ADDONS_ACTION_ID)}>Open Add-ons</button>
+		</div>
 		<div className='text-vader-fg-3 pb-2'>Skills, MCP servers, coding agents, language servers, debuggers and formatters. Extensions are in the lists above.</div>
 		<StoreView types={NON_EXTENSION_TYPES} layout='narrow' query={query} />
 	</div>

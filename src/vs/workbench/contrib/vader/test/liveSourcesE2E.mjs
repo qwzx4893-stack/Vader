@@ -82,6 +82,22 @@ try {
 	check('skills and MCP servers each have several live sources, not one', S.sourcesOfKind('skill').length >= 4 && S.sourcesOfKind('mcp').length >= 4);
 	check('a source is on unless it was switched off, and one added later is on', S.isSourceOn(undefined, 'smithery') && S.isSourceOn([], 'smithery') && !S.isSourceOn(['smithery'], 'smithery') && S.isSourceOn(['smithery'], 'npm-mcp'));
 
+	// ---- the sources added later: SkillsMP, Smithery skills, Docker Hub, Open VSX
+	const mp = P.parseSkillsMp(fixture('skillsmp-search.json'));
+	check('SkillsMP: name, author, folder on GitHub, stars and when it changed are read; the date is turned from seconds', mp.length >= 1 && mp.every((s) => /^https:\/\/github\.com\//.test(s.githubUrl) && s.stars >= 0) && mp.some((s) => /^20\d\d-/.test(s.updatedAt ?? '')), JSON.stringify(mp[0]));
+	check('SkillsMP: an entry whose address is not GitHub, or that has no name, is left out', P.parseSkillsMp({ data: { skills: [{ name: 'a', githubUrl: 'https://evil.test/x' }, { githubUrl: 'https://github.com/o/r' }, { name: 'ok', githubUrl: 'https://github.com/o/r/tree/main/s' }] } }).map((s) => s.name).join() === 'ok');
+	const ss = P.parseSmitherySkills(fixture('smithery-skills.json'));
+	check('Smithery skills: the section names Smithery gave and the repository’s stars are read', ss.length >= 1 && ss.some((s) => s.categories.length > 0) && ss.every((s) => /^https:\/\/github\.com\//.test(s.gitUrl)), JSON.stringify(ss[0]));
+	check('Smithery skills: an unlisted skill or one without a GitHub folder is left out', P.parseSmitherySkills({ skills: [{ qualifiedName: 'a/b', gitUrl: 'https://github.com/o/r/tree/main/x', listed: false }, { qualifiedName: 'c/d', gitUrl: 'git@host:x' }] }).length === 0);
+	const dk = P.parseDockerMcp(fixture('dockerhub-mcp.json'));
+	check('Docker: image name, pulls and last update are read, and the catalog index itself is not a server', dk.length >= 2 && dk.every((r) => /^[a-z0-9]/.test(r.name) && r.pulls >= 0) && !dk.some((r) => r.name === 'catalog'), JSON.stringify(dk.map((r) => r.name)));
+	check('Docker: a private image or a name with odd characters is refused', P.parseDockerMcp({ results: [{ name: 'x', is_private: true }, { name: 'a b' }, { name: '../x' }, { name: 'ok' }] }).map((r) => r.name).join() === 'ok');
+	const ov = P.parseOpenVsx(fixture('openvsx-search.json'));
+	check('Open VSX: id, downloads, rating, verified, last update and icon are read', ov.length >= 3 && ov.every((e) => /^[^.]+\.[^.]+/.test(e.id) && e.downloads >= 0) && ov.some((e) => e.rating > 0 && e.verified) && ov.some((e) => /^https:\/\/open-vsx\.org\//.test(e.iconUrl ?? '')) && ov.every((e) => /^20\d\d-/.test(e.updatedAt ?? '2026')), JSON.stringify(ov[0]));
+	check('Open VSX: an icon from anywhere but open-vsx.org is dropped, and odd ids are refused', P.parseOpenVsx({ extensions: [{ namespace: 'a', name: 'b', files: { icon: 'https://evil.test/i.png' } }, { namespace: '../x', name: 'b' }] }).length === 1 && P.parseOpenVsx({ extensions: [{ namespace: 'a', name: 'b', files: { icon: 'https://evil.test/i.png' } }] })[0].iconUrl === undefined);
+	check('GitHub folder addresses: a repository or a folder in one is kept, anything else refused', P.githubFolderUrlOf('https://github.com/o/r/tree/main/skills/pdf') === 'https://github.com/o/r/tree/main/skills/pdf' && P.githubFolderUrlOf('https://github.com/o/r') === 'https://github.com/o/r' && P.githubFolderUrlOf('https://github.com/o/r/blob/main/x') === undefined && P.githubFolderUrlOf('http://github.com/o/r') === undefined && P.githubFolderUrlOf('https://github.com.evil.test/o/r') === undefined);
+	check('there are now six sources of skills, five of MCP servers', S.sourcesOfKind('skill').length === 6 && S.sourcesOfKind('mcp').length === 5);
+
 	// ---- what the monitor remembers, and when it speaks up
 	const H = await load('../common/marketplace/trustHistory.ts', 'h.mjs');
 	const e = (first, score, against = []) => ({ first, score, at: 1, against });

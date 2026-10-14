@@ -31,6 +31,10 @@ class DiscoveryService implements IDiscoveryMainService {
 	searchSmithery: IDiscoveryMainService['searchSmithery'] = (query) => this._mainService.searchSmithery(query);
 	searchNpmMcp: IDiscoveryMainService['searchNpmMcp'] = (query) => this._mainService.searchNpmMcp(query);
 	getRepoSignals: IDiscoveryMainService['getRepoSignals'] = (repo) => this._mainService.getRepoSignals(repo);
+	searchSkillsMp: IDiscoveryMainService['searchSkillsMp'] = (query) => this._mainService.searchSkillsMp(query);
+	searchSmitherySkills: IDiscoveryMainService['searchSmitherySkills'] = (query) => this._mainService.searchSmitherySkills(query);
+	searchDockerMcp: IDiscoveryMainService['searchDockerMcp'] = (query) => this._mainService.searchDockerMcp(query);
+	searchOpenVsx: IDiscoveryMainService['searchOpenVsx'] = (query, category, sortBy) => this._mainService.searchOpenVsx(query, category, sortBy);
 	getNpmInfo: IDiscoveryMainService['getNpmInfo'] = (name) => this._mainService.getNpmInfo(name);
 	resolveGithubSkill: IDiscoveryMainService['resolveGithubSkill'] = (repo, skillId) => this._mainService.resolveGithubSkill(repo, skillId);
 }

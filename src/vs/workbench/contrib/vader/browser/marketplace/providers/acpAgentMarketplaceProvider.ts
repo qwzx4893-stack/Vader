@@ -46,9 +46,14 @@ class ACPAgentMarketplaceProvider implements IMarketplaceProvider {
 		});
 	}
 
-	async search(query: string, token: CancellationToken): Promise<MarketplaceItem[]> {
-		const q = query.toLowerCase();
-		return this._toItems().filter(i => !q || i.name.toLowerCase().includes(q) || i.description.toLowerCase().includes(q));
+	// The in-process adapter is part of how Vader is built, not something a person picks: Add-ons lists the agents they can connect instead
+	// (connectedAgentsProvider.ts), so neither a search nor the front page shows this one. It stays in listInstalled for the capability bus.
+	async search(_query: string, _token: CancellationToken): Promise<MarketplaceItem[]> {
+		return [];
+	}
+
+	async browse(_token: CancellationToken): Promise<MarketplaceItem[]> {
+		return [];
 	}
 
 	async listInstalled(): Promise<MarketplaceItem[]> {

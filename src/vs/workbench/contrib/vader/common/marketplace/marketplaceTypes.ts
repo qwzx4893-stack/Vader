@@ -103,9 +103,14 @@ export type MarketplaceItem = {
 	readonly metadata: Record<string, unknown>;
 };
 
+/** one line of the facts on an item's own page: who published it, how big, how often installed, when it last changed */
+export type ItemFact = { readonly label: string; readonly value: string; readonly href?: string };
+
 export type MarketplaceSearchOptions = {
 	/** restrict federated search to these item types; omit/empty = all */
 	types?: MarketplaceItemType[];
+	/** one section of the page (an id from common/marketplace/categories.ts); providers ask their sources for it and keep what belongs */
+	category?: string;
 	signal?: AbortSignal;
 };
 
@@ -139,11 +144,11 @@ export interface IMarketplaceProvider {
 	/** per-provider cache TTL in ms for search results - caching never applies to install/enable state, which is always read live */
 	readonly cacheTtlMs: number;
 
-	search(query: string, token: CancellationToken): Promise<MarketplaceItem[]>;
+	search(query: string, token: CancellationToken, category?: string): Promise<MarketplaceItem[]>;
 	/** items already installed/configured/local, shown even with an empty query and used for offline degradation */
 	listInstalled(): Promise<MarketplaceItem[]>;
 	/** what to show before anyone has typed anything: a source's popular or full listing. Providers without one are skipped when browsing. */
-	browse?(token: CancellationToken): Promise<MarketplaceItem[]>;
+	browse?(token: CancellationToken, category?: string): Promise<MarketplaceItem[]>;
 
 	/** the sources that did not answer in the last search or listing, said once (read and cleared) */
 	takeWarnings?(): string[];

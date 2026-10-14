@@ -3,8 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
-import type { NpmMcpResult, RepoSignals, SkillsShResult, SmitheryResult } from './feedParsers.js';
-export type { NpmMcpResult, RepoSignals, SkillsShResult, SmitheryResult };
+import type { DockerMcpResult, NpmMcpResult, OpenVsxResult, RepoSignals, SkillsMpResult, SkillsShResult, SmitherySkillResult, SmitheryResult } from './feedParsers.js';
+export type { DockerMcpResult, NpmMcpResult, OpenVsxResult, RepoSignals, SkillsMpResult, SkillsShResult, SmitherySkillResult, SmitheryResult };
 
 // Vader's external discovery surfaces: the official MCP Registry (a live capability
 // source) and SkillNet (a live skill source, see skills/skillProviderTypes.ts for the
@@ -92,6 +92,14 @@ export interface IDiscoveryMainService {
 	searchNpmMcp(query: string): Promise<NpmMcpResult[]>;
 	/** what npm says about the latest version of a package: whether it runs a script when installed, and whether it is deprecated */
 	getNpmInfo(name: string): Promise<{ readonly installScripts: boolean; readonly deprecated: boolean; readonly license?: string } | undefined>;
+	/** skillsmp.com: skills indexed from GitHub with the repository's stars and when each last changed; needs a word to search for */
+	searchSkillsMp(query: string): Promise<SkillsMpResult[]>;
+	/** Smithery's registry of skills, which also says which section each belongs to; an empty query lists the front page */
+	searchSmitherySkills(query: string): Promise<SmitherySkillResult[]>;
+	/** the MCP server images Docker curates (hub.docker.com, namespace "mcp"), most pulled first; the words narrow what is returned */
+	searchDockerMcp(query: string): Promise<DockerMcpResult[]>;
+	/** Open VSX, directly: optionally in one of its own categories, sorted by downloads, rating or recency; the editor still installs by id */
+	searchOpenVsx(query: string, category: string | undefined, sortBy: 'downloadCount' | 'rating' | 'timestamp' | 'relevance'): Promise<OpenVsxResult[]>;
 	/** the live signals of one GitHub repository ("owner/repo" or its address); cached for six hours */
 	getRepoSignals(repo: string): Promise<RepoSignals | undefined>;
 	/** one skill of a GitHub repository by its folder or frontmatter name; reads the file list once and only that skill's SKILL.md, not every skill of the repository */

@@ -135,3 +135,118 @@ export function registryEntryStatus(entry: any): { deprecated: boolean; publishe
 	const meta = entry?._meta?.['io.modelcontextprotocol.registry/official'];
 	return { deprecated: meta?.status === 'deprecated' || meta?.status === 'deleted', publishedAt: str(meta?.publishedAt), updatedAt: str(meta?.updatedAt) };
 }
+
+// ---- more live sources
+
+export type SkillsMpResult = {
+	readonly name: string;
+	readonly author?: string;
+	readonly description: string;
+	/** the skill's folder on GitHub */
+	readonly githubUrl: string;
+	readonly stars: number;
+	readonly updatedAt?: string;
+};
+
+/** skillsmp.com/api/v1/skills/search: skills indexed from GitHub, with the repository's stars and when the skill last changed (seconds since 1970) */
+export function parseSkillsMp(data: any): SkillsMpResult[] {
+	const items: any[] = Array.isArray(data?.data?.skills) ? data.data.skills : [];
+	const out: SkillsMpResult[] = [];
+	for (const s of items) {
+		const name = str(s?.name);
+		const githubUrl = githubFolderUrlOf(str(s?.githubUrl));
+		if (!name || !githubUrl) continue;
+		const secs = typeof s?.updatedAt === 'number' && s.updatedAt > 0 ? s.updatedAt : undefined;
+		out.push({ name, author: str(s?.author), description: str(s?.description) ?? '', githubUrl, stars: num(s?.stars), updatedAt: secs ? new Date(secs * 1000).toISOString() : undefined });
+	}
+	return out;
+}
+
+/** a github.com address of a repository or of a folder inside one, as it stands; anything else is refused */
+export function githubFolderUrlOf(raw: string | undefined): string | undefined {
+	if (!raw) return undefined;
+	const m = /^https:\/\/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)(\/tree\/[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.@%+-]+)*)?\/?$/.exec(raw.trim());
+	return m ? `https://github.com/${m[1]}/${m[2]}${m[3] ?? ''}` : undefined;
+}
+
+export type SmitherySkillResult = {
+	readonly qualifiedName: string;
+	readonly displayName: string;
+	readonly description: string;
+	readonly categories: readonly string[];
+	/** the stars of the repository the skill lives in */
+	readonly stars: number;
+	readonly gitUrl: string;
+	readonly verified: boolean;
+	readonly createdAt?: string;
+};
+
+/** registry.smithery.ai/skills: skills with the section Smithery put them in */
+export function parseSmitherySkills(data: any): SmitherySkillResult[] {
+	const items: any[] = Array.isArray(data?.skills) ? data.skills : [];
+	const out: SmitherySkillResult[] = [];
+	for (const s of items) {
+		const q = str(s?.qualifiedName);
+		const gitUrl = githubFolderUrlOf(str(s?.gitUrl));
+		if (!q || !gitUrl || s?.listed === false) continue;
+		out.push({
+			qualifiedName: q, displayName: str(s?.displayName) ?? q, description: str(s?.description) ?? '', categories: Array.isArray(s?.categories) ? s.categories.filter((c: unknown) => typeof c === 'string') : [],
+			stars: num(s?.externalStars), gitUrl, verified: s?.verified === true, createdAt: str(s?.createdAt),
+		});
+	}
+	return out;
+}
+
+export type DockerMcpResult = {
+	/** the image name under the "mcp" namespace, without it ("github" for mcp/github) */
+	readonly name: string;
+	readonly description: string;
+	readonly pulls: number;
+	readonly stars: number;
+	readonly updatedAt?: string;
+};
+
+/** hub.docker.com/v2/namespaces/mcp/repositories: the MCP server images Docker curates, with how many times each was pulled */
+export function parseDockerMcp(data: any): DockerMcpResult[] {
+	const items: any[] = Array.isArray(data?.results) ? data.results : [];
+	const out: DockerMcpResult[] = [];
+	for (const r of items) {
+		const name = str(r?.name);
+		if (!name || !/^[a-z0-9][a-z0-9._-]*$/.test(name) || r?.is_private === true || name === 'catalog') continue;
+		out.push({ name, description: str(r?.description) ?? '', pulls: num(r?.pull_count), stars: num(r?.star_count), updatedAt: str(r?.last_updated) });
+	}
+	return out;
+}
+
+export type OpenVsxResult = {
+	/** namespace.name, the id the editor installs by */
+	readonly id: string;
+	readonly displayName: string;
+	readonly description: string;
+	readonly version: string;
+	readonly downloads: number;
+	readonly rating?: number;
+	readonly ratingCount: number;
+	readonly verified: boolean;
+	readonly deprecated: boolean;
+	readonly updatedAt?: string;
+	readonly iconUrl?: string;
+	readonly publisher: string;
+};
+
+/** open-vsx.org/api/-/search */
+export function parseOpenVsx(data: any): OpenVsxResult[] {
+	const items: any[] = Array.isArray(data?.extensions) ? data.extensions : [];
+	const out: OpenVsxResult[] = [];
+	for (const e of items) {
+		const ns = str(e?.namespace), name = str(e?.name);
+		if (!ns || !name || !/^[A-Za-z0-9_.-]+$/.test(ns) || !/^[A-Za-z0-9_.-]+$/.test(name)) continue;
+		const icon = str(e?.files?.icon);
+		out.push({
+			id: `${ns}.${name}`, displayName: str(e?.displayName) ?? name, description: str(e?.description) ?? '', version: str(e?.version) ?? '',
+			downloads: num(e?.downloadCount), rating: typeof e?.averageRating === 'number' && e.averageRating > 0 ? e.averageRating : undefined, ratingCount: num(e?.reviewCount),
+			verified: e?.verified === true, deprecated: e?.deprecated === true, updatedAt: str(e?.timestamp), iconUrl: icon && /^https:\/\/open-vsx\.org\//.test(icon) ? icon : undefined, publisher: ns,
+		});
+	}
+	return out;
+}

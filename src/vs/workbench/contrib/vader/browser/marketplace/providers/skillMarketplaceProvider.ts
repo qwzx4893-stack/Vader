@@ -7,7 +7,8 @@ import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase 
 import { ISkillService, SkillRecord } from '../../../common/skills/skillService.js';
 import { GithubSkillEntry, IDiscoveryMainService, RepoSignals } from '../../../common/discovery/discoveryServiceTypes.js';
 import { githubRepoUrlOf, ownerOfGithubUrl } from '../../../common/discovery/feedParsers.js';
-import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem, MarketplaceTrust } from '../../../common/marketplace/marketplaceTypes.js';
+import { IMarketplaceProvider, ItemFact, IUnifiedMarketplaceService, MarketplaceItem, MarketplaceTrust } from '../../../common/marketplace/marketplaceTypes.js';
+import { categoryOf, classify } from '../../../common/marketplace/categories.js';
 import { computeTrust, TrustInputs } from '../../../common/marketplace/trustScore.js';
 import { isSourceOn } from '../../../common/marketplace/addonSources.js';
 import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
@@ -17,6 +18,7 @@ import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
 //   - the GitHub repositories kept as sources (anthropics/skills and openai/skills by default, and the ones the person adds)
 //   - skills.sh, a live index with install counts
 //   - GitHub's own search for repositories that tag themselves "agent-skills"
+//   - SkillsMP and Smithery's registry of skills (both index skills that live on GitHub)
 //   - SkillNet
 // The same skill found by two sources is one row that says it was found twice (two sources agreeing is a signal in the score).
 // What each source knows goes into the score as it is read, every time; nothing is stored as a ready-made number. Installed skills come from
@@ -40,10 +42,32 @@ type Candidate = {
 	readonly skillsSh?: { readonly repo: string; readonly skillId: string };
 	/** a whole repository found by topic: it may hold one skill or many */
 	readonly wholeRepo?: boolean;
+	/** the section names the source itself gave ("Productivity") */
+	readonly sourceCategories?: readonly string[];
 	readonly signals: LiveSignals;
 };
 
+const fmtDate = (iso: string | undefined): string | undefined => { const t = iso ? Date.parse(iso) : NaN; return Number.isFinite(t) ? new Date(t).toISOString().slice(0, 10) : undefined; };
+const fmtCount = (n: number): string => n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1).replace(/\.0$/, '')}M` : n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, '')}K` : String(n);
+const fmtSize = (n: number): string => n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
+
+/** the facts on a skill's own page, from whatever the sources said */
+function skillFacts(o: { publisher?: string; sources?: readonly string[]; sizeBytes?: number; repositoryUrl?: string; signals: LiveSignals }): ItemFact[] {
+	const f: ItemFact[] = [];
+	if (o.publisher) f.push({ label: 'Publisher', value: o.publisher, href: `https://github.com/${o.publisher}` });
+	if (o.sources?.length) f.push({ label: 'Found in', value: o.sources.join(', ') });
+	if (o.sizeBytes !== undefined) f.push({ label: 'Size', value: fmtSize(o.sizeBytes) });
+	if (typeof o.signals.sourceInstalls === 'number') f.push({ label: 'Installed', value: `${fmtCount(o.signals.sourceInstalls)} times` });
+	if (typeof o.signals.stars === 'number') f.push({ label: 'Stars', value: fmtCount(o.signals.stars) });
+	const changed = fmtDate(o.signals.pushedAt); if (changed) f.push({ label: 'Last change', value: changed });
+	if (o.signals.license !== undefined) f.push({ label: 'Licence', value: o.signals.license ?? 'none declared' });
+	if (o.signals.archived) f.push({ label: 'Status', value: 'Archived' });
+	if (o.repositoryUrl) f.push({ label: 'Repository', value: o.repositoryUrl.replace('https://github.com/', ''), href: o.repositoryUrl });
+	return f;
+}
+
 const SKILLS_SH_BROWSE_QUERIES = ['best practices', 'testing', 'pdf', 'code review'];
+const SKILLSMP_BROWSE_QUERIES = ['documents', 'testing'];
 
 const signalsOf = (s: RepoSignals | undefined): LiveSignals => s ? {
 	stars: s.stars, forks: s.forks, pushedAt: s.pushedAt, createdAt: s.createdAt, archived: s.archived, license: s.license ?? null, ownerType: s.ownerType,
@@ -51,7 +75,7 @@ const signalsOf = (s: RepoSignals | undefined): LiveSignals => s ? {
 
 const keyOf = (c: Candidate): string => c.repo ? `${c.repo.toLowerCase()}#${c.name.toLowerCase()}` : (c.repositoryUrl ?? c.name).toLowerCase();
 
-class SkillMarketplaceProvider implements IMarketplaceProvider {
+export class SkillMarketplaceProvider implements IMarketplaceProvider {
 	readonly id = 'skills';
 	readonly displayName = 'Agent Skills';
 	readonly itemType = 'SKILL' as const;
@@ -102,7 +126,11 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 				filesystemAccess: skill.requestedCapabilities.fs,
 				terminalAccess: skill.requestedCapabilities.terminal,
 			},
-			metadata: { skillId: skill.id, category: skill.category, pinned: skill.pinned, instructionsHash: skill.instructionsHash, instructions: skill.instructions, repositoryUrl: skill.source.repositoryUrl, repo: githubRepoUrlOf(skill.source.repositoryUrl)?.slice('https://github.com/'.length) },
+			metadata: {
+				skillId: skill.id, category: skill.category, pinned: skill.pinned, instructionsHash: skill.instructionsHash, instructions: skill.instructions, repositoryUrl: skill.source.repositoryUrl, repo: githubRepoUrlOf(skill.source.repositoryUrl)?.slice('https://github.com/'.length),
+				categories: classify('skill', { name: skill.name, description: skill.description }),
+				facts: skillFacts({ publisher, sizeBytes: skill.instructions.length, repositoryUrl: skill.source.repositoryUrl, signals: live ?? {} }),
+			},
 		};
 	}
 
@@ -145,6 +173,8 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 				trustScore: computeTrust({ kind: 'skill', name: first.name, publisher, instructions: instructions || undefined, ...signals, sourceInstalls, listedBy: sources.size }),
 				security: { source: repositoryUrl ?? repo ?? 'skills.sh', repositoryUrl, executesCode: false },
 				metadata: {
+					categories: classify('skill', { name: first.name, description: first.description || g.find(c => c.description)?.description, sourceCategories: g.flatMap(c => c.sourceCategories ?? []) }),
+					facts: skillFacts({ publisher, sources: labels, sizeBytes: g.find(c => c.sizeBytes !== undefined)?.sizeBytes, repositoryUrl: repositoryUrl ? (githubRepoUrlOf(repositoryUrl) ?? repositoryUrl) : repo ? `https://github.com/${repo}` : undefined, signals: { ...signals, sourceInstalls } }),
 					repositoryUrl, repo, instructions, signals, sourcesListing: labels, listedBy: sources.size,
 					skillsSh: g.find(c => c.skillsSh)?.skillsSh, wholeRepo: g.every(c => c.wholeRepo) && g.some(c => c.wholeRepo),
 				},
@@ -180,6 +210,22 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 		}));
 	}
 
+	private async _skillsMpCandidates(queries: readonly string[]): Promise<Candidate[]> {
+		const lists = await Promise.all(queries.map(q => this._discoveryService.searchSkillsMp(q)));
+		return lists.flat().map((r): Candidate => ({
+			name: r.name, description: r.description, repositoryUrl: r.githubUrl, repo: githubRepoUrlOf(r.githubUrl)?.slice('https://github.com/'.length), publisher: r.author ?? ownerOfGithubUrl(r.githubUrl),
+			sourceId: 'skillsmp', sourceLabel: 'SkillsMP', signals: { stars: r.stars, pushedAt: r.updatedAt },
+		}));
+	}
+
+	private async _smitherySkillCandidates(queries: readonly string[]): Promise<Candidate[]> {
+		const lists = await Promise.all(queries.map(q => this._discoveryService.searchSmitherySkills(q)));
+		return lists.flat().map((r): Candidate => ({
+			name: r.displayName, description: r.description, repositoryUrl: r.gitUrl, repo: githubRepoUrlOf(r.gitUrl)?.slice('https://github.com/'.length), publisher: ownerOfGithubUrl(r.gitUrl) ?? r.qualifiedName.split('/')[0],
+			sourceId: 'smithery-skills', sourceLabel: 'Smithery', sourceCategories: r.categories, signals: { stars: r.stars },
+		}));
+	}
+
 	private async _skillNetCandidates(query: string): Promise<Candidate[]> {
 		const results = await this._discoveryService.searchSkillNet(query);
 		return results.map((r): Candidate => ({
@@ -192,7 +238,7 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 		const repos = await this._discoveryService.searchGithubTopic('agent-skills', query);
 		return repos.map((r): Candidate => ({
 			name: r.repo.split('/')[1], description: r.description ?? '', repositoryUrl: r.url, repo: r.repo, publisher: r.repo.split('/')[0], sourceId: 'github-topic-skills',
-			sourceLabel: 'GitHub topic: agent-skills', wholeRepo: true, signals: signalsOf(r),
+			sourceLabel: 'GitHub topic: agent-skills', wholeRepo: true, sourceCategories: r.topics, signals: signalsOf(r),
 		}));
 	}
 
@@ -214,13 +260,18 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 		return new Set(this._skillService.list().map(s => s.source.repositoryUrl).filter((u): u is string => !!u));
 	}
 
-	async browse(_token: CancellationToken): Promise<MarketplaceItem[]> {
+	async browse(_token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
+		const cat = category ? categoryOf('skill', category) : undefined;
+		// a section is looked for by name in every source; the front page is each source's own best
+		const seeds = cat?.seeds ?? SKILLS_SH_BROWSE_QUERIES;
 		const candidates = await this._gather([
 			{ id: 'github-repos', label: 'GitHub repositories', run: () => this._githubRepoCandidates() },
-			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates(SKILLS_SH_BROWSE_QUERIES) },
-			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates('') },
+			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates(seeds) },
+			{ id: 'skillsmp', label: 'SkillsMP', run: () => this._skillsMpCandidates(cat ? seeds : SKILLSMP_BROWSE_QUERIES) },
+			{ id: 'smithery-skills', label: 'Smithery skills', run: () => this._smitherySkillCandidates(cat ? seeds : ['']) },
+			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates(cat ? seeds[0] : '') },
 		]).catch(e => { if (this._skillService.list().length === 0) throw e; return [] as Candidate[]; });
-		const remote = this._merge(candidates, this._installedUrls());
+		const remote = this._merge(candidates, this._installedUrls()).filter(i => !cat || (i.metadata.categories as string[]).includes(cat.id));
 		const remoteUrls = new Set(remote.map(r => r.id));
 		const installed = this._skillService.list().map(s => this._installedToItem(s));
 		const installedElsewhere = installed.filter(i => !i.security?.repositoryUrl || !remoteUrls.has(i.security.repositoryUrl));
@@ -229,18 +280,21 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 		return [...installedFromListing, ...installedElsewhere, ...remote.filter(r => !installedUrls.has(r.security?.repositoryUrl))];
 	}
 
-	async search(query: string, token: CancellationToken): Promise<MarketplaceItem[]> {
+	async search(query: string, token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
 		const q = query.toLowerCase();
 		const installed = this._skillService.list().filter(s => `${s.name} ${s.description}`.toLowerCase().includes(q));
 		const candidates = await this._gather([
 			{ id: 'github-repos', label: 'GitHub repositories', run: async () => (await this._githubRepoCandidates()).filter(c => `${c.name} ${c.description}`.toLowerCase().includes(q)) },
 			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates([query]) },
+			{ id: 'skillsmp', label: 'SkillsMP', run: () => this._skillsMpCandidates([query]) },
+			{ id: 'smithery-skills', label: 'Smithery skills', run: () => this._smitherySkillCandidates([query]) },
 			{ id: 'skillnet', label: 'SkillNet', run: () => this._skillNetCandidates(query) },
 			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates(query) },
 		]).catch(() => [] as Candidate[]);
 		if (token.isCancellationRequested) return [];
 		const installedIds = new Set(installed.map(s => s.source.repositoryUrl));
-		const remote = this._merge(candidates, this._installedUrls()).filter(r => !installedIds.has(r.id));
+		const cat = category ? categoryOf('skill', category) : undefined;
+		const remote = this._merge(candidates, this._installedUrls()).filter(r => !installedIds.has(r.id) && (!cat || (r.metadata.categories as string[]).includes(cat.id)));
 		return [...installed.map(s => this._installedToItem(s)), ...remote];
 	}
 
@@ -274,7 +328,10 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 			...item, description, sizeBytes, id: repositoryUrl ?? item.id,
 			security: { ...item.security, source: repositoryUrl ?? item.security?.source ?? '', repositoryUrl },
 			trustScore: computeTrust({ kind: 'skill', name: item.name, publisher: item.publisher, instructions, ...live, listedBy }),
-			metadata: { ...item.metadata, instructions, repositoryUrl, signals: live, refined: true },
+			metadata: {
+				...item.metadata, instructions, repositoryUrl, signals: live, refined: true,
+				facts: skillFacts({ publisher: item.publisher, sources: item.metadata.sourcesListing as string[] | undefined, sizeBytes, repositoryUrl: repo ? `https://github.com/${repo}` : repositoryUrl, signals: live }),
+			},
 		};
 	}
 
@@ -286,6 +343,7 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 			// skills.sh names the skill by folder: find it in its repository and read only that skill
 			const entry = await this._discoveryService.resolveGithubSkill(sh.repo, sh.skillId);
 			if (entry) { instructions = entry.instructions; repositoryUrl = entry.repositoryUrl; }
+			else throw new Error(`Could not find the skill "${sh.skillId}" in ${sh.repo}. It may have been moved or renamed there.`);
 		}
 		if (!instructions && item.metadata.wholeRepo && typeof item.metadata.repo === 'string') {
 			// a repository found by topic: one skill is installed, several need a choice the person makes by adding the repository as a source

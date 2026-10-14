@@ -3,8 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { GithubSkillEntry, GithubSkillListing, IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, NpmMcpResult, RepoSignals, SkillNetSearchResult, SkillsShResult, SmitheryResult } from '../common/discovery/discoveryServiceTypes.js';
-import { parseGithubSearch, parseNpmSearch, parseRepoSignals, parseSkillsSh, parseSmithery, registryEntryStatus } from '../common/discovery/feedParsers.js';
+import { DockerMcpResult, GithubSkillEntry, GithubSkillListing, IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, NpmMcpResult, OpenVsxResult, RepoSignals, SkillNetSearchResult, SkillsMpResult, SkillsShResult, SmitherySkillResult, SmitheryResult } from '../common/discovery/discoveryServiceTypes.js';
+import { parseDockerMcp, parseGithubSearch, parseNpmSearch, parseOpenVsx, parseRepoSignals, parseSkillsMp, parseSkillsSh, parseSmithery, parseSmitherySkills, registryEntryStatus } from '../common/discovery/feedParsers.js';
 import { parseRepoRef, parseSkillFrontmatter, skillFolderUrl, skillFoldersFromTree } from '../common/discovery/githubSkillSources.js';
 import { rawSkillInstructionUrls } from '../common/discovery/githubSkillUrl.js';
 
@@ -18,6 +18,9 @@ const SKILLS_SH_BASE_URL = 'https://skills.sh';
 const SMITHERY_BASE_URL = 'https://registry.smithery.ai';
 const NPM_REGISTRY_BASE_URL = 'https://registry.npmjs.org';
 const FEED_CACHE_TTL_MS = 10 * 60_000;
+const SKILLSMP_BASE_URL = 'https://skillsmp.com';
+const DOCKER_HUB_BASE_URL = 'https://hub.docker.com';
+const OPEN_VSX_BASE_URL = 'https://open-vsx.org';
 const SIGNALS_CACHE_TTL_MS = 6 * 60 * 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
 // Responses come from third-party servers; never read an unbounded body into memory.
@@ -101,6 +104,31 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 	searchSmithery(query: string): Promise<SmitheryResult[]> {
 		const q = query.trim();
 		return this._cached(`smithery:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseSmithery(await fetchJson(`${SMITHERY_BASE_URL}/servers?${q ? `q=${encodeURIComponent(q)}&` : ''}pageSize=24`)));
+	}
+
+	searchSkillsMp(query: string): Promise<SkillsMpResult[]> {
+		const q = query.trim();
+		if (q.length < 2) { return Promise.resolve([]); }
+		return this._cached(`skillsmp:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseSkillsMp(await fetchJson(`${SKILLSMP_BASE_URL}/api/v1/skills/search?q=${encodeURIComponent(q)}&limit=24`)));
+	}
+
+	searchSmitherySkills(query: string): Promise<SmitherySkillResult[]> {
+		const q = query.trim();
+		return this._cached(`smitheryskills:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseSmitherySkills(await fetchJson(`${SMITHERY_BASE_URL}/skills?${q ? `q=${encodeURIComponent(q)}&` : ''}pageSize=24`)));
+	}
+
+	async searchDockerMcp(query: string): Promise<DockerMcpResult[]> {
+		// the namespace has a few hundred images and no search of its own: the hundred most pulled are read once and narrowed here
+		const all = await this._cached('dockermcp', FEED_CACHE_TTL_MS, async () => parseDockerMcp(await fetchJson(`${DOCKER_HUB_BASE_URL}/v2/namespaces/mcp/repositories?page_size=100&ordering=-pull_count`)));
+		const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+		return words.length === 0 ? all.slice(0, 24) : all.filter(r => words.every(w => `${r.name} ${r.description}`.toLowerCase().includes(w))).slice(0, 24);
+	}
+
+	searchOpenVsx(query: string, category: string | undefined, sortBy: 'downloadCount' | 'rating' | 'timestamp' | 'relevance'): Promise<OpenVsxResult[]> {
+		const params = new URLSearchParams({ size: '30', sortOrder: 'desc', sortBy: query.trim() && sortBy === 'downloadCount' ? 'relevance' : sortBy });
+		if (query.trim()) { params.set('query', query.trim()); }
+		if (category && /^[A-Za-z ]{2,40}$/.test(category)) { params.set('category', category); }
+		return this._cached(`openvsx:${params.toString()}`, FEED_CACHE_TTL_MS, async () => parseOpenVsx(await fetchJson(`${OPEN_VSX_BASE_URL}/api/-/search?${params.toString()}`)));
 	}
 
 	searchNpmMcp(query: string): Promise<NpmMcpResult[]> {

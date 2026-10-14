@@ -173,6 +173,9 @@ function requestedFrom(text: string): { fs: boolean; terminal: boolean; network:
 	};
 }
 
+/** what a skill's text asks for, for the skill's own page */
+export const skillAsks = (text: string): { fs: boolean; terminal: boolean; network: boolean; mcp: boolean } => requestedFrom(text);
+
 export function computeTrust(i: TrustInputs): TrustScore {
 	if (i.userTrustState === 'blocked' || i.flaggedMalicious) {
 		return { score: 0, level: 'low', factors: [{ label: i.flaggedMalicious ? 'The gallery flags it as malicious' : 'You blocked it', points: 0 }] };
@@ -269,5 +272,6 @@ export function computeTrust(i: TrustInputs): TrustScore {
 }
 
 function formatCount(n: number): string {
+	if (n >= 1_000_000) { return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1).replace(/\.0$/, '')}M` }
 	return n >= 1000 ? `${(n / 1000).toFixed(n >= 10_000 ? 0 : 1).replace(/\.0$/, '')}K` : String(n);
 }
