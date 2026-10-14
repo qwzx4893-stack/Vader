@@ -538,6 +538,10 @@ export type GlobalSettings = {
 	autoCheckUpdates: boolean; // look for a newer GitHub release in the background (off by default: nothing contacts the network on its own)
 	/** US dollars a day the agent may spend on models; null means no limit. At the limit a running task pauses and asks before it goes on (common/usageAccounting.ts). */
 	dailySpendLimitUsd: number | null;
+	/** a flat percentage taken off every list price when Vader estimates cost (a discount or contract); the estimate only, never what is charged */
+	priceDiscountPercent: number;
+	/** the person's own prices, US dollars per million tokens by model name, replacing the built-in price of that model */
+	modelPriceOverrides: { [modelName: string]: { input: number, output: number, cache_read?: number, cache_write?: number } };
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -558,6 +562,8 @@ export const defaultGlobalSettings: GlobalSettings = {
 	customAcpAgents: [],
 	autoCheckUpdates: false,
 	dailySpendLimitUsd: null,
+	priceDiscountPercent: 0,
+	modelPriceOverrides: {},
 }
 
 export type GlobalSettingName = keyof GlobalSettings

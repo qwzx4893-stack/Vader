@@ -29,8 +29,9 @@ import { TransferEditorType, TransferFilesInfo, transferEditorTypes } from '../.
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
-import { StoreView, TrustMeter } from '../vader-marketplace-tsx/Store.js';
-import { formatUsd, formatTokens } from '../../../../common/usageAccounting.js';
+import { TrustMeter } from '../vader-marketplace-tsx/Store.js';
+import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js';
+import { formatUsd, formatTokens, formatCost, PROVIDER_USAGE_PAGES } from '../../../../common/usageAccounting.js';
 import { computeTrust } from '../../../../common/marketplace/trustScore.js';
 
 type Tab =
@@ -977,6 +978,70 @@ const ROUTER_CATEGORIES: { category: RouterCategory, label: string, desc: string
 
 const DEFAULT_ROUTER_OPTION = '(default: Chat model)'
 
+// Vader addition: check the estimate against the provider, and the person's own prices for a contract or an unknown model.
+const PricesAndProviderPages = () => {
+	const accessor = useAccessor()
+	const settingsState = useSettingsState()
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const openerService = accessor.get('IOpenerService')
+	const g = settingsState.globalSettings
+	const withKey = Object.entries(PROVIDER_USAGE_PAGES).filter(([provider]) => (settingsState.settingsOfProvider as any)[provider]?._didFillInProviderSettings)
+	const [discountText, setDiscountText] = useState(String(g.priceDiscountPercent || ''))
+	const [model, setModel] = useState('')
+	const [inText, setInText] = useState('')
+	const [outText, setOutText] = useState('')
+	const saveDiscount = (text: string) => {
+		const n = Number(text)
+		vaderSettingsService.setGlobalSetting('priceDiscountPercent', text.trim() === '' || !Number.isFinite(n) || n < 0 || n > 100 ? 0 : n)
+	}
+	const overrides = g.modelPriceOverrides ?? {}
+	const addOverride = () => {
+		const i = Number(inText), o = Number(outText)
+		if (!model.trim() || !Number.isFinite(i) || !Number.isFinite(o) || i < 0 || o < 0) return
+		vaderSettingsService.setGlobalSetting('modelPriceOverrides', { ...overrides, [model.trim()]: { input: i, output: o } })
+		setModel(''); setInText(''); setOutText('')
+	}
+	const removeOverride = (name: string) => {
+		const { [name]: _drop, ...rest } = overrides
+		vaderSettingsService.setGlobalSetting('modelPriceOverrides', rest)
+	}
+	const field = 'px-2 py-0.5 rounded-sm border border-vader-border-2 bg-vader-bg-1 text-vader-fg-1 outline-none'
+	return <div className='border border-vader-border-3 rounded p-2 mb-4 flex flex-col gap-3'>
+		<div className='flex flex-col gap-1'>
+			<span className='font-medium'>Check it against the provider</span>
+			<span className='text-vader-fg-3 text-xs'>These pages show what each provider really charged. They open in your browser.</span>
+			<div className='flex flex-wrap gap-2 mt-1'>
+				{(withKey.length ? withKey : Object.entries(PROVIDER_USAGE_PAGES).slice(0, 4)).map(([provider, page]) => <VaderButtonBgDarken key={provider} className='px-2 py-0.5 text-xs' onClick={() => openerService.open(URI.parse(page!.url))}>{page!.label}</VaderButtonBgDarken>)}
+			</div>
+		</div>
+		<div className='flex items-center justify-between gap-3'>
+			<div className='flex flex-col'>
+				<span>Discount on list prices</span>
+				<span className='text-vader-fg-3 text-xs'>For a flat discount, such as 20% off. It changes the estimate only, never what you are charged.</span>
+			</div>
+			<div className='flex items-center gap-1'>
+				<input className={`w-16 ${field}`} inputMode='decimal' value={discountText} placeholder='0' onChange={e => setDiscountText(e.target.value)} onBlur={() => saveDiscount(discountText)} onKeyDown={e => { if (e.key === 'Enter') saveDiscount(discountText) }} />
+				<span className='text-vader-fg-3'>%</span>
+			</div>
+		</div>
+		<div className='flex flex-col gap-1'>
+			<span>Your own prices</span>
+			<span className='text-vader-fg-3 text-xs'>For a model Vader has no price for, or a contract. US dollars per million tokens. A model the provider reports the charge for does not need one.</span>
+			{Object.entries(overrides).map(([name, p]) => <div key={name} className='flex items-center gap-2 text-xs'>
+				<span className='font-mono flex-1 truncate'>{name}</span>
+				<span className='text-vader-fg-3'>in {p?.input} / out {p?.output}</span>
+				<VaderButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => removeOverride(name)}>Remove</VaderButtonBgDarken>
+			</div>)}
+			<div className='flex items-center gap-2 mt-1'>
+				<input className={`flex-1 min-w-0 ${field}`} placeholder='Model name' value={model} onChange={e => setModel(e.target.value)} />
+				<input className={`w-16 ${field}`} inputMode='decimal' placeholder='Input' value={inText} onChange={e => setInText(e.target.value)} />
+				<input className={`w-16 ${field}`} inputMode='decimal' placeholder='Output' value={outText} onChange={e => setOutText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addOverride() }} />
+				<VaderButtonBgDarken className='px-2 py-0.5 text-xs' onClick={addOverride}>Add</VaderButtonBgDarken>
+			</div>
+		</div>
+	</div>
+}
+
 // Vader addition: AUTO/MANUAL Model Router. See common/modelRouter/.
 // Vader addition: today's spending, an optional daily limit, and the commands and tools allowed in this project without asking again.
 export const SpendingAndProjectSection = () => {
@@ -1003,18 +1068,18 @@ export const SpendingAndProjectSection = () => {
 
 	return <div className='max-w-[600px]'>
 		<h2 className={`text-3xl mb-2`}>Spending and approvals</h2>
-		<h4 className={`text-vader-fg-3 mb-4`}>What the agent has cost, read from each provider's own token counts, and the commands you chose to stop being asked about.</h4>
+		<h4 className={`text-vader-fg-3 mb-4`}>Vader counts the tokens each provider reports. The money is worked out from list prices, so it is an estimate (shown with ≈) unless the provider says what it charged. Your provider's own page is the bill. Below that: the commands you chose to stop being asked about.</h4>
 
 		<div className='border border-vader-border-3 rounded p-2 mb-4'>
 			<div className='flex items-center justify-between'>
 				<span className='font-medium'>Today</span>
-				<span>{formatUsd(today.costUsd)}{today.unpricedTurns > 0 ? ' +' : ''} <span className='text-vader-fg-3 text-xs'>{formatTokens(today.inputTokens)} in, {formatTokens(today.outputTokens)} out</span></span>
+				<span>{formatCost(today.costUsd, today.billedCostUsd)}{today.unpricedTurns > 0 ? ' +' : ''} <span className='text-vader-fg-3 text-xs'>{formatTokens(today.inputTokens)} in, {formatTokens(today.outputTokens)} out</span></span>
 			</div>
-			{today.unpricedTurns > 0 ? <div className='text-vader-fg-3 text-xs mt-1'>{today.unpricedTurns} answer(s) came from a model whose price Vader does not know; they are not in the amount. Local models are free.</div> : null}
+			{today.unpricedTurns > 0 ? <div className='text-vader-fg-3 text-xs mt-1'>{today.unpricedTurns} answer(s) came from a model whose price Vader does not know; they are not in the amount (never counted as free). Add its price below. Local models are free.</div> : null}
 			<div className='flex items-center justify-between gap-3 mt-3'>
 				<div className='flex flex-col'>
 					<span>Daily limit</span>
-					<span className='text-vader-fg-3 text-xs'>At the limit a running task pauses and asks before it goes on. Empty means no limit.</span>
+					<span className='text-vader-fg-3 text-xs'>When today's estimate reaches the limit a running task pauses and asks before it goes on. A provider that bills more than the list price can still spend more. Empty means no limit.</span>
 				</div>
 				<div className='flex items-center gap-1'>
 					<span className='text-vader-fg-3'>$</span>
@@ -1022,6 +1087,8 @@ export const SpendingAndProjectSection = () => {
 				</div>
 			</div>
 		</div>
+
+		<PricesAndProviderPages />
 
 		<div className='text-vader-fg-3 text-sm mb-2'>Allowed in this project{projectKey ? <span className='font-mono'> ({projectKey})</span> : null}</div>
 		{!projectKey ? <div className='text-vader-fg-3 text-xs'>Open a folder to keep approvals for it.</div> : approvals.length === 0 ? <div className='text-vader-fg-3 text-xs'>Nothing yet. When the agent asks to run a command, "Allow in this project" remembers that exact command here. Rules that always ask (keys, installs, sudo) are never skipped.</div> : <div className='flex flex-col gap-y-1'>
@@ -1206,13 +1273,17 @@ const SkillSourcesSection = () => {
 }
 
 export const SkillsPage = () => {
-	const [tab, setTab] = useState<'store' | 'installed' | 'sources'>('store')
+	const [tab, setTab] = useState<'installed' | 'sources'>('installed')
 	const skills = useSkillsState()
-	const tabs: { id: typeof tab, label: string }[] = [{ id: 'store', label: 'Store' }, { id: 'installed', label: `Installed ${skills.length || ''}`.trim() }, { id: 'sources', label: 'Sources' }]
+	const commandService = useAccessor().get('ICommandService')
+	const tabs: { id: typeof tab, label: string }[] = [{ id: 'installed', label: `Installed ${skills.length || ''}`.trim() }, { id: 'sources', label: 'Sources' }]
 	return <div className='flex flex-col gap-4' data-testid='vader-settings-skills'>
-		<div>
-			<h2 className='text-3xl mb-2'>Skills</h2>
-			<h4 className='text-vader-fg-3 max-w-[760px]'>Skills are written instructions the agent follows when a task matches, such as how to make a PDF or how your team writes commits. Installing one never switches it on: read it first.</h4>
+		<div className='flex items-start gap-4'>
+			<div className='flex-1'>
+				<h2 className='text-3xl mb-2'>Skills</h2>
+				<h4 className='text-vader-fg-3 max-w-[760px]'>The skills this computer has: switch them on and off, read them, update or remove them. A skill is written instructions the agent follows when a task matches. To find new ones, use Add-ons.</h4>
+			</div>
+			<VaderButtonBgDarken className='px-3 py-1 shrink-0' onClick={() => commandService.executeCommand(VADER_OPEN_ADDONS_ACTION_ID)}>Browse skills in Add-ons</VaderButtonBgDarken>
 		</div>
 		<div className='flex items-end justify-between border-b border-vader-border-3'>
 			<div className='flex'>
@@ -1220,7 +1291,6 @@ export const SkillsPage = () => {
 			</div>
 			<div className='pb-2'><TrustLegend /></div>
 		</div>
-		{tab === 'store' ? <StoreView types={['SKILL']} layout='wide' showSearch searchPlaceholder='Search skills across all sources' /> : null}
 		{tab === 'installed' ? <SkillsSection /> : null}
 		{tab === 'sources' ? <SkillSourcesSection /> : null}
 	</div>
@@ -1782,7 +1852,7 @@ const PrivacySection = () => {
 	const contacts: { who: string, when: string, host: string }[] = [
 		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure (or localhost for local models)' },
 		{ who: 'Extension registry', when: 'When you browse, search or install extensions.', host: 'open-vsx.org' },
-		{ who: 'Skills and MCP stores', when: 'When you open the Skills or MCP page, or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a GitHub repository\'s public file list and its SKILL.md files. Nothing from your project is sent.', host: 'api.github.com, raw.githubusercontent.com, registry.modelcontextprotocol.io, api-skillnet.openkg.cn' },
+		{ who: 'Add-ons lists', when: 'When you open Add-ons, or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a GitHub repository\'s public file list and its SKILL.md files. Nothing from your project is sent.', host: 'api.github.com, raw.githubusercontent.com, registry.modelcontextprotocol.io, api-skillnet.openkg.cn' },
 		{ who: 'Release check', when: autoCheckUpdates ? 'Now on: a quiet check for a newer Vader release every few hours, plus the manual button.' : 'Only when you press "Check for Updates". The background check is off.', host: 'api.github.com' },
 		{ who: 'Coding agents you add', when: 'Only after you pick one in Settings > Coding Agents and press Download or Install, or send it a message. The vendor\'s own program then talks to the vendor with your account; Vader does not see the sign-in.', host: 'the vendor of that agent (npm registry, github.com, downloads.cursor.com, dl.google.com for downloads)' },
 		{ who: 'Pages the agent opens', when: 'Only when the agent uses its browser tool, and only the sites it was told to visit.', host: 'the sites in question' },
@@ -2432,11 +2502,9 @@ Use Model Context Protocol to provide Agent mode with more tools.
 										<MCPServersList />
 									</ErrorBoundary>
 									<div className='mt-10'>
-										<h3 className='text-xl mb-1'>Add from the registry</h3>
-										<h4 className='text-vader-fg-3 mb-4 max-w-[760px]'>Servers listed in the official MCP Registry. Adding one writes its entry to your MCP config file, after asking for any key it needs. Servers from a known organisation are listed first; anyone can publish to the registry, so read the score before you add one.</h4>
-										<ErrorBoundary>
-											<StoreView types={['MCP_SERVER']} layout='wide' showSearch searchPlaceholder='Search the official MCP Registry' />
-										</ErrorBoundary>
+										<h3 className='text-xl mb-1'>Find more servers</h3>
+										<h4 className='text-vader-fg-3 mb-3 max-w-[760px]'>Servers from the official MCP Registry are in Add-ons, with a trust score and the reasons for it. Adding one writes its entry to your MCP config file, after asking for any key it needs.</h4>
+										<VaderButtonBgDarken className='px-3 py-1' onClick={() => commandService.executeCommand(VADER_OPEN_ADDONS_ACTION_ID)}>Find servers in Add-ons</VaderButtonBgDarken>
 									</div>
 								</ErrorBoundary>
 							</div>

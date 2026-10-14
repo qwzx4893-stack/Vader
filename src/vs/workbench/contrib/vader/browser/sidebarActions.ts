@@ -18,7 +18,7 @@ import { VADER_VIEW_CONTAINER_ID, VADER_VIEW_ID } from './sidebarPane.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { VADER_TOGGLE_SETTINGS_ACTION_ID } from './vaderSettingsPane.js';
-import { VADER_CTRL_L_ACTION_ID } from './actionIDs.js';
+import { VADER_CTRL_L_ACTION_ID, VADER_TOGGLE_ADDONS_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService, awaitMounted } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
@@ -236,6 +236,22 @@ registerAction2(class extends Action2 {
 
 
 // Settings gear
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'vader.addonsAction',
+			title: 'Add-ons',
+			tooltip: 'Add-ons: skills, MCP servers, extensions and agents',
+			icon: { id: 'package' },
+			menu: [{ id: MenuId.ViewTitle, group: 'navigation', order: 0, when: ContextKeyExpr.equals('view', VADER_VIEW_ID), }]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		const commandService = accessor.get(ICommandService)
+		commandService.executeCommand(VADER_TOGGLE_ADDONS_ACTION_ID)
+	}
+})
+
 registerAction2(class extends Action2 {
 	constructor() {
 		super({

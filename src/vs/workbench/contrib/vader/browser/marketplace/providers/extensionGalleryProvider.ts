@@ -6,6 +6,7 @@ import { CancellationToken } from '../../../../../../base/common/cancellation.js
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../../../common/contributions.js';
 import { IExtension, IExtensionsWorkbenchService } from '../../../../extensions/common/extensions.js';
 import { EnablementState, IWorkbenchExtensionEnablementService } from '../../../../../services/extensionManagement/common/extensionManagement.js';
+import { SortBy } from '../../../../../../platform/extensionManagement/common/extensionManagement.js';
 import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem } from '../../../common/marketplace/marketplaceTypes.js';
 import { computeTrust } from '../../../common/marketplace/trustScore.js';
 
@@ -68,6 +69,16 @@ class ExtensionGalleryMarketplaceProvider implements IMarketplaceProvider {
 	async search(query: string, token: CancellationToken): Promise<MarketplaceItem[]> {
 		const pager = await this._extensionsWorkbenchService.queryGallery({ text: query, pageSize: 25 }, token);
 		return pager.firstPage.map(ext => this._toItem(ext));
+	}
+
+	/** the most installed extensions of the gallery, with the installed ones first, for the page a person sees before they search */
+	async browse(token: CancellationToken): Promise<MarketplaceItem[]> {
+		const [pager, local] = await Promise.all([
+			this._extensionsWorkbenchService.queryGallery({ text: '', sortBy: SortBy.InstallCount, pageSize: 30 }, token),
+			this.listInstalled(),
+		]);
+		const seen = new Set(local.map(i => i.id));
+		return [...local, ...pager.firstPage.map(ext => this._toItem(ext)).filter(i => !seen.has(i.id))];
 	}
 
 	async listInstalled(): Promise<MarketplaceItem[]> {

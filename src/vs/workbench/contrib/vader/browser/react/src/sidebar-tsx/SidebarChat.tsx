@@ -36,7 +36,7 @@ import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/Settings.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
-import { formatUsd } from '../../../../common/usageAccounting.js';
+import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAccounting.js';
 
 
 
@@ -343,12 +343,13 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 	const unpriced = (usage?.unpricedTurns ?? 0) > 0
 
 	return <div className='flex items-center gap-x-2 text-xs text-vader-fg-3 text-nowrap'>
-		{pause ? <span className='text-yellow-600'>{pause.reason === 'budget' ? `Paused: the daily limit of ${formatUsd(limit ?? 0)} is reached` : 'Paused'}</span> : null}
+		{pause ? <span className='text-yellow-600'>{pause.reason === 'budget' ? `Paused: today's estimate reached ${formatUsd(limit ?? 0)}` : 'Paused'}</span> : null}
 		{isStreaming ? (pause
 			? <button data-testid='vader-resume' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.resumeRun(threadId)}>{pause.reason === 'budget' ? 'Go on anyway' : 'Resume'}</button>
 			: <button data-testid='vader-pause' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.pauseRun(threadId)}>Pause</button>) : null}
-		{usage && usage.turns > 0 ? <span title={unpriced ? `${usage.unpricedTurns} answer(s) came from a model whose price Vader does not know, so they are not in this amount` : 'What this chat has cost'}>{formatUsd(usage.costUsd)}{unpriced ? '+' : ''} this chat</span> : null}
-		{today.costUsd > 0 ? <span title='What every chat has cost today'>{formatUsd(today.costUsd)} today</span> : null}
+		{usage && usage.turns > 0 ? <span title='Tokens the providers reported for this chat'>{formatTokens(usage.inputTokens + usage.outputTokens)} tokens</span> : null}
+		{usage && usage.turns > 0 ? <span title={unpriced ? `${usage.unpricedTurns} answer(s) came from a model whose price Vader does not know, so they are not in this amount. Set a price in Settings, Spending.` : usage.costUsd === 0 ? 'A model on this computer is free' : (usage.billedCostUsd ?? 0) >= usage.costUsd - 1e-9 ? 'The amount the provider says it charged' : 'Worked out from list prices. Your provider\'s bill can differ (discounts, taxes, cache writes). See Settings, Spending.'}>{usage.costUsd === 0 && !unpriced ? 'free' : formatCost(usage.costUsd, usage.billedCostUsd)}{unpriced ? ' +' : ''} this chat</span> : null}
+		{today.costUsd > 0 ? <span title='Worked out from list prices unless the provider reported the charge'>{formatCost(today.costUsd, today.billedCostUsd)} today</span> : null}
 	</div>
 }
 

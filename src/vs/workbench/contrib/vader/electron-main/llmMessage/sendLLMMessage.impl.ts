@@ -416,7 +416,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 			// when receive text
 			for await (const chunk of response) {
 				// token counts: the last chunk carries them (and has no choices)
-				if (chunk.usage) usage = normalizeUsage({ inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens, cachedInputTokens: (chunk.usage as any).prompt_tokens_details?.cached_tokens })
+				if (chunk.usage) usage = normalizeUsage({ inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens, cachedInputTokens: (chunk.usage as any).prompt_tokens_details?.cached_tokens, cacheWriteInputTokens: (chunk.usage as any).prompt_tokens_details?.cache_write_tokens, ...(providerName === 'openRouter' ? { reportedCostUsd: (chunk.usage as any).cost } : {}) })
 
 				// message
 				const newText = chunk.choices[0]?.delta?.content ?? ''
@@ -658,7 +658,7 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 
 		// Anthropic's input_tokens leaves out what came from or went into the prompt cache, so the three are added back; cache writes are priced at the plain input rate (a slight under-count, never an invented number)
 		const u = response.usage as any
-		const usage = normalizeUsage({ inputTokens: (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0), outputTokens: u?.output_tokens, cachedInputTokens: u?.cache_read_input_tokens ?? 0 })
+		const usage = normalizeUsage({ inputTokens: (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0), outputTokens: u?.output_tokens, cachedInputTokens: u?.cache_read_input_tokens ?? 0, cacheWriteInputTokens: u?.cache_creation_input_tokens ?? 0 })
 		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, toolCalls: toolCalls.length ? toolCalls : undefined, usage })
 	})
 	// on error

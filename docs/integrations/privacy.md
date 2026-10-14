@@ -6,8 +6,8 @@ gallery (Open VSX), the public list of Vader releases on GitHub (`api.github.com
 The editor's own update and telemetry endpoints in `product.json` are not configured. The same list is shown to the user in **Settings > Privacy & Network**.
 Chromium and Electron ship background services that contact Google on their own; Vader turns them off.
 
-## Skills and MCP stores (Settings > Skills and Settings > MCP) - `electron-main/discoveryMainService.ts`
-- Opening the Skills page lists the skills in each GitHub repository the person keeps as a source (by default `anthropics/skills`): one call to `api.github.com` for the repository and one for its file tree, then the `SKILL.md` of each skill from `raw.githubusercontent.com`. Listings are cached for 10 minutes in the main process because GitHub allows 60 unauthenticated calls an hour. Typing in the search box also asks SkillNet (`api-skillnet.openkg.cn`, plain HTTP, a third-party index) and the MCP page asks `registry.modelcontextprotocol.io`.
+## Add-ons lists (the Add-ons page in the chat title bar) - `electron-main/discoveryMainService.ts`
+- Opening Add-ons lists the skills in each GitHub repository the person keeps as a source (by default `anthropics/skills`): one call to `api.github.com` for the repository and one for its file tree, then the `SKILL.md` of each skill from `raw.githubusercontent.com`. Listings are cached for 10 minutes in the main process because GitHub allows 60 unauthenticated calls an hour. Typing in the search box also asks SkillNet (`api-skillnet.openkg.cn`, plain HTTP, a third-party index) and the MCP page asks `registry.modelcontextprotocol.io`.
 - Only the search words travel. No file, path or chat from the workspace is sent. The agent's own `search_skillnet`, `search_mcp_registry` and `fetch_skill_instructions` tools use the same three hosts. (The first version of this page did not name them.)
 - Installing a skill never runs anything: its text is stored switched off and `review_required`. The score on a card is explained in `common/marketplace/trustScore.ts`; it guides what to read first and is not a security scan.
 

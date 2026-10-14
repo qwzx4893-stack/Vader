@@ -60,6 +60,31 @@ try {
 	check('the ledger keeps about two months and no more', Object.keys(long).length <= 62);
 	check('a stored ledger is read back, and nonsense is dropped', JSON.stringify(U.parseLedger({ '2026-10-14': { costUsd: 1, inputTokens: 2, outputTokens: 3 }, bad: { costUsd: 1 }, '2026-10-15': 'x' })) === '{"2026-10-14":{"costUsd":1,"inputTokens":2,"outputTokens":3,"unpricedTurns":0}}' && JSON.stringify(U.parseLedger(null)) === '{}');
 
+	// ---- where the money comes from: billed, estimate, free, unpriced
+	const p = { input: 3, output: 15, cache_read: 0.3, cache_write: 3.75 };
+	check('cache writes are priced at the cache-write rate', near(U.costOfUsage({ inputTokens: 1_000_000, outputTokens: 0, cachedInputTokens: 200_000, cacheWriteInputTokens: 300_000 }, p, false), 0.5 * 3 + 0.2 * 0.3 + 0.3 * 3.75));
+	check('a model with no cache-write rate pays the input rate for them', near(U.costOfUsage({ inputTokens: 1000, outputTokens: 0, cacheWriteInputTokens: 400 }, { input: 2, output: 8 }, false), 1000 * 2 / 1e6));
+	check('cache writes cannot exceed what is left of the input', U.normalizeUsage({ inputTokens: 100, outputTokens: 1, cachedInputTokens: 60, cacheWriteInputTokens: 900 }).cacheWriteInputTokens === 40);
+	const turn = { inputTokens: 1_000_000, outputTokens: 100_000 };
+	check('an estimate says it is an estimate', U.priceTurn(turn, price, false, 'm').source === 'estimate' && near(U.priceTurn(turn, price, false, 'm').costUsd, 4.5));
+	check('what the provider says it charged is used as it is, and called billed', (() => { const r = U.priceTurn({ ...turn, reportedCostUsd: 0.42 }, price, false, 'm'); return r.source === 'billed' && r.costUsd === 0.42; })());
+	check('a reported charge is read from the usage, and nonsense is not', U.normalizeUsage({ inputTokens: 1, outputTokens: 1, reportedCostUsd: 0.5 }).reportedCostUsd === 0.5 && U.normalizeUsage({ inputTokens: 1, outputTokens: 1, reportedCostUsd: -1 }).reportedCostUsd === undefined && U.normalizeUsage({ inputTokens: 1, outputTokens: 1, reportedCostUsd: 'x' }).reportedCostUsd === undefined);
+	check('a local model is free even if a cost was reported', U.priceTurn({ ...turn, reportedCostUsd: 9 }, undefined, true, 'm').source === 'free' && U.priceTurn(turn, undefined, true, 'm').costUsd === 0);
+	check('no price anywhere is unpriced, never zero', (() => { const r = U.priceTurn(turn, undefined, false, 'm'); return r.source === 'unpriced' && r.costUsd === undefined; })());
+	check('your own price replaces the built-in one, and fills a gap', near(U.priceTurn(turn, price, false, 'm', { overrides: { m: { input: 1, output: 2 } } }).costUsd, 1 + 0.2) && near(U.priceTurn(turn, undefined, false, 'mine', { overrides: { mine: { input: 1, output: 2 } } }).costUsd, 1.2));
+	check('a discount lowers the estimate and only the estimate', near(U.priceTurn(turn, price, false, 'm', { discountPercent: 20 }).costUsd, 4.5 * 0.8) && U.priceTurn({ ...turn, reportedCostUsd: 1 }, price, false, 'm', { discountPercent: 20 }).costUsd === 1);
+	check('a discount that is not a percentage is ignored', near(U.priceTurn(turn, price, false, 'm', { discountPercent: 150 }).costUsd, 4.5) && near(U.priceTurn(turn, price, false, 'm', { discountPercent: -5 }).costUsd, 4.5) && near(U.priceTurn(turn, price, false, 'm', { discountPercent: NaN }).costUsd, 4.5));
+	let mixed = U.addTurnToThreadUsage(undefined, turn, 0.4, 'billed');
+	mixed = U.addTurnToThreadUsage(mixed, turn, 0.6, 'estimate');
+	check('a task keeps what was billed apart from what was estimated', near(mixed.costUsd, 1.0) && near(mixed.billedCostUsd, 0.4));
+	check('an older thread without the split still adds up', near(U.addTurnToThreadUsage({ turns: 1, inputTokens: 1, outputTokens: 1, cachedInputTokens: 0, costUsd: 2, unpricedTurns: 0, turnsWithoutUsage: 0 }, turn, 1, 'estimate').billedCostUsd, 0));
+	let led = U.addToLedger({}, d1, turn, 0.4, 'billed');
+	led = U.addToLedger(led, d1, turn, 0.6, 'estimate');
+	check('the day keeps what was billed apart too, and it is read back', near(led[d1].billedCostUsd, 0.4) && near(U.parseLedger(JSON.parse(JSON.stringify(led)))[d1].billedCostUsd, 0.4));
+	check('an amount that is partly an estimate is shown with the approximate sign', U.formatCost(0.31, 0) === '≈ $0.31' && U.formatCost(0.31, undefined) === '≈ $0.31' && U.formatCost(1.0, 0.4) === '≈ $1.00');
+	check('an amount the provider billed in full is shown plainly', U.formatCost(0.12, 0.12) === '$0.12');
+	check('the provider pages are real https addresses', Object.values(U.PROVIDER_USAGE_PAGES).every(x => new URL(x.url).protocol === 'https:') && U.PROVIDER_USAGE_PAGES.openRouter.url === 'https://openrouter.ai/activity');
+
 	// ---- the limit
 	check('no limit means no state', U.budgetState(100, null) === 'none' && U.budgetState(100, 0) === 'none');
 	check('the limit warns at 80% and stops at 100%', U.budgetState(7.9, 10) === 'ok' && U.budgetState(8, 10) === 'near' && U.budgetState(9.99, 10) === 'near' && U.budgetState(10, 10) === 'over');
@@ -80,6 +105,7 @@ try {
 		{ type: 'text', text: 'hello there world', usage: { prompt_tokens: 120, completion_tokens: 30, total_tokens: 150, prompt_tokens_details: { cached_tokens: 40 } } },
 		{ type: 'text', text: 'no counts here' },
 		{ type: 'text', text: 'local answer', usage: { prompt_tokens: 7, completion_tokens: 3, total_tokens: 10 } },
+		{ type: 'text', text: 'someone else’s cost field', usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10, cost: 0.77 } },
 	]);
 	const a = await send('openAICompatible', sim.url);
 	check('counts a provider sends unasked are read', a.ok && a.usage?.inputTokens === 120 && a.usage?.outputTokens === 30 && a.usage?.cachedInputTokens === 40, JSON.stringify(a));
@@ -90,6 +116,8 @@ try {
 	const c = await send('ollama', sim.url);
 	check('a listed provider is asked for the counts', sim.requests[2]?.stream_options?.include_usage === true, JSON.stringify(sim.requests[2]?.stream_options));
 	check('and they are read', c.ok && c.usage?.inputTokens === 7 && c.usage?.outputTokens === 3, JSON.stringify(c));
+	const dd = await send('openAICompatible', sim.url);
+	check('a cost field from a server other than OpenRouter is not taken as a charge', dd.ok && dd.usage?.inputTokens === 5 && dd.usage?.reportedCostUsd === undefined, JSON.stringify(dd));
 	await sim.close();
 } finally {
 	fs.rmSync(tmp, { recursive: true, force: true });

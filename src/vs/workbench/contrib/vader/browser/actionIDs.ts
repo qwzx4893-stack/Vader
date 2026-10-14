@@ -28,3 +28,7 @@ export const VADER_REJECT_ALL_DIFFS_ACTION_ID = 'vader.rejectAllDiffs'
 export const VADER_TOGGLE_SETTINGS_ACTION_ID = 'workbench.action.toggleVaderSettings'
 
 export const VADER_OPEN_SETTINGS_ACTION_ID = 'workbench.action.openVaderSettings'
+
+export const VADER_TOGGLE_ADDONS_ACTION_ID = 'workbench.action.toggleVaderAddons'
+
+export const VADER_OPEN_ADDONS_ACTION_ID = 'workbench.action.openVaderAddons'

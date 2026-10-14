@@ -4,7 +4,10 @@
 
 // What a task cost: tokens read from each provider's own answer, priced with the model's list price, added up per task and per day.
 //
-// Two rules keep the numbers honest:
+// Three rules keep the numbers honest:
+//  - Tokens are a fact (the provider reported them). Money is a calculation, unless the provider reported what it charged (OpenRouter does):
+//    then that amount is used and called "billed". Every other amount is an estimate from list prices, shown with "≈", and the person is
+//    pointed to the provider's own usage page for the figure that is actually charged.
 //  - A price that is not known is not shown as zero. A cloud model whose price Vader does not have counts as an "unpriced turn", and the
 //    totals say how many there were, so "$0.31" never hides a turn it could not price. Only a local model is free.
 //  - The tokens come from the provider's answer. When a provider sends none (some OpenAI-compatible servers), the turn is counted as
@@ -15,10 +18,17 @@ export type TokenUsage = {
 	readonly outputTokens: number;
 	/** the part of inputTokens the provider served from its prompt cache, when it says so */
 	readonly cachedInputTokens?: number;
+	/** the part of inputTokens written to the provider's prompt cache (Anthropic prices that above plain input), when it says so */
+	readonly cacheWriteInputTokens?: number;
+	/** what the provider says it charged for this request, in US dollars (OpenRouter sends it); when present it is used instead of an estimate */
+	readonly reportedCostUsd?: number;
 };
 
+/** where an amount of money comes from */
+export type CostSource = 'billed' | 'estimate' | 'free' | 'unpriced';
+
 /** US dollars per million tokens, as in modelCapabilities.ts */
-export type ModelPrice = { readonly input: number; readonly output: number; readonly cache_read?: number };
+export type ModelPrice = { readonly input: number; readonly output: number; readonly cache_read?: number; readonly cache_write?: number };
 
 export type ThreadUsage = {
 	readonly turns: number;
@@ -27,21 +37,29 @@ export type ThreadUsage = {
 	readonly cachedInputTokens: number;
 	/** dollars for the turns that could be priced */
 	readonly costUsd: number;
+	/** the part of costUsd that providers reported as charged; the rest is an estimate from list prices (missing in threads saved before this existed) */
+	readonly billedCostUsd?: number;
 	/** turns whose model has no known price */
 	readonly unpricedTurns: number;
 	/** turns where the provider sent no token counts */
 	readonly turnsWithoutUsage: number;
 };
 
-export const EMPTY_THREAD_USAGE: ThreadUsage = { turns: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0, unpricedTurns: 0, turnsWithoutUsage: 0 };
+export const EMPTY_THREAD_USAGE: ThreadUsage = { turns: 0, inputTokens: 0, outputTokens: 0, cachedInputTokens: 0, costUsd: 0, billedCostUsd: 0, unpricedTurns: 0, turnsWithoutUsage: 0 };
 
 const finiteNonNegative = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
 
 /** a usage object from whatever a provider sent; anything that is not a pair of counts gives undefined */
-export function normalizeUsage(raw: { inputTokens?: unknown; outputTokens?: unknown; cachedInputTokens?: unknown } | null | undefined): TokenUsage | undefined {
+export function normalizeUsage(raw: { inputTokens?: unknown; outputTokens?: unknown; cachedInputTokens?: unknown; cacheWriteInputTokens?: unknown; reportedCostUsd?: unknown } | null | undefined): TokenUsage | undefined {
 	if (!raw || !finiteNonNegative(raw.inputTokens) || !finiteNonNegative(raw.outputTokens)) return undefined;
 	const cached = finiteNonNegative(raw.cachedInputTokens) ? Math.min(raw.cachedInputTokens, raw.inputTokens) : undefined;
-	return { inputTokens: Math.round(raw.inputTokens), outputTokens: Math.round(raw.outputTokens), ...(cached !== undefined ? { cachedInputTokens: Math.round(cached) } : {}) };
+	const written = finiteNonNegative(raw.cacheWriteInputTokens) ? Math.min(raw.cacheWriteInputTokens, raw.inputTokens - (cached ?? 0)) : undefined;
+	return {
+		inputTokens: Math.round(raw.inputTokens), outputTokens: Math.round(raw.outputTokens),
+		...(cached !== undefined ? { cachedInputTokens: Math.round(cached) } : {}),
+		...(written !== undefined && written > 0 ? { cacheWriteInputTokens: Math.round(written) } : {}),
+		...(finiteNonNegative(raw.reportedCostUsd) ? { reportedCostUsd: raw.reportedCostUsd } : {}),
+	};
 }
 
 /**
@@ -52,12 +70,39 @@ export function costOfUsage(usage: TokenUsage, price: ModelPrice | undefined, is
 	if (isLocal) return 0;
 	if (!price || (price.input === 0 && price.output === 0)) return undefined;
 	const cached = Math.min(usage.cachedInputTokens ?? 0, usage.inputTokens);
-	const fresh = usage.inputTokens - cached;
+	const written = Math.min(usage.cacheWriteInputTokens ?? 0, usage.inputTokens - cached);
+	const fresh = usage.inputTokens - cached - written;
 	const perM = 1_000_000;
-	return (fresh * price.input + cached * (price.cache_read ?? price.input) + usage.outputTokens * price.output) / perM;
+	return (fresh * price.input + cached * (price.cache_read ?? price.input) + written * (price.cache_write ?? price.input) + usage.outputTokens * price.output) / perM;
 }
 
-export function addTurnToThreadUsage(prev: ThreadUsage | undefined, usage: TokenUsage | undefined, cost: number | undefined): ThreadUsage {
+/** the person's own prices, for a contract or a model Vader does not know (Settings > Usage and cost) */
+export type PriceSettings = {
+	/** a flat percentage taken off every list price, 0 to 100 */
+	readonly discountPercent?: number;
+	/** US dollars per million tokens by model name; replaces the built-in price of that model */
+	readonly overrides?: { readonly [modelName: string]: ModelPrice | undefined };
+};
+
+/**
+ * One turn: its money and where the money comes from.
+ *  - a local model is free
+ *  - the amount the provider says it charged is used as it is ("billed")
+ *  - otherwise tokens times the person's own price for the model, or the built-in list price, less the person's discount ("estimate")
+ *  - no price anywhere is "unpriced", never zero
+ */
+export function priceTurn(usage: TokenUsage, builtIn: ModelPrice | undefined, isLocal: boolean, modelName: string, settings?: PriceSettings): { costUsd: number | undefined; source: CostSource } {
+	if (isLocal) return { costUsd: 0, source: 'free' };
+	if (usage.reportedCostUsd !== undefined) return { costUsd: usage.reportedCostUsd, source: 'billed' };
+	const own = settings?.overrides?.[modelName];
+	const estimate = costOfUsage(usage, own ?? builtIn, false);
+	if (estimate === undefined) return { costUsd: undefined, source: 'unpriced' };
+	const d = settings?.discountPercent;
+	const factor = d !== undefined && Number.isFinite(d) && d > 0 && d <= 100 ? 1 - d / 100 : 1;
+	return { costUsd: estimate * factor, source: 'estimate' };
+}
+
+export function addTurnToThreadUsage(prev: ThreadUsage | undefined, usage: TokenUsage | undefined, cost: number | undefined, source?: CostSource): ThreadUsage {
 	const p = prev ?? EMPTY_THREAD_USAGE;
 	if (!usage) return { ...p, turns: p.turns + 1, turnsWithoutUsage: p.turnsWithoutUsage + 1 };
 	return {
@@ -66,6 +111,7 @@ export function addTurnToThreadUsage(prev: ThreadUsage | undefined, usage: Token
 		outputTokens: p.outputTokens + usage.outputTokens,
 		cachedInputTokens: p.cachedInputTokens + (usage.cachedInputTokens ?? 0),
 		costUsd: p.costUsd + (cost ?? 0),
+		billedCostUsd: (p.billedCostUsd ?? 0) + (source === 'billed' ? cost ?? 0 : 0),
 		unpricedTurns: p.unpricedTurns + (cost === undefined ? 1 : 0),
 		turnsWithoutUsage: p.turnsWithoutUsage,
 	};
@@ -73,7 +119,7 @@ export function addTurnToThreadUsage(prev: ThreadUsage | undefined, usage: Token
 
 // ---- per day
 
-export type DayTotals = { readonly costUsd: number; readonly inputTokens: number; readonly outputTokens: number; readonly unpricedTurns: number };
+export type DayTotals = { readonly costUsd: number; readonly billedCostUsd?: number; readonly inputTokens: number; readonly outputTokens: number; readonly unpricedTurns: number };
 export type UsageLedger = { readonly [day: string]: DayTotals | undefined };
 
 const LEDGER_KEEP_DAYS = 62;
@@ -84,10 +130,11 @@ export function dayKey(date: Date): string {
 	return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
-export function addToLedger(ledger: UsageLedger, day: string, usage: TokenUsage | undefined, cost: number | undefined): UsageLedger {
-	const d = ledger[day] ?? { costUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 };
+export function addToLedger(ledger: UsageLedger, day: string, usage: TokenUsage | undefined, cost: number | undefined, source?: CostSource): UsageLedger {
+	const d = ledger[day] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 };
 	const next: DayTotals = {
 		costUsd: d.costUsd + (usage ? cost ?? 0 : 0),
+		billedCostUsd: (d.billedCostUsd ?? 0) + (usage && source === 'billed' ? cost ?? 0 : 0),
 		inputTokens: d.inputTokens + (usage?.inputTokens ?? 0),
 		outputTokens: d.outputTokens + (usage?.outputTokens ?? 0),
 		unpricedTurns: d.unpricedTurns + (usage && cost === undefined ? 1 : 0),
@@ -105,7 +152,7 @@ export function parseLedger(raw: unknown): UsageLedger {
 	for (const [day, v] of Object.entries(raw as Record<string, unknown>)) {
 		const t = v as Partial<DayTotals> | null;
 		if (/^\d{4}-\d{2}-\d{2}$/.test(day) && t && finiteNonNegative(t.costUsd) && finiteNonNegative(t.inputTokens) && finiteNonNegative(t.outputTokens)) {
-			out[day] = { costUsd: t.costUsd, inputTokens: t.inputTokens, outputTokens: t.outputTokens, unpricedTurns: finiteNonNegative(t.unpricedTurns) ? t.unpricedTurns : 0 };
+			out[day] = { costUsd: t.costUsd, ...(finiteNonNegative(t.billedCostUsd) ? { billedCostUsd: t.billedCostUsd } : {}), inputTokens: t.inputTokens, outputTokens: t.outputTokens, unpricedTurns: finiteNonNegative(t.unpricedTurns) ? t.unpricedTurns : 0 };
 		}
 	}
 	return out;
@@ -127,6 +174,27 @@ export function formatUsd(n: number): string {
 	if (n > 0 && n < 0.01) return '<$0.01';
 	return `$${n.toFixed(2)}`;
 }
+
+/**
+ * The amount as the person should read it: with "≈" in front when any of it is an estimate, plainly when the provider billed all of it.
+ * "≈ $0.31" says "worked out from list prices"; "$0.12" says "the provider reported this charge".
+ */
+export function formatCost(costUsd: number, billedUsd: number | undefined): string {
+	const allBilled = costUsd > 0 && (billedUsd ?? 0) >= costUsd - 1e-9;
+	return allBilled ? formatUsd(costUsd) : `≈ ${formatUsd(costUsd)}`;
+}
+
+/** the page where a provider shows what it really charged, for "check it against the provider" */
+export const PROVIDER_USAGE_PAGES: { readonly [providerName: string]: { label: string; url: string } | undefined } = {
+	anthropic: { label: 'Anthropic Console', url: 'https://platform.claude.com/usage' },
+	openAI: { label: 'OpenAI usage', url: 'https://platform.openai.com/usage' },
+	openRouter: { label: 'OpenRouter activity', url: 'https://openrouter.ai/activity' },
+	gemini: { label: 'Google AI Studio', url: 'https://aistudio.google.com/usage' },
+	deepseek: { label: 'DeepSeek usage', url: 'https://platform.deepseek.com/usage' },
+	xAI: { label: 'xAI Console', url: 'https://console.x.ai' },
+	groq: { label: 'Groq usage', url: 'https://console.groq.com/dashboard/usage' },
+	mistral: { label: 'Mistral usage', url: 'https://console.mistral.ai/usage' },
+};
 
 export function formatTokens(n: number): string {
 	return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);

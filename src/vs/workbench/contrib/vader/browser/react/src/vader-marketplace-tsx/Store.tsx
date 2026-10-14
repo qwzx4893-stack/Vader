@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, FileText, Loader2, Plug, Puzzle, Search, Wrench } from 'lucide-react'
+import { Bot, Check, FileText, Loader2, Plug, Plus, Puzzle, Search, Wrench } from 'lucide-react'
 import { useAccessor, useSkillsState } from '../util/services.js'
 import type { MarketplaceItem, MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
 import { trustLevelOf, TrustScore } from '../../../../common/marketplace/trustScore.js'
@@ -14,7 +14,7 @@ import { trustLevelOf, TrustScore } from '../../../../common/marketplace/trustSc
 // The data comes from IUnifiedMarketplaceService; nothing here talks to a network.
 
 const TYPE_NOUN: Record<MarketplaceItemType, string> = {
-	EXTENSION: 'Extension', SKILL: 'Skill', MCP_SERVER: 'MCP server', ACP_AGENT: 'Coding agent', LANGUAGE_SERVER: 'Language server',
+	EXTENSION: 'Extension', SKILL: 'Skill', MCP_SERVER: 'MCP server', ACP_AGENT: 'Agent', LANGUAGE_SERVER: 'Language server',
 	DEBUG_ADAPTER: 'Debugger', TREE_SITTER_GRAMMAR: 'Grammar', FORMATTER: 'Formatter', JUPYTER_KERNEL: 'Jupyter kernel',
 }
 
@@ -57,7 +57,7 @@ const TypeIcon = ({ type }: { type: MarketplaceItemType }) => {
 type Sort = 'trust' | 'name'
 
 /** the items of a kind, found by browsing when the search box is empty and by searching when it is not; refreshed when skills or their sources change */
-function useStoreItems(types: MarketplaceItemType[], query: string) {
+function useStoreItems(types: MarketplaceItemType[], query: string, includeExtensions?: boolean) {
 	const accessor = useAccessor()
 	const marketplace = accessor.get('IUnifiedMarketplaceService')
 	const skills = useSkillsState()
@@ -75,12 +75,12 @@ function useStoreItems(types: MarketplaceItemType[], query: string) {
 			const opts = { types: typeKey.split(',') as MarketplaceItemType[] }
 			const res = query.trim() ? await marketplace.search(query.trim(), opts) : await marketplace.browse(opts)
 			if (g !== generation.current) return
-			setItems(res.items.filter(i => i.type !== 'EXTENSION'))
+			setItems(res.items.filter(i => includeExtensions || i.type !== 'EXTENSION'))
 			setFailed(res.providerOutcomes.filter(o => o.error).map(o => `${o.providerId}: ${o.error}`))
 		} finally {
 			if (g === generation.current) setLoading(false)
 		}
-	}, [marketplace, typeKey, query])
+	}, [marketplace, typeKey, query, includeExtensions])
 
 	useEffect(() => {
 		const t = setTimeout(load, query ? 250 : 0) // wait for a pause in typing before asking the network
@@ -119,6 +119,35 @@ const ItemCard = ({ item, selected, busy, onSelect, onAction }: { item: Marketpl
 					onClick={label === 'Review' ? onSelect : onAction}
 				>{busy ? <Loader2 className='w-3.5 h-3.5 animate-spin' /> : label}</button>
 					: null}
+		</div>
+	</div>
+}
+
+const GROUP_TITLE: Partial<Record<MarketplaceItemType, string>> = { SKILL: 'Most trusted skills', MCP_SERVER: 'MCP servers', EXTENSION: 'Extensions for the editor', ACP_AGENT: 'Agents you can connect' }
+const GROUP_ORDER: MarketplaceItemType[] = ['SKILL', 'MCP_SERVER', 'EXTENSION', 'ACP_AGENT']
+
+const AddonRow = ({ item, selected, busy, onSelect, onAction }: { item: MarketplaceItem, selected: boolean, busy: boolean, onSelect: () => void, onAction: () => void }) => {
+	const level = item.trustScore ? trustLevelOf(item.trustScore.score) : undefined
+	const review = !item.installed && level === 'low' && !!item.installMethod
+	return <div
+		className={`flex items-center gap-3 h-16 px-1 border-b border-vader-border-3 cursor-pointer min-w-0 ${selected ? 'bg-vader-bg-2 rounded-md px-2' : ''}`}
+		onClick={onSelect}
+	>
+		<div className='w-9 h-9 shrink-0 rounded-lg border border-vader-border-3 bg-vader-bg-2 flex items-center justify-center'><TypeIcon type={item.type} /></div>
+		<div className='flex flex-col min-w-0 flex-1'>
+			<div className='flex items-baseline gap-2 min-w-0'>
+				<span className='font-semibold text-vader-fg-1 truncate'>{item.name}</span>
+				<span className='text-vader-fg-3 shrink-0'>{TYPE_NOUN[item.type]}</span>
+			</div>
+			<span className='text-vader-fg-3 truncate'>{item.description || 'No description'}</span>
+		</div>
+		{item.trustScore ? <TrustMeter score={item.trustScore} /> : null}
+		<div className='w-16 shrink-0 flex justify-end' onClick={e => e.stopPropagation()}>
+			{item.installed ? <span className='w-8 h-8 flex items-center justify-center text-green-500' aria-label='Installed' title='Installed'><Check className='w-4 h-4' /></span>
+				: busy ? <span className='w-8 h-8 flex items-center justify-center'><Loader2 className='w-4 h-4 animate-spin' /></span>
+					: review ? <button className='px-2.5 py-1 rounded-sm border border-vader-border-1 text-vader-fg-1' onClick={onSelect}>Review</button>
+						: item.installMethod ? <button className='w-8 h-8 rounded-full border border-vader-border-1 text-vader-fg-1 flex items-center justify-center hover:bg-vader-bg-2-hover' aria-label={`Add ${item.name}`} title={ACTION_LABEL[item.installMethod] ?? item.installMethod} onClick={onAction}><Plus className='w-4 h-4' /></button>
+							: null}
 		</div>
 	</div>
 }
@@ -162,14 +191,18 @@ const DetailPane = ({ item, busy, error, onAction, onActionAndEnable, onClose }:
 	</div>
 }
 
-export const StoreView = ({ types, layout, query: externalQuery, showSearch, searchPlaceholder }: {
-	types: MarketplaceItemType[], layout: 'wide' | 'narrow', query?: string, showSearch?: boolean, searchPlaceholder?: string,
+export const StoreView = ({ types, layout, query: externalQuery, showSearch, searchPlaceholder, includeExtensions, installedOnly, grouped, onSeeAll }: {
+	types: MarketplaceItemType[], layout: 'wide' | 'narrow' | 'rows', query?: string, showSearch?: boolean, searchPlaceholder?: string,
+	/** rows layout: also list extensions (the Settings pages never do) */
+	includeExtensions?: boolean, installedOnly?: boolean,
+	/** rows layout: one short list per kind, each with a "See all" link that calls onSeeAll(kind) */
+	grouped?: boolean, onSeeAll?: (type: MarketplaceItemType) => void,
 }) => {
 	const accessor = useAccessor()
 	const marketplace = accessor.get('IUnifiedMarketplaceService')
 	const [typed, setTyped] = useState('')
 	const query = showSearch ? typed : externalQuery ?? ''
-	const { items, loading, failed, reload } = useStoreItems(types, query)
+	const { items, loading, failed, reload } = useStoreItems(types, query, includeExtensions)
 	const [sort, setSort] = useState<Sort>('trust')
 	const [source, setSource] = useState<string | null>(null)
 	const [selectedKey, setSelectedKey] = useState<string | null>(null)
@@ -183,11 +216,11 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 		return [...counts.entries()].sort((a, b) => b[1] - a[1])
 	}, [items])
 	const shown = useMemo(() => {
-		const list = source ? items.filter(i => i.source === source) : items.slice()
+		const list = (source ? items.filter(i => i.source === source) : items.slice()).filter(i => !installedOnly || i.installed)
 		if (sort === 'name') list.sort((a, b) => a.name.localeCompare(b.name))
 		else list.sort((a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)))
 		return list
-	}, [items, source, sort])
+	}, [items, source, sort, installedOnly])
 	const selected = selectedKey ? shown.find(i => keyOf(i) === selectedKey) : undefined
 
 	const act = useCallback(async (item: MarketplaceItem) => {
@@ -213,6 +246,23 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 		const installed = skillService.list().find(s => s.source.repositoryUrl === url)
 		if (installed) skillService.setEnabled(installed.id, true)
 	}, [act, accessor])
+
+	if (layout === 'rows') {
+		const rowOf = (item: MarketplaceItem) => <AddonRow key={keyOf(item)} item={item} selected={keyOf(item) === selectedKey} busy={busyKey === keyOf(item)} onSelect={() => setSelectedKey(keyOf(item) === selectedKey ? null : keyOf(item))} onAction={() => act(item)} />
+		const groups = grouped && !query.trim() ? GROUP_ORDER.map(t => ({ type: t, list: shown.filter(i => i.type === t) })).filter(g => g.list.length > 0) : []
+		return <div className='flex min-w-0 min-h-0 flex-1 text-root'>
+			<div className='flex flex-col gap-4 min-w-0 flex-1 overflow-y-auto pr-2'>
+				{failed.length > 0 ? <div className='text-yellow-600'>{failed.length === 1 ? 'One source' : `${failed.length} sources`} could not be read just now: {failed.join(' ')}</div> : null}
+				{loading && items.length === 0 ? <div className='text-vader-fg-3 py-6'>Loading...</div> : null}
+				{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{query.trim() ? `Nothing matches "${query.trim()}". Searched every source that is turned on.` : installedOnly ? 'Nothing is installed yet.' : 'Nothing to show yet.'}</div> : null}
+				{grouped && groups.length > 0 ? groups.map(g => <div key={g.type} className='flex flex-col'>
+					<div className='flex items-center gap-3 h-9'><span className='font-semibold text-vader-fg-1'>{GROUP_TITLE[g.type] ?? TYPE_NOUN[g.type]}</span><span className='flex-1' />{onSeeAll ? <button className='text-vader-fg-2 hover:text-vader-fg-1' onClick={() => onSeeAll(g.type)}>See all</button> : null}</div>
+					<div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{g.list.slice(0, 4).map(rowOf)}</div>
+				</div>) : <div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{shown.map(rowOf)}</div>}
+			</div>
+			{selected ? <div className='shrink-0' style={{ width: 460 }}><DetailPane item={selected} busy={busyKey === keyOf(selected)} error={errorOf[keyOf(selected)]} onAction={() => act(selected)} onActionAndEnable={selected.trustScore && selected.trustScore.level !== 'low' ? () => actAndEnable(selected) : undefined} onClose={() => setSelectedKey(null)} /></div> : null}
+		</div>
+	}
 
 	const wide = layout === 'wide'
 	return <div className='flex flex-col gap-3 min-w-0 text-root'>

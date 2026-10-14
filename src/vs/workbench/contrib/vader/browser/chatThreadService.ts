@@ -59,7 +59,7 @@ import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
 import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
-import { addToLedger, addTurnToThreadUsage, budgetState, costOfUsage, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
+import { addToLedger, addTurnToThreadUsage, budgetState, priceTurn, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
 import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
 import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
 import { ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
@@ -930,7 +930,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	getThreadUsage(threadId: string): ThreadUsage | undefined { return this.state.allThreads[threadId]?.usage }
 
 	getUsageToday(): DayTotals {
-		return this._ledger[dayKey(new Date())] ?? { costUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }
+		return this._ledger[dayKey(new Date())] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }
 	}
 
 	/** called once per answer of the model: adds the turn to the thread and to today, priced with the model's list price (a local model is free; a cloud model with no known price is counted as unpriced, not as free) */
@@ -938,14 +938,17 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (!modelSelection) return
 		const caps = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, this._settingsService.state.overridesOfModel)
 		const isLocal = (localProviderNames as readonly string[]).includes(modelSelection.providerName)
-		const cost = usage ? costOfUsage(usage, caps.cost, isLocal) : undefined
+		const g = this._settingsService.state.globalSettings
+		const priced = usage ? priceTurn(usage, caps.cost, isLocal, modelSelection.modelName, { discountPercent: g.priceDiscountPercent, overrides: g.modelPriceOverrides }) : undefined
+		const cost = priced?.costUsd
+		const source = priced?.source
 		const thread = this.state.allThreads[threadId]
 		if (thread) {
-			const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, usage: addTurnToThreadUsage(thread.usage, usage, cost) } }
+			const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, usage: addTurnToThreadUsage(thread.usage, usage, cost, source) } }
 			this._storeAllThreads(newThreads)
 			this._setState({ allThreads: newThreads }, true)
 		}
-		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost)
+		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost, source)
 		this._storageService.store(USAGE_LEDGER_STORAGE_KEY, JSON.stringify(this._ledger), StorageScope.APPLICATION, StorageTarget.USER)
 		this._onDidChangeUsage.fire()
 	}
