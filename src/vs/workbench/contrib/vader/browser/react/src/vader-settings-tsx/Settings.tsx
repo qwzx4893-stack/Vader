@@ -29,7 +29,7 @@ import { TransferEditorType, TransferFilesInfo, transferEditorTypes } from '../.
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
-import { TrustMeter } from '../vader-marketplace-tsx/Store.js';
+import { TrustMeter } from '../vader-marketplace-tsx/TrustMeter.js';
 import { ADDON_SOURCES, AddonSourceKind, isSourceOn } from '../../../../common/marketplace/addonSources.js';
 import { parseTrustHistory, TRUST_HISTORY_STORAGE_KEY } from '../../../../common/marketplace/trustHistory.js';
 import { StorageScope } from '../../../../../../../platform/storage/common/storage.js';

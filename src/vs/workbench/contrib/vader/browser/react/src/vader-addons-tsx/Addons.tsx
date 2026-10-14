@@ -85,7 +85,6 @@ export const Addons = () => {
 					category={category ?? undefined}
 					onPageChange={setPageOpen}
 					types={TAB_TYPES[tab]}
-					layout='rows'
 					query={query}
 					includeExtensions
 					installedOnly={installedOnly}
