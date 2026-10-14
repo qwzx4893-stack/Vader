@@ -8,11 +8,14 @@ import { hash } from '../../../../../base/common/hash.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
 import { registerSingleton, InstantiationType } from '../../../../../platform/instantiation/common/extensions.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
+import { parseRepoRef } from '../discovery/githubSkillSources.js';
 import { RequestedCapabilities, SkillCategory, SkillRecord, SkillTrustState, ISkillService } from './skillServiceTypes.js';
 
 export * from './skillServiceTypes.js';
 
 const VADER_SKILLS_STORAGE_KEY = 'vader.skillServiceStorageI';
+const VADER_SKILL_SOURCES_STORAGE_KEY = 'vader.skillSources';
+const DEFAULT_SKILL_SOURCES = ['anthropics/skills'];
 
 // Heuristic, not a claim of real static analysis - see docs/integrations/skills.md. This
 // only informs what's SHOWN to the user/model about a skill's likely footprint; it never by
@@ -148,6 +151,39 @@ class SkillService extends Disposable implements ISkillService {
 	remove(id: string): void {
 		this._skills = this._skills.filter(s => s.id !== id);
 		this._writeState();
+	}
+
+	private _readSources(): string[] {
+		try {
+			const raw = this._storageService.get(VADER_SKILL_SOURCES_STORAGE_KEY, StorageScope.APPLICATION);
+			if (raw === undefined) return [...DEFAULT_SKILL_SOURCES];
+			const parsed = JSON.parse(raw);
+			return Array.isArray(parsed) ? parsed.filter((s): s is string => typeof s === 'string' && !!parseRepoRef(s)) : [...DEFAULT_SKILL_SOURCES];
+		} catch {
+			return [...DEFAULT_SKILL_SOURCES];
+		}
+	}
+
+	private _writeSources(sources: string[]) {
+		this._storageService.store(VADER_SKILL_SOURCES_STORAGE_KEY, JSON.stringify(sources), StorageScope.APPLICATION, StorageTarget.USER);
+		this._onDidChangeSkills.fire();
+	}
+
+	listSources(): string[] { return this._readSources(); }
+
+	addSource(repo: string): boolean {
+		const ref = parseRepoRef(repo);
+		if (!ref) return false;
+		const name = `${ref.owner}/${ref.repo}`;
+		const sources = this._readSources();
+		if (!sources.some(s => s.toLowerCase() === name.toLowerCase())) this._writeSources([...sources, name]);
+		return true;
+	}
+
+	removeSource(repo: string): void {
+		const ref = parseRepoRef(repo);
+		const name = ref ? `${ref.owner}/${ref.repo}`.toLowerCase() : repo.toLowerCase();
+		this._writeSources(this._readSources().filter(s => s.toLowerCase() !== name));
 	}
 }
 

@@ -9,6 +9,7 @@ import { IMCPService } from '../../../common/mcpService.js';
 import { MCPConfigFileEntryJSON } from '../../../common/mcpServiceTypes.js';
 import { IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult } from '../../../common/discovery/discoveryServiceTypes.js';
 import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem } from '../../../common/marketplace/marketplaceTypes.js';
+import { computeTrust, KNOWN_PUBLISHERS } from '../../../common/marketplace/trustScore.js';
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
 // Search results come from the real, currently-live official MCP Registry
@@ -27,6 +28,22 @@ import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem } fro
 // instead. The existing mcp.json file watcher then runs the real add-server/health-check flow
 // exactly as it would for a hand-edited file, so there is exactly one server-lifecycle path,
 // not two.
+const FEATURED_MCP_QUERIES = ['github', 'playwright', 'filesystem', 'fetch', 'sentry', 'stripe', 'postgres', 'linear', 'notion', 'slack'];
+
+/** who published a registry entry: the owner of its GitHub repository, else the name of its reverse-domain namespace ("com.stripe/mcp" is stripe) */
+function mcpPublisherOf(result: McpRegistrySearchResult): string | undefined {
+	try {
+		if (result.repositoryUrl) {
+			const url = new URL(result.repositoryUrl);
+			if (url.hostname === 'github.com') return url.pathname.split('/').filter(Boolean)[0];
+		}
+	} catch { /* fall through to the namespace */ }
+	const ns = result.name.split('/')[0];
+	if (ns.startsWith('io.github.')) return ns.slice('io.github.'.length);
+	const parts = ns.split('.');
+	return parts.length >= 2 ? parts[parts.length - 1] : undefined;
+}
+
 class MCPMarketplaceProvider implements IMarketplaceProvider {
 	readonly id = 'mcp-registry';
 	readonly displayName = 'MCP Servers';
@@ -57,6 +74,7 @@ class MCPMarketplaceProvider implements IMarketplaceProvider {
 	}
 
 	private _remoteToItem(result: McpRegistrySearchResult): MarketplaceItem {
+		const publisher = mcpPublisherOf(result);
 		return {
 			id: result.name,
 			providerId: this.id,
@@ -64,9 +82,11 @@ class MCPMarketplaceProvider implements IMarketplaceProvider {
 			name: result.name,
 			description: result.description,
 			source: 'MCP Registry (registry.modelcontextprotocol.io)',
+			publisher,
 			version: result.version,
 			trust: 'unknown',
 			installed: false,
+			trustScore: computeTrust({ kind: 'mcp', publisher, runsLocalCode: result.localOnly }),
 			installMethod: 'configure',
 			security: {
 				source: result.repositoryUrl ?? result.remoteUrl ?? 'MCP Registry',
@@ -90,6 +110,22 @@ class MCPMarketplaceProvider implements IMarketplaceProvider {
 
 	async listInstalled(): Promise<MarketplaceItem[]> {
 		return this._configuredToItems();
+	}
+
+	/** servers people ask for most, found by name in the registry and kept only when a known organisation published them; what is already set up comes first */
+	async browse(token: CancellationToken): Promise<MarketplaceItem[]> {
+		const configured = this._configuredToItems();
+		const configuredNames = new Set(configured.map(c => c.id));
+		const found = await Promise.all(FEATURED_MCP_QUERIES.map(q => this._discoveryService.searchMcpRegistry(q).catch(() => [] as McpRegistrySearchResult[])));
+		if (token.isCancellationRequested) return configured;
+		const seen = new Set<string>();
+		const featured: MarketplaceItem[] = [];
+		for (const results of found) {
+			// the registry lets anyone publish a server named "github" or "stripe", so only a result from a known organisation is featured; one per query
+			const best = results.find(r => KNOWN_PUBLISHERS.has((mcpPublisherOf(r) ?? '').toLowerCase()));
+			if (best && !seen.has(best.name) && !configuredNames.has(best.name)) { seen.add(best.name); featured.push(this._remoteToItem(best)); }
+		}
+		return [...configured, ...featured];
 	}
 
 	async setEnabled(item: MarketplaceItem, enabled: boolean): Promise<void> {

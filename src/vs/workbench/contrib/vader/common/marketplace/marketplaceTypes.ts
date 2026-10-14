@@ -4,6 +4,7 @@
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { CancellationToken } from '../../../../../base/common/cancellation.js';
+import type { TrustScore } from './trustScore.js';
 
 /**
  * The Unified Capability Marketplace: a single federated search/management layer over every
@@ -94,6 +95,10 @@ export type MarketplaceItem = {
 	 * download is needed.
 	 */
 	readonly isLocal?: boolean;
+	/** what installing it costs on disk, when known (a skill's folder, a package) */
+	readonly sizeBytes?: number;
+	/** 0 to 100 with the reasons behind it (see trustScore.ts); only for the kinds a person is asked to trust, not for ordinary extensions */
+	readonly trustScore?: TrustScore;
 	/** ecosystem-specific fields the common shape above doesn't capture - never erased */
 	readonly metadata: Record<string, unknown>;
 };
@@ -135,6 +140,8 @@ export interface IMarketplaceProvider {
 	search(query: string, token: CancellationToken): Promise<MarketplaceItem[]>;
 	/** items already installed/configured/local, shown even with an empty query and used for offline degradation */
 	listInstalled(): Promise<MarketplaceItem[]>;
+	/** what to show before anyone has typed anything: a source's popular or full listing. Providers without one are skipped when browsing. */
+	browse?(token: CancellationToken): Promise<MarketplaceItem[]>;
 
 	install?(item: MarketplaceItem): Promise<void>;
 	uninstall?(item: MarketplaceItem): Promise<void>;
@@ -163,6 +170,12 @@ export interface IUnifiedMarketplaceService {
 	 * opening the marketplace isn't a blank page).
 	 */
 	search(query: string, opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult>;
+
+	/**
+	 * What a store shows before a search: each provider's own listing (a GitHub repository of skills, the MCP registry) together with
+	 * what is already installed. Failure isolation is the same as search(): a source that is down is reported and the rest still show.
+	 */
+	browse(opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult>;
 
 	/** every installed/local/configured item across all providers - used for offline degradation and Capability Bus wiring */
 	listInstalled(): Promise<MarketplaceItem[]>;

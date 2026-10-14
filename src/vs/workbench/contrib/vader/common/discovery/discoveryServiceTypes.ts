@@ -43,10 +43,34 @@ export type SkillNetSearchResult = {
 	readonly category?: string;
 };
 
+/** one skill found in a GitHub repository that holds skills (see githubSkillSources.ts); the SKILL.md text comes with it so a store can score and install it without a second download */
+export type GithubSkillEntry = {
+	readonly name: string;
+	readonly description: string;
+	/** the page of the skill's folder, in the shape fetchSkillInstructions understands */
+	readonly repositoryUrl: string;
+	readonly owner: string;
+	readonly repo: string;
+	/** every file of the skill's folder added up */
+	readonly sizeBytes: number;
+	/** the SKILL.md text; empty when it could not be fetched */
+	readonly instructions: string;
+};
+
+export type GithubSkillListing = {
+	readonly repo: string;
+	readonly stars: number;
+	readonly entries: readonly GithubSkillEntry[];
+	/** set when the repository could not be read (not found, rate limited, offline); the entries are then empty */
+	readonly error?: string;
+};
+
 export interface IDiscoveryMainService {
 	readonly _serviceBrand: undefined;
 	searchMcpRegistry(query: string): Promise<McpRegistrySearchResult[]>;
 	searchSkillNet(query: string): Promise<SkillNetSearchResult[]>;
+	/** the skills in a GitHub repository ("owner/repo" or its https://github.com address); read from GitHub's public API, nothing about the workspace is sent */
+	listGithubSkills(repo: string): Promise<GithubSkillListing>;
 	/** fetches a skill's primary instructions file (SKILL.md, README.md, ...) as plain text, for use as an instructions layer */
 	fetchSkillInstructions(repositoryUrl: string): Promise<string | null>;
 }

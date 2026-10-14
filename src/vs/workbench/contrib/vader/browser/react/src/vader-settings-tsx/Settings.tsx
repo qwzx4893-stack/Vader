@@ -10,7 +10,7 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VaderButtonBgDarken, VaderCustomDropdownBox, VaderInputBox2, VaderSimpleInputBox, VaderSwitch } from '../util/inputs.js'
 import { filterProviders } from '../../../../common/providerSearch.js'
 import { useAccessor, useIsDark, useRefreshModelListener, useRefreshModelState, useCloudModelListState, useSettingsState, useAgentsServiceState, usePolicyServiceState, useModelRouterServiceState, useSkillsState, useMemoryState, useOrchestrationRunsState } from '../util/services.js'
-import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info, Terminal } from 'lucide-react'
+import { X, RefreshCw, Loader2, Check, Asterisk, Plus, Sparkles, Brain, HardDrive, Cloud, SlidersHorizontal, Plug, List, Bot, BookOpen, Puzzle, ShieldCheck, Database, Info, Terminal } from 'lucide-react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { ModelDropdown } from './ModelDropdown.js'
 import { ExternalAgentsSection } from './ExternalAgents.js'
@@ -29,6 +29,8 @@ import { TransferEditorType, TransferFilesInfo, transferEditorTypes } from '../.
 import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
+import { StoreView, TrustMeter } from '../vader-marketplace-tsx/Store.js';
+import { computeTrust } from '../../../../common/marketplace/trustScore.js';
 
 type Tab =
 	| 'models'
@@ -38,6 +40,7 @@ type Tab =
 	| 'agent'
 	| 'context'
 	| 'featureOptions'
+	| 'skills'
 	| 'mcp'
 	| 'extensions'
 	| 'privacy'
@@ -1051,19 +1054,21 @@ export const SkillsSection = () => {
 	const skillService = accessor.get('ISkillService')
 	const skills = useSkillsState()
 
-	if (skills.length === 0) return null
+	if (skills.length === 0) return <div className='text-vader-fg-3 py-6'>No skills are installed yet. Open the Store tab to find some.</div>
 
-	return <div className='max-w-[600px]'>
-		<h2 className={`text-3xl mb-2`}>Skills</h2>
+	return <div className='max-w-[760px]'>
 		<h4 className={`text-vader-fg-3 mb-4`}>
-			Skills the main agent discovered (via SkillNet) and installed, or wrote itself. Every skill starts disabled and marked "review_required" - read it before enabling, and especially before marking it Trusted. An update to a skill's source content automatically downgrades a Trusted skill back to review_required, so a silent external change can never keep trusted status without you seeing it again.
+			Skills you installed from the store, that the main agent found, or that it wrote itself. Every skill starts switched off and marked "review_required": read it before enabling it, and especially before marking it Trusted. When a skill changes at its source, a Trusted skill goes back to review_required, so a silent change can never keep its trusted status.
 		</h4>
 		<div className='flex flex-col gap-y-2'>
 			{skills.map(skill => (
 				<div key={skill.id} className='border border-vader-border-3 rounded p-2 flex flex-col gap-y-1'>
 					<div className='flex items-center justify-between'>
 						<span className='font-medium'>{skill.name}</span>
-						<span className={`text-xs capitalize ${trustBadgeClass(skill.trustState)}`}>{skill.trustState.replace('_', ' ')}</span>
+						<span className='flex items-center gap-3'>
+								<span className={`text-xs capitalize ${trustBadgeClass(skill.trustState)}`}>{skill.trustState.replace('_', ' ')}</span>
+								<TrustMeter score={computeTrust({ kind: 'skill', publisher: ownerOfRepository(skill.source.repositoryUrl), instructions: skill.instructions, userTrustState: skill.trustState })} />
+							</span>
 					</div>
 					<span className='text-vader-fg-3 text-xs'>{skill.description}</span>
 					<span className='text-vader-fg-3 text-xs'>
@@ -1093,6 +1098,74 @@ export const SkillsSection = () => {
 	</div>
 }
 
+
+/** "owner" of a https://github.com/owner/repo address, or undefined */
+const ownerOfRepository = (repositoryUrl: string | undefined): string | undefined => {
+	try {
+		if (!repositoryUrl) return undefined
+		const url = new URL(repositoryUrl)
+		return url.hostname === 'github.com' ? url.pathname.split('/').filter(Boolean)[0] : undefined
+	} catch { return undefined }
+}
+
+const TrustLegend = () => <span className='flex items-center gap-4 text-vader-fg-3 text-xs'>
+	<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-green-500' />80 to 100 high trust</span>
+	<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-yellow-500' />50 to 79 read it first</span>
+	<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-red-500' />under 50 risky</span>
+</span>
+
+// The places the skills store reads from: the GitHub repositories of skills the user keeps, and SkillNet. A repository is read through
+// GitHub's public API (a repository's file list and each SKILL.md); nothing about the workspace is sent.
+const SkillSourcesSection = () => {
+	const accessor = useAccessor()
+	const skillService = accessor.get('ISkillService')
+	useSkillsState() // sources changes fire the same event as skills do
+	const sources = skillService.listSources()
+	const [text, setText] = useState('')
+	const [problem, setProblem] = useState('')
+	const add = () => {
+		if (!text.trim()) return
+		if (skillService.addSource(text)) { setText(''); setProblem('') }
+		else setProblem('That is not a GitHub repository. Use owner/repo or an address that starts with https://github.com/.')
+	}
+	return <div className='flex flex-col gap-3 max-w-[760px]'>
+		<div className='text-vader-fg-3'>The store lists the skills it finds in these GitHub repositories, and searches SkillNet when you type in the search box.</div>
+		<div className='flex flex-col'>
+			{sources.length === 0 ? <div className='text-vader-fg-3 py-3'>No repositories yet. Add one below.</div> : null}
+			{sources.map(s => <div key={s} className='flex items-center gap-3 py-2 border-t border-vader-border-3'>
+				<span className='flex-1 font-mono'>{s}</span>
+				<a className='text-vader-fg-3 hover:text-vader-fg-1 underline cursor-pointer' onClick={() => accessor.get('IOpenerService').open(URI.parse(`https://github.com/${s}`))}>Open on GitHub</a>
+				<VaderButtonBgDarken className='px-2 py-0.5 text-xs' onClick={() => skillService.removeSource(s)}>Remove</VaderButtonBgDarken>
+			</div>)}
+		</div>
+		<div className='flex items-center gap-2'>
+			<input className='flex-1 px-3 py-1.5 rounded-md border border-vader-border-2 bg-vader-bg-1 text-vader-fg-1 outline-none' placeholder='owner/repo or https://github.com/owner/repo' value={text} onChange={e => { setText(e.target.value); setProblem('') }} onKeyDown={e => { if (e.key === 'Enter') add() }} />
+			<VaderButtonBgDarken className='px-3 py-1' onClick={add}>Add repository</VaderButtonBgDarken>
+		</div>
+		{problem ? <div className='text-red-500'>{problem}</div> : null}
+	</div>
+}
+
+export const SkillsPage = () => {
+	const [tab, setTab] = useState<'store' | 'installed' | 'sources'>('store')
+	const skills = useSkillsState()
+	const tabs: { id: typeof tab, label: string }[] = [{ id: 'store', label: 'Store' }, { id: 'installed', label: `Installed ${skills.length || ''}`.trim() }, { id: 'sources', label: 'Sources' }]
+	return <div className='flex flex-col gap-4' data-testid='vader-settings-skills'>
+		<div>
+			<h2 className='text-3xl mb-2'>Skills</h2>
+			<h4 className='text-vader-fg-3 max-w-[760px]'>Skills are written instructions the agent follows when a task matches, such as how to make a PDF or how your team writes commits. Installing one never switches it on: read it first.</h4>
+		</div>
+		<div className='flex items-end justify-between border-b border-vader-border-3'>
+			<div className='flex'>
+				{tabs.map(t => <button key={t.id} className={`px-1 py-2 mr-5 border-b ${tab === t.id ? 'border-vader-fg-1 text-vader-fg-1' : 'border-transparent text-vader-fg-3'}`} onClick={() => setTab(t.id)}>{t.label}</button>)}
+			</div>
+			<div className='pb-2'><TrustLegend /></div>
+		</div>
+		{tab === 'store' ? <StoreView types={['SKILL']} layout='wide' showSearch searchPlaceholder='Search skills across all sources' /> : null}
+		{tab === 'installed' ? <SkillsSection /> : null}
+		{tab === 'sources' ? <SkillSourcesSection /> : null}
+	</div>
+}
 
 // Vader addition: Memory UI - see common/memory/. Never exposes hidden model
 // reasoning/chain-of-thought, only the stored facts/labels a `remember` call actually wrote.
@@ -1627,6 +1700,7 @@ const PrivacySection = () => {
 	const contacts: { who: string, when: string, host: string }[] = [
 		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure (or localhost for local models)' },
 		{ who: 'Extension registry', when: 'When you browse, search or install extensions.', host: 'open-vsx.org' },
+		{ who: 'Skills and MCP stores', when: 'When you open the Skills or MCP page, or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a GitHub repository\'s public file list and its SKILL.md files. Nothing from your project is sent.', host: 'api.github.com, raw.githubusercontent.com, registry.modelcontextprotocol.io, api-skillnet.openkg.cn' },
 		{ who: 'Release check', when: autoCheckUpdates ? 'Now on: a quiet check for a newer Vader release every few hours, plus the manual button.' : 'Only when you press "Check for Updates". The background check is off.', host: 'api.github.com' },
 		{ who: 'Coding agents you add', when: 'Only after you pick one in Settings > Coding Agents and press Download or Install, or send it a message. The vendor\'s own program then talks to the vendor with your account; Vader does not see the sign-in.', host: 'the vendor of that agent (npm registry, github.com, downloads.cursor.com, dl.google.com for downloads)' },
 		{ who: 'Pages the agent opens', when: 'Only when the agent uses its browser tool, and only the sites it was told to visit.', host: 'the sites in question' },
@@ -1730,6 +1804,7 @@ export const Settings = () => {
 		{ title: 'Agent', items: [
 			{ tab: 'agent', label: 'Agent & Permissions', Icon: Bot },
 			{ tab: 'context', label: 'Context & Instructions', Icon: BookOpen },
+			{ tab: 'skills', label: 'Skills', Icon: Sparkles },
 			{ tab: 'mcp', label: 'MCP', Icon: Plug },
 			{ tab: 'featureOptions', label: 'Editor Features', Icon: SlidersHorizontal },
 		] },
@@ -1854,7 +1929,7 @@ export const Settings = () => {
 
 			{/* ───────────── MAIN PANE ───────────── */}
 			<main ref={mainRef} className='flex-1 h-full overflow-y-auto select-none'>
-				<div className='max-w-3xl mx-auto px-10 py-8 mb-24'>
+				<div className={`${selectedSection === 'skills' || selectedSection === 'mcp' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-10 py-8 mb-24`}>
 
 						{/* All sections in flex container with gap-12 */}
 						<div className='flex flex-col gap-12'>
@@ -2130,8 +2205,12 @@ Alternatively, place a \`.vaderrules\` file in the root of your workspace.
 								</div>
 
 							
-								<SkillsSection />
 								<MemorySection />
+							</div>
+
+							{/* Skills */}
+							<div className={shouldShowTab('skills') ? `` : 'hidden'}>
+								<ErrorBoundary><SkillsPage /></ErrorBoundary>
 							</div>
 
 							{/* Extensions */}
@@ -2248,6 +2327,13 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									<ErrorBoundary>
 										<MCPServersList />
 									</ErrorBoundary>
+									<div className='mt-10'>
+										<h3 className='text-xl mb-1'>Add from the registry</h3>
+										<h4 className='text-vader-fg-3 mb-4 max-w-[760px]'>Servers listed in the official MCP Registry. Adding one writes its entry to your MCP config file, after asking for any key it needs. Servers from a known organisation are listed first; anyone can publish to the registry, so read the score before you add one.</h4>
+										<ErrorBoundary>
+											<StoreView types={['MCP_SERVER']} layout='wide' showSearch searchPlaceholder='Search the official MCP Registry' />
+										</ErrorBoundary>
+									</div>
 								</ErrorBoundary>
 							</div>
 

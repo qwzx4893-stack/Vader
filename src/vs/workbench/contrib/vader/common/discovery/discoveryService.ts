@@ -23,6 +23,7 @@ class DiscoveryService implements IDiscoveryMainService {
 
 	searchMcpRegistry: IDiscoveryMainService['searchMcpRegistry'] = (query) => this._mainService.searchMcpRegistry(query);
 	searchSkillNet: IDiscoveryMainService['searchSkillNet'] = (query) => this._mainService.searchSkillNet(query);
+	listGithubSkills: IDiscoveryMainService['listGithubSkills'] = (repo) => this._mainService.listGithubSkills(repo);
 	fetchSkillInstructions: IDiscoveryMainService['fetchSkillInstructions'] = (url) => this._mainService.fetchSkillInstructions(url);
 }
 

@@ -17,6 +17,7 @@ export * from '../../common/marketplace/marketplaceTypes.js';
 // Per-provider search timeout - a slow/hung network source must never hold up the other
 // providers' results (failure isolation, not just error isolation).
 const PROVIDER_SEARCH_TIMEOUT_MS = 8_000;
+const PROVIDER_BROWSE_TIMEOUT_MS = 30_000;
 
 // Soft per-type weighting used only to break ties among non-exact matches (see search()'s
 // scoring) - never overrides an exact name match or installed/local status from a
@@ -131,6 +132,46 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 		}
 		items.sort((a, b) => this._score(b, queryLower) - this._score(a, queryLower));
 
+		return { items, providerOutcomes: outcomes };
+	}
+
+	private async _browseOneProvider(provider: IMarketplaceProvider): Promise<MarketplaceProviderSearchOutcome> {
+		const cacheKey = this._cacheKey(provider.id, '\u0000browse');
+		const cached = this._cache.get(cacheKey);
+		if (cached && Date.now() - cached.atMs < provider.cacheTtlMs) {
+			return { providerId: provider.id, items: cached.items };
+		}
+		const cts = new CancellationTokenSource();
+		let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+		try {
+			// a listing can take longer than a search (a repository of skills is downloaded file by file), so it gets its own, longer limit
+			const timeout = new Promise<never>((_, reject) => { timeoutHandle = setTimeout(() => { cts.cancel(); reject(new Error('took too long to answer')); }, PROVIDER_BROWSE_TIMEOUT_MS); });
+			const items = await Promise.race([provider.browse ? provider.browse(cts.token) : provider.listInstalled(), timeout]);
+			this._cache.set(cacheKey, { atMs: Date.now(), items });
+			return { providerId: provider.id, items };
+		} catch (e) {
+			return { providerId: provider.id, items: cached?.items ?? [], error: e instanceof Error ? e.message : String(e) };
+		} finally {
+			if (timeoutHandle) { clearTimeout(timeoutHandle); }
+			cts.dispose();
+		}
+	}
+
+	async browse(opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult> {
+		const providers = [...this._providers.values()].filter(p => !opts?.types?.length || opts.types.includes(p.itemType));
+		const outcomes = await Promise.all(providers.map(p => this._browseOneProvider(p)));
+		const seen = new Set<string>();
+		const items: MarketplaceItem[] = [];
+		for (const outcome of outcomes) {
+			for (const item of outcome.items) {
+				const key = `${item.providerId}:${item.id}`;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				items.push(item);
+			}
+		}
+		// installed first, then the most trusted; items without a score keep the order their source gave them
+		items.sort((a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)));
 		return { items, providerOutcomes: outcomes };
 	}
 

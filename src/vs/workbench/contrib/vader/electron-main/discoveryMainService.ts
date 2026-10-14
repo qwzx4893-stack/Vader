@@ -3,13 +3,16 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
+import { GithubSkillEntry, GithubSkillListing, IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
+import { parseRepoRef, parseSkillFrontmatter, skillFolderUrl, skillFoldersFromTree } from '../common/discovery/githubSkillSources.js';
 import { rawSkillInstructionUrls } from '../common/discovery/githubSkillUrl.js';
 
 // Real, live, unauthenticated public APIs - no source code or workspace content is ever
 // sent to either of these, only the search string the user/agent typed.
 const MCP_REGISTRY_BASE_URL = 'https://registry.modelcontextprotocol.io';
 const SKILLNET_BASE_URL = 'http://api-skillnet.openkg.cn';
+const GITHUB_API_BASE_URL = 'https://api.github.com';
+const GITHUB_CACHE_TTL_MS = 10 * 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
 // Responses come from third-party servers; never read an unbounded body into memory.
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -66,7 +69,18 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 		try {
 			const url = `${MCP_REGISTRY_BASE_URL}/v0/servers?search=${encodeURIComponent(query)}&limit=20`;
 			const data = await fetchJson(url);
-			const servers: any[] = Array.isArray(data?.servers) ? data.servers : [];
+			const all: any[] = Array.isArray(data?.servers) ? data.servers : [];
+			// the registry lists every published version of a server; only the latest one is offered, once
+			const seenNames = new Set<string>();
+			const servers = all.filter(entry => {
+				const server = entry?.server ?? entry;
+				const meta = entry?._meta?.['io.modelcontextprotocol.registry/official'];
+				if (meta?.isLatest === false) return false;
+				const name = String(server?.name ?? '');
+				if (seenNames.has(name)) return false;
+				seenNames.add(name);
+				return true;
+			});
 			return servers.map((entry): McpRegistrySearchResult => {
 				const server = entry?.server ?? entry;
 				const remotes: any[] = Array.isArray(server?.remotes) ? server.remotes : [];
@@ -120,6 +134,47 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 			})).filter(s => !!s.repositoryUrl);
 		} catch (e) {
 			return [];
+		}
+	}
+
+	// A repository's listing is cached for a few minutes: GitHub allows 60 unauthenticated API calls an hour, and a store that is
+	// opened and closed would otherwise spend two of them every time.
+	private readonly _githubCache = new Map<string, { atMs: number; listing: GithubSkillListing }>();
+
+	async listGithubSkills(repoSpec: string): Promise<GithubSkillListing> {
+		const ref = parseRepoRef(repoSpec);
+		if (!ref) { return { repo: repoSpec, stars: 0, entries: [], error: 'Not a GitHub repository. Use owner/repo or a https://github.com address.' }; }
+		const name = `${ref.owner}/${ref.repo}`;
+		const cached = this._githubCache.get(name.toLowerCase());
+		if (cached && Date.now() - cached.atMs < GITHUB_CACHE_TTL_MS) { return cached.listing; }
+		try {
+			const meta = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}`);
+			const branch = typeof meta?.default_branch === 'string' && /^[A-Za-z0-9_.-]+$/.test(meta.default_branch) ? meta.default_branch : 'main';
+			const tree = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}/git/trees/${branch}?recursive=1`);
+			const folders = skillFoldersFromTree(Array.isArray(tree?.tree) ? tree.tree : []);
+			const entries: GithubSkillEntry[] = new Array(folders.length);
+			let next = 0;
+			// six downloads at a time: raw.githubusercontent.com is not rate limited like the API, but there is no reason to open eighty connections
+			await Promise.all(Array.from({ length: Math.min(6, folders.length) }, async () => {
+				for (; ;) {
+					const i = next++;
+					if (i >= folders.length) { return; }
+					const f = folders[i];
+					const text = await fetchText(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${branch}/${f.skillMdPath}`) ?? '';
+					const fm = parseSkillFrontmatter(text);
+					const fallbackName = f.dir ? f.dir.split('/').pop()! : ref.repo;
+					entries[i] = {
+						name: fm.name ?? fallbackName, description: fm.description ?? '', repositoryUrl: skillFolderUrl(ref, branch, f.dir),
+						owner: ref.owner, repo: ref.repo, sizeBytes: f.sizeBytes, instructions: text,
+					};
+				}
+			}));
+			const listing: GithubSkillListing = { repo: name, stars: Number(meta?.stargazers_count ?? 0), entries };
+			this._githubCache.set(name.toLowerCase(), { atMs: Date.now(), listing });
+			return listing;
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
+			return { repo: name, stars: 0, entries: [], error: /HTTP (403|429)/.test(message) ? 'GitHub is limiting requests from this computer for now. Try again in a few minutes.' : /HTTP 404/.test(message) ? 'That repository was not found.' : `Could not read the repository (${message}).` };
 		}
 	}
 

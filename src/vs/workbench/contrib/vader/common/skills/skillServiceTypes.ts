@@ -63,6 +63,12 @@ export interface ISkillService {
 	/** the only way a skill becomes 'trusted' or 'blocked' - always an explicit, user-driven decision, never automatic */
 	setTrustState(id: string, trustState: SkillTrustState): void;
 	remove(id: string): void;
+
+	/** GitHub repositories the skills store browses ("owner/repo"); a first run has the one Anthropic publishes. Changing them fires onDidChangeSkills. */
+	listSources(): string[];
+	/** false when `repo` is not an owner/repo name or a https://github.com address */
+	addSource(repo: string): boolean;
+	removeSource(repo: string): void;
 }
 
 export const ISkillService = createDecorator<ISkillService>('vaderSkillService');
