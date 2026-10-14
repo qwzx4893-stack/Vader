@@ -17,8 +17,9 @@ import { IRange } from '../../../../editor/common/core/range.js';
 import { VADER_VIEW_CONTAINER_ID, VADER_VIEW_ID } from './sidebarPane.js';
 import { IMetricsService } from '../common/metricsService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { Codicon } from '../../../../base/common/codicons.js';
 import { VADER_TOGGLE_SETTINGS_ACTION_ID } from './vaderSettingsPane.js';
-import { VADER_CTRL_L_ACTION_ID, VADER_TOGGLE_ADDONS_ACTION_ID } from './actionIDs.js';
+import { VADER_CTRL_L_ACTION_ID, VADER_TOGGLE_ADDONS_ACTION_ID, VADER_OPEN_SHELL_ACTION_ID } from './actionIDs.js';
 import { localize2 } from '../../../../nls.js';
 import { IChatThreadService, awaitMounted } from './chatThreadService.js';
 import { IViewsService } from '../../../services/views/common/viewsService.js';
@@ -234,6 +235,22 @@ registerAction2(class extends Action2 {
 	}
 })
 
+
+// back to the Vader window (projects, conversations, all agents) from the editor layout
+registerAction2(class extends Action2 {
+	constructor() {
+		super({
+			id: 'vader.windowAction',
+			title: 'Vader window',
+			tooltip: 'Vader window: projects, conversations and all agents',
+			icon: Codicon.layout,
+			menu: [{ id: MenuId.ViewTitle, group: 'navigation', order: -1, when: ContextKeyExpr.equals('view', VADER_VIEW_ID), }]
+		});
+	}
+	async run(accessor: ServicesAccessor): Promise<void> {
+		await accessor.get(ICommandService).executeCommand(VADER_OPEN_SHELL_ACTION_ID)
+	}
+})
 
 // Settings gear
 registerAction2(class extends Action2 {

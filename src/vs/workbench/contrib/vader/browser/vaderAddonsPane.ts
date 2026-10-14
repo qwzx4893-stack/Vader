@@ -11,6 +11,7 @@ import { Codicon } from '../../../../base/common/codicons.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
 import { mountVaderAddons } from './react/out/vader-addons-tsx/index.js'
 import { VADER_TOGGLE_ADDONS_ACTION_ID, VADER_OPEN_ADDONS_ACTION_ID } from './actionIDs.js'
+import { IVaderShellService } from './vaderShellService.js'
 
 
 // Add-ons is where a person finds skills, MCP servers, editor extensions and agents. It opens as a full-window page over the editor, like Settings
@@ -107,6 +108,9 @@ registerAction2(class extends Action2 {
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
+		const shell = accessor.get(IVaderShellService)
+		// in the Vader window Add-ons is a page of the window, beside the sidebar
+		if (shell.state.mode === 'window') { shell.state.page === 'addons' ? shell.show('conversation') : shell.show('addons'); return }
 		overlayOf(accessor).toggle()
 	}
 })
@@ -121,6 +125,8 @@ registerAction2(class extends Action2 {
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {
+		const shell = accessor.get(IVaderShellService)
+		if (shell.state.mode === 'window') { shell.show('addons'); return }
 		overlayOf(accessor).open()
 	}
 })

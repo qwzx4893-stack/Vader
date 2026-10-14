@@ -67,6 +67,7 @@ import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestra
 import { IExternalAgentsService, ExternalAgentsState } from '../../../externalAgents/externalAgentsService.js'
 import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
 import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
+import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -116,6 +117,11 @@ const memoryStateListeners: Set<(s: { project: MemoryRecord[]; agent: MemoryReco
 let externalAgentsState: ExternalAgentsState
 const externalAgentsStateListeners: Set<(s: ExternalAgentsState) => void> = new Set()
 
+let shellState: ShellState
+const shellStateListeners: Set<(s: ShellState) => void> = new Set()
+
+const usageListeners: Set<() => void> = new Set()
+
 let orchestrationRunsState: ParallelRunState[]
 const orchestrationRunsStateListeners: Set<(s: ParallelRunState[]) => void> = new Set()
 
@@ -144,9 +150,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		memoryService: accessor.get(IMemoryService),
 		orchestrationService: accessor.get(IAgentOrchestrationService),
 		externalAgentsService: accessor.get(IExternalAgentsService),
+		shellService: accessor.get(IVaderShellService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService, externalAgentsService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService, externalAgentsService, shellService } = stateServices
 
 
 
@@ -276,6 +283,18 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	shellState = shellService.state
+	disposables.push(
+		shellService.onDidChange(() => {
+			shellState = shellService.state
+			shellStateListeners.forEach(l => l(shellState))
+		})
+	)
+
+	disposables.push(
+		chatThreadsStateService.onDidChangeUsage(() => { usageListeners.forEach(l => l()) })
+	)
+
 	orchestrationRunsState = orchestrationService.runs
 	disposables.push(
 		orchestrationService.onDidChangeOrchestration(() => {
@@ -350,6 +369,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExternalAgentsService: accessor.get(IExternalAgentsService),
 		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
 		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
+		IVaderShellService: accessor.get(IVaderShellService),
 
 	} as const
 	return reactAccessor
@@ -376,6 +396,27 @@ export const useAccessor = () => {
 
 
 // -- state of services --
+
+export const useShellState = () => {
+	const [s, ss] = useState(shellState)
+	useEffect(() => {
+		ss(shellState)
+		shellStateListeners.add(ss)
+		return () => { shellStateListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+/** a number that changes whenever what the conversations have spent changes, so a list that shows costs re-reads them */
+export const useUsageTick = () => {
+	const [n, setN] = useState(0)
+	useEffect(() => {
+		const l = () => setN(x => x + 1)
+		usageListeners.add(l)
+		return () => { usageListeners.delete(l) }
+	}, [])
+	return n
+}
 
 export const useSettingsState = () => {
 	const [s, ss] = useState(settingsState)

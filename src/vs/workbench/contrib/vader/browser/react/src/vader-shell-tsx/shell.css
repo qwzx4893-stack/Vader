@@ -1,0 +1,135 @@
+/*--------------------------------------------------------------------------------------
+ *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
+ *--------------------------------------------------------------------------------------*/
+/* The Vader window. The first part is the styles of the interface boards (v3 and v4 of the canvas), with every class name prefixed "vader-" the way the
+   build prefixes the class names written in the components, and scoped under .vader-shell so nothing else in the editor is touched. This file is now
+   the source: new styles go after "app additions". Write class names in the components without the prefix (className='r c fl'), as literals or
+   ternaries of literals, because the build adds "vader-" to the class names it finds written in a className and cannot see a name built at run time. */
+.vader-shell{--g0:#0b0b0c;--g1:#121214;--g2:#19191c;--g3:#202024;--ln:rgba(255,255,255,.075);--ln2:rgba(255,255,255,.14);--t1:#ededee;--t2:#b0b0b5;--t3:#8a8a91;--t4:#6f6f76;--ac:#6ea0ff;--addt:#8fd7ac;--delt:#f1a1a4;--wa:#e2a93f;
+width:100%;height:100%;box-sizing:border-box;background:var(--g0);color:var(--t1);font:13px/1.5 'Segoe UI Variable Text','Segoe UI',system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;overflow:hidden;font-feature-settings:'tnum' 1;-webkit-font-smoothing:antialiased}
+.vader-shell *{box-sizing:border-box}
+.vader-shell :where(button){font:inherit;color:inherit;background:none;border:0;padding:0;text-align:left;cursor:default}
+.vader-shell .vader-mo{font-family:'Cascadia Code','Cascadia Mono',Consolas,ui-monospace,monospace;font-size:12px}
+.vader-shell .vader-i{width:15px;height:15px;flex:none;stroke:currentColor;fill:none;stroke-width:1.4;stroke-linecap:round;stroke-linejoin:round}
+.vader-shell .vader-i12{width:12px;height:12px}
+.vader-shell .vader-r{display:flex;align-items:center}
+.vader-shell .vader-c{display:flex;flex-direction:column}
+.vader-shell .vader-fl{flex:1;min-width:0}
+.vader-shell .vader-tr{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vader-shell .vader-t1{color:var(--t1)}
+.vader-shell .vader-t2{color:var(--t2)}
+.vader-shell .vader-t3{color:var(--t3)}
+.vader-shell .vader-t4{color:var(--t4)}
+.vader-shell .vader-add{color:var(--addt)}
+.vader-shell .vader-del{color:var(--delt)}
+.vader-shell .vader-sm{font-size:12px}
+.vader-shell .vader-hint{font-size:12px;color:var(--t3)}
+.vader-shell .vader-hd{font-size:12px;color:var(--t3);font-weight:500;padding:16px 10px 4px}
+.vader-shell .vader-ag{display:flex;align-items:center;gap:10px;width:100%;height:30px;padding:0 10px;border-radius:6px;color:var(--t2)}
+.vader-shell .vader-ag.vader-on{background:var(--g3);color:var(--t1)}
+.vader-shell .vader-ag .vader-m{font-size:12px;color:var(--t3);flex:none}
+.vader-shell .vader-nv{display:flex;align-items:center;gap:10px;height:30px;padding:0 10px;border-radius:6px;width:100%;color:var(--t2)}
+.vader-shell .vader-nv.vader-on{background:var(--g3);color:var(--t1)}
+.vader-shell .vader-lg{display:grid;grid-template-columns:78px 1fr auto;column-gap:12px;align-items:baseline;line-height:22px;color:var(--t3)}
+.vader-shell .vader-lg .vader-o{color:var(--t2);min-width:0}
+.vader-shell .vader-dl{display:block;tab-size:2;font-family:'Cascadia Code','Cascadia Mono',Consolas,ui-monospace,monospace;font-size:12px;line-height:20px;white-space:pre;color:var(--t2)}
+.vader-shell .vader-dl b{display:inline-block;width:40px;text-align:right;padding-right:10px;color:var(--t4);font-weight:400}
+.vader-shell .vader-dl::after{content:none}
+.vader-shell .vader-dl i{display:inline-block;width:16px;font-style:normal;color:var(--t4);text-align:center}
+.vader-shell .vader-dl.vader-x{background:rgba(229,72,77,.085)}
+.vader-shell .vader-dl.vader-x i{color:var(--delt)}
+.vader-shell .vader-dl.vader-p{background:rgba(46,160,98,.095)}
+.vader-shell .vader-dl.vader-p i{color:var(--addt)}
+.vader-shell .vader-dl.vader-x .vader-w{background:rgba(229,72,77,.3);border-radius:2px}
+.vader-shell .vader-dl.vader-p .vader-w{background:rgba(46,160,98,.32);border-radius:2px}
+.vader-shell .vader-dl.vader-n{color:var(--t2)}
+.vader-shell .vader-tb{display:inline-flex;align-items:center;height:38px;margin-right:18px;color:var(--t3);border-bottom:1px solid transparent}
+.vader-shell .vader-tb.vader-on{color:var(--t1);border-bottom-color:var(--t1)}
+.vader-shell .vader-pb{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:6px;background:var(--t1);color:#000;font-weight:600}
+.vader-shell .vader-gb{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 11px;border-radius:6px;border:1px solid var(--ln2);color:var(--t1)}
+.vader-shell .vader-tx{display:inline-flex;align-items:center;gap:6px;height:28px;padding:0 8px;border-radius:6px;color:var(--t2)}
+.vader-shell .vader-fr{display:flex;align-items:center;gap:8px;height:28px;padding:0 10px;border-radius:6px;width:100%}
+.vader-shell .vader-fr.vader-on{background:var(--g3)}
+.vader-shell .vader-hl{height:1px;background:var(--ln);flex:none}
+.vader-shell .vader-ic{display:flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:6px;color:var(--t3)}
+.vader-shell .vader-sw{display:inline-flex;align-items:center;width:26px;height:14px;border-radius:7px;background:var(--t1);padding:2px;justify-content:flex-end;flex:none}
+.vader-shell .vader-sw i{display:block;width:10px;height:10px;border-radius:50%;background:#000}
+.vader-shell .vader-sw.vader-off{background:transparent;border:1px solid var(--ln2);justify-content:flex-start;padding:1px}
+.vader-shell .vader-sw.vader-off i{background:var(--t3);width:10px;height:10px}
+.vader-shell .vader-fld{display:flex;align-items:center;height:32px;padding:0 10px;border-radius:6px;border:1px solid var(--ln2);color:var(--t1);background:transparent}
+.vader-shell .vader-pop{background:var(--g3);border:1px solid var(--ln2);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.55);overflow:hidden}
+.vader-shell .vader-opt{display:flex;align-items:center;gap:9px;width:100%;height:30px;padding:0 10px;color:var(--t2)}
+.vader-shell .vader-opt.vader-on{background:rgba(255,255,255,.07);color:var(--t1)}
+.vader-shell .vader-lbl{font-size:12px;color:var(--t3);padding:0 2px 6px}
+.vader-shell .vader-th{display:grid;align-items:center;column-gap:14px;height:32px;padding:0 14px;border-bottom:1px solid var(--ln);color:var(--t3);font-size:12px}
+.vader-shell .vader-td{display:grid;align-items:center;column-gap:14px;height:40px;padding:0 14px;border-bottom:1px solid var(--ln);color:var(--t2)}
+.vader-shell .vader-td.vader-on{background:var(--g3)}
+.vader-shell .vader-sheet{background:var(--g1);border:1px solid var(--ln);border-radius:10px}
+.vader-shell .vader-gate{background:var(--g2);border:1px solid var(--ln2);border-radius:10px}
+.vader-shell .vader-step{display:flex;align-items:center;gap:8px;min-height:22px;color:var(--t3);font-size:13px}
+.vader-shell .vader-step b{font-weight:400;color:var(--t2)}
+.vader-shell .vader-step .vader-mo{color:var(--t2)}
+.vader-shell .vader-card{display:flex;align-items:center;gap:14px;padding:14px 16px;border:1px solid var(--ln);border-radius:10px;background:var(--g1);min-width:0}
+.vader-shell .vader-card.vader-on{background:var(--g2);border-color:var(--ln2)}
+.vader-shell .vader-logo{width:42px;height:42px;border-radius:10px;background:var(--g3);border:1px solid var(--ln);display:flex;align-items:center;justify-content:center;flex:none;color:var(--t3)}
+.vader-shell .vader-logo img{width:22px;height:22px;display:block}
+.vader-shell .vader-logo.vader-sm{width:30px;height:30px;border-radius:8px}
+.vader-shell .vader-logo.vader-sm img{width:16px;height:16px}
+.vader-shell .vader-nm{font-weight:600;color:var(--t1);font-size:13.5px}
+.vader-shell .vader-dsc{color:var(--t2);font-size:12.5px;line-height:1.45;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.vader-shell .vader-meta{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--t3);white-space:nowrap}
+.vader-shell .vader-sc{display:flex;flex-direction:column;align-items:flex-end;gap:5px;width:76px;flex:none}
+.vader-shell .vader-sc .vader-lv{font-size:11px;line-height:1;white-space:nowrap}
+.vader-shell .vader-hi .vader-lv{color:#4cc38a}
+.vader-shell .vader-md .vader-lv{color:#e2a93f}
+.vader-shell .vader-lo .vader-lv{color:#f06a6e}
+.vader-shell .vader-sc b{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;line-height:1}
+.vader-shell .vader-bar{width:52px;height:4px;border-radius:2px;background:rgba(255,255,255,.1);overflow:hidden}
+.vader-shell .vader-bar i{display:block;height:100%;border-radius:2px}
+.vader-shell .vader-hi b{color:#4cc38a}
+.vader-shell .vader-hi .vader-bar i{background:#4cc38a}
+.vader-shell .vader-md b{color:#e2a93f}
+.vader-shell .vader-md .vader-bar i{background:#e2a93f}
+.vader-shell .vader-lo b{color:#f06a6e}
+.vader-shell .vader-lo .vader-bar i{background:#f06a6e}
+.vader-shell .vader-in{font-size:12.5px;color:var(--t3)}
+.vader-shell .vader-grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.vader-shell .vader-srch{display:flex;align-items:center;gap:8px;height:32px;padding:0 11px;border:1px solid var(--ln2);border-radius:8px;color:var(--t3);background:var(--g0)}
+.vader-shell .vader-wc{height:38px;display:flex;align-items:center;padding:0 0 0 12px;gap:6px;flex:none}
+.vader-shell .vader-main-sheet{background:var(--g1);border-left:1px solid var(--ln);border-top:1px solid var(--ln);border-top-left-radius:12px;min-width:0;display:flex;flex-direction:column}
+.vader-shell .vader-nvh{font-size:12px;color:var(--t3);font-weight:500;padding:14px 10px 4px}
+.vader-shell .vader-ttl{font-size:20px;font-weight:600;letter-spacing:-.01em;color:var(--t1)}
+.vader-shell .vader-row{display:flex;align-items:center;gap:12px;min-height:44px;border-top:1px solid var(--ln)}
+.vader-shell .vader-row:last-child{border-bottom:1px solid var(--ln)}
+.vader-shell .vader-dot{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+.vader-shell .vader-ta{background:var(--g0);border:1px solid var(--ln2);border-radius:8px;padding:10px 12px;color:var(--t2);line-height:1.6}
+.vader-shell .vader-chk{width:15px;height:15px;border-radius:4px;border:1px solid var(--ln2);flex:none;display:flex;align-items:center;justify-content:center}
+.vader-shell .vader-chk.vader-on{background:var(--t1);border-color:var(--t1)}
+.vader-shell .vader-col4{width:318px;flex:none;display:flex;flex-direction:column}
+.vader-shell .vader-cap4{display:flex;flex-direction:column;gap:2px;height:44px;flex:none}
+.vader-shell .vader-pn4{height:430px;flex:none;display:flex;flex-direction:column;background:var(--g1);border:1px solid var(--ln);border-radius:12px;overflow:hidden}
+.vader-shell .vader-pb,.vader-shell .vader-gb,.vader-shell .vader-tx{white-space:nowrap;flex:none}
+/* ---- app additions ---- */
+/* what the app needs that the boards (static pictures) did not: real focus, hover and scrolling */
+.vader-shell button{cursor:pointer}
+.vader-shell button:disabled{cursor:default;opacity:.45}
+.vader-shell .vader-nv:hover,.vader-shell .vader-ag:hover,.vader-shell .vader-tx:hover,.vader-shell .vader-ic:hover{background:rgba(255,255,255,.05);color:var(--t1)}
+.vader-shell .vader-nv.vader-on:hover,.vader-shell .vader-ag.vader-on:hover{background:var(--g3)}
+.vader-shell .vader-gb:hover{background:rgba(255,255,255,.05)}
+.vader-shell .vader-pb:hover{background:#fff}
+.vader-shell :focus-visible{outline:1px solid var(--ac);outline-offset:1px;border-radius:6px}
+.vader-shell input,.vader-shell textarea{font:inherit;color:inherit;background:transparent;border:0;outline:0;min-width:0}
+.vader-shell ::-webkit-scrollbar{width:10px;height:10px}
+.vader-shell ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:5px;border:2px solid transparent;background-clip:padding-box}
+.vader-shell ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);background-clip:padding-box;border:2px solid transparent}
+.vader-shell .vader-scroll{overflow-y:auto;min-height:0}
+@keyframes vader-spin{to{transform:rotate(360deg)}}
+.vader-shell .vader-spin{animation:vader-spin 1s linear infinite;transform-origin:center}
+@media (prefers-reduced-motion:reduce){.vader-shell .vader-spin{animation:none}}
+
+/* the chat, Add-ons and the other pages that are written with the editor's theme colours take the colours of the boards while they are inside the window */
+.vader-shell .vader-scope{
+	--vader-bg-1:#19191c;--vader-bg-1-alt:#202024;--vader-bg-2:#121214;--vader-bg-2-alt:#121214;--vader-bg-2-hover:#17171a;--vader-bg-3:#0b0b0c;
+	--vader-fg-0:#ffffff;--vader-fg-1:#ededee;--vader-fg-2:#b0b0b5;--vader-fg-3:#8a8a91;--vader-fg-4:#6f6f76;
+	--vader-border-1:rgba(255,255,255,.22);--vader-border-2:rgba(255,255,255,.14);--vader-border-3:rgba(255,255,255,.075);--vader-border-4:rgba(255,255,255,.075);
+}
