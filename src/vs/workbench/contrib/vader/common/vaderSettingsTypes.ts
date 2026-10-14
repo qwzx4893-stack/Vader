@@ -542,6 +542,8 @@ export type GlobalSettings = {
 	priceDiscountPercent: number;
 	/** the person's own prices, US dollars per million tokens by model name, replacing the built-in price of that model */
 	modelPriceOverrides: { [modelName: string]: { input: number, output: number, cache_read?: number, cache_write?: number } };
+	/** ids of the Add-ons sources the person turned off (common/marketplace/addonSources.ts); all others are on, including ones added later */
+	addonSourcesOff: string[];
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -564,6 +566,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	dailySpendLimitUsd: null,
 	priceDiscountPercent: 0,
 	modelPriceOverrides: {},
+	addonSourcesOff: [],
 }
 
 export type GlobalSettingName = keyof GlobalSettings

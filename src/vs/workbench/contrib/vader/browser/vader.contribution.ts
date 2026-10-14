@@ -24,6 +24,7 @@ import './autocompleteService.js'
 // settings pane
 import './vaderSettingsPane.js'
 import './vaderAddonsPane.js'
+import './trustMonitor.js'
 
 // register css
 import './media/vader.css'

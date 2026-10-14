@@ -83,7 +83,7 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 			// gets its result cached (so the next search benefits), but is not returned here -
 			// _searchGeneration is checked by the caller, not here, to keep this function pure
 			this._cache.set(cacheKey, { atMs: Date.now(), items });
-			return { providerId: provider.id, items };
+			return { providerId: provider.id, items, warnings: provider.takeWarnings?.() };
 		} catch (e) {
 			// per-provider failure isolation: one dead/offline source degrades to "0 results,
 			// error noted," never breaks the whole federated search - offline degradation and
@@ -148,7 +148,7 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 			const timeout = new Promise<never>((_, reject) => { timeoutHandle = setTimeout(() => { cts.cancel(); reject(new Error('took too long to answer')); }, PROVIDER_BROWSE_TIMEOUT_MS); });
 			const items = await Promise.race([provider.browse ? provider.browse(cts.token) : provider.listInstalled(), timeout]);
 			this._cache.set(cacheKey, { atMs: Date.now(), items });
-			return { providerId: provider.id, items };
+			return { providerId: provider.id, items, warnings: provider.takeWarnings?.() };
 		} catch (e) {
 			return { providerId: provider.id, items: cached?.items ?? [], error: e instanceof Error ? e.message : String(e) };
 		} finally {
@@ -180,6 +180,12 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 			try { return await p.listInstalled(); } catch { return []; }
 		}));
 		return perProvider.flat();
+	}
+
+	async refine(item: MarketplaceItem): Promise<MarketplaceItem> {
+		const provider = this._providers.get(item.providerId);
+		if (!provider?.refine) return item;
+		try { return await provider.refine(item); } catch { return item; }
 	}
 
 	async performAction(action: Exclude<MarketplaceInstallMethod, null>, item: MarketplaceItem): Promise<void> {

@@ -5,29 +5,51 @@
 import { CancellationToken } from '../../../../../../base/common/cancellation.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../../../common/contributions.js';
 import { ISkillService, SkillRecord } from '../../../common/skills/skillService.js';
-import { GithubSkillEntry, IDiscoveryMainService, SkillNetSearchResult } from '../../../common/discovery/discoveryServiceTypes.js';
+import { GithubSkillEntry, IDiscoveryMainService, RepoSignals } from '../../../common/discovery/discoveryServiceTypes.js';
+import { githubRepoUrlOf, ownerOfGithubUrl } from '../../../common/discovery/feedParsers.js';
 import { IMarketplaceProvider, IUnifiedMarketplaceService, MarketplaceItem, MarketplaceTrust } from '../../../common/marketplace/marketplaceTypes.js';
-import { computeTrust } from '../../../common/marketplace/trustScore.js';
+import { computeTrust, TrustInputs } from '../../../common/marketplace/trustScore.js';
+import { isSourceOn } from '../../../common/marketplace/addonSources.js';
+import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
-// Uses the EXISTING SkillProvider/SkillNet/skill-lifecycle architecture (ISkillService,
-// IDiscoveryMainService.searchSkillNet) rather than inventing a second Skill concept, per the
-// mission's explicit instruction. Installed skills come from ISkillService.list() directly;
-// remote candidates come from SkillNet (search) and from the GitHub repositories the user keeps as
-// sources (browse and search), converted to a not-yet-installed MarketplaceItem whose "install"
-// action calls ISkillService.install with the instructions text - the same flow install_skill's tool
-// implementation already uses, not a new one.
+// Skills are found in several live sources at once and merged:
+//   - the GitHub repositories kept as sources (anthropics/skills and openai/skills by default, and the ones the person adds)
+//   - skills.sh, a live index with install counts
+//   - GitHub's own search for repositories that tag themselves "agent-skills"
+//   - SkillNet
+// The same skill found by two sources is one row that says it was found twice (two sources agreeing is a signal in the score).
+// What each source knows goes into the score as it is read, every time; nothing is stored as a ready-made number. Installed skills come from
+// ISkillService.list(); installing goes through ISkillService.install with the text, the same flow as before.
 
-/** "owner" of https://github.com/owner/repo/..., or undefined for anything else */
-function ownerOf(repositoryUrl: string | undefined): string | undefined {
-	if (!repositoryUrl) return undefined;
-	try {
-		const url = new URL(repositoryUrl);
-		return url.hostname === 'github.com' ? url.pathname.split('/').filter(Boolean)[0] : undefined;
-	} catch {
-		return undefined;
-	}
-}
+type LiveSignals = Pick<TrustInputs, 'stars' | 'forks' | 'pushedAt' | 'createdAt' | 'archived' | 'license' | 'ownerType' | 'sourceInstalls'>;
+
+/** one skill as one source described it, before the sources are merged */
+type Candidate = {
+	readonly name: string;
+	readonly description: string;
+	readonly repositoryUrl?: string;
+	/** owner/repo on GitHub, when known */
+	readonly repo?: string;
+	readonly publisher?: string;
+	readonly sourceId: string;
+	readonly sourceLabel: string;
+	readonly instructions?: string;
+	readonly sizeBytes?: number;
+	/** set when the source names the skill by folder but gave no address for it (skills.sh) */
+	readonly skillsSh?: { readonly repo: string; readonly skillId: string };
+	/** a whole repository found by topic: it may hold one skill or many */
+	readonly wholeRepo?: boolean;
+	readonly signals: LiveSignals;
+};
+
+const SKILLS_SH_BROWSE_QUERIES = ['best practices', 'testing', 'pdf', 'code review'];
+
+const signalsOf = (s: RepoSignals | undefined): LiveSignals => s ? {
+	stars: s.stars, forks: s.forks, pushedAt: s.pushedAt, createdAt: s.createdAt, archived: s.archived, license: s.license ?? null, ownerType: s.ownerType,
+} : {};
+
+const keyOf = (c: Candidate): string => c.repo ? `${c.repo.toLowerCase()}#${c.name.toLowerCase()}` : (c.repositoryUrl ?? c.name).toLowerCase();
 
 class SkillMarketplaceProvider implements IMarketplaceProvider {
 	readonly id = 'skills';
@@ -35,17 +57,24 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 	readonly itemType = 'SKILL' as const;
 	readonly cacheTtlMs = 30_000;
 
+	private _warnings: string[] = [];
+
 	constructor(
 		private readonly _skillService: ISkillService,
 		private readonly _discoveryService: IDiscoveryMainService,
+		private readonly _settings: IVaderSettingsService,
 	) { }
+
+	takeWarnings(): string[] { const w = this._warnings; this._warnings = []; return w; }
+
+	private _on(sourceId: string): boolean { return isSourceOn(this._settings.state.globalSettings.addonSourcesOff, sourceId); }
 
 	private _trustOf(state: SkillRecord['trustState']): MarketplaceTrust {
 		return state === 'trusted' ? 'trusted' : state === 'blocked' ? 'blocked' : 'review_required';
 	}
 
-	private _installedToItem(skill: SkillRecord): MarketplaceItem {
-		const publisher = ownerOf(skill.source.repositoryUrl);
+	private _installedToItem(skill: SkillRecord, live?: LiveSignals): MarketplaceItem {
+		const publisher = ownerOfGithubUrl(skill.source.repositoryUrl);
 		return {
 			id: skill.id,
 			providerId: this.id,
@@ -59,7 +88,7 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 			installed: true,
 			enabled: skill.enabled,
 			sizeBytes: skill.instructions.length,
-			trustScore: computeTrust({ kind: 'skill', publisher, instructions: skill.instructions, userTrustState: skill.trustState }),
+			trustScore: computeTrust({ kind: 'skill', name: skill.name, publisher, instructions: skill.instructions, userTrustState: skill.trustState, ...live }),
 			capabilities: Object.entries(skill.requestedCapabilities).filter(([, v]) => v).map(([k]) => k),
 			// a skill that's already installed has nothing left to "install" - its only
 			// meaningful marketplace actions are enable/disable, handled via setEnabled.
@@ -73,100 +102,199 @@ class SkillMarketplaceProvider implements IMarketplaceProvider {
 				filesystemAccess: skill.requestedCapabilities.fs,
 				terminalAccess: skill.requestedCapabilities.terminal,
 			},
-			metadata: { skillId: skill.id, category: skill.category, pinned: skill.pinned, instructionsHash: skill.instructionsHash, instructions: skill.instructions },
+			metadata: { skillId: skill.id, category: skill.category, pinned: skill.pinned, instructionsHash: skill.instructionsHash, instructions: skill.instructions, repositoryUrl: skill.source.repositoryUrl, repo: githubRepoUrlOf(skill.source.repositoryUrl)?.slice('https://github.com/'.length) },
 		};
 	}
 
-	private _skillNetToItem(result: SkillNetSearchResult): MarketplaceItem {
-		return {
-			id: result.repositoryUrl,
-			providerId: this.id,
-			type: 'SKILL',
-			name: result.name,
-			description: result.description,
-			source: 'SkillNet',
-			publisher: ownerOf(result.repositoryUrl),
-			trust: 'unknown', // never installed, never reviewed - unknown until fetched and reviewed, same as install_skill's tool default
-			installed: false,
-			installMethod: 'review_and_install', // matches the mission's own action vocabulary: a Skill's instructions must be reviewed, not blindly executed
-			// no text yet, so this score only reflects who published it and how many stars it has; the review step fetches the text and scores it again
-			trustScore: computeTrust({ kind: 'skill', publisher: ownerOf(result.repositoryUrl), stars: result.stars }),
-			security: {
-				source: result.repositoryUrl,
-				repositoryUrl: result.repositoryUrl,
-				executesCode: false,
-			},
-			metadata: { repositoryUrl: result.repositoryUrl, stars: result.stars, skillNetCategory: result.category },
-		};
-	}
-
-	private _githubToItem(entry: GithubSkillEntry, stars: number, installedUrls: ReadonlySet<string>): MarketplaceItem {
-		const installed = installedUrls.has(entry.repositoryUrl);
-		return {
-			id: entry.repositoryUrl,
-			providerId: this.id,
-			type: 'SKILL',
-			name: entry.name,
-			description: entry.description,
-			source: `GitHub: ${entry.owner}/${entry.repo}`,
-			publisher: entry.owner,
-			trust: 'unknown',
-			installed,
-			sizeBytes: entry.sizeBytes,
-			installMethod: installed ? null : 'review_and_install',
-			trustScore: computeTrust({ kind: 'skill', publisher: entry.owner, stars, instructions: entry.instructions || undefined }),
-			security: { source: entry.repositoryUrl, repositoryUrl: entry.repositoryUrl, executesCode: false },
-			metadata: { repositoryUrl: entry.repositoryUrl, stars, instructions: entry.instructions, repo: `${entry.owner}/${entry.repo}` },
-		};
-	}
-
-	/** every skill in every source repository; a source that cannot be read is left out, and if none can be read the reason is thrown so the store can say why it is empty */
-	private async _githubItems(): Promise<MarketplaceItem[]> {
-		const installedUrls = new Set(this._skillService.list().map(s => s.source.repositoryUrl).filter((u): u is string => !!u));
-		const listings = await Promise.all(this._skillService.listSources().map(r => this._discoveryService.listGithubSkills(r)));
-		const items = listings.flatMap(l => l.entries.map(e => this._githubToItem(e, l.stars, installedUrls)));
-		const errors = listings.filter(l => l.error).map(l => `${l.repo}: ${l.error}`);
-		if (items.length === 0 && errors.length > 0) throw new Error(errors.join(' '));
+	/** merges what several sources said about the same skill into one item */
+	private _merge(candidates: readonly Candidate[], installedUrls: ReadonlySet<string>): MarketplaceItem[] {
+		const groups = new Map<string, Candidate[]>();
+		const byUrl = new Map<string, string>();
+		for (const c of candidates) {
+			const urlKey = c.repositoryUrl?.toLowerCase();
+			const key = (urlKey && byUrl.get(urlKey)) || keyOf(c);
+			const g = groups.get(key) ?? [];
+			g.push(c);
+			groups.set(key, g);
+			if (urlKey) byUrl.set(urlKey, key);
+		}
+		const items: MarketplaceItem[] = [];
+		for (const g of groups.values()) {
+			const first = g.find(c => c.instructions) ?? g[0];
+			const signals: LiveSignals = Object.assign({}, ...g.map(c => c.signals));
+			const sourceInstalls = g.map(c => c.signals.sourceInstalls).find((n): n is number => typeof n === 'number');
+			const labels = [...new Set(g.map(c => c.sourceLabel))];
+			const sources = new Set(g.map(c => c.sourceId));
+			const instructions = g.find(c => c.instructions)?.instructions;
+			const repositoryUrl = g.find(c => c.repositoryUrl)?.repositoryUrl;
+			const repo = g.find(c => c.repo)?.repo;
+			const publisher = first.publisher ?? g.find(c => c.publisher)?.publisher;
+			const installed = !!repositoryUrl && installedUrls.has(repositoryUrl);
+			items.push({
+				id: repositoryUrl ?? `skills.sh:${first.skillsSh?.repo}/${first.skillsSh?.skillId}`,
+				providerId: this.id,
+				type: 'SKILL',
+				name: first.name,
+				description: first.description || g.find(c => c.description)?.description || '',
+				source: labels.join(' · '),
+				publisher,
+				trust: 'unknown',
+				installed,
+				sizeBytes: g.find(c => c.sizeBytes !== undefined)?.sizeBytes,
+				installMethod: installed ? null : 'review_and_install',
+				trustScore: computeTrust({ kind: 'skill', name: first.name, publisher, instructions: instructions || undefined, ...signals, sourceInstalls, listedBy: sources.size }),
+				security: { source: repositoryUrl ?? repo ?? 'skills.sh', repositoryUrl, executesCode: false },
+				metadata: {
+					repositoryUrl, repo, instructions, signals, sourcesListing: labels, listedBy: sources.size,
+					skillsSh: g.find(c => c.skillsSh)?.skillsSh, wholeRepo: g.every(c => c.wholeRepo) && g.some(c => c.wholeRepo),
+				},
+			});
+		}
 		return items;
 	}
 
+	// ---- the live feeds, each one a list of candidates; one that fails is said so and the others still answer
+
+	private async _githubRepoCandidates(): Promise<Candidate[]> {
+		const listings = await Promise.all(this._skillService.listSources().map(r => this._discoveryService.listGithubSkills(r)));
+		const out: Candidate[] = [];
+		const errors: string[] = [];
+		for (const l of listings) {
+			if (l.error) { errors.push(`${l.repo}: ${l.error}`); continue; }
+			const signals = signalsOf(l.signals);
+			for (const e of l.entries) out.push(this._entryCandidate(e, l.stars, signals, 'github-repos', `GitHub: ${e.owner}/${e.repo}`));
+		}
+		if (out.length === 0 && errors.length > 0) throw new Error(errors.join(' '));
+		return out;
+	}
+
+	private _entryCandidate(e: GithubSkillEntry, stars: number, signals: LiveSignals, sourceId: string, label: string): Candidate {
+		return { name: e.name, description: e.description, repositoryUrl: e.repositoryUrl, repo: `${e.owner}/${e.repo}`, publisher: e.owner, sourceId, sourceLabel: label, instructions: e.instructions || undefined, sizeBytes: e.sizeBytes, signals: { ...signals, stars } };
+	}
+
+	private async _skillsShCandidates(queries: readonly string[]): Promise<Candidate[]> {
+		const lists = await Promise.all(queries.map(q => this._discoveryService.searchSkillsSh(q)));
+		return lists.flat().map((r): Candidate => ({
+			name: r.name, description: '', repo: r.repo, publisher: r.repo.split('/')[0], sourceId: 'skills-sh', sourceLabel: 'skills.sh',
+			skillsSh: { repo: r.repo, skillId: r.skillId }, signals: { sourceInstalls: r.installs },
+		}));
+	}
+
+	private async _skillNetCandidates(query: string): Promise<Candidate[]> {
+		const results = await this._discoveryService.searchSkillNet(query);
+		return results.map((r): Candidate => ({
+			name: r.name, description: r.description, repositoryUrl: r.repositoryUrl, repo: githubRepoUrlOf(r.repositoryUrl)?.slice('https://github.com/'.length), publisher: ownerOfGithubUrl(r.repositoryUrl),
+			sourceId: 'skillnet', sourceLabel: 'SkillNet', signals: { stars: r.stars },
+		}));
+	}
+
+	private async _topicCandidates(query: string): Promise<Candidate[]> {
+		const repos = await this._discoveryService.searchGithubTopic('agent-skills', query);
+		return repos.map((r): Candidate => ({
+			name: r.repo.split('/')[1], description: r.description ?? '', repositoryUrl: r.url, repo: r.repo, publisher: r.repo.split('/')[0], sourceId: 'github-topic-skills',
+			sourceLabel: 'GitHub topic: agent-skills', wholeRepo: true, signals: signalsOf(r),
+		}));
+	}
+
+	private async _gather(feeds: readonly { id: string; label: string; run: () => Promise<Candidate[]> }[]): Promise<Candidate[]> {
+		const active = feeds.filter(f => this._on(f.id));
+		const settled = await Promise.allSettled(active.map(f => f.run()));
+		const out: Candidate[] = [];
+		let failed = 0;
+		settled.forEach((r, i) => {
+			if (r.status === 'fulfilled') { out.push(...r.value); return; }
+			failed++;
+			this._warnings.push(`${active[i].label} did not answer (${r.reason instanceof Error ? r.reason.message : String(r.reason)})`);
+		});
+		if (active.length > 0 && failed === active.length) throw new Error(this.takeWarnings().join('; '));
+		return out;
+	}
+
+	private _installedUrls(): Set<string> {
+		return new Set(this._skillService.list().map(s => s.source.repositoryUrl).filter((u): u is string => !!u));
+	}
+
 	async browse(_token: CancellationToken): Promise<MarketplaceItem[]> {
-		const remote = await this._githubItems().catch(e => { if (this._skillService.list().length === 0) throw e; return []; });
+		const candidates = await this._gather([
+			{ id: 'github-repos', label: 'GitHub repositories', run: () => this._githubRepoCandidates() },
+			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates(SKILLS_SH_BROWSE_QUERIES) },
+			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates('') },
+		]).catch(e => { if (this._skillService.list().length === 0) throw e; return [] as Candidate[]; });
+		const remote = this._merge(candidates, this._installedUrls());
 		const remoteUrls = new Set(remote.map(r => r.id));
-		// installed skills that came from somewhere the sources do not list (SkillNet, written by the agent) are still shown
-		const installedElsewhere = this._skillService.list().filter(s => !s.source.repositoryUrl || !remoteUrls.has(s.source.repositoryUrl)).map(s => this._installedToItem(s));
-		const installedFromListing = this._skillService.list().filter(s => s.source.repositoryUrl && remoteUrls.has(s.source.repositoryUrl)).map(s => this._installedToItem(s));
+		const installed = this._skillService.list().map(s => this._installedToItem(s));
+		const installedElsewhere = installed.filter(i => !i.security?.repositoryUrl || !remoteUrls.has(i.security.repositoryUrl));
+		const installedFromListing = installed.filter(i => i.security?.repositoryUrl && remoteUrls.has(i.security.repositoryUrl));
 		const installedUrls = new Set(installedFromListing.map(i => i.security?.repositoryUrl));
 		return [...installedFromListing, ...installedElsewhere, ...remote.filter(r => !installedUrls.has(r.security?.repositoryUrl))];
 	}
 
 	async search(query: string, token: CancellationToken): Promise<MarketplaceItem[]> {
 		const q = query.toLowerCase();
-		const [installed, remote, github] = await Promise.all([
-			Promise.resolve(this._skillService.list().filter(s => `${s.name} ${s.description}`.toLowerCase().includes(q))),
-			this._discoveryService.searchSkillNet(query),
-			this._githubItems().catch(() => [] as MarketplaceItem[]),
-		]);
+		const installed = this._skillService.list().filter(s => `${s.name} ${s.description}`.toLowerCase().includes(q));
+		const candidates = await this._gather([
+			{ id: 'github-repos', label: 'GitHub repositories', run: async () => (await this._githubRepoCandidates()).filter(c => `${c.name} ${c.description}`.toLowerCase().includes(q)) },
+			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates([query]) },
+			{ id: 'skillnet', label: 'SkillNet', run: () => this._skillNetCandidates(query) },
+			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates(query) },
+		]).catch(() => [] as Candidate[]);
 		if (token.isCancellationRequested) return [];
 		const installedIds = new Set(installed.map(s => s.source.repositoryUrl));
-		const githubMatches = github.filter(g => !installedIds.has(g.id) && `${g.name} ${g.description}`.toLowerCase().includes(q));
-		const githubIds = new Set(githubMatches.map(g => g.id));
-		return [
-			...installed.map(s => this._installedToItem(s)),
-			...githubMatches,
-			...remote.filter(r => !installedIds.has(r.repositoryUrl) && !githubIds.has(r.repositoryUrl)).map(r => this._skillNetToItem(r)),
-		];
+		const remote = this._merge(candidates, this._installedUrls()).filter(r => !installedIds.has(r.id));
+		return [...installed.map(s => this._installedToItem(s)), ...remote];
 	}
 
 	async listInstalled(): Promise<MarketplaceItem[]> {
 		return this._skillService.list().map(s => this._installedToItem(s));
 	}
 
+	/** a live look at one skill: the repository's current signals, and the skill's own text when only its name was known */
+	async refine(item: MarketplaceItem): Promise<MarketplaceItem> {
+		const repo = typeof item.metadata.repo === 'string' ? item.metadata.repo : undefined;
+		const signalsNow = repo ? signalsOf(await this._discoveryService.getRepoSignals(repo)) : {};
+		const known = (item.metadata.signals ?? {}) as LiveSignals;
+		const live: LiveSignals = { ...known, ...signalsNow };
+		if (item.installed) {
+			const skill = this._skillService.get(String(item.metadata.skillId ?? item.id));
+			if (!skill) return item;
+			const fresh = this._installedToItem(skill, live);
+			return { ...fresh, metadata: { ...fresh.metadata, signals: live, refined: true } };
+		}
+		let instructions = typeof item.metadata.instructions === 'string' ? item.metadata.instructions : undefined;
+		let repositoryUrl = typeof item.metadata.repositoryUrl === 'string' ? item.metadata.repositoryUrl : undefined;
+		let description = item.description;
+		let sizeBytes = item.sizeBytes;
+		const sh = item.metadata.skillsSh as { repo: string; skillId: string } | undefined;
+		if (!instructions && sh) {
+			const entry = await this._discoveryService.resolveGithubSkill(sh.repo, sh.skillId);
+			if (entry) { instructions = entry.instructions || undefined; repositoryUrl = entry.repositoryUrl; description = description || entry.description; sizeBytes = entry.sizeBytes; }
+		}
+		const listedBy = typeof item.metadata.listedBy === 'number' ? item.metadata.listedBy : undefined;
+		return {
+			...item, description, sizeBytes, id: repositoryUrl ?? item.id,
+			security: { ...item.security, source: repositoryUrl ?? item.security?.source ?? '', repositoryUrl },
+			trustScore: computeTrust({ kind: 'skill', name: item.name, publisher: item.publisher, instructions, ...live, listedBy }),
+			metadata: { ...item.metadata, instructions, repositoryUrl, signals: live, refined: true },
+		};
+	}
+
 	async install(item: MarketplaceItem): Promise<void> {
-		const repositoryUrl = String(item.metadata.repositoryUrl ?? item.id);
+		let instructions = typeof item.metadata.instructions === 'string' ? item.metadata.instructions : '';
+		let repositoryUrl = String(item.metadata.repositoryUrl ?? item.id);
+		const sh = item.metadata.skillsSh as { repo: string; skillId: string } | undefined;
+		if (!instructions && sh) {
+			// skills.sh names the skill by folder: find it in its repository and read only that skill
+			const entry = await this._discoveryService.resolveGithubSkill(sh.repo, sh.skillId);
+			if (entry) { instructions = entry.instructions; repositoryUrl = entry.repositoryUrl; }
+		}
+		if (!instructions && item.metadata.wholeRepo && typeof item.metadata.repo === 'string') {
+			// a repository found by topic: one skill is installed, several need a choice the person makes by adding the repository as a source
+			const listing = await this._discoveryService.listGithubSkills(item.metadata.repo);
+			if (listing.entries.length > 1) throw new Error(`${item.metadata.repo} holds ${listing.entries.length} skills. Add it as a source in Settings, Skills, Sources, then pick the one you want here.`);
+			if (listing.entries.length === 1) { instructions = listing.entries[0].instructions; repositoryUrl = listing.entries[0].repositoryUrl; }
+		}
 		// a listing from a source already carries the text; SkillNet results do not, so they are downloaded now
-		const given = typeof item.metadata.instructions === 'string' ? item.metadata.instructions : '';
-		const instructions = given || await this._discoveryService.fetchSkillInstructions(repositoryUrl);
+		if (!instructions) instructions = (await this._discoveryService.fetchSkillInstructions(repositoryUrl)) ?? '';
 		if (!instructions) throw new Error(`Could not fetch instructions for "${item.name}" from ${repositoryUrl}.`);
 		this._skillService.install({ name: item.name, description: item.description, category: 'cached-external', instructions, repositoryUrl });
 	}
@@ -186,9 +314,10 @@ class SkillMarketplaceProviderContribution implements IWorkbenchContribution {
 	constructor(
 		@ISkillService skillService: ISkillService,
 		@IDiscoveryMainService discoveryService: IDiscoveryMainService,
+		@IVaderSettingsService settingsService: IVaderSettingsService,
 		@IUnifiedMarketplaceService marketplaceService: IUnifiedMarketplaceService,
 	) {
-		marketplaceService.registerProvider(new SkillMarketplaceProvider(skillService, discoveryService));
+		marketplaceService.registerProvider(new SkillMarketplaceProvider(skillService, discoveryService, settingsService));
 	}
 }
 

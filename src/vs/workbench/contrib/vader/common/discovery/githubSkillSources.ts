@@ -19,6 +19,8 @@ export type SkillFolder = {
 };
 
 const SEGMENT = /^[A-Za-z0-9_.-]+$/;
+/** hidden folders that are where a repository keeps its skills (openai/skills keeps them in skills/.curated), not tooling */
+const SKILL_DOT_FOLDERS: ReadonlySet<string> = new Set(['.curated', '.system', '.experimental']);
 
 /** accepts "owner/repo" and https://github.com/owner/repo (with or without .git or a trailing path); anything else is refused */
 export function parseRepoRef(spec: string): GithubRepoRef | null {
@@ -48,7 +50,7 @@ export function skillFoldersFromTree(tree: readonly GithubTreeEntry[], maxFolder
 		if (!m) { continue; }
 		const dir = m[1] ?? '';
 		const segments = dir.split('/').filter(Boolean);
-		if (segments.some(s => s.startsWith('.') || s === 'node_modules' || s === 'test' || s === 'tests' || s === 'fixtures' || s === 'template' || s === 'templates')) { continue; }
+		if (segments.some(s => (s.startsWith('.') && !SKILL_DOT_FOLDERS.has(s)) || s === 'node_modules' || s === 'test' || s === 'tests' || s === 'fixtures' || s === 'template' || s === 'templates')) { continue; }
 		if (!segments.every(s => SEGMENT.test(s))) { continue; }
 		const prefix = dir ? `${dir}/` : '';
 		const sizeBytes = blobs.filter(x => (dir ? x.path.startsWith(prefix) : true)).reduce((n, x) => n + (x.size ?? 0), 0);

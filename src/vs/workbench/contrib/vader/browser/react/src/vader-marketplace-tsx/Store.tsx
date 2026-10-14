@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Bot, Check, FileText, Loader2, Plug, Plus, Puzzle, Search, Wrench } from 'lucide-react'
+import { Bot, Check, FileText, Loader2, Plug, Puzzle, Search, Wrench } from 'lucide-react'
 import { useAccessor, useSkillsState } from '../util/services.js'
 import type { MarketplaceItem, MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
 import { trustLevelOf, TrustScore } from '../../../../common/marketplace/trustScore.js'
@@ -76,7 +76,7 @@ function useStoreItems(types: MarketplaceItemType[], query: string, includeExten
 			const res = query.trim() ? await marketplace.search(query.trim(), opts) : await marketplace.browse(opts)
 			if (g !== generation.current) return
 			setItems(res.items.filter(i => includeExtensions || i.type !== 'EXTENSION'))
-			setFailed(res.providerOutcomes.filter(o => o.error).map(o => `${o.providerId}: ${o.error}`))
+			setFailed(res.providerOutcomes.flatMap(o => [...(o.error ? [`${o.providerId}: ${o.error}`] : []), ...(o.warnings ?? [])]))
 		} finally {
 			if (g === generation.current) setLoading(false)
 		}
@@ -142,17 +142,18 @@ const AddonRow = ({ item, selected, busy, onSelect, onAction }: { item: Marketpl
 			<span className='text-vader-fg-3 truncate'>{item.description || 'No description'}</span>
 		</div>
 		{item.trustScore ? <TrustMeter score={item.trustScore} /> : null}
-		<div className='w-16 shrink-0 flex justify-end' onClick={e => e.stopPropagation()}>
-			{item.installed ? <span className='w-8 h-8 flex items-center justify-center text-green-500' aria-label='Installed' title='Installed'><Check className='w-4 h-4' /></span>
-				: busy ? <span className='w-8 h-8 flex items-center justify-center'><Loader2 className='w-4 h-4 animate-spin' /></span>
-					: review ? <button className='px-2.5 py-1 rounded-sm border border-vader-border-1 text-vader-fg-1' onClick={onSelect}>Review</button>
-						: item.installMethod ? <button className='w-8 h-8 rounded-full border border-vader-border-1 text-vader-fg-1 flex items-center justify-center hover:bg-vader-bg-2-hover' aria-label={`Add ${item.name}`} title={ACTION_LABEL[item.installMethod] ?? item.installMethod} onClick={onAction}><Plus className='w-4 h-4' /></button>
+		<div className='w-24 shrink-0 flex justify-end' onClick={e => e.stopPropagation()}>
+			{item.installed ? <span className='flex items-center gap-1.5 text-vader-fg-2' aria-label='Installed'><Check className='w-3.5 h-3.5 text-green-500' />Installed</span>
+				: busy ? <span className='flex items-center gap-1.5 text-vader-fg-2'><Loader2 className='w-3.5 h-3.5 animate-spin' />Installing</span>
+					: review ? <button className='px-3.5 py-1 rounded-md border border-vader-border-1 text-vader-fg-1' onClick={onSelect}>Review</button>
+						: item.installMethod ? <button data-testid='vader-addon-install' className='px-3.5 py-1 rounded-md bg-vader-fg-1 text-vader-bg-1 font-medium hover:opacity-90' aria-label={`${item.metadata.openOnly ? 'Open' : 'Install'} ${item.name}`} onClick={onAction}>{item.metadata.openOnly ? 'Open' : 'Install'}</button>
 							: null}
 		</div>
 	</div>
 }
 
-const DetailPane = ({ item, busy, error, onAction, onActionAndEnable, onClose }: { item: MarketplaceItem, busy: boolean, error?: string, onAction: () => void, onActionAndEnable?: () => void, onClose: () => void }) => {
+const DetailPane = ({ item, busy, refining, error, onAction, onActionAndEnable, onClose }: { item: MarketplaceItem, busy: boolean, refining?: boolean, error?: string, onAction: () => void, onActionAndEnable?: () => void, onClose: () => void }) => {
+	const listedBy = Array.isArray(item.metadata.sourcesListing) ? (item.metadata.sourcesListing as string[]).join(', ') : ''
 	const instructions = typeof item.metadata.instructions === 'string' ? item.metadata.instructions : ''
 	const stars = typeof item.metadata.stars === 'number' ? item.metadata.stars : undefined
 	return <div className='flex flex-col gap-4 p-4 border-l border-vader-border-3 min-w-0 overflow-y-auto'>
@@ -181,7 +182,8 @@ const DetailPane = ({ item, busy, error, onAction, onActionAndEnable, onClose }:
 				<span className='text-vader-fg-2'>{f.label}</span>
 				<span className={f.points > 0 && i > 0 ? 'text-green-500' : f.points < 0 ? 'text-red-500' : 'text-vader-fg-2'}>{f.points > 0 && i > 0 ? `+${f.points}` : f.points < 0 ? `−${-f.points}` : f.points}</span>
 			</div>)}
-			<div className='text-vader-fg-3 pt-2'>This is a guide to what to read first, not a safety check. Vader still asks before the agent runs anything.</div>
+			<div className='text-vader-fg-3 pt-2'>{refining ? 'Asking the sources again for the latest numbers...' : item.metadata.refined ? 'Scored just now from what the sources say today.' : 'Scored from what the listing says. Open the details to ask the sources again.'}{listedBy ? ` Found in: ${listedBy}.` : ''}</div>
+			<div className='text-vader-fg-3'>This is a guide to what to read first, not a safety check. Vader still asks before the agent runs anything.</div>
 		</div> : null}
 		{item.capabilities?.length ? <div className='text-vader-fg-2'>It mentions: {item.capabilities.join(', ')}. The agent still asks before it uses any of these.</div> : null}
 		{instructions ? <div className='flex flex-col gap-1 min-h-0'>
@@ -221,7 +223,17 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 		else list.sort((a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)))
 		return list
 	}, [items, source, sort, installedOnly])
-	const selected = selectedKey ? shown.find(i => keyOf(i) === selectedKey) : undefined
+	const [refined, setRefined] = useState<Record<string, MarketplaceItem>>({})
+	const [refining, setRefining] = useState<string | null>(null)
+	const selectedListed = selectedKey ? shown.find(i => keyOf(i) === selectedKey) : undefined
+	const selected = selectedListed ? (refined[selectedKey!] ?? selectedListed) : undefined
+	useEffect(() => {
+		if (!selectedListed || !selectedKey || refined[selectedKey]) return
+		let live = true
+		setRefining(selectedKey)
+		marketplace.refine(selectedListed).then(r => { if (live) setRefined(prev => ({ ...prev, [selectedKey]: r })) }).finally(() => { if (live) setRefining(null) })
+		return () => { live = false }
+	}, [selectedKey, selectedListed, refined, marketplace])
 
 	const act = useCallback(async (item: MarketplaceItem) => {
 		if (!item.installMethod) return
@@ -230,6 +242,7 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 		setErrorOf(e => { const { [key]: _drop, ...rest } = e; return rest })
 		try {
 			await marketplace.performAction(item.installMethod, item)
+			setRefined({})
 			await reload()
 		} catch (e) {
 			setErrorOf(prev => ({ ...prev, [key]: e instanceof Error ? e.message : String(e) }))
@@ -260,7 +273,7 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 					<div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{g.list.slice(0, 4).map(rowOf)}</div>
 				</div>) : <div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{shown.map(rowOf)}</div>}
 			</div>
-			{selected ? <div className='shrink-0' style={{ width: 460 }}><DetailPane item={selected} busy={busyKey === keyOf(selected)} error={errorOf[keyOf(selected)]} onAction={() => act(selected)} onActionAndEnable={selected.trustScore && selected.trustScore.level !== 'low' ? () => actAndEnable(selected) : undefined} onClose={() => setSelectedKey(null)} /></div> : null}
+			{selected ? <div className='shrink-0' style={{ width: 460 }}><DetailPane item={selected} busy={busyKey === keyOf(selected)} refining={refining === selectedKey} error={errorOf[keyOf(selected)]} onAction={() => act(selected)} onActionAndEnable={selected.trustScore && selected.trustScore.level !== 'low' ? () => actAndEnable(selected) : undefined} onClose={() => setSelectedKey(null)} /></div> : null}
 		</div>
 	}
 

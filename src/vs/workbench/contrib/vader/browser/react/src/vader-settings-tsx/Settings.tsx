@@ -30,6 +30,9 @@ import { MCPServer } from '../../../../common/mcpServiceTypes.js';
 import { useMCPServiceState } from '../util/services.js';
 import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js';
 import { TrustMeter } from '../vader-marketplace-tsx/Store.js';
+import { ADDON_SOURCES, AddonSourceKind, isSourceOn } from '../../../../common/marketplace/addonSources.js';
+import { parseTrustHistory, TRUST_HISTORY_STORAGE_KEY } from '../../../../common/marketplace/trustHistory.js';
+import { StorageScope } from '../../../../../../../platform/storage/common/storage.js';
 import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js';
 import { formatUsd, formatTokens, formatCost, PROVIDER_USAGE_PAGES } from '../../../../common/usageAccounting.js';
 import { computeTrust } from '../../../../common/marketplace/trustScore.js';
@@ -1179,12 +1182,14 @@ export const SkillsSection = () => {
 	const accessor = useAccessor()
 	const skillService = accessor.get('ISkillService')
 	const skills = useSkillsState()
+	// what the trust monitor saw the first time it scored each skill; it scores them again from live data every few hours
+	const trustHistory = React.useMemo(() => { try { return parseTrustHistory(JSON.parse(accessor.get('IStorageService').get(TRUST_HISTORY_STORAGE_KEY, StorageScope.APPLICATION) ?? 'null')) } catch { return {} } }, [accessor, skills])
 
-	if (skills.length === 0) return <div className='text-vader-fg-3 py-6'>No skills are installed yet. Open the Store tab to find some.</div>
+	if (skills.length === 0) return <div className='text-vader-fg-3 py-6'>No skills are installed yet. Open Add-ons to find some.</div>
 
 	return <div className='max-w-[760px]'>
 		<h4 className={`text-vader-fg-3 mb-4`}>
-			Skills you installed from the store, that the main agent found, or that it wrote itself. Every skill starts switched off and marked "review_required": read it before enabling it, and especially before marking it Trusted. When a skill changes at its source, a Trusted skill goes back to review_required, so a silent change can never keep its trusted status.
+			Skills you installed from Add-ons, that the main agent found, or that it wrote itself. Every skill starts switched off and marked "review_required": read it before enabling it, and especially before marking it Trusted. When a skill changes at its source, a Trusted skill goes back to review_required, so a silent change can never keep its trusted status.
 		</h4>
 		<div className='flex flex-col gap-y-2'>
 			{skills.map(skill => (
@@ -1193,9 +1198,10 @@ export const SkillsSection = () => {
 						<span className='font-medium'>{skill.name}</span>
 						<span className='flex items-center gap-3'>
 								<span className={`text-xs capitalize ${trustBadgeClass(skill.trustState)}`}>{skill.trustState.replace('_', ' ')}</span>
-								<TrustMeter score={computeTrust({ kind: 'skill', publisher: ownerOfRepository(skill.source.repositoryUrl), instructions: skill.instructions, userTrustState: skill.trustState })} />
+								<TrustMeter score={computeTrust({ kind: 'skill', name: skill.name, publisher: ownerOfRepository(skill.source.repositoryUrl), instructions: skill.instructions, userTrustState: skill.trustState })} />
 							</span>
 					</div>
+					{(() => { const h = trustHistory['skills:' + skill.id]; return h && h.score !== h.first ? <span className={h.score < h.first ? 'text-yellow-600 text-xs' : 'text-vader-fg-3 text-xs'}>Scored {h.score}% on {new Date(h.at).toLocaleDateString()} from live data; it was {h.first}% the first time. {h.against.length ? 'Against it: ' + h.against.slice(0, 3).join('; ') + '.' : ''}</span> : h ? <span className='text-vader-fg-3 text-xs'>Scored again from live data on {new Date(h.at).toLocaleDateString()}: {h.score}%.</span> : null })()}
 					<span className='text-vader-fg-3 text-xs'>{skill.description}</span>
 					<span className='text-vader-fg-3 text-xs'>
 						Category: {skill.category}
@@ -1242,6 +1248,28 @@ const TrustLegend = () => <span className='flex items-center gap-4 text-vader-fg
 
 // The places the skills store reads from: the GitHub repositories of skills the user keeps, and SkillNet. A repository is read through
 // GitHub's public API (a repository's file list and each SKILL.md); nothing about the workspace is sent.
+// Vader addition: where Add-ons looks. Each is a live public source asked with the words typed; one switched off is not asked. Extension and agent
+// sources are fixed by the product and shown so the person sees where results come from.
+const AddonSourcesSection = ({ kinds }: { kinds: AddonSourceKind[] }) => {
+	const accessor = useAccessor()
+	const settingsState = useSettingsState()
+	const vaderSettingsService = accessor.get('IVaderSettingsService')
+	const off = settingsState.globalSettings.addonSourcesOff ?? []
+	const toggle = (id: string, on: boolean) => vaderSettingsService.setGlobalSetting('addonSourcesOff', on ? off.filter(x => x !== id) : [...off.filter(x => x !== id), id])
+	return <div className='flex flex-col gap-2 max-w-[760px]' data-testid='vader-addon-sources'>
+		<div className='text-vader-fg-3'>Add-ons asks these live sources when you open it or search. A source you switch off is not asked; what you installed from it stays. Only your search words are sent, never anything from your project.</div>
+		<div className='flex flex-col'>
+			{ADDON_SOURCES.filter(s => kinds.includes(s.kind)).map(s => <div key={s.id} className='flex items-center gap-3 py-2 border-t border-vader-border-3'>
+				<div className='flex flex-col min-w-0 flex-1'>
+					<span className='text-vader-fg-1'>{s.label}</span>
+					<span className='text-vader-fg-3 text-xs'>{s.hint} <span className='font-mono'>{s.host}</span></span>
+				</div>
+				{s.fixed ? <span className='text-vader-fg-3 text-xs'>Always on</span> : <VaderSwitch size='xs' value={isSourceOn(off, s.id)} onChange={v => toggle(s.id, v)} />}
+			</div>)}
+		</div>
+	</div>
+}
+
 const SkillSourcesSection = () => {
 	const accessor = useAccessor()
 	const skillService = accessor.get('ISkillService')
@@ -1254,8 +1282,11 @@ const SkillSourcesSection = () => {
 		if (skillService.addSource(text)) { setText(''); setProblem('') }
 		else setProblem('That is not a GitHub repository. Use owner/repo or an address that starts with https://github.com/.')
 	}
-	return <div className='flex flex-col gap-3 max-w-[760px]'>
-		<div className='text-vader-fg-3'>The store lists the skills it finds in these GitHub repositories, and searches SkillNet when you type in the search box.</div>
+	return <div className='flex flex-col gap-6 max-w-[760px]'>
+		<AddonSourcesSection kinds={['skill']} />
+		<div className='flex flex-col gap-3'>
+		<div className='text-vader-fg-1'>GitHub repositories of skills</div>
+		<div className='text-vader-fg-3'>Add-ons lists every skill it finds in these repositories (anthropics/skills and openai/skills to begin with). Add your own below.</div>
 		<div className='flex flex-col'>
 			{sources.length === 0 ? <div className='text-vader-fg-3 py-3'>No repositories yet. Add one below.</div> : null}
 			{sources.map(s => <div key={s} className='flex items-center gap-3 py-2 border-t border-vader-border-3'>
@@ -1269,6 +1300,7 @@ const SkillSourcesSection = () => {
 			<VaderButtonBgDarken className='px-3 py-1' onClick={add}>Add repository</VaderButtonBgDarken>
 		</div>
 		{problem ? <div className='text-red-500'>{problem}</div> : null}
+		</div>
 	</div>
 }
 
@@ -1852,7 +1884,7 @@ const PrivacySection = () => {
 	const contacts: { who: string, when: string, host: string }[] = [
 		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure (or localhost for local models)' },
 		{ who: 'Extension registry', when: 'When you browse, search or install extensions.', host: 'open-vsx.org' },
-		{ who: 'Add-ons lists', when: 'When you open Add-ons, or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a GitHub repository\'s public file list and its SKILL.md files. Nothing from your project is sent.', host: 'api.github.com, raw.githubusercontent.com, registry.modelcontextprotocol.io, api-skillnet.openkg.cn' },
+		{ who: 'Add-ons lists', when: 'When you open Add-ons, or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a GitHub repository\'s public file list and its SKILL.md files. Nothing from your project is sent.', host: 'api.github.com, raw.githubusercontent.com, registry.modelcontextprotocol.io, skills.sh, registry.smithery.ai, registry.npmjs.org, api-skillnet.openkg.cn' },
 		{ who: 'Release check', when: autoCheckUpdates ? 'Now on: a quiet check for a newer Vader release every few hours, plus the manual button.' : 'Only when you press "Check for Updates". The background check is off.', host: 'api.github.com' },
 		{ who: 'Coding agents you add', when: 'Only after you pick one in Settings > Coding Agents and press Download or Install, or send it a message. The vendor\'s own program then talks to the vendor with your account; Vader does not see the sign-in.', host: 'the vendor of that agent (npm registry, github.com, downloads.cursor.com, dl.google.com for downloads)' },
 		{ who: 'Pages the agent opens', when: 'Only when the agent uses its browser tool, and only the sites it was told to visit.', host: 'the sites in question' },
@@ -2503,6 +2535,7 @@ Use Model Context Protocol to provide Agent mode with more tools.
 									</ErrorBoundary>
 									<div className='mt-10'>
 										<h3 className='text-xl mb-1'>Find more servers</h3>
+										<div className='mb-4'><AddonSourcesSection kinds={['mcp']} /></div>
 										<h4 className='text-vader-fg-3 mb-3 max-w-[760px]'>Servers from the official MCP Registry are in Add-ons, with a trust score and the reasons for it. Adding one writes its entry to your MCP config file, after asking for any key it needs.</h4>
 										<VaderButtonBgDarken className='px-3 py-1' onClick={() => commandService.executeCommand(VADER_OPEN_ADDONS_ACTION_ID)}>Find servers in Add-ons</VaderButtonBgDarken>
 									</div>

@@ -15,7 +15,7 @@ export * from './skillServiceTypes.js';
 
 const VADER_SKILLS_STORAGE_KEY = 'vader.skillServiceStorageI';
 const VADER_SKILL_SOURCES_STORAGE_KEY = 'vader.skillSources';
-const DEFAULT_SKILL_SOURCES = ['anthropics/skills'];
+const DEFAULT_SKILL_SOURCES = ['anthropics/skills', 'openai/skills'];
 
 // Heuristic, not a claim of real static analysis - see docs/integrations/skills.md. This
 // only informs what's SHOWN to the user/model about a skill's likely footprint; it never by

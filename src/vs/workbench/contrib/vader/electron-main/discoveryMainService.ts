@@ -3,7 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import { Disposable } from '../../../../base/common/lifecycle.js';
-import { GithubSkillEntry, GithubSkillListing, IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, SkillNetSearchResult } from '../common/discovery/discoveryServiceTypes.js';
+import { GithubSkillEntry, GithubSkillListing, IDiscoveryMainService, McpRegistryPackage, McpRegistrySearchResult, NpmMcpResult, RepoSignals, SkillNetSearchResult, SkillsShResult, SmitheryResult } from '../common/discovery/discoveryServiceTypes.js';
+import { parseGithubSearch, parseNpmSearch, parseRepoSignals, parseSkillsSh, parseSmithery, registryEntryStatus } from '../common/discovery/feedParsers.js';
 import { parseRepoRef, parseSkillFrontmatter, skillFolderUrl, skillFoldersFromTree } from '../common/discovery/githubSkillSources.js';
 import { rawSkillInstructionUrls } from '../common/discovery/githubSkillUrl.js';
 
@@ -13,6 +14,11 @@ const MCP_REGISTRY_BASE_URL = 'https://registry.modelcontextprotocol.io';
 const SKILLNET_BASE_URL = 'http://api-skillnet.openkg.cn';
 const GITHUB_API_BASE_URL = 'https://api.github.com';
 const GITHUB_CACHE_TTL_MS = 10 * 60_000;
+const SKILLS_SH_BASE_URL = 'https://skills.sh';
+const SMITHERY_BASE_URL = 'https://registry.smithery.ai';
+const NPM_REGISTRY_BASE_URL = 'https://registry.npmjs.org';
+const FEED_CACHE_TTL_MS = 10 * 60_000;
+const SIGNALS_CACHE_TTL_MS = 6 * 60 * 60_000;
 const FETCH_TIMEOUT_MS = 10_000;
 // Responses come from third-party servers; never read an unbounded body into memory.
 const MAX_RESPONSE_BYTES = 1024 * 1024;
@@ -65,6 +71,63 @@ async function fetchText(url: string): Promise<string | null> {
 export class DiscoveryMainService extends Disposable implements IDiscoveryMainService {
 	_serviceBrand: undefined;
 
+	// Every live feed is asked at most once every ten minutes for the same words; a store that is opened and closed must not spend the
+	// quota that GitHub (60 calls an hour, 10 searches a minute without a key) gives this computer.
+	private readonly _feedCache = new Map<string, { atMs: number; value: unknown }>();
+	private async _cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
+		const hit = this._feedCache.get(key);
+		if (hit && Date.now() - hit.atMs < ttlMs) { return hit.value as T; }
+		const value = await load();
+		this._feedCache.set(key, { atMs: Date.now(), value });
+		if (this._feedCache.size > 200) { this._feedCache.delete(this._feedCache.keys().next().value!); }
+		return value;
+	}
+
+	searchSkillsSh(query: string): Promise<SkillsShResult[]> {
+		const q = query.trim();
+		if (q.length < 2) { return Promise.resolve([]); } // the service refuses anything shorter
+		return this._cached(`skillssh:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseSkillsSh(await fetchJson(`${SKILLS_SH_BASE_URL}/api/search?q=${encodeURIComponent(q)}&limit=24`)));
+	}
+
+	searchGithubTopic(topic: string, query: string): Promise<RepoSignals[]> {
+		if (!/^[a-z0-9][a-z0-9-]{0,49}$/.test(topic)) { return Promise.resolve([]); }
+		const q = `${query.trim()} topic:${topic}`.trim();
+		return this._cached(`ghtopic:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseGithubSearch(await fetchJson(`${GITHUB_API_BASE_URL}/search/repositories?q=${encodeURIComponent(q)}&sort=stars&order=desc&per_page=24`)));
+	}
+
+	searchSmithery(query: string): Promise<SmitheryResult[]> {
+		const q = query.trim();
+		return this._cached(`smithery:${q.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseSmithery(await fetchJson(`${SMITHERY_BASE_URL}/servers?${q ? `q=${encodeURIComponent(q)}&` : ''}pageSize=24`)));
+	}
+
+	searchNpmMcp(query: string): Promise<NpmMcpResult[]> {
+		const text = `keywords:mcp-server ${query.trim()}`.trim();
+		return this._cached(`npm:${text.toLowerCase()}`, FEED_CACHE_TTL_MS, async () => parseNpmSearch(await fetchJson(`${NPM_REGISTRY_BASE_URL}/-/v1/search?text=${encodeURIComponent(text)}&size=24`)));
+	}
+
+	async getNpmInfo(name: string): Promise<{ installScripts: boolean; deprecated: boolean; license?: string } | undefined> {
+		if (!/^(@[a-z0-9~._-]+\/)?[a-z0-9~._-]+$/.test(name)) { return undefined; }
+		try {
+			return await this._cached(`npminfo:${name}`, SIGNALS_CACHE_TTL_MS, async () => {
+				const j = await fetchJson(`${NPM_REGISTRY_BASE_URL}/${name.replace('/', '%2F')}/latest`);
+				const s = j?.scripts ?? {};
+				return { installScripts: !!(s.preinstall || s.install || s.postinstall), deprecated: typeof j?.deprecated === 'string' && j.deprecated.length > 0, license: typeof j?.license === 'string' ? j.license : undefined };
+			});
+		} catch {
+			return undefined;
+		}
+	}
+
+	async getRepoSignals(repoSpec: string): Promise<RepoSignals | undefined> {
+		const ref = parseRepoRef(repoSpec);
+		if (!ref) { return undefined; }
+		try {
+			return await this._cached(`repo:${ref.owner}/${ref.repo}`.toLowerCase(), SIGNALS_CACHE_TTL_MS, async () => parseRepoSignals(await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}`)));
+		} catch {
+			return undefined; // a limited or offline GitHub leaves the signals unknown, which the score does not hold against anything
+		}
+	}
+
 	async searchMcpRegistry(query: string): Promise<McpRegistrySearchResult[]> {
 		try {
 			const url = `${MCP_REGISTRY_BASE_URL}/v0/servers?search=${encodeURIComponent(query)}&limit=20`;
@@ -108,6 +171,7 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 					localOnly: !remoteUrl && hasPackages,
 					repositoryUrl: server?.repository?.url,
 					packages: packages.length > 0 ? packages : undefined,
+					...(() => { const s = registryEntryStatus(entry); return { deprecated: s.deprecated || undefined, publishedAt: s.publishedAt, updatedAt: s.updatedAt }; })(),
 				};
 			});
 		} catch (e) {
@@ -169,12 +233,32 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 					};
 				}
 			}));
-			const listing: GithubSkillListing = { repo: name, stars: Number(meta?.stargazers_count ?? 0), entries };
+			const listing: GithubSkillListing = { repo: name, stars: Number(meta?.stargazers_count ?? 0), signals: parseRepoSignals(meta), entries };
 			this._githubCache.set(name.toLowerCase(), { atMs: Date.now(), listing });
 			return listing;
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
 			return { repo: name, stars: 0, entries: [], error: /HTTP (403|429)/.test(message) ? 'GitHub is limiting requests from this computer for now. Try again in a few minutes.' : /HTTP 404/.test(message) ? 'That repository was not found.' : `Could not read the repository (${message}).` };
+		}
+	}
+
+	async resolveGithubSkill(repoSpec: string, skillId: string): Promise<GithubSkillEntry | undefined> {
+		const ref = parseRepoRef(repoSpec);
+		if (!ref || !/^[A-Za-z0-9_.-]+$/.test(skillId)) { return undefined; }
+		try {
+			const found = await this._cached(`skilltree:${ref.owner}/${ref.repo}`.toLowerCase(), GITHUB_CACHE_TTL_MS, async () => {
+				const meta = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}`);
+				const branch = typeof meta?.default_branch === 'string' && /^[A-Za-z0-9_.-]+$/.test(meta.default_branch) ? meta.default_branch : 'main';
+				const tree = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}/git/trees/${branch}?recursive=1`);
+				return { branch, folders: skillFoldersFromTree(Array.isArray(tree?.tree) ? tree.tree : []) };
+			});
+			const folder = found.folders.find(f => (f.dir ? f.dir.split('/').pop() : ref.repo) === skillId);
+			if (!folder) { return undefined; }
+			const text = await fetchText(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${found.branch}/${folder.skillMdPath}`) ?? '';
+			const fm = parseSkillFrontmatter(text);
+			return { name: fm.name ?? skillId, description: fm.description ?? '', repositoryUrl: skillFolderUrl(ref, found.branch, folder.dir), owner: ref.owner, repo: ref.repo, sizeBytes: folder.sizeBytes, instructions: text };
+		} catch {
+			return undefined;
 		}
 	}
 

@@ -114,6 +114,8 @@ export type MarketplaceProviderSearchOutcome = {
 	items: MarketplaceItem[];
 	/** set when this provider's search failed/timed out - federated search still returns every other provider's results (failure isolation) */
 	error?: string;
+	/** a provider that asks several sources can still answer when one of them does not: what did not answer, for the page to say */
+	warnings?: string[];
 };
 
 export type MarketplaceSearchResult = {
@@ -142,6 +144,14 @@ export interface IMarketplaceProvider {
 	listInstalled(): Promise<MarketplaceItem[]>;
 	/** what to show before anyone has typed anything: a source's popular or full listing. Providers without one are skipped when browsing. */
 	browse?(token: CancellationToken): Promise<MarketplaceItem[]>;
+
+	/** the sources that did not answer in the last search or listing, said once (read and cleared) */
+	takeWarnings?(): string[];
+	/**
+	 * Looks the item up again, live, and gives it a fresh score from what the sources say now (stars, last change, licence, what its text asks for).
+	 * Called when a person opens an item and by the trust monitor for what is installed. Never throws: an item that cannot be looked up is returned as it was.
+	 */
+	refine?(item: MarketplaceItem): Promise<MarketplaceItem>;
 
 	install?(item: MarketplaceItem): Promise<void>;
 	uninstall?(item: MarketplaceItem): Promise<void>;
@@ -179,6 +189,9 @@ export interface IUnifiedMarketplaceService {
 
 	/** every installed/local/configured item across all providers - used for offline degradation and Capability Bus wiring */
 	listInstalled(): Promise<MarketplaceItem[]>;
+
+	/** a fresh, live look at one item and its score; the item as it was when its provider cannot do that */
+	refine(item: MarketplaceItem): Promise<MarketplaceItem>;
 
 	performAction(action: Exclude<MarketplaceInstallMethod, null>, item: MarketplaceItem): Promise<void>;
 

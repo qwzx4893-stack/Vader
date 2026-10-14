@@ -25,6 +25,13 @@ class DiscoveryService implements IDiscoveryMainService {
 	searchSkillNet: IDiscoveryMainService['searchSkillNet'] = (query) => this._mainService.searchSkillNet(query);
 	listGithubSkills: IDiscoveryMainService['listGithubSkills'] = (repo) => this._mainService.listGithubSkills(repo);
 	fetchSkillInstructions: IDiscoveryMainService['fetchSkillInstructions'] = (url) => this._mainService.fetchSkillInstructions(url);
+	searchSkillsSh: IDiscoveryMainService['searchSkillsSh'] = (query) => this._mainService.searchSkillsSh(query);
+	searchGithubTopic: IDiscoveryMainService['searchGithubTopic'] = (topic, query) => this._mainService.searchGithubTopic(topic, query);
+	searchSmithery: IDiscoveryMainService['searchSmithery'] = (query) => this._mainService.searchSmithery(query);
+	searchNpmMcp: IDiscoveryMainService['searchNpmMcp'] = (query) => this._mainService.searchNpmMcp(query);
+	getRepoSignals: IDiscoveryMainService['getRepoSignals'] = (repo) => this._mainService.getRepoSignals(repo);
+	getNpmInfo: IDiscoveryMainService['getNpmInfo'] = (name) => this._mainService.getNpmInfo(name);
+	resolveGithubSkill: IDiscoveryMainService['resolveGithubSkill'] = (repo, skillId) => this._mainService.resolveGithubSkill(repo, skillId);
 }
 
 registerSingleton(IDiscoveryMainService, DiscoveryService, InstantiationType.Delayed);

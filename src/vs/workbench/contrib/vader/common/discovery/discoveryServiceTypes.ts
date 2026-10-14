@@ -3,6 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
+import type { NpmMcpResult, RepoSignals, SkillsShResult, SmitheryResult } from './feedParsers.js';
+export type { NpmMcpResult, RepoSignals, SkillsShResult, SmitheryResult };
 
 // Vader's external discovery surfaces: the official MCP Registry (a live capability
 // source) and SkillNet (a live skill source, see skills/skillProviderTypes.ts for the
@@ -31,6 +33,10 @@ export type McpRegistrySearchResult = {
 	/** true if this server only ships as a local package (npm/pip/docker/...) requiring manual setup */
 	readonly localOnly: boolean;
 	readonly repositoryUrl?: string;
+	/** the registry marked it deprecated or deleted */
+	readonly deprecated?: boolean;
+	readonly publishedAt?: string;
+	readonly updatedAt?: string;
 	/** real package metadata for localOnly servers, straight from the registry response - lets a real command be constructed instead of only linking the user to the package */
 	readonly packages?: readonly McpRegistryPackage[];
 };
@@ -60,6 +66,8 @@ export type GithubSkillEntry = {
 export type GithubSkillListing = {
 	readonly repo: string;
 	readonly stars: number;
+	/** what GitHub says about the repository itself (forks, last change, licence, archived), from the same call that gave the stars */
+	readonly signals?: RepoSignals;
 	readonly entries: readonly GithubSkillEntry[];
 	/** set when the repository could not be read (not found, rate limited, offline); the entries are then empty */
 	readonly error?: string;
@@ -71,6 +79,20 @@ export interface IDiscoveryMainService {
 	searchSkillNet(query: string): Promise<SkillNetSearchResult[]>;
 	/** the skills in a GitHub repository ("owner/repo" or its https://github.com address); read from GitHub's public API, nothing about the workspace is sent */
 	listGithubSkills(repo: string): Promise<GithubSkillListing>;
+	/** skills.sh: a live index of skills with how many times each was installed. Throws when the source cannot be reached, so a store can say so. */
+	searchSkillsSh(query: string): Promise<SkillsShResult[]>;
+	/** repositories on GitHub tagged with a topic ("agent-skills", "mcp-server"), most starred first, each with its own live signals; the query narrows by words */
+	searchGithubTopic(topic: string, query: string): Promise<RepoSignals[]>;
+	/** the Smithery registry of MCP servers (public listing, no key); an empty query lists the front page */
+	searchSmithery(query: string): Promise<SmitheryResult[]>;
+	/** npm packages that call themselves MCP servers, with how many times each was downloaded last week */
+	searchNpmMcp(query: string): Promise<NpmMcpResult[]>;
+	/** what npm says about the latest version of a package: whether it runs a script when installed, and whether it is deprecated */
+	getNpmInfo(name: string): Promise<{ readonly installScripts: boolean; readonly deprecated: boolean; readonly license?: string } | undefined>;
+	/** the live signals of one GitHub repository ("owner/repo" or its address); cached for six hours */
+	getRepoSignals(repo: string): Promise<RepoSignals | undefined>;
+	/** one skill of a GitHub repository by its folder or frontmatter name; reads the file list once and only that skill's SKILL.md, not every skill of the repository */
+	resolveGithubSkill(repo: string, skillId: string): Promise<GithubSkillEntry | undefined>;
 	/** fetches a skill's primary instructions file (SKILL.md, README.md, ...) as plain text, for use as an instructions layer */
 	fetchSkillInstructions(repositoryUrl: string): Promise<string | null>;
 }
