@@ -75,7 +75,10 @@ export type GithubSkillListing = {
 
 export interface IDiscoveryMainService {
 	readonly _serviceBrand: undefined;
+	/** the registry's answer, or [] when it cannot be reached (what the agent's own tool wants: advisory, never an error) */
 	searchMcpRegistry(query: string): Promise<McpRegistrySearchResult[]>;
+	/** the same search, but it throws when the registry cannot be reached, so Add-ons can say that this one source did not answer while the others did */
+	queryMcpRegistry(query: string): Promise<McpRegistrySearchResult[]>;
 	searchSkillNet(query: string): Promise<SkillNetSearchResult[]>;
 	/** the skills in a GitHub repository ("owner/repo" or its https://github.com address); read from GitHub's public API, nothing about the workspace is sent */
 	listGithubSkills(repo: string): Promise<GithubSkillListing>;

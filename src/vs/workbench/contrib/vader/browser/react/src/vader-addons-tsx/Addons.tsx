@@ -3,7 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useState } from 'react'
-import { Search, SlidersHorizontal } from 'lucide-react'
+import { Search } from 'lucide-react'
+import { AddonsMark, SettingsMark } from './marks.js'
 import '../styles.css'
 import { useAccessor, useIsDark } from '../util/services.js'
 import type { MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
@@ -18,10 +19,10 @@ import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 type Tab = 'all' | 'skills' | 'mcp' | 'extensions' | 'agents'
 
 const TAB_TYPES: Record<Tab, MarketplaceItemType[]> = {
-	all: ['SKILL', 'MCP_SERVER', 'EXTENSION', 'ACP_AGENT'],
+	all: ['SKILL', 'MCP_SERVER', 'EXTENSION', 'LANGUAGE_SERVER', 'DEBUG_ADAPTER', 'FORMATTER', 'TREE_SITTER_GRAMMAR', 'JUPYTER_KERNEL', 'ACP_AGENT'],
 	skills: ['SKILL'],
 	mcp: ['MCP_SERVER'],
-	extensions: ['EXTENSION'],
+	extensions: ['EXTENSION', 'LANGUAGE_SERVER', 'DEBUG_ADAPTER', 'FORMATTER', 'TREE_SITTER_GRAMMAR', 'JUPYTER_KERNEL'],
 	agents: ['ACP_AGENT'],
 }
 const TABS: { id: Tab, label: string }[] = [{ id: 'all', label: 'All' }, { id: 'skills', label: 'Skills' }, { id: 'mcp', label: 'MCP servers' }, { id: 'extensions', label: 'Extensions' }, { id: 'agents', label: 'Agents' }]
@@ -42,6 +43,7 @@ export const Addons = () => {
 		<div className='flex flex-col w-full h-full bg-vader-bg-1 text-vader-fg-1 text-root min-w-0'>
 			<div className='flex flex-col gap-3 px-8 pt-6 shrink-0'>
 				<div className='flex items-center gap-3'>
+					<AddonsMark size={22} strokeWidth={1.5} className='text-vader-fg-2' />
 					<h2 className='text-2xl font-semibold'>Add-ons</h2>
 					<span className='text-vader-fg-3'>Skills, MCP servers, extensions and agents</span>
 					<span className='flex-1' />
@@ -51,7 +53,7 @@ export const Addons = () => {
 						aria-pressed={installedOnly}
 						onClick={() => setInstalledOnly(v => !v)}
 					>Installed</button>
-					<button className='p-1.5 rounded-md text-vader-fg-3 hover:text-vader-fg-1' title='Settings: where add-ons come from, and the ones you have' aria-label='Open Settings' onClick={() => commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID)}><SlidersHorizontal className='w-4 h-4' /></button>
+					<button className='p-1.5 rounded-md text-vader-fg-3 hover:text-vader-fg-1' title='Settings: where add-ons come from, and the ones you have' aria-label='Open Settings' onClick={() => commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID)}><SettingsMark size={16} /></button>
 				</div>
 				<label className='flex items-center gap-2 px-3 py-2 rounded-lg border border-vader-border-2 bg-vader-bg-2 max-w-[560px]'>
 					<Search className='w-4 h-4 text-vader-fg-3' />

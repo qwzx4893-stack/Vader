@@ -123,8 +123,12 @@ const ItemCard = ({ item, selected, busy, onSelect, onAction }: { item: Marketpl
 	</div>
 }
 
-const GROUP_TITLE: Partial<Record<MarketplaceItemType, string>> = { SKILL: 'Most trusted skills', MCP_SERVER: 'MCP servers', EXTENSION: 'Extensions for the editor', ACP_AGENT: 'Agents you can connect' }
-const GROUP_ORDER: MarketplaceItemType[] = ['SKILL', 'MCP_SERVER', 'EXTENSION', 'ACP_AGENT']
+// the editor's own tooling (language servers, debuggers, formatters, grammars, notebook kernels) is listed with extensions: one place for what extends the editor
+type GroupKey = MarketplaceItemType | 'TOOLING'
+const TOOLING_TYPES: readonly MarketplaceItemType[] = ['LANGUAGE_SERVER', 'DEBUG_ADAPTER', 'FORMATTER', 'TREE_SITTER_GRAMMAR', 'JUPYTER_KERNEL']
+const groupOf = (t: MarketplaceItemType): GroupKey => TOOLING_TYPES.includes(t) ? 'TOOLING' : t
+const GROUP_TITLE: Partial<Record<GroupKey, string>> = { SKILL: 'Most trusted skills', MCP_SERVER: 'MCP servers', EXTENSION: 'Extensions for the editor', TOOLING: 'Language servers, debuggers and formatters', ACP_AGENT: 'Agents you can connect' }
+const GROUP_ORDER: GroupKey[] = ['SKILL', 'MCP_SERVER', 'EXTENSION', 'TOOLING', 'ACP_AGENT']
 
 const AddonRow = ({ item, selected, busy, onSelect, onAction }: { item: MarketplaceItem, selected: boolean, busy: boolean, onSelect: () => void, onAction: () => void }) => {
 	const level = item.trustScore ? trustLevelOf(item.trustScore.score) : undefined
@@ -262,14 +266,14 @@ export const StoreView = ({ types, layout, query: externalQuery, showSearch, sea
 
 	if (layout === 'rows') {
 		const rowOf = (item: MarketplaceItem) => <AddonRow key={keyOf(item)} item={item} selected={keyOf(item) === selectedKey} busy={busyKey === keyOf(item)} onSelect={() => setSelectedKey(keyOf(item) === selectedKey ? null : keyOf(item))} onAction={() => act(item)} />
-		const groups = grouped && !query.trim() ? GROUP_ORDER.map(t => ({ type: t, list: shown.filter(i => i.type === t) })).filter(g => g.list.length > 0) : []
+		const groups = grouped && !query.trim() ? GROUP_ORDER.map(t => ({ type: t, list: shown.filter(i => groupOf(i.type) === t) })).filter(g => g.list.length > 0) : []
 		return <div className='flex min-w-0 min-h-0 flex-1 text-root'>
 			<div className='flex flex-col gap-4 min-w-0 flex-1 overflow-y-auto pr-2'>
 				{failed.length > 0 ? <div className='text-yellow-600'>{failed.length === 1 ? 'One source' : `${failed.length} sources`} could not be read just now: {failed.join(' ')}</div> : null}
 				{loading && items.length === 0 ? <div className='text-vader-fg-3 py-6'>Loading...</div> : null}
 				{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{query.trim() ? `Nothing matches "${query.trim()}". Searched every source that is turned on.` : installedOnly ? 'Nothing is installed yet.' : 'Nothing to show yet.'}</div> : null}
 				{grouped && groups.length > 0 ? groups.map(g => <div key={g.type} className='flex flex-col'>
-					<div className='flex items-center gap-3 h-9'><span className='font-semibold text-vader-fg-1'>{GROUP_TITLE[g.type] ?? TYPE_NOUN[g.type]}</span><span className='flex-1' />{onSeeAll ? <button className='text-vader-fg-2 hover:text-vader-fg-1' onClick={() => onSeeAll(g.type)}>See all</button> : null}</div>
+					<div className='flex items-center gap-3 h-9'><span className='font-semibold text-vader-fg-1'>{GROUP_TITLE[g.type]}</span><span className='flex-1' />{onSeeAll ? <button className='text-vader-fg-2 hover:text-vader-fg-1' onClick={() => onSeeAll(g.type === 'TOOLING' ? 'EXTENSION' : g.type)}>See all</button> : null}</div>
 					<div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{g.list.slice(0, 4).map(rowOf)}</div>
 				</div>) : <div className='grid gap-x-10' style={{ gridTemplateColumns: selected ? 'minmax(0,1fr)' : 'repeat(2,minmax(0,1fr))' }}>{shown.map(rowOf)}</div>}
 			</div>

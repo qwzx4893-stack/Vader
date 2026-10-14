@@ -39,6 +39,14 @@ The **marketplace** (this doc) is a *discovery and management* layer: search, in
 
 There is no code path from "agent found a candidate" to "something is installed" that skips human approval - satisfying "the agent must never silently install arbitrary executable software" by the same mechanism that already protects every other mutating tool, not a new one.
 
+## Add-ons: live sources and the trust score (the Add-ons page)
+
+The store people use is the **Add-ons** page, opened from the package icon in the chat title (or Settings gear menu, or "Vader: Open Add-ons"). Settings keeps the inventory (Skills, MCP) and points to it.
+
+- **Skills** are found in four sources at once: the GitHub repositories kept as sources (anthropics/skills and openai/skills by default), skills.sh (live, with install counts), GitHub repositories tagged agent-skills, and SkillNet. **MCP servers**: the official MCP Registry, Smithery, npm (packages tagged mcp-server) and GitHub repositories tagged mcp-server. **Extensions**: Open VSX through the editor gallery, with the editor tooling providers. **Agents**: the ACP registry. A skill or server that two sources list is one row. Each source can be switched off (Settings, Skills, Sources and MCP);  is the list. A source that does not answer is named in the page and the others still show.
+- **The score is computed from live signals every time**, never stored as a ready-made number (): who published it, when the repository last changed, archived or deprecated, licence, installs (skills.sh, Smithery), weekly downloads and CI provenance (npm), a script that runs on install, how many sources list it, a name that copies a well-known one, and for a skill what its own text asks for. Missing signals are not held against an item. Opening an item asks its sources again ();  scores what is installed again a minute after start and every six hours, keeps the first score () and says so when one falls by ten points or into red.
+- Limits worth knowing: GitHub allows 60 calls an hour without a key (answers are cached ten minutes, repository numbers six hours); the MCP Registry is sometimes slow, which the page reports as one source not answering.
+
 ## UI: additive, not a redesign
 
 `MarketplaceViewPane` registers as a **second, independent view** inside the existing Extensions view container (`Registry.as<IViewContainersRegistry>(...).get(VIEWLET_ID)`), deferred to a `WorkbenchPhase.BlockRestore` contribution so the container is guaranteed to already exist. This was verified against the container's own `rejectAddedViews: true` flag first - that flag only gates drag-and-drop UI affordances (`viewPaneContainer.ts`), not static `registerViews()` calls, so this approach doesn't fight that flag.

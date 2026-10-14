@@ -47,7 +47,10 @@ async function fetchJson(url: string): Promise<any> {
 	const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 	try {
 		const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
-		if (!res.ok) throw new Error(`HTTP ${res.status}`);
+		if (!res.ok) {
+			if ((res.status === 403 || res.status === 429) && new URL(url).hostname === 'api.github.com') throw new Error('GitHub is limiting requests from this computer for now (it allows 60 an hour without a key). Try again in a few minutes.');
+			throw new Error(`HTTP ${res.status}`);
+		}
 		return JSON.parse(await readCapped(res));
 	} finally {
 		clearTimeout(timeoutId);
@@ -130,6 +133,19 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 
 	async searchMcpRegistry(query: string): Promise<McpRegistrySearchResult[]> {
 		try {
+			return await this.queryMcpRegistry(query);
+		} catch (e) {
+			// Discovery failing (offline, registry down, blocked network) should degrade to "no results found," not crash the caller - this is advisory, not load-bearing.
+			return [];
+		}
+	}
+
+	queryMcpRegistry(query: string): Promise<McpRegistrySearchResult[]> {
+		return this._cached(`mcpreg:${query.trim().toLowerCase()}`, FEED_CACHE_TTL_MS, () => this._queryMcpRegistry(query));
+	}
+
+	private async _queryMcpRegistry(query: string): Promise<McpRegistrySearchResult[]> {
+		{
 			const url = `${MCP_REGISTRY_BASE_URL}/v0/servers?search=${encodeURIComponent(query)}&limit=20`;
 			const data = await fetchJson(url);
 			const all: any[] = Array.isArray(data?.servers) ? data.servers : [];
@@ -174,10 +190,6 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 					...(() => { const s = registryEntryStatus(entry); return { deprecated: s.deprecated || undefined, publishedAt: s.publishedAt, updatedAt: s.updatedAt }; })(),
 				};
 			});
-		} catch (e) {
-			// Discovery failing (offline, registry down, blocked network) should degrade to
-			// "no results found," not crash the caller - this is advisory, not load-bearing.
-			return [];
 		}
 	}
 

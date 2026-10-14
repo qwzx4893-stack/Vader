@@ -180,7 +180,7 @@ class MCPMarketplaceProvider implements IMarketplaceProvider {
 		const feeds: { id: string; label: string; run: () => Promise<Part[]> }[] = [
 			{
 				id: 'mcp-registry', label: 'Official MCP Registry', run: async () => {
-					const lists = browse ? await Promise.all(FEATURED_MCP_QUERIES.map(q => this._discoveryService.searchMcpRegistry(q))) : [await this._discoveryService.searchMcpRegistry(query)];
+					const lists = browse ? await Promise.all(FEATURED_MCP_QUERIES.map(q => this._discoveryService.queryMcpRegistry(q))) : [await this._discoveryService.queryMcpRegistry(query)];
 					// the registry lets anyone publish a server named "github" or "stripe": when browsing, only a known organisation's entry is featured, one per query
 					const picked = browse ? lists.map(l => l.find(r => KNOWN_PUBLISHERS.has((mcpPublisherOf(r) ?? '').toLowerCase()))).filter((r): r is McpRegistrySearchResult => !!r) : lists.flat();
 					return picked.map(r => ({ sourceId: 'mcp-registry', label: 'MCP Registry', registry: r }));

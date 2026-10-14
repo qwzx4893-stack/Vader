@@ -242,7 +242,7 @@ registerAction2(class extends Action2 {
 			id: 'vader.addonsAction',
 			title: 'Add-ons',
 			tooltip: 'Add-ons: skills, MCP servers, extensions and agents',
-			icon: { id: 'package' },
+			icon: { id: 'vader-addons' },
 			menu: [{ id: MenuId.ViewTitle, group: 'navigation', order: 0, when: ContextKeyExpr.equals('view', VADER_VIEW_ID), }]
 		});
 	}
@@ -257,7 +257,7 @@ registerAction2(class extends Action2 {
 		super({
 			id: 'vader.settingsAction',
 			title: `Vader's Settings`,
-			icon: { id: 'settings-gear' },
+			icon: { id: 'vader-settings' },
 			menu: [{ id: MenuId.ViewTitle, group: 'navigation', when: ContextKeyExpr.equals('view', VADER_VIEW_ID), }]
 		});
 	}
