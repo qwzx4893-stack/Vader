@@ -125,37 +125,37 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 		}
 	},
 	"antigravity-acp": {
-		"version": "1.3.0",
+		"version": "1.4.0",
 		"distribution": {
 			"binary": {
 				"darwin-aarch64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.3.0-darwin-arm64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.0-darwin-arm64.zip",
 					"cmd": "./agy_acp_server.par"
 				},
 				"darwin-x86_64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.3.0-darwin-x86_64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/macos/agy-acp-server-1.4.0-darwin-x86_64.zip",
 					"cmd": "./agy_acp_server.par"
 				},
 				"linux-x86_64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.3.0-linux-x86_64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.0-linux-x86_64.zip",
 					"cmd": "./agy_acp_server.par",
 					"args": [
 						"--uid="
 					]
 				},
 				"linux-aarch64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.3.0-linux-arm64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/linux/agy-acp-server-1.4.0-linux-arm64.zip",
 					"cmd": "./agy_acp_server.par",
 					"args": [
 						"--uid="
 					]
 				},
 				"windows-x86_64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.3.0-windows-x86_64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.4.0-windows-x86_64.zip",
 					"cmd": "./agy_acp_server.exe"
 				},
 				"windows-aarch64": {
-					"archive": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.3.0-windows-arm64.zip",
+					"archive": "https://dl.google.com/agy-extensions/releases/windows/agy-acp-server-1.4.0-windows-arm64.zip",
 					"cmd": "./agy_acp_server.exe"
 				}
 			}
@@ -205,10 +205,10 @@ export const acpRegistrySnapshot: { readonly [id: string]: { readonly version: s
 		}
 	},
 	"grok-build": {
-		"version": "1.0.55",
+		"version": "1.0.58",
 		"distribution": {
 			"npx": {
-				"package": "@xai-official/grok@1.0.55",
+				"package": "@xai-official/grok@1.0.58",
 				"args": [
 					"agent",
 					"stdio"

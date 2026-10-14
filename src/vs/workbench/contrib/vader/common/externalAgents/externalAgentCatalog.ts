@@ -42,7 +42,7 @@ export type AcpAgentSpec = {
 	 * The program a person who already uses this agent has on their computer. When it is found and answers the protocol (checked with a handshake) it is used as it
 	 * is: nothing is downloaded and the sign-in it already holds counts. `args` are what make it speak ACP (the registry's own arguments for the agent).
 	 */
-	readonly local?: { readonly command: string, readonly args: readonly string[], readonly candidateDirs?: readonly string[] }
+	readonly local?: { readonly command: string, readonly args: readonly string[], readonly candidateDirs?: readonly string[], /** other names the vendor's program has been installed under, tried after `command` */ readonly alternates?: readonly string[] }
 }
 
 export type ExternalAgentDef = {
@@ -79,27 +79,27 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		tagline: 'Your Cursor subscription, through Cursor\'s own agent.',
 		website: 'https://cursor.com/docs/cli/acp',
 		note: 'You sign in with your Cursor account; Cursor counts the usage on your plan.',
-		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.', local: { command: 'cursor-agent', args: ['acp'], candidateDirs: ['.local/bin'] }, archivePrefixes: ['https://downloads.cursor.com/'] },
+		acp: { registryId: 'cursor', loginNote: 'A browser page opens to sign in to Cursor.', local: { command: 'agent', args: ['acp'], candidateDirs: ['.local/bin'], alternates: ['cursor-agent'] }, archivePrefixes: ['https://downloads.cursor.com/'] },
 	},
 	{
 		id: 'copilot', name: 'GitHub Copilot', kind: 'acp', logo: 'copilot',
 		tagline: 'Your GitHub Copilot plan (a free plan exists; Pro and Pro+ for more), through GitHub\'s own Copilot CLI.',
 		website: 'https://github.com/features/copilot/cli/',
-		note: 'Needs Node.js. You sign in with your GitHub account in the terminal that opens; GitHub counts the usage on your Copilot plan.',
+		note: 'Needs Node.js. You sign in with your GitHub account in the terminal that opens; GitHub counts the usage on your Copilot plan. GitHub says its ACP support is a public preview and may change.',
 		acp: { registryId: 'github-copilot-cli', loginNote: 'A terminal runs GitHub\'s own "copilot login" (a code to confirm in the browser).', local: { command: 'copilot', args: ['--acp'] } },
 	},
 	{
 		id: 'mistral-vibe', name: 'Mistral Vibe', kind: 'acp', logo: 'mistral',
-		tagline: 'Your Mistral Le Chat plan (Pro or Team), through Mistral\'s own coding agent.',
+		tagline: 'Your Mistral account, through Mistral\'s own coding agent.',
 		website: 'https://mistral.ai/products/vibe',
-		note: 'You sign in with your Mistral account; Mistral counts the usage on your plan. The free plan has only limited coding access.',
+		note: 'You sign in with your Mistral account; Mistral counts the usage on your plan, and its limits depend on that plan.',
 		acp: { registryId: 'mistral-vibe', loginNote: 'A browser page opens to sign in to Mistral.', authPreference: ['browser-auth'], local: { command: 'vibe-acp', args: [] }, archivePrefixes: ['https://github.com/mistralai/mistral-vibe/releases/download/'] },
 	},
 	{
 		id: 'grok-build', name: 'Grok Build', kind: 'acp', logo: 'grok',
 		tagline: 'Your SuperGrok or X Premium+ plan, through xAI\'s own coding agent.',
 		website: 'https://x.ai/cli',
-		note: 'Needs Node.js and a paid SuperGrok or X Premium+ plan (the free Grok chat does not include it). xAI has not published usage limits.',
+		note: 'Needs a SuperGrok or X Premium+ subscription (xAI\'s announcement lists those two; the free Grok chat does not include it), and Node.js when Vader downloads it for you. xAI has not published usage limits.',
 		acp: { registryId: 'grok-build', loginNote: 'A browser page opens to sign in with Grok.', local: { command: 'grok', args: ['agent', 'stdio'] } },
 	},
 	{

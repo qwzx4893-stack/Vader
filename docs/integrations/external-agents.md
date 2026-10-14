@@ -19,7 +19,7 @@ Tests: `test/externalAgentE2E.mjs` (120 checks against `test/fixtures/fakeAcpAge
 | **Grok Build** | ACP, `@xai-official/grok` (npm, `agent stdio`) | xAI's own CLI; "Sign in with Grok" through the agent's own page; paid SuperGrok or X Premium+ only. |
 | **Kimi** | ACP, `kimi acp` (GitHub release binary) | Moonshot's own CLI; terminal login (`kimi login`); checksum published. |
 | **OpenCode** | ACP, `opencode acp` (GitHub release binary) | Native ACP mode; the registry publishes a checksum. |
-| **Cursor** | ACP, `cursor-agent acp` (binary from downloads.cursor.com) | Cursor's own CLI speaks ACP. The registry publishes no checksum for it. |
+| **Cursor** | ACP, `agent acp` (Cursor's documentation; the download from downloads.cursor.com holds it as `cursor-agent`, which is also looked for) | Cursor's own CLI speaks ACP and advertises the sign-in method `cursor_login`. The registry publishes no checksum for it. |
 | **Antigravity** | ACP, `agy_acp_server` (binary from dl.google.com) | Google ships an agent server for editors and lists it in the ACP registry (authors: Google LLC). The `agy` terminal CLI has no protocol mode. |
 | **Claude Code** | the unmodified official program in a Vader terminal | Anthropic restricts its consumer subscriptions to its own products (see the audit below). Hosting the official binary, with Anthropic's own sign-in, is the allowed shape. |
 | **Freebuff** | the official `freebuff` CLI in a Vader terminal | It has no integration protocol (checked: no ACP mode, not in the registry). |

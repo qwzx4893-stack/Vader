@@ -238,7 +238,9 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	private async _localProgram(def: ExternalAgentDef): Promise<{ command: string, args: string[], version?: string } | undefined> {
 		const l = def.acp?.local
 		if (!l) { return undefined }
-		const found = await findProgram(l.command, (l.candidateDirs ?? []).map(d => path.join(homeDir(), d)))
+		const dirs = (l.candidateDirs ?? []).map(d => path.join(homeDir(), d))
+		let found: string | null = null
+		for (const name of [l.command, ...(l.alternates ?? [])]) { found = await findProgram(name, dirs); if (found) { break } }
 		if (!found) { return undefined }
 		let mtime = 0
 		try { mtime = (await fs.promises.stat(found)).mtimeMs } catch { return undefined }
