@@ -42,6 +42,18 @@ const worktreesRootFor = (repoPath: string) => path.join(path.dirname(repoPath),
 
 const sanitizeForPath = (branchName: string) => branchName.replace(/[^a-zA-Z0-9_.-]/g, '-').replace(/^\.+/, '-') || 'branch'; // a leading dot would let '..' point at the parent directory
 
+/** files git lists as unmerged right now (a merge stopped on them); empty when none or when git cannot say */
+const unmergedFiles = async (cwd: string): Promise<string[]> => {
+	try {
+		return (await git(['diff', '--name-only', '--diff-filter=U'], cwd)).split('\n').map(s => s.trim()).filter(Boolean);
+	} catch {
+		return [];
+	}
+};
+
+/** a branch name that is safe to hand to git as an argument: no leading dash (an option), no whitespace or control characters */
+const isSafeRef = (name: string) => /^[A-Za-z0-9_][A-Za-z0-9_./-]*$/.test(name) && !name.includes('..');
+
 export class GitWorktreeMainService implements IGitWorktreeMainService {
 	readonly _serviceBrand: undefined;
 
@@ -70,10 +82,12 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 		try {
 			await git(['add', '-A'], worktreePath);
 			const status = await git(['status', '--porcelain'], worktreePath);
-			if (!status) {
+			if (status) {
+				await git(['commit', '-m', commitMessage], worktreePath);
+			} else if (!isSafeRef(targetBranch) || !isSafeRef(branchName) || Number(await git(['rev-list', '--count', `${targetBranch}..${branchName}`], repoPath)) === 0) {
+				// nothing uncommitted, and the branch has no commit the target lacks (an agent may have committed its own work): nothing to merge
 				return { ok: true, merged: false, hadChanges: false };
 			}
-			await git(['commit', '-m', commitMessage], worktreePath);
 		} catch (e) {
 			return { ok: false, reason: `Failed to commit worktree changes: ${e instanceof Error ? e.message : String(e)}` };
 		}
@@ -83,11 +97,13 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 			await git(['merge', '--no-ff', branchName, '-m', `Merge parallel agent branch ${branchName}`], repoPath);
 			return { ok: true, merged: true };
 		} catch (e) {
+			// the files both sides changed, read before the merge is abandoned, so a caller can tell a conflict from any other failure
+			const conflictFiles = await unmergedFiles(repoPath);
 			// never leave the main repo mid-conflict for a process with no user to resolve it -
 			// abort and report instead. The worktree/branch are untouched, so the commit made
 			// above is not lost - it's still reachable from branchName for manual merging later.
 			try { await git(['merge', '--abort'], repoPath); } catch { /* nothing was in progress - fine */ }
-			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+			return { ok: false, reason: e instanceof Error ? e.message : String(e), ...(conflictFiles.length ? { conflictFiles } : {}) };
 		}
 	}
 
@@ -102,5 +118,61 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 
 	getCurrentBranch(repoPath: string): Promise<string> {
 		return git(['branch', '--show-current'], repoPath);
+	}
+
+	async mergeWorktreeBranchPreferring({ repoPath, worktreePath, branchName, targetBranch, prefer, commitMessage }: { repoPath: string; worktreePath: string; branchName: string; targetBranch: string; prefer: 'target' | 'branch'; commitMessage: string }): Promise<MergeWorktreeResult> {
+		if (!isSafeRef(branchName) || !isSafeRef(targetBranch)) return { ok: false, reason: 'The branch name is not one Vader will pass to git.' };
+		try {
+			// anything the task left uncommitted in its worktree goes into its branch first, as in commitAndMergeWorktreeBranch
+			await git(['add', '-A'], worktreePath);
+			if (await git(['status', '--porcelain'], worktreePath)) await git(['commit', '-m', commitMessage], worktreePath);
+		} catch (e) {
+			return { ok: false, reason: `Failed to commit worktree changes: ${e instanceof Error ? e.message : String(e)}` };
+		}
+		try {
+			await git(['checkout', targetBranch], repoPath);
+			// -X ours keeps the side already on targetBranch where both changed the same lines; -X theirs keeps the task's side
+			await git(['merge', '--no-ff', '-X', prefer === 'target' ? 'ours' : 'theirs', branchName, '-m', `Merge parallel agent branch ${branchName} (kept ${prefer === 'target' ? 'the current version' : 'the task\'s version'} where they differed)`], repoPath);
+			return { ok: true, merged: true };
+		} catch (e) {
+			const conflictFiles = await unmergedFiles(repoPath);
+			try { await git(['merge', '--abort'], repoPath); } catch { /* nothing was in progress - fine */ }
+			return { ok: false, reason: e instanceof Error ? e.message : String(e), ...(conflictFiles.length ? { conflictFiles } : {}) };
+		}
+	}
+
+	async startMergeInWorktree({ worktreePath, targetBranch }: { worktreePath: string; targetBranch: string }): Promise<{ ok: true; conflictFiles: string[] } | { ok: false; reason: string }> {
+		if (!isSafeRef(targetBranch)) return { ok: false, reason: 'The branch name is not one Vader will pass to git.' };
+		try {
+			// whatever the task left uncommitted is committed first, so the merge starts from a clean worktree
+			await git(['add', '-A'], worktreePath);
+			if (await git(['status', '--porcelain'], worktreePath)) await git(['commit', '-m', 'Parallel agent: work in progress before merging the current branch'], worktreePath);
+		} catch (e) {
+			return { ok: false, reason: `Failed to commit worktree changes: ${e instanceof Error ? e.message : String(e)}` };
+		}
+		try {
+			await git(['merge', '--no-ff', '--no-commit', targetBranch], worktreePath);
+			return { ok: true, conflictFiles: [] }; // nothing conflicted after all: the merge is staged and finishMergeInWorktree commits it
+		} catch (e) {
+			const conflictFiles = await unmergedFiles(worktreePath);
+			if (conflictFiles.length) return { ok: true, conflictFiles };
+			try { await git(['merge', '--abort'], worktreePath); } catch { /* nothing was in progress */ }
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	async finishMergeInWorktree({ worktreePath, commitMessage }: { worktreePath: string; commitMessage: string }): Promise<{ ok: true } | { ok: false; reason: string; stillConflicted?: string[] }> {
+		try {
+			// a file still holding git's conflict markers has not been resolved, whatever its state in the index
+			const marked = (await git(['grep', '-l', '-E', '^(<<<<<<< |=======$|>>>>>>> )', '--', '.'], worktreePath).catch(() => '')).split('\n').map(s => s.trim()).filter(Boolean);
+			if (marked.length) return { ok: false, reason: 'Some files still contain conflict markers.', stillConflicted: marked };
+			await git(['add', '-A'], worktreePath);
+			const stillUnmerged = await unmergedFiles(worktreePath);
+			if (stillUnmerged.length) return { ok: false, reason: 'Some files are still unmerged.', stillConflicted: stillUnmerged };
+			await git(['commit', '--no-edit', '-m', commitMessage], worktreePath);
+			return { ok: true };
+		} catch (e) {
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
 	}
 }

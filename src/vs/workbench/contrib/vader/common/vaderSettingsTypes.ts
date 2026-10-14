@@ -536,6 +536,8 @@ export type GlobalSettings = {
 	/** agents added by hand: any program that speaks the Agent Client Protocol */
 	customAcpAgents: { id: string, name: string, command: string, args: string[] }[];
 	autoCheckUpdates: boolean; // look for a newer GitHub release in the background (off by default: nothing contacts the network on its own)
+	/** US dollars a day the agent may spend on models; null means no limit. At the limit a running task pauses and asks before it goes on (common/usageAccounting.ts). */
+	dailySpendLimitUsd: number | null;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -555,6 +557,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	externalAgentId: null,
 	customAcpAgents: [],
 	autoCheckUpdates: false,
+	dailySpendLimitUsd: null,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

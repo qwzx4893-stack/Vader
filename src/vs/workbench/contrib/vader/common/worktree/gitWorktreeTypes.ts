@@ -11,7 +11,7 @@ export type CreateWorktreeResult =
 export type MergeWorktreeResult =
 	| { ok: true; merged: true }
 	| { ok: true; merged: false; hadChanges: boolean } // nothing to merge - the worktree had no changes
-	| { ok: false; reason: string }; // merge attempted and failed (conflict, etc) - worktree/branch are left in place
+	| { ok: false; reason: string; /** the files both sides changed, when the failure is a conflict (empty or absent for any other failure) */ conflictFiles?: string[] }; // merge attempted and failed (conflict, etc) - worktree/branch are left in place
 
 /**
  * Real git-worktree lifecycle, run in electron-main (git is a `child_process`, same
@@ -36,6 +36,22 @@ export interface IGitWorktreeMainService {
 	removeWorktree(opts: { repoPath: string; worktreePath: string; branchName: string }): Promise<void>;
 
 	getCurrentBranch(repoPath: string): Promise<string>;
+
+	/**
+	 * Merges the branch into targetBranch for the person, choosing one side wherever the two changed the same lines: 'target' keeps what is
+	 * already on targetBranch, 'branch' keeps what the task wrote. Lines only one side changed are always kept. If git still cannot finish
+	 * (a file one side deleted and the other edited, a binary file) the merge is aborted and the reason is reported; nothing is left half done.
+	 */
+	mergeWorktreeBranchPreferring(opts: { repoPath: string; worktreePath: string; branchName: string; targetBranch: string; prefer: 'target' | 'branch'; commitMessage: string }): Promise<MergeWorktreeResult>;
+
+	/**
+	 * First half of "let the agent merge": merges targetBranch INTO the task's worktree and leaves the conflict markers in its files, so an
+	 * agent working in that worktree can resolve them. The main repository is not touched. Returns the files that have markers.
+	 */
+	startMergeInWorktree(opts: { worktreePath: string; targetBranch: string }): Promise<{ ok: true; conflictFiles: string[] } | { ok: false; reason: string }>;
+
+	/** Second half: after the markers are gone, stages everything in the worktree and commits the merge. Refuses while any file still has conflict markers or is unmerged. */
+	finishMergeInWorktree(opts: { worktreePath: string; commitMessage: string }): Promise<{ ok: true } | { ok: false; reason: string; stillConflicted?: string[] }>;
 }
 
 export const IGitWorktreeMainService = createDecorator<IGitWorktreeMainService>('vaderGitWorktreeMainService');

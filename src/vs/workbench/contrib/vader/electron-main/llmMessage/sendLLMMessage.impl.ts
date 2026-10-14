@@ -22,6 +22,7 @@ import { getSendableReasoningInfo, getModelCapabilities, getProviderCapabilities
 import { extractReasoningWrapper, extractXMLToolsWrapper } from './extractGrammar.js';
 import { availableTools, InternalToolInfo, requiredParamNames } from '../../common/prompt/prompts.js';
 import { generateUuid } from '../../../../../base/common/uuid.js';
+import { normalizeUsage, TokenUsage } from '../../common/usageAccounting.js';
 
 const getGoogleApiKey = async () => {
 	// module‑level singleton
@@ -33,6 +34,10 @@ const getGoogleApiKey = async () => {
 
 
 
+
+// OpenAI-style servers send token counts in a last stream chunk only when asked with stream_options.include_usage. Only providers whose documentation lists it are asked:
+// a server that does not know the field can refuse the whole request. Any provider's counts are still read when it sends them unasked.
+const PROVIDERS_ASKED_FOR_STREAM_USAGE = new Set<string>(['openAI', 'openRouter', 'xAI', 'groq', 'deepseek', 'together', 'fireworks', 'vLLM', 'lmStudio', 'ollama'])
 
 type InternalCommonMessageParams = {
 	onText: OnText;
@@ -356,6 +361,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		model: modelName,
 		messages: messages as any,
 		stream: true,
+		...(PROVIDERS_ASKED_FOR_STREAM_USAGE.has(providerName) ? { stream_options: { include_usage: true } } : {}),
 		...nativeToolsObj,
 		...includeInPayload, // reasoning effort / budget for this model + the model's additional payload
 		// max_completion_tokens: maxTokens,
@@ -392,6 +398,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 
 	let fullReasoningSoFar = ''
 	let fullTextSoFar = ''
+	let usage: TokenUsage | undefined
 
 	// Vader: accumulate EVERY tool call index the provider streams, not just index 0 - a
 	// model asking for N tools in one turn used to silently have N-1 of them dropped here.
@@ -408,6 +415,9 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 		.then(async response => {
 			// when receive text
 			for await (const chunk of response) {
+				// token counts: the last chunk carries them (and has no choices)
+				if (chunk.usage) usage = normalizeUsage({ inputTokens: chunk.usage.prompt_tokens, outputTokens: chunk.usage.completion_tokens, cachedInputTokens: (chunk.usage as any).prompt_tokens_details?.cached_tokens })
+
 				// message
 				const newText = chunk.choices[0]?.delta?.content ?? ''
 				fullTextSoFar += newText
@@ -452,7 +462,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 				const toolCalls = [...toolCallsByIndex.values()]
 					.map(({ name, id, paramsStr }) => rawToolCallObjOfParamsStr(name, paramsStr, id))
 					.filter((t): t is RawToolCallObj => t !== null)
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined });
+				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined, usage });
 			}
 		})
 		// when error/fail - this catches errors of both .create() and .then(for await)
@@ -646,7 +656,10 @@ const sendAnthropicChat = async ({ messages, providerName, onText, onFinalMessag
 		const tools = response.content.filter(c => c.type === 'tool_use')
 		const toolCalls = tools.map(rawToolCallObjOfAnthropicParams).filter((t): t is RawToolCallObj => t !== null)
 
-		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, toolCalls: toolCalls.length ? toolCalls : undefined })
+		// Anthropic's input_tokens leaves out what came from or went into the prompt cache, so the three are added back; cache writes are priced at the plain input rate (a slight under-count, never an invented number)
+		const u = response.usage as any
+		const usage = normalizeUsage({ inputTokens: (u?.input_tokens ?? 0) + (u?.cache_read_input_tokens ?? 0) + (u?.cache_creation_input_tokens ?? 0), outputTokens: u?.output_tokens, cachedInputTokens: u?.cache_read_input_tokens ?? 0 })
+		onFinalMessage({ fullText, fullReasoning, anthropicReasoning, toolCalls: toolCalls.length ? toolCalls : undefined, usage })
 	})
 	// on error
 	stream.on('error', (error) => {
@@ -856,6 +869,7 @@ const sendGeminiChat = async ({
 	let toolId = ''
 	// Vader: every functionCall the model returns, not just functionCalls[0]
 	let allFunctionCalls: { name?: string, args?: Record<string, unknown>, id?: string }[] = []
+	let usage: TokenUsage | undefined
 
 
 	genAI.models.generateContentStream({
@@ -872,6 +886,10 @@ const sendGeminiChat = async ({
 
 			// Process the stream
 			for await (const chunk of stream) {
+				// token counts: every chunk repeats the running totals, the last one wins (thinking tokens are billed as output)
+				const um = chunk.usageMetadata
+				if (um) usage = normalizeUsage({ inputTokens: um.promptTokenCount, outputTokens: (um.candidatesTokenCount ?? 0) + (um.thoughtsTokenCount ?? 0), cachedInputTokens: um.cachedContentTokenCount })
+
 				// message
 				const newText = chunk.text ?? ''
 				fullTextSoFar += newText
@@ -904,7 +922,7 @@ const sendGeminiChat = async ({
 				const toolCalls = allFunctionCalls
 					.map(fc => rawToolCallObjOfParamsStr(fc.name ?? '', JSON.stringify(fc.args ?? {}), fc.id || generateUuid()))
 					.filter((t): t is RawToolCallObj => t !== null)
-				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined });
+				onFinalMessage({ fullText: fullTextSoFar, fullReasoning: fullReasoningSoFar, anthropicReasoning: null, toolCalls: toolCalls.length ? toolCalls : undefined, usage });
 			}
 		})
 		.catch(error => {

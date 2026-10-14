@@ -32,7 +32,11 @@ export type ParallelTaskState = {
 	conclusion?: string;
 	changedFilePaths?: string[];
 	/** only meaningful when usesWorktree is true */
-	mergeOutcome?: 'merged' | 'no_changes' | 'conflict' | 'not_attempted' | 'verification_failed';
+	mergeOutcome?: 'merged' | 'no_changes' | 'conflict' | 'merge_failed' | 'not_attempted' | 'verification_failed';
+	/** the repository the worktree was made from */
+	repoPath?: string;
+	/** the files both sides changed, when mergeOutcome is 'conflict' */
+	conflictFiles?: string[];
 	errorMessage?: string;
 	startedAt?: number;
 	finishedAt?: number;
@@ -72,6 +76,12 @@ export interface IAgentOrchestrationService {
 	runParallelTasks(specs: ParallelTaskSpec[]): Promise<ParallelRunState>;
 	/** best-effort: cancels every task in the run that hasn't finished yet; already-finished tasks are untouched */
 	cancelRun(runId: string): void;
+	/**
+	 * A task whose branch conflicts with the current branch (mergeOutcome 'conflict'): 'target' keeps what is already on the current branch where
+	 * the two differ, 'branch' keeps the task's version, 'agent' has an agent merge the two inside the task's worktree and then merges the
+	 * result. Lines only one side changed are kept in every case. Nothing is removed unless the merge completes.
+	 */
+	resolveConflict(runId: string, taskId: string, choice: 'target' | 'branch' | 'agent'): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
 
 export const IAgentOrchestrationService = createDecorator<IAgentOrchestrationService>('vaderAgentOrchestrationService');

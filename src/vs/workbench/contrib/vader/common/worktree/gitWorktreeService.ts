@@ -26,6 +26,9 @@ class GitWorktreeService implements IGitWorktreeMainService {
 	commitAndMergeWorktreeBranch: IGitWorktreeMainService['commitAndMergeWorktreeBranch'] = (opts) => this._mainService.commitAndMergeWorktreeBranch(opts);
 	removeWorktree: IGitWorktreeMainService['removeWorktree'] = (opts) => this._mainService.removeWorktree(opts);
 	getCurrentBranch: IGitWorktreeMainService['getCurrentBranch'] = (path) => this._mainService.getCurrentBranch(path);
+	mergeWorktreeBranchPreferring: IGitWorktreeMainService['mergeWorktreeBranchPreferring'] = (opts) => this._mainService.mergeWorktreeBranchPreferring(opts);
+	startMergeInWorktree: IGitWorktreeMainService['startMergeInWorktree'] = (opts) => this._mainService.startMergeInWorktree(opts);
+	finishMergeInWorktree: IGitWorktreeMainService['finishMergeInWorktree'] = (opts) => this._mainService.finishMergeInWorktree(opts);
 }
 
 registerSingleton(IGitWorktreeMainService, GitWorktreeService, InstantiationType.Delayed);

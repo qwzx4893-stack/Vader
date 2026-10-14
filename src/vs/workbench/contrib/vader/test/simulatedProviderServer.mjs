@@ -156,6 +156,8 @@ export function createSimulatedProvider(scenarios = []) {
 				sseChunk(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: { content: (i > 0 ? ' ' : '') + words[i] }, finish_reason: null }] });
 			}
 			sseChunk(res, { id, object: 'chat.completion.chunk', created, model, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] });
+			// a scenario with `usage` makes the server send the token counts OpenAI-style: one last chunk with no choices
+			if (scenario.usage) sseChunk(res, { id, object: 'chat.completion.chunk', created, model, choices: [], usage: scenario.usage });
 			res.write('data: [DONE]\n\n');
 			res.end();
 		} else {

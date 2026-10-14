@@ -59,6 +59,15 @@ import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
 import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
+import { addToLedger, addTurnToThreadUsage, budgetState, costOfUsage, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
+import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
+import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
+import { ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
+import { composeReviewComment, ReviewComment } from '../common/reviewComment.js';
+import { localProviderNames } from '../common/vaderSettingsTypes.js';
+
+const USAGE_LEDGER_STORAGE_KEY = 'vader.usageLedger'
+const PROJECT_APPROVALS_STORAGE_KEY = 'vader.projectApprovals'
 
 
 // Vader addition: tools blocked outright in 'gather' and 'plan' chat modes - hard
@@ -239,6 +248,13 @@ export type ThreadType = {
 	// which can never have one - need no migration.
 	activePlan?: PlanObject | null;
 
+	// Vader addition: the folders that were open when this thread began. Conversations are listed under their project by this
+	// (common/threadProjects.ts); an older thread has none and is listed under "Chats".
+	projectFolders?: string[];
+
+	// Vader addition: what this thread has cost so far, read from the providers' own token counts (common/usageAccounting.ts).
+	usage?: ThreadUsage;
+
 	// this doesn't need to go in a state object, but feels right
 	state: {
 		currCheckpointIdx: number | null; // the latest checkpoint we're at (null if not at a particular checkpoint, like if the chat is streaming, or chat just finished and we haven't clicked on a checkpt)
@@ -336,7 +352,7 @@ export type ThreadStreamState = {
 	}
 }
 
-const newThreadObject = () => {
+const newThreadObject = (projectFolders?: string[]) => {
 	const now = new Date().toISOString()
 	return {
 		id: generateUuid(),
@@ -344,6 +360,7 @@ const newThreadObject = () => {
 		lastModified: now,
 		messages: [],
 		agentId: null,
+		...(projectFolders && projectFolders.length ? { projectFolders } : {}),
 		state: {
 			currCheckpointIdx: null,
 			stagingSelections: [],
@@ -441,8 +458,32 @@ export interface IChatThreadService {
 	addUserMessageAndStreamResponse({ userMessage, threadId }: { userMessage: string, threadId: string }): Promise<void>;
 
 	// approve/reject
-	approveLatestToolRequest(threadId: string): void;
+	/** rememberForProject: also stop asking about this exact command (or MCP tool) in this project; never offered when the Policy Engine itself asked */
+	approveLatestToolRequest(threadId: string, opts?: { rememberForProject?: boolean }): void;
 	rejectLatestToolRequest(threadId: string): void;
+
+	// projects, status and spending (Vader addition)
+	/** the conversations under their project, the open project first */
+	listProjectGroups(): ProjectGroup[];
+	getCurrentProjectKey(): string | null;
+	getThreadStatus(threadId: string): ThreadStatus;
+	getThreadUsage(threadId: string): ThreadUsage | undefined;
+	getUsageToday(): DayTotals;
+	readonly onDidChangeUsage: Event<void>;
+
+	// pause: the run holds at its next step (the next request or the next tool call) until resumed
+	pauseRun(threadId: string): void;
+	resumeRun(threadId: string): void;
+	getPause(threadId: string): { reason: 'user' | 'budget' } | undefined;
+
+	// "Allow in this project"
+	canRememberForProject(threadId: string): boolean;
+	listProjectApprovals(projectKey: string | null): { key: string; kind: 'command' | 'mcp'; label: string; addedAt: number }[];
+	revokeProjectApproval(projectKey: string, key: string): void;
+	readonly onDidChangeProjectApprovals: Event<void>;
+
+	/** a comment on a line of the agent's change, sent to the agent as a message; false when there was nothing to send */
+	addReviewComment(threadId: string, comment: ReviewComment): Promise<boolean>;
 
 	// jump to history
 	jumpToCheckpointBeforeMessageIdx(opts: { threadId: string, messageIdx: number, jumpToUserModified: boolean }): void;
@@ -506,6 +547,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			allThreads: allThreads,
 			currentThreadId: null as unknown as string, // gets set in startNewThread()
 		}
+
+		this._ledger = this._readLedger()
+		this._projectApprovals = this._readProjectApprovals()
 
 		// always be in a thread
 		this.openNewThread()
@@ -741,7 +785,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._addMessageToThread(threadId, tool)
 	}
 
-	approveLatestToolRequest(threadId: string) {
+	approveLatestToolRequest(threadId: string, opts?: { rememberForProject?: boolean }) {
+		if (opts?.rememberForProject) this._rememberLatestRequestForProject(threadId)
 		// A thread whose current tool_request came from _runToolCallInline (the normal case)
 		// is waiting on this exact promise - resolving it lets @cline/agents' own AgentRuntime
 		// resume the rest of its tool-call batch itself. See _runToolCallInline's doc comment.
@@ -830,10 +875,207 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		return this._mcpService.getMCPTools()?.find(t => t.name === toolName)?.mcpServerName
 	}
 
+	// ---------- projects, status ----------
+
+	private _currentWorkspaceFolders(): string[] {
+		return this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
+	}
+
+	getCurrentProjectKey(): string | null {
+		return projectKeyOf(this._currentWorkspaceFolders())
+	}
+
+	/** an empty thread that is reused belongs to the project that is open now */
+	private _adoptCurrentProject(threadId: string) {
+		const thread = this.state.allThreads[threadId]
+		const folders = this._currentWorkspaceFolders()
+		if (!thread || JSON.stringify(thread.projectFolders ?? []) === JSON.stringify(folders)) return
+		const { projectFolders: _old, ...rest } = thread
+		const updated: ThreadType = folders.length ? { ...rest, projectFolders: folders } : rest
+		this._setState({ allThreads: { ...this.state.allThreads, [threadId]: updated } }, true)
+	}
+
+	listProjectGroups(): ProjectGroup[] {
+		const threads = Object.values(this.state.allThreads).filter((t): t is ThreadType => !!t)
+		return groupThreadsByProject(
+			threads.map(t => ({ id: t.id, lastModified: t.lastModified, messageCount: t.messages.length, projectFolders: t.projectFolders, hidden: !!(t.isSubagentThread || t.isVerificationThread) })),
+			this.getCurrentProjectKey(),
+		)
+	}
+
+	getThreadStatus(threadId: string): ThreadStatus {
+		const thread = this.state.allThreads[threadId]
+		const stream = this.streamState[threadId]
+		const messages = thread?.messages ?? []
+		return deriveThreadStatus({
+			isRunning: stream?.isRunning,
+			isPaused: this._paused.has(threadId),
+			hasError: !!stream?.error,
+			endsWithToolRequest: endsWithToolRequest(messages),
+			changedFilesSinceLastUserMessage: changedFilesSinceLastUserMessage(messages),
+		})
+	}
+
+	// ---------- spending ----------
+
+	private _ledger: UsageLedger = {}
+	private _budgetWaivedDay: string | null = null
+	private readonly _onDidChangeUsage = new Emitter<void>()
+	readonly onDidChangeUsage: Event<void> = this._onDidChangeUsage.event
+
+	private _readLedger(): UsageLedger {
+		try { return parseLedger(JSON.parse(this._storageService.get(USAGE_LEDGER_STORAGE_KEY, StorageScope.APPLICATION) ?? 'null')) } catch { return {} }
+	}
+
+	getThreadUsage(threadId: string): ThreadUsage | undefined { return this.state.allThreads[threadId]?.usage }
+
+	getUsageToday(): DayTotals {
+		return this._ledger[dayKey(new Date())] ?? { costUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }
+	}
+
+	/** called once per answer of the model: adds the turn to the thread and to today, priced with the model's list price (a local model is free; a cloud model with no known price is counted as unpriced, not as free) */
+	private _recordTurnUsage(threadId: string, modelSelection: ModelSelection | null, usage: TokenUsage | undefined) {
+		if (!modelSelection) return
+		const caps = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, this._settingsService.state.overridesOfModel)
+		const isLocal = (localProviderNames as readonly string[]).includes(modelSelection.providerName)
+		const cost = usage ? costOfUsage(usage, caps.cost, isLocal) : undefined
+		const thread = this.state.allThreads[threadId]
+		if (thread) {
+			const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, usage: addTurnToThreadUsage(thread.usage, usage, cost) } }
+			this._storeAllThreads(newThreads)
+			this._setState({ allThreads: newThreads }, true)
+		}
+		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost)
+		this._storageService.store(USAGE_LEDGER_STORAGE_KEY, JSON.stringify(this._ledger), StorageScope.APPLICATION, StorageTarget.USER)
+		this._onDidChangeUsage.fire()
+	}
+
+	// ---------- pause ----------
+
+	private readonly _paused = new Map<string, { reason: 'user' | 'budget', promise: Promise<'ok' | 'aborted'>, settle: (r: 'ok' | 'aborted') => void }>()
+
+	private _pause(threadId: string, reason: 'user' | 'budget') {
+		if (this._paused.has(threadId)) return
+		let settle: (r: 'ok' | 'aborted') => void = () => { }
+		const promise = new Promise<'ok' | 'aborted'>(res => { settle = res })
+		this._paused.set(threadId, { reason, promise, settle })
+		this._onDidChangeStreamState.fire({ threadId })
+	}
+
+	/** holds the run at its next step; a run that is not running has nothing to hold */
+	pauseRun(threadId: string): void {
+		if (this.streamState[threadId]?.isRunning === undefined) return
+		this._pause(threadId, 'user')
+	}
+
+	resumeRun(threadId: string): void {
+		const p = this._paused.get(threadId)
+		if (!p) return
+		// going on after the daily limit is the person's decision: it holds for the rest of that day
+		if (p.reason === 'budget') this._budgetWaivedDay = dayKey(new Date())
+		this._releasePause(threadId, 'ok')
+	}
+
+	private _releasePause(threadId: string, result: 'ok' | 'aborted') {
+		const p = this._paused.get(threadId)
+		if (!p) return
+		this._paused.delete(threadId)
+		p.settle(result)
+		this._onDidChangeStreamState.fire({ threadId })
+	}
+
+	getPause(threadId: string): { reason: 'user' | 'budget' } | undefined {
+		const p = this._paused.get(threadId)
+		return p ? { reason: p.reason } : undefined
+	}
+
+	private async _waitIfPaused(threadId: string): Promise<'ok' | 'aborted'> {
+		const p = this._paused.get(threadId)
+		return p ? p.promise : 'ok'
+	}
+
+	/** before each request to the provider: over the daily limit the run pauses by itself and says why; otherwise it waits only if it was paused */
+	private async _beforeLLMRequest(threadId: string): Promise<'ok' | 'aborted'> {
+		const today = dayKey(new Date())
+		const limit = this._settingsService.state.globalSettings.dailySpendLimitUsd
+		if (budgetState(spentOn(this._ledger, today), limit) === 'over' && this._budgetWaivedDay !== today) this._pause(threadId, 'budget')
+		return this._waitIfPaused(threadId)
+	}
+
+	// ---------- Allow in this project ----------
+
+	private _projectApprovals: ProjectApprovalState = EMPTY_APPROVAL_STATE
+	private readonly _onDidChangeProjectApprovals = new Emitter<void>()
+	readonly onDidChangeProjectApprovals: Event<void> = this._onDidChangeProjectApprovals.event
+
+	private _readProjectApprovals(): ProjectApprovalState {
+		try { return parseApprovalState(JSON.parse(this._storageService.get(PROJECT_APPROVALS_STORAGE_KEY, StorageScope.APPLICATION) ?? 'null')) } catch { return EMPTY_APPROVAL_STATE }
+	}
+
+	private _writeProjectApprovals(next: ProjectApprovalState) {
+		this._projectApprovals = next
+		this._storageService.store(PROJECT_APPROVALS_STORAGE_KEY, JSON.stringify(next), StorageScope.APPLICATION, StorageTarget.USER)
+		this._onDidChangeProjectApprovals.fire()
+	}
+
+	/** the project a thread works in: the folders it began with, else the folder that is open now (an older thread has none) */
+	private _projectKeyOfThread(threadId: string): string | null {
+		return projectKeyOf(this.state.allThreads[threadId]?.projectFolders) ?? this.getCurrentProjectKey()
+	}
+
+	/** only a command that is run, or an MCP tool, can be remembered; an edit never is */
+	private _subjectOfToolCall(toolName: ToolName, params: unknown, mcpServerName: string | undefined): ApprovalSubject | null {
+		if (toolName === 'run_command' || toolName === 'run_persistent_command') {
+			const command = (params as { command?: unknown } | null)?.command
+			return typeof command === 'string' ? { kind: 'command', command } : null
+		}
+		if (!isABuiltinToolName(toolName)) return mcpServerName ? { kind: 'mcp', server: mcpServerName, tool: toolName } : null
+		return null
+	}
+
+	private _isApprovedForProject(threadId: string, toolName: ToolName, params: unknown, mcpServerName: string | undefined): boolean {
+		const subject = this._subjectOfToolCall(toolName, params, mcpServerName)
+		return !!subject && isApproved(this._projectApprovals, this._projectKeyOfThread(threadId), subject)
+	}
+
+	canRememberForProject(threadId: string): boolean {
+		const last = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'tool' && m.type === 'tool_request')
+		if (!last || last.role !== 'tool' || last.type !== 'tool_request') return false
+		if (last.content.startsWith('(Vader policy requires approval')) return false // the Policy Engine asked: nothing may turn that off
+		return !!this._projectKeyOfThread(threadId) && !!this._subjectOfToolCall(last.name, last.params, last.mcpServerName)
+	}
+
+	private _rememberLatestRequestForProject(threadId: string) {
+		if (!this.canRememberForProject(threadId)) return
+		const messages = this.state.allThreads[threadId]?.messages ?? []
+		const last = messages[messages.length - 1]
+		if (!last || last.role !== 'tool' || last.type !== 'tool_request') return
+		const subject = this._subjectOfToolCall(last.name, last.params, last.mcpServerName)
+		const next = subject ? withApproval(this._projectApprovals, this._projectKeyOfThread(threadId), subject, Date.now()) : null
+		if (next && next !== this._projectApprovals) this._writeProjectApprovals(next)
+	}
+
+	listProjectApprovals(projectKey: string | null) { return listApprovals(this._projectApprovals, projectKey) }
+
+	revokeProjectApproval(projectKey: string, key: string) {
+		const next = withoutApproval(this._projectApprovals, projectKey, key)
+		if (next !== this._projectApprovals) this._writeProjectApprovals(next)
+	}
+
+	// ---------- a comment on a line of the agent's change ----------
+
+	async addReviewComment(threadId: string, comment: ReviewComment): Promise<boolean> {
+		const userMessage = composeReviewComment(comment)
+		if (!userMessage) return false
+		await this.addUserMessageAndStreamResponse({ userMessage, threadId })
+		return true
+	}
+
 	async abortRunning(threadId: string) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 		this._bumpToolQueueEpoch(threadId) // tool calls of this turn that are still waiting for their turn must not start
+		this._releasePause(threadId, 'aborted')
 
 		// add assistant message
 		if (this.streamState[threadId]?.isRunning === 'LLM') {
@@ -1010,7 +1252,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// thread only - never the user's global setting, and never a policy 'ask'
 			// verdict, which still stalls it exactly like it would a human-driven thread.
 			const isSubagentThread = !!this.state.allThreads[threadId]?.isSubagentThread
-			const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType]) : false
+			const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType] || this._isApprovedForProject(threadId, toolName, toolParams, mcpServerName)) : false
 			// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
 			const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
 			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
@@ -1152,6 +1394,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		mcpServerName: string | undefined,
 		unvalidatedToolParams: RawToolParamsObj,
 	): Promise<{ resultStr: string, isError: boolean }> => {
+
+		if (await this._waitIfPaused(threadId) === 'aborted') return { resultStr: this.toolErrMsgs.interrupted, isError: true }
 
 		const gateResult = await this._evaluateToolCallGate(threadId, toolName, toolId, mcpServerName, unvalidatedToolParams)
 
@@ -1468,6 +1712,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			overridesOfModel: this._settingsService.state.overridesOfModel,
 			getOverridesOfModel: () => this._settingsService.state.overridesOfModel,
 			onNativeToolsRejected: (errorMessage) => this._fallBackToXmlTools(modelSelection, errorMessage),
+			beforeRequest: () => this._beforeLLMRequest(threadId),
+			onTurnUsage: (usage) => this._recordTurnUsage(threadId, modelSelection, usage),
 			loggingName: `Chat - ${chatMode} (Cline)`,
 		})
 
@@ -2433,13 +2679,14 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const { allThreads: currentThreads } = this.state
 		for (const threadId in currentThreads) {
 			if (currentThreads[threadId]!.messages.length === 0) {
-				// switch to the existing empty thread and exit
+				// switch to the existing empty thread and exit (it belongs to the project that is open now)
+				this._adoptCurrentProject(threadId)
 				this.switchToThread(threadId)
 				return
 			}
 		}
 		// otherwise, start a new thread
-		const newThread = newThreadObject()
+		const newThread = newThreadObject(this._currentWorkspaceFolders())
 
 		// update state
 		const newThreads: ChatThreads = {
@@ -2462,6 +2709,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		// 'rejected' here is the correct default: the thread is gone, so there is no longer any
 		// user who could approve it, and a stuck action must never be silently left running.
 		this._bumpToolQueueEpoch(threadId)
+		this._releasePause(threadId, 'aborted')
 		const pendingInline = this._pendingInlineApprovals.get(threadId)
 		if (pendingInline) {
 			this._pendingInlineApprovals.delete(threadId)

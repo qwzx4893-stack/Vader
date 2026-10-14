@@ -9,6 +9,7 @@ import { IConvertToLLMMessageService } from '../convertToLLMMessageService.js';
 import { ChatMessage } from '../../common/chatThreadServiceTypes.js';
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel } from '../../common/vaderSettingsTypes.js';
 import { classifyProviderError, userFacingProviderError } from '../../common/providerErrorTypes.js';
+import type { TokenUsage } from '../../common/usageAccounting.js';
 
 /**
  * Vader addition, part of the Cline Main Agent Runtime integration (see
@@ -58,11 +59,16 @@ export class VaderAgentModel implements AgentModel {
 			getOverridesOfModel?: () => OverridesOfModel | undefined;
 			/** the server refused the first request; true means the model's tool format was changed and the request should be sent again (common/toolSupport.ts) */
 			onNativeToolsRejected?: (errorMessage: string) => Promise<boolean>;
+			/** called before every request to the provider: waits while the run is paused (or over its daily limit); 'aborted' means the run was stopped while waiting */
+			beforeRequest?: () => Promise<'ok' | 'aborted'>;
+			/** called once per answer with the token counts the provider reported, or undefined when it reported none */
+			onTurnUsage?: (usage: TokenUsage | undefined) => void;
 			loggingName: string;
 		},
 	) { }
 
 	async *stream(request: AgentModelRequest): AsyncIterable<AgentModelEvent> {
+		if (await this._opts.beforeRequest?.() === 'aborted') { yield { type: 'finish', reason: 'aborted' }; return; }
 		await this._opts.maybeCompactThread();
 
 		// A model name Vader does not know is first offered native tool calling; if the server refuses the `tools` field, the request is sent again once, with the tools
@@ -118,7 +124,8 @@ export class VaderAgentModel implements AgentModel {
 					sawOutput = true;
 				}
 			},
-			onFinalMessage: ({ toolCalls }) => {
+			onFinalMessage: ({ toolCalls, usage }) => {
+				this._opts.onTurnUsage?.(usage);
 				for (const toolCall of toolCalls ?? []) {
 					// invalid argument text goes to the runtime as text, which is what makes it answer that call with an "invalid JSON arguments" error result
 					push(toolCall.rawInputText !== undefined

@@ -6,6 +6,7 @@
 import { InternalToolInfo } from './prompt/prompts.js'
 import { ToolName, ToolParamName } from './toolsServiceTypes.js'
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel, ProviderName, RefreshableProviderName, SettingsOfProvider } from './vaderSettingsTypes.js'
+import type { TokenUsage } from './usageAccounting.js'
 
 
 export const errorDetails = (fullError: Error | null): string | null => {
@@ -99,7 +100,8 @@ export type OnText = (p: { fullText: string; fullReasoning: string; toolCall?: R
 // pre-Vader behavior of silently keeping only the first and dropping the rest. The XML
 // fallback grammar (extractGrammar.ts, used by models without native function-calling) still
 // only ever produces one, and wraps it in a single-element array.
-export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCalls?: RawToolCallObj[]; anthropicReasoning: AnthropicReasoning[] | null }) => void // id is tool_use_id
+// Vader addition: usage - the token counts the provider reported for this answer (usageAccounting.ts). Absent when the provider sent none.
+export type OnFinalMessage = (p: { fullText: string; fullReasoning: string; toolCalls?: RawToolCallObj[]; anthropicReasoning: AnthropicReasoning[] | null; usage?: TokenUsage }) => void // id is tool_use_id
 export type OnError = (p: { message: string; fullError: Error | null }) => void
 export type OnAbort = () => void
 export type AbortRef = { current: (() => void) | null }
