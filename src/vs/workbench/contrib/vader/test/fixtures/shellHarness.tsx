@@ -117,8 +117,39 @@ const reviewSvc: any = {
 	async openPullRequestPage() { w.__log.push('pr'); return true },
 }
 const workspaceSvc: any = { getWorkspace: () => ({ folders: [{ uri: { fsPath: ROOT } }] }) }
+// ---- what the agent did in its browser and its terminals
+allThreads['t-wait'].messages.splice(2, 0,
+	tool('browser_navigate', 'success', { url: 'http://localhost:5173/', pageId: null }),
+	tool('browser_click', 'success', { ref: 'button Send 70 requests', pageId: null }),
+	tool('browser_screenshot', 'success', { pageId: null }),
+	tool('open_persistent_terminal', 'success', { cwd: null }, { persistentTerminalId: '1' }),
+	tool('run_persistent_command', 'success', { command: 'npm run dev', persistentTerminalId: '1' }, { result: 'ready', resolveReason: { type: 'timeout' } }),
+	tool('run_command', 'success', { command: 'npm test', cwd: null, terminalId: 'x' }, { result: '48 passed', resolveReason: { type: 'done', exitCode: 0 } }),
+	tool('run_command', 'rejected', { command: 'rm -rf dist', cwd: null, terminalId: 'y' }),
+)
+const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
+w.__pages = [{ pageId: 'p1', url: 'http://localhost:5173/', title: 'Rate limiter demo', isActive: true, isClosed: false }, { pageId: 'p2', url: 'http://localhost:5173/docs', title: 'API docs', isActive: false, isClosed: false }]
+w.__browserDown = ''
+const browserSvc: any = {
+	async listPages() { if (w.__browserDown) throw new Error(w.__browserDown); return w.__pages },
+	async screenshot() { return PNG },
+	async consoleLogs() { return [{ type: 'log', text: 'limiter ready, 60 per minute' }, { type: 'error', text: 'Uncaught (in promise) Error: rate limited at send (app.js:48)' }] },
+	async networkLog() { return [{ url: 'http://localhost:5173/api', method: 'GET', status: 200, failureText: null }, { url: 'http://localhost:5173/api/send', method: 'POST', status: 429, failureText: null }] },
+	async pageErrors() { return [{ message: 'rate limited at send (app.js:48)' }] },
+	async reload() { w.__log.push('reload'); return {} },
+}
+const term: any = {
+	_out: { '1': ['> npm run dev', 'VITE v6.0.1  ready in 412 ms', '  Local:   http://localhost:5173/'].join(NL) } as any, _alive: { '1': true, '2': true } as any,
+	listPersistentTerminalIds: () => Object.keys(term._alive).filter(k => term._alive[k]),
+	persistentTerminalExists: (id: string) => !!term._alive[id],
+	async readTerminal(id: string) { return term._out[id] ?? '' },
+	async runCommand(c: string, o: any) { w.__log.push(`term:${o.persistentTerminalId}:${c}`); term._out[o.persistentTerminalId] += NL + '$ ' + c },
+	async killPersistentTerminal(id: string) { w.__log.push(`kill:${id}`); term._alive[id] = false },
+}
+w.__opened = [] as string[]
+const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 w.__accessor = {
-	get: (name: string) => ({ IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc } as any)[name],
+	get: (name: string) => ({ IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
 }
 Date.now = () => NOW
 

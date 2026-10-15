@@ -70,6 +70,7 @@ import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marke
 import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
 import { IVaderReviewService } from '../../../vaderReviewService.js'
 import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
+import { IBrowserToolMainService } from '../../../../common/browser/browserToolService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -374,6 +375,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IVaderShellService: accessor.get(IVaderShellService),
 		IVaderReviewService: accessor.get(IVaderReviewService),
 		IVerificationService: accessor.get(IVerificationService),
+		IBrowserToolMainService: accessor.get(IBrowserToolMainService),
 
 	} as const
 	return reactAccessor

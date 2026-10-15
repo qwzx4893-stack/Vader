@@ -34,6 +34,7 @@ const plugin = {
 			if (!args.path.startsWith('.')) return null;
 			const full = path.resolve(args.resolveDir, args.path).replace(/\\/g, '/');
 			if (/\/util\/services\.js$/.test(full)) return { path: path.join(here, 'fixtures/shellHarnessServices.ts') };
+			if (/\/terminalToolService\.js$/.test(full)) return { path: path.join(here, 'fixtures/terminalToolStub.ts') };
 			if (/\/sidebar-tsx\/(SidebarChat|ErrorBoundary)\.js$/.test(full) || /\/vader-addons-tsx\/Addons\.js$/.test(full)) return { path: path.join(here, 'fixtures/shellStubs.tsx') };
 			return null;
 		});
@@ -233,6 +234,64 @@ async function layoutProblems(page) {
 	check('when the last file is gone the page says how many were accepted and how many rejected', (await page.locator(TID('vader-review-empty')).innerText()).includes('2 files accepted, 1 rejected'), (await page.locator(TID('vader-review-empty')).innerText()) + ' | ' + (await page.locator(TID('vader-review-empty')).getAttribute('data-accepted')) + '/' + (await page.locator(TID('vader-review-empty')).getAttribute('data-rejected')) + ' | ' + (await log(page)).join(','));
 	await shot(page, '06-review-accepted');
 	check('the review page has no layout problem', (await layoutProblems(page)).length === 0, (await layoutProblems(page)).join('; '));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== the agent's browser
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-shell-tab-browser')).click();
+	await page.waitForSelector(TID('vader-browser-shot'));
+	check('the pages the agent opened are listed and the first is shown with its address', (await page.locator(TID('vader-browser-page')).count()) === 2 && (await page.locator(TID('vader-browser-url')).innerText()) === 'http://localhost:5173/');
+	const did = flat(await page.locator(TID('vader-browser-did')).innerText());
+	check('what the agent did there is listed in order', /Opened localhost:5173/.test(did) && /Clicked/.test(did) && /Took/.test(did), did);
+	check('the console, the network and the errors are counted and shown', (await page.locator(TID('vader-browser-tab-console')).innerText()).includes('2') && (await page.locator(TID('vader-browser-log')).innerText()).includes('limiter ready'));
+	await page.locator(TID('vader-browser-tab-network')).click();
+	check('the network tab shows a request that was refused', (await page.locator(TID('vader-browser-log')).innerText()).includes('429 http://localhost:5173/api/send'));
+	await page.locator(TID('vader-browser-tab-errors')).click();
+	check('the errors tab shows what the page threw', (await page.locator(TID('vader-browser-log')).innerText()).includes('rate limited at send'));
+	await page.locator(TID('vader-browser-page')).nth(1).click();
+	check('choosing another page works', await page.locator(`${TID('vader-browser-page')}.vader-on`).count() === 1);
+	await page.locator(TID('vader-browser-reload')).click();
+	check('Reload reloads the page', (await log(page)).includes('reload'));
+	await page.locator(TID('vader-browser-open-mine')).click();
+	check('Open in my browser opens the same address in the person\'s browser', (await page.evaluate(() => window.__opened)).some((u) => u.includes('localhost:5173')));
+	await shot(page, '07-browser');
+	// while the agent works, the page says who has it
+	await page.locator(TID('vader-shell-nav')).getByText('Probe every provider gateway').click();
+	await page.locator(TID('vader-shell-tab-browser')).click();
+	await page.waitForSelector(TID('vader-browser-banner'));
+	await page.locator(TID('vader-browser-pause')).click();
+	check('a working agent shows who has the page, and Pause holds it', (await page.locator(TID('vader-browser-banner')).innerText()).includes('The agent is paused') && (await log(page)).includes('pause:t-run1'));
+	await page.evaluate(() => { window.__browserDown = 'Could not launch a browser. Run "npx playwright install chromium" once.'; });
+	await page.waitForSelector(TID('vader-browser-failure'), { timeout: 5000 });
+	check('a browser that cannot start is said so, with the real reason', (await page.locator(TID('vader-browser-failure')).innerText()).includes('playwright install chromium'));
+	await page.evaluate(() => { window.__browserDown = ''; window.__pages = []; });
+	await page.waitForSelector(TID('vader-browser-empty'), { timeout: 5000 });
+	check('no page open says so', (await page.locator(TID('vader-browser-empty')).innerText()).includes('has not opened a page'));
+	check('the browser page has no layout problem', (await layoutProblems(page)).length === 0, (await layoutProblems(page)).join('; '));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== the terminals of a task
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-shell-tab-terminal')).click();
+	check('the terminal the agent kept open is listed with the command it runs', (await page.locator(TID('vader-terminal-item')).first().innerText()).includes('Vader Agent') && (await page.locator(TID('vader-terminal-item')).first().innerText()).includes('npm run dev'));
+	check('its output is shown', (await page.locator(TID('vader-terminal-output')).innerText()).includes('VITE v6.0.1'));
+	check('a terminal the task did not start is under Yours', (await page.locator('[data-terminal-id="2"]').count()) === 1 && (await page.getByText('Yours', { exact: true }).count()) === 1);
+	check('the commands the task ran are counted, with what the person rejected', (await page.locator(TID('vader-terminal-commands')).innerText()).includes('3 in all: 2 ran, 1 you rejected'), await page.locator(TID('vader-terminal-commands')).innerText());
+	await page.locator(TID('vader-terminal-input')).fill('ls');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-terminal-output"]')?.textContent?.includes('$ ls'));
+	check('a line typed under the terminal runs in it, as the person', (await log(page)).includes('term:1:ls'));
+	check('the line says it runs as the person and not as the agent', ((await page.locator(TID('vader-terminal-input')).getAttribute('placeholder')) ?? '').includes('runs as you'));
+	await shot(page, '08-terminal');
+	await page.locator(TID('vader-terminal-stop')).click();
+	check('Stop it closes the terminal', (await log(page)).includes('kill:1'));
+	check('the terminal page has no layout problem', (await layoutProblems(page)).length === 0, (await layoutProblems(page)).join('; '));
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
 }

@@ -155,3 +155,68 @@ export function recentActivity(messages: readonly MessageLike[], max = 3): Activ
 	}
 	return out;
 }
+
+// ---- the page the agent opened and the terminals it started (boards R25 and R26)
+
+const hostOf = (url: string): string => { try { return new URL(url).host || url; } catch { return url; } };
+
+const BROWSER_VERB: Record<string, string> = {
+	browser_new_page: 'Opened a new tab', browser_navigate: 'Opened', browser_reload: 'Reloaded', browser_click: 'Clicked', browser_type: 'Typed',
+	browser_snapshot: 'Read the page', browser_screenshot: 'Took a screenshot', browser_switch_page: 'Switched tab', browser_close_page: 'Closed a tab',
+	browser_console: 'Read the console', browser_network: 'Read the network',
+};
+
+/** what the agent did in its browser, oldest first: "Opened localhost:5173", "Clicked a button", "Took a screenshot" */
+export function browserActivity(messages: readonly MessageLike[], max = 12): Activity[] {
+	const out: Activity[] = [];
+	for (const m of messages) {
+		if (m.role !== 'tool' || m.type !== 'success' || !m.name || !m.name.startsWith('browser_')) continue;
+		const verb = BROWSER_VERB[m.name] ?? m.name.replace(/^browser_/, '').replace(/_/g, ' ');
+		const p = (m.params ?? {}) as Record<string, unknown>;
+		const target = typeof p.url === 'string' ? hostOf(p.url) : m.name === 'browser_type' && typeof p.text === 'string' ? `“${p.text.slice(0, 40)}”` : typeof p.ref === 'string' ? p.ref : '';
+		out.push({ verb, target });
+	}
+	return out.slice(-max);
+}
+
+export type TerminalRun = { readonly command: string; readonly status: 'done' | 'failed' | 'rejected' | 'running' | 'waiting'; readonly exitCode?: number };
+export type TerminalOfTask = { readonly id: string; readonly persistent: boolean; readonly runs: TerminalRun[] };
+
+/** the terminals a task used and what ran in each: persistent ones by their id, and every one-off command together as "commands" */
+export function terminalActivity(messages: readonly MessageLike[]): { terminals: TerminalOfTask[]; ran: number; failed: number; rejected: number } {
+	const byId = new Map<string, TerminalRun[]>();
+	const oneOff: TerminalRun[] = [];
+	let ran = 0, failed = 0, rejected = 0;
+	for (const m of messages) {
+		if (m.role !== 'tool' || !m.name) continue;
+		if (m.name === 'open_persistent_terminal' && m.type === 'success') {
+			const id = (m.result as { persistentTerminalId?: string } | null)?.persistentTerminalId;
+			if (id && !byId.has(id)) byId.set(id, []);
+			continue;
+		}
+		if (m.name !== 'run_command' && m.name !== 'run_persistent_command') continue;
+		const p = (m.params ?? {}) as { command?: string; persistentTerminalId?: string };
+		const command = String(p.command ?? '');
+		const status: TerminalRun['status'] = m.type === 'rejected' ? 'rejected' : m.type === 'tool_request' ? 'waiting' : m.type === 'running_now' ? 'running' : m.type === 'tool_error' ? 'failed' : 'done';
+		const reason = (m.result as { resolveReason?: { type?: string; exitCode?: number } } | null)?.resolveReason;
+		const exitCode = reason?.type === 'done' ? reason.exitCode : undefined;
+		const finalStatus: TerminalRun['status'] = status === 'done' && exitCode !== undefined && exitCode !== 0 ? 'failed' : status;
+		if (finalStatus === 'rejected') rejected++; else if (finalStatus === 'done' || finalStatus === 'failed') { ran++; if (finalStatus === 'failed') failed++; }
+		const run: TerminalRun = { command, status: finalStatus, exitCode };
+		if (m.name === 'run_persistent_command' && p.persistentTerminalId) { const l = byId.get(p.persistentTerminalId) ?? []; l.push(run); byId.set(p.persistentTerminalId, l); }
+		else oneOff.push(run);
+	}
+	const terminals: TerminalOfTask[] = [...byId.entries()].map(([id, runs]) => ({ id, persistent: true, runs }));
+	if (oneOff.length > 0) terminals.push({ id: 'commands', persistent: false, runs: oneOff });
+	return { terminals, ran, failed, rejected };
+}
+
+/** what the line under the terminals says about the commands a task ran */
+export function commandsLine(c: { ran: number; failed: number; rejected: number }): string {
+	const total = c.ran + c.rejected;
+	if (total === 0) return 'This task has not run a command.';
+	const parts = [`${c.ran} ran`];
+	if (c.failed > 0) parts.push(`${c.failed} failed`);
+	if (c.rejected > 0) parts.push(`${c.rejected} you rejected`);
+	return `${total} in all: ${parts.join(', ')}.`;
+}
