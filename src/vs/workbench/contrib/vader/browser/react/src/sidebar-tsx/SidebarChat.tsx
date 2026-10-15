@@ -6,7 +6,7 @@
 import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, usePolicyServiceState } from '../util/services.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
 import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markdown/ChatMarkdownRender.js';
@@ -37,6 +37,8 @@ import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/Settings.js';
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAccounting.js';
+import { parseTaskList } from '../../../../common/taskList.js';
+import { projectNameOf } from '../../../../common/threadProjects.js';
 
 
 
@@ -257,10 +259,10 @@ const nameOfChatMode = {
 }
 
 const detailOfChatMode = {
-	'normal': 'Normal chat',
-	'gather': 'Reads files, but can\'t edit',
-	'plan': 'Read-only research, ends in a structured plan you can approve into Agent mode',
-	'agent': 'Edits files and uses tools',
+	'normal': 'Plain conversation, no tools.',
+	'gather': 'Read-only. Explores the project and answers.',
+	'plan': 'Writes a plan. Changes nothing until you approve it.',
+	'agent': 'Reads, edits and runs commands until the task is done.',
 }
 
 
@@ -293,6 +295,57 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 
 
 
+
+// How much the agent asks before it acts (boards R06 and R08): Safe, Balanced or Autonomous. Some rules are locked in every mode.
+const PERMISSION_NAME = { safe: 'Safe', balanced: 'Balanced', autonomous: 'Autonomous' } as const
+const PERMISSION_DETAIL = {
+	safe: 'Asks before every change and command.',
+	balanced: 'Edits in the project go through. Commands and sensitive files ask.',
+	autonomous: 'Runs without asking, except what is on the locked list.',
+} as const
+const PermissionDropdown = ({ className }: { className: string }) => {
+	const accessor = useAccessor()
+	const policyService = accessor.get('IPolicyService')
+	const policy = usePolicyServiceState()
+	const options = useMemo(() => ['safe', 'balanced', 'autonomous'] as ('safe' | 'balanced' | 'autonomous')[], [])
+	return <VaderCustomDropdownBox
+		className={className}
+		options={options}
+		selectedOption={policy.mode}
+		onChangeOption={(m) => policyService.setMode(m)}
+		getOptionDisplayName={(v) => PERMISSION_NAME[v]}
+		getOptionDropdownName={(v) => PERMISSION_NAME[v]}
+		getOptionDropdownDetail={(v) => PERMISSION_DETAIL[v]}
+		getOptionsEqual={(a, b) => a === b}
+	/>
+}
+
+/** how much of the model's window this conversation uses, as a ring and a percentage (board R06, "Context meter") */
+const ContextMeter = () => {
+	const settingsState = useSettingsState()
+	const threadsState = useChatThreadsState()
+	const sel = settingsState.modelSelectionOfFeature?.Chat
+	if (!sel) return null
+	const thread = threadsState.allThreads[threadsState.currentThreadId]
+	if (!thread || thread.messages.length === 0) return null
+	const caps = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
+	const windowTokens = caps.contextWindow
+	if (!windowTokens) return null
+	let chars = 0
+	for (const m of thread.messages) {
+		if (m.role === 'user' || m.role === 'assistant') chars += (m.displayContent ?? '').length
+		else if (m.role === 'tool') chars += String((m as { content?: unknown }).content ?? '').length
+	}
+	const tokens = Math.round(chars / 4 + 8000)
+	const pct = Math.min(100, Math.round(100 * tokens / windowTokens))
+	const r = 6.5, c = 2 * Math.PI * r
+	const color = pct >= 90 ? '#f06a6e' : pct >= 70 ? '#e2a93f' : '#8a8a91'
+	return <span className='flex items-center gap-1.5 text-xs text-vader-fg-3' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter'>
+		<svg width='16' height='16' viewBox='0 0 16 16' aria-hidden='true'><circle cx='8' cy='8' r={r} fill='none' stroke='rgba(255,255,255,.14)' strokeWidth='1.8' /><circle cx='8' cy='8' r={r} fill='none' stroke={color} strokeWidth='1.8' strokeLinecap='round' strokeDasharray={`${c * pct / 100} ${c}`} transform='rotate(-90 8 8)' /></svg>
+		{pct}%
+	</span>
+}
+
 interface VaderChatAreaProps {
 	// Required
 	children: React.ReactNode; // This will be the input component
@@ -317,6 +370,9 @@ interface VaderChatAreaProps {
 	// onSelectionsChange?: (selections: any[]) => void;
 
 	onClickAnywhere?: () => void;
+	/** the main message box: shows the footer line under it and an "Add context" button */
+	onAddContext?: () => void;
+	showFooter?: boolean;
 	// Optional close button
 	onClose?: () => void;
 
@@ -359,6 +415,8 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	onAbort,
 	onClose,
 	onClickAnywhere,
+	onAddContext,
+	showFooter,
 	divRef,
 	isStreaming = false,
 	isDisabled = false,
@@ -372,78 +430,85 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	loadingIcon,
 }) => {
 	return (
-		<div
-			ref={divRef}
-			className={`
+		<div className='flex flex-col gap-1.5'>
+			<div
+				ref={divRef}
+				className={`
 				gap-x-1
-                flex flex-col p-2 relative input text-left shrink-0
-                rounded-md
+                flex flex-col p-2.5 relative input text-left shrink-0
+                rounded-xl
                 bg-vader-bg-1
 				transition-all duration-200
-				border border-vader-border-3 focus-within:border-vader-border-1 hover:border-vader-border-1
+				border border-vader-border-2 focus-within:border-vader-border-1 hover:border-vader-border-1
 				max-h-[80vh] overflow-y-auto
                 ${className}
             `}
-			onClick={(e) => {
-				onClickAnywhere?.()
-			}}
-		>
-			{/* Selections section */}
-			{showSelections && selections && setSelections && (
-				<SelectedFiles
-					type='staging'
-					selections={selections}
-					setSelections={setSelections}
-					showProspectiveSelections={showProspectiveSelections}
-				/>
-			)}
-
-			{/* Input section */}
-			<div className="relative w-full">
-				{children}
-
-				{/* Close button (X) if onClose is provided */}
-				{onClose && (
-					<div className='absolute -top-1 -right-1 cursor-pointer z-1'>
-						<IconX
-							size={12}
-							className="stroke-[2] opacity-80 text-vader-fg-3 hover:brightness-95"
-							onClick={onClose}
-						/>
-					</div>
+				onClick={(e) => {
+					onClickAnywhere?.()
+				}}
+			>
+				{/* Selections section */}
+				{showSelections && selections && setSelections && (
+					<SelectedFiles
+						type='staging'
+						selections={selections}
+						setSelections={setSelections}
+						showProspectiveSelections={showProspectiveSelections}
+					/>
 				)}
-			</div>
 
-			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1'>
-				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
-						<ReasoningOptionSlider featureName={featureName} />
+				{/* Input section */}
+				<div className="relative w-full">
+					{children}
 
-						{featureName === 'Chat' && <RunControls isStreaming={isStreaming} />}
-						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
-							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-vader-fg-3 bg-vader-bg-1 border border-vader-border-2 rounded py-0.5 px-1' />}
-							{featureName === 'Chat' && <ExternalAgentChatPicker className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />
+					{/* Close button (X) if onClose is provided */}
+					{onClose && (
+						<div className='absolute -top-1 -right-1 cursor-pointer z-1'>
+							<IconX
+								size={12}
+								className="stroke-[2] opacity-80 text-vader-fg-3 hover:brightness-95"
+								onClick={onClose}
+							/>
 						</div>
-					</div>
-				)}
-
-				<div className="flex items-center gap-2">
-
-					{isStreaming && loadingIcon}
-
-					{isStreaming ? (
-						<ButtonStop onClick={onAbort} />
-					) : (
-						<ButtonSubmit
-							onClick={onSubmit}
-							disabled={isDisabled}
-						/>
 					)}
 				</div>
 
+				{/* Bottom row */}
+				<div className='flex flex-row justify-between items-end gap-1'>
+					{showModelDropdown && (
+						<div className='flex flex-col gap-y-1'>
+							<ReasoningOptionSlider featureName={featureName} />
+
+							<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
+								{featureName === 'Chat' && <ChatModeDropdown className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded py-0.5 px-1' />}
+								{featureName === 'Chat' && <ExternalAgentChatPicker className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />}
+								<ModelDropdown featureName={featureName} className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />
+								{featureName === 'Chat' && showFooter ? <PermissionDropdown className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded py-0.5 px-1' /> : null}
+								{onAddContext ? <button type='button' data-testid='vader-add-context' className='text-[13px] text-vader-fg-2 hover:text-vader-fg-1 px-1' onClick={(e) => { e.stopPropagation(); onAddContext() }}>@ Add context</button> : null}
+							</div>
+						</div>
+					)}
+
+					<div className="flex items-center gap-2">
+
+						{showFooter ? <ContextMeter /> : null}
+
+						{isStreaming && loadingIcon}
+
+						{isStreaming ? (
+							<ButtonStop onClick={onAbort} />
+						) : (
+							<ButtonSubmit
+								onClick={onSubmit}
+								disabled={isDisabled}
+							/>
+						)}
+					</div>
+
+				</div>
 			</div>
+			{/* what this chat and today have cost, and Pause: under the box, like the interface boards */}
+			{featureName === 'Chat' && showFooter ? <div className='px-2'><RunControls isStreaming={isStreaming} /></div> : null}
 		</div>
 	);
 };
@@ -845,7 +910,7 @@ const ToolHeaderWrapper = ({
 	const isDesc1Clickable = !!desc1OnClick
 
 	const desc1HTML = <span
-		className={`text-vader-fg-4 text-xs italic truncate ml-2
+		className={`text-vader-fg-2 text-[12.5px] font-mono truncate ml-2
 			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
 		`}
 		onClick={desc1OnClick}
@@ -858,7 +923,7 @@ const ToolHeaderWrapper = ({
 	>{desc1}</span>
 
 	return (<div className='' data-testid='vader-tool'>
-		<div className={`w-full border border-vader-border-3 rounded px-2 py-1 bg-vader-bg-3 overflow-hidden ${className}`}>
+		<div className={`w-full rounded px-1 py-0.5 overflow-hidden ${className}`}>
 			{/* header */}
 			<div className={`select-none flex items-center min-h-[24px]`}>
 				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
@@ -927,8 +992,8 @@ const ToolHeaderWrapper = ({
 			</div>
 			{/* children */}
 			{<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
-					text-vader-fg-4 rounded-sm overflow-x-auto
+				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1 mt-1 rounded-md border border-vader-border-3 bg-vader-bg-3' : 'max-h-0 opacity-0'}
+					text-vader-fg-4 overflow-x-auto
 				  `}
 			//    bg-black bg-opacity-10 border border-vader-border-4 border-opacity-50
 			>
@@ -1213,9 +1278,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	return <div
 		// align chatbubble accoridng to role
 		className={`
-        relative ml-auto
+        relative
         ${mode === 'edit' ? 'w-full max-w-full'
-				: mode === 'display' ? `self-end w-fit max-w-full whitespace-pre-wrap` : '' // user words should be pre
+				: mode === 'display' ? `self-stretch w-full max-w-full whitespace-pre-wrap` : '' // user words should be pre
 			}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -1226,9 +1291,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		<div
 			// style chatbubble according to role
 			className={`
-            text-left rounded-lg max-w-full
+            text-left rounded-xl max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'p-2 flex flex-col bg-vader-bg-1 text-vader-fg-1 overflow-x-auto cursor-pointer' : ''
+					: mode === 'display' ? 'px-3.5 py-2.5 flex flex-col bg-vader-bg-1 text-vader-fg-1 text-[13.5px] leading-relaxed overflow-x-auto cursor-pointer' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1678,16 +1743,9 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<button
 			data-testid='vader-tool-approve'
 			onClick={onAccept}
-			className={`
-                px-2 py-1
-                bg-[var(--vscode-button-background)]
-                text-[var(--vscode-button-foreground)]
-                hover:bg-[var(--vscode-button-hoverBackground)]
-                rounded
-                text-sm font-medium
-            `}
+			className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium'
 		>
-			Approve
+			Allow once
 		</button>
 	)
 
@@ -1695,16 +1753,9 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<button
 			data-testid='vader-tool-reject'
 			onClick={onReject}
-			className={`
-                px-2 py-1
-                bg-[var(--vscode-button-secondaryBackground)]
-                text-[var(--vscode-button-secondaryForeground)]
-                hover:bg-[var(--vscode-button-secondaryHoverBackground)]
-                rounded
-                text-sm font-medium
-            `}
+			className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm'
 		>
-			Cancel
+			Reject
 		</button>
 	)
 
@@ -1713,11 +1764,32 @@ const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) =>
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
 
-	return <div className="flex gap-2 mx-0.5 items-center">
+	return <div className="flex flex-wrap gap-2 items-center">
 		{approveButton}
-		{canRemember ? <button data-testid='vader-tool-approve-project' onClick={onAcceptForProject} className='px-2 py-1 rounded text-sm border border-vader-border-1 text-vader-fg-1 hover:bg-vader-bg-2-hover' title='Approve this, and do not ask about this exact command in this project again'>Allow in this project</button> : null}
+		{canRemember ? <button data-testid='vader-tool-approve-project' onClick={onAcceptForProject} className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' title='Allow this, and do not ask about this exact command in this project again'>Allow in this project</button> : null}
 		{cancelButton}
 		{approvalToggle}
+	</div>
+}
+
+const GATE_TITLE: Partial<Record<string, string>> = {
+	run_command: 'Run a command', run_persistent_command: 'Run a command in a terminal', open_persistent_terminal: 'Open a terminal',
+	edit_file: 'Apply an edit', rewrite_file: 'Rewrite a file', create_file_or_folder: 'Create a file', delete_file_or_folder: 'Delete a file',
+}
+const MODE_WORD: Record<string, string> = { safe: 'Safe', balanced: 'Balanced', autonomous: 'Autonomous' }
+
+/** a request for the person's say, as one card: its name, the mode it asks in, the thing itself, and Allow once / Allow in this project / Reject */
+const GateCard = ({ toolName, mcpServerName, isCheckpointGhost, children }: { toolName: ToolName, mcpServerName: string | undefined, isCheckpointGhost: boolean, children: React.ReactNode }) => {
+	const policy = usePolicyServiceState()
+	const title = GATE_TITLE[toolName] ?? (mcpServerName ? `Use a tool from ${mcpServerName}` : 'Allow this action')
+	return <div data-testid='vader-gate' className={`rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2.5 ${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
+		<div className='flex items-center gap-2'>
+			<span className='font-semibold text-vader-fg-1'>{title}</span>
+			<span className='flex-1' />
+			<span className='text-vader-fg-3 text-xs'>Asks in {MODE_WORD[policy.mode] ?? policy.mode} mode</span>
+		</div>
+		{children}
+		<ToolRequestAcceptRejectButtons toolName={toolName} />
 	</div>
 }
 
@@ -2052,7 +2124,27 @@ const GenericToolWrapper = ({ toolMessage }: WrapperProps<ToolName>) => {
 	return <ToolHeaderWrapper {...componentParams} />
 }
 
+/** the agent's task list as a card (board R01): "Plan 2 of 4" with each step marked; only the latest list is a card, an older one is a quiet line */
+const PlanCard = ({ toolMessage, messageIdx, threadId }: WrapperProps<'update_task_list'>) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	if (toolMessage.type !== 'success') return <GenericToolWrapper toolMessage={toolMessage as never} messageIdx={messageIdx} threadId={threadId} />
+	const msgs = chatThreadsService.state.allThreads[threadId]?.messages ?? []
+	const isLatest = !msgs.slice(messageIdx + 1).some(m => m.role === 'tool' && m.name === 'update_task_list')
+	const { done, total } = toolMessage.result
+	if (!isLatest) return <ToolHeaderWrapper title='Updated the plan' desc1={`${done} of ${total}`} />
+	const tasks = parseTaskList(toolMessage.result.text)
+	return <div data-testid='vader-plan' className='rounded-xl border border-vader-border-3 bg-vader-bg-1 px-4 py-3 flex flex-col gap-1.5'>
+		<div className='flex items-baseline gap-2'><span className='font-semibold text-vader-fg-1'>Plan</span><span className='text-vader-fg-3 text-sm'>{done} of {total}</span></div>
+		{tasks.map((t, i) => <div key={i} className={`flex items-start gap-2 ${t.status === 'done' ? 'text-vader-fg-3' : t.status === 'in_progress' ? 'text-vader-fg-1 font-medium' : 'text-vader-fg-2'}`}>
+			<span className='w-4 shrink-0 text-center'>{t.status === 'done' ? '✓' : '○'}</span>
+			<span className='min-w-0 break-words'>{t.text}</span>
+		</div>)}
+	</div>
+}
+
 const builtinToolNameToComponent: Partial<{ [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } }> = {
+	'update_task_list': { resultWrapper: PlanCard },
 	'read_file': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
@@ -2597,35 +2689,33 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 		return !!Object.keys(streamState).find((threadId2) => streamState[threadId2]?.isRunning)
 	}, [isRunning, streamState])
 
-	return <div
-		className={`flex items-center justify-center px-2 `}
-	>
-		<div
-			className={`
-                    text-xs
-                    text-vader-fg-3
-                    select-none
-                    ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
-					${isDisabled ? 'cursor-default' : 'cursor-pointer'}
-                `}
-			style={{ position: 'relative', display: 'inline-block' }} // allow absolute icon
-			onClick={() => {
-				if (threadIsRunning) return
-				if (isDisabled) return
-				chatThreadService.jumpToCheckpointBeforeMessageIdx({
-					threadId,
-					messageIdx,
-					jumpToUserModified: messageIdx === (chatThreadService.state.allThreads[threadId]?.messages.length ?? 0) - 1
-				})
-			}}
+	const num = useMemo(() => {
+		const msgs = chatThreadService.state.allThreads[threadId]?.messages ?? []
+		let n = 0
+		for (let i = 0; i <= messageIdx && i < msgs.length; i++) if (msgs[i].role === 'checkpoint') n++
+		return n
+	}, [chatThreadService, threadId, messageIdx])
+	const onRestore = () => {
+		if (threadIsRunning) return
+		if (isDisabled) return
+		chatThreadService.jumpToCheckpointBeforeMessageIdx({
+			threadId,
+			messageIdx,
+			jumpToUserModified: messageIdx === (chatThreadService.state.allThreads[threadId]?.messages.length ?? 0) - 1
+		})
+	}
+
+	return <div className={`flex items-center gap-2 px-1 text-xs text-vader-fg-3 select-none ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`} data-testid='vader-checkpoint'>
+		<span>Checkpoint {num}</span>
+		<span
+			className={`underline ${isDisabled ? 'cursor-default opacity-60' : 'cursor-pointer hover:text-vader-fg-1'}`}
+			onClick={onRestore}
 			{...isDisabled ? {
 				'data-tooltip-id': 'vader-tooltip',
 				'data-tooltip-content': `Disabled ${isRunning ? 'when running' : 'because another thread is running'}`,
 				'data-tooltip-place': 'top',
 			} : {}}
-		>
-			Checkpoint
-		</div>
+		>Restore</span>
 	</div>
 }
 
@@ -2683,19 +2773,23 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 			: MCPToolWrapper as ResultWrapper<ToolName>
 
 		if (ToolResultWrapper)
-			return <>
-				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			// something the person is asked to allow is one card: what it is and in which mode it asks, what exactly it does, and the buttons (boards R07, S02)
+			if (chatMessage.type === 'tool_request') {
+				return <GateCard toolName={chatMessage.name} mcpServerName={chatMessage.mcpServerName} isCheckpointGhost={isCheckpointGhost}>
 					<ToolResultWrapper
 						toolMessage={chatMessage}
 						messageIdx={messageIdx}
 						threadId={threadId}
 					/>
-				</div>
-				{chatMessage.type === 'tool_request' ?
-					<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-						<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
-					</div> : null}
-			</>
+				</GateCard>
+			}
+			return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+				<ToolResultWrapper
+					toolMessage={chatMessage}
+					messageIdx={messageIdx}
+					threadId={threadId}
+				/>
+			</div>
 		return null
 	}
 
@@ -3262,6 +3356,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		showFooter
+		onAddContext={() => { const t = textAreaRef.current; if (t) { t.focus(); try { document.execCommand('insertText', false, '@') } catch { /* the @ menu opens when typing it */ } } }}
 	>
 		<VaderInputBox2
 			enableAtToMention
@@ -3314,26 +3410,50 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		</div>
 	</div>
 
+	// a new chat (board R21): what this is, the message box, and where to pick up
+	const projectKey = chatThreadsService.getCurrentProjectKey()
+	const projectName = projectKey ? projectNameOf(projectKey) : undefined
+	const recent = useMemo(() => {
+		const groups = chatThreadsService.listProjectGroups()
+		const group = groups.find(g => g.key === projectKey) ?? groups[0]
+		return (group?.threadIds ?? []).slice(0, 3).map(id => {
+			const t = chatThreadsState.allThreads[id]
+			const first = t?.messages.find(m => m.role === 'user')
+			const title = first && first.role === 'user' ? (first.displayContent || '').replace(/\s+/g, ' ').trim() : ''
+			return { id, title: title || 'New chat', status: chatThreadsService.getThreadStatus(id) }
+		}).filter(r => r.id !== threadId)
+	}, [chatThreadsService, chatThreadsState, projectKey, threadId])
+
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
+		className='w-full h-full max-h-full flex flex-col overflow-auto px-4 items-center justify-center'
+		data-testid='vader-landing'
 	>
-		<ErrorBoundary>
-			{landingPageInput}
-		</ErrorBoundary>
+		<div className='w-full flex flex-col gap-4 py-8' style={{ maxWidth: 560 }}>
+			<ErrorBoundary>
+				<div className='flex flex-col gap-1.5'>
+					<h2 className='text-xl font-semibold text-vader-fg-1'>{projectName ? `New chat in ${projectName}` : 'New chat'}</h2>
+					<p className='text-vader-fg-3 leading-relaxed'>{projectName ? 'Agent mode reads and edits the files of this project and shows every change for you to accept or reject.' : 'No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project.'}</p>
+				</div>
+				{inputChatArea}
+			</ErrorBoundary>
 
-		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-vader-fg-3 text-root select-none pointer-events-none'>Previous Threads</div>
-				<PastThreadsList />
+				{recent.length > 0 ? <div className='flex flex-col mt-2' data-testid='vader-landing-recent'>
+					<div className='text-vader-fg-3 text-xs pb-1'>Pick up where you left off</div>
+					{recent.map(r => <button key={r.id} className='flex items-center gap-2.5 h-9 border-t border-vader-border-3 text-left text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-sm px-1' onClick={() => chatThreadsService.switchToThread(r.id)}>
+						<span className='shrink-0 w-3.5 flex justify-center'>{r.status === 'needs_you' ? <span className='w-2 h-2 rounded-full bg-yellow-500' /> : r.status === 'running' ? <IconLoading className='text-vader-fg-3' /> : r.status === 'review' ? <span className='w-2.5 h-2.5 rounded-full border border-vader-fg-3' /> : null}</span>
+						<span className='truncate flex-1'>{r.title}</span>
+						<span className='text-vader-fg-3 text-xs shrink-0'>{r.status === 'review' ? 'Review it' : r.status === 'needs_you' ? 'Needs you' : ''}</span>
+					</button>)}
+				</div> : <div className='flex flex-col gap-2 mt-2'>
+					<div className='text-vader-fg-3 text-xs'>Suggestions</div>
+					{initiallySuggestedPromptsHTML}
+				</div>}
 			</ErrorBoundary>
-			:
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-vader-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
-				{initiallySuggestedPromptsHTML}
-			</ErrorBoundary>
-		}
+		</div>
 	</div>
+
 
 
 	// const threadPageContent = <div>
