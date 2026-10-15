@@ -25,6 +25,7 @@ import './autocompleteService.js'
 import './vaderSettingsPane.js'
 import './vaderAddonsPane.js'
 import './vaderShellService.js'
+import './vaderReviewService.js'
 import './vaderShellPane.js'
 import './trustMonitor.js'
 

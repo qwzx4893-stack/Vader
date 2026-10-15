@@ -20,3 +20,4 @@ export const useChatThreadsState = () => { useTick(); return w.__chat.state }
 export const useFullChatThreadsStreamState = () => { useTick(); return w.__chat.streamState }
 export const useChatThreadsStreamState = (id: string) => { useTick(); return w.__chat.streamState[id] }
 export const useUsageTick = () => { useTick(); return 0 }
+export const useCommandBarState = () => { useTick(); return { stateOfURI: w.__cb.stateOfURI, sortedURIs: w.__cb.sortedURIs } }

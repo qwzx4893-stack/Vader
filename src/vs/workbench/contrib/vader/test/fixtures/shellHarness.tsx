@@ -69,8 +69,56 @@ w.__shell = shell
 const commands: any = { async executeCommand(id: string) { w.__log.push(`cmd:${id}`) } }
 const tools: any = { callTool: { async search_pathnames_only({ query }: any) { return { result: Promise.resolve({ uris: ['src/limiter.ts', 'src/app.ts'].filter(p => p.includes(query)).map(p => ({ fsPath: 'c:/work/vader-app/' + p })) }) } } } }
 const settingsSvc: any = { state: w.__settings, setGlobalSetting(k: string, v: any) { w.__settings.globalSettings[k] = v; w.__log.push(`setting:${k}=${v}`); notify() } }
+// ---- the editor's pending edits, as the review page reads them
+const uriOf = (p: string) => ({ fsPath: p, toString: () => 'file:///' + p })
+const ROOT = 'c:/work/vader-app'
+const fileText: { [p: string]: string[] } = {
+	[ROOT + '/browser/convertToLLMMessageService.ts']: ['const { messages, systemMessage } = args', '', 'reservedOutputTokenSpace = Math.max(', '// the budget comes from common/contextBudget.ts', 'const charsNeedToTrim = totalLen - inputBudgetChars(contextWindow, reserved)', 'let remainingCharsToTrim = charsNeedToTrim', '', 'if (charsNeedToTrim > 0) {', '  pruneOldToolOutput(messages)', '}'],
+	[ROOT + '/browser/chatThreadService.ts']: ['a', 'b', 'c', 'd', 'e', 'f'],
+	[ROOT + '/common/contextBudget.ts']: Array.from({ length: 98 }, (_, i) => `export const line${i + 1} = ${i + 1}`),
+}
+let diffId = 1
+const mk = (path: string, d: any) => ({ diffid: diffId++, diffareaid: 1, ...d, _path: path })
+const diffs: { [id: number]: any } = {}
+const cb: any = { stateOfURI: {}, sortedURIs: [] }
+const addFile = (path: string, ds: any[]) => {
+	const made = ds.map(d => mk(path, d)); made.forEach(d => { diffs[d.diffid] = d })
+	cb.stateOfURI[path] = { sortedDiffIds: made.map(d => String(d.diffid)), sortedDiffZoneIds: ['1'], isStreaming: false, diffIdx: null }
+	cb.sortedURIs = [...cb.sortedURIs, uriOf(path)]
+}
+const NL = String.fromCharCode(10)
+const L = (...lines: string[]) => lines.join(NL)
+addFile(ROOT + '/browser/convertToLLMMessageService.ts', [{ type: 'edit', originalCode: L('contextWindow * 1 / 2, // reserve at least 1/4', 'reservedOutputTokenSpace ?? 4_096 // defaults to 4096', ')'), originalStartLine: 300, code: L('// the budget comes from common/contextBudget.ts', 'const charsNeedToTrim = totalLen - inputBudgetChars(contextWindow, reserved)'), startLine: 4, endLine: 5 }])
+addFile(ROOT + '/browser/chatThreadService.ts', [{ type: 'insertion', originalStartLine: 2, code: L('x', 'y', 'z'), startLine: 2, endLine: 4 }, { type: 'edit', originalCode: 'e', originalStartLine: 5, code: L('E1', 'E2'), startLine: 5, endLine: 6 }])
+addFile(ROOT + '/common/contextBudget.ts', [{ type: 'insertion', originalStartLine: 1, code: fileText[ROOT + '/common/contextBudget.ts'].join(NL), startLine: 1, endLine: 98 }])
+const removeFile = (path: string) => {
+	for (const id of cb.stateOfURI[path]?.sortedDiffIds ?? []) delete diffs[Number(id)]
+	delete cb.stateOfURI[path]; cb.sortedURIs = cb.sortedURIs.filter((u: any) => u.fsPath !== path); notify()
+}
+w.__cb = cb
+const editSvc: any = {
+	diffOfId: diffs,
+	acceptDiff({ diffid }: any) { w.__log.push(`acceptDiff:${diffid}`); const d = diffs[diffid]; if (!d) return; const st = cb.stateOfURI[d._path]; st.sortedDiffIds = st.sortedDiffIds.filter((x: string) => x !== String(diffid)); delete diffs[diffid]; if (st.sortedDiffIds.length === 0) removeFile(d._path); else notify() },
+	rejectDiff({ diffid }: any) { w.__log.push(`rejectDiff:${diffid}`); this.acceptDiff({ diffid }) },
+	acceptOrRejectAllDiffAreas({ uri, behavior }: any) { w.__log.push(`${behavior}All:${uri.fsPath}`); removeFile(uri.fsPath) },
+}
+const modelSvc: any = { getModel: (u: any) => fileText[u.fsPath] ? { getValue: () => fileText[u.fsPath].join(NL) } : null }
+w.__sent = [] as any[]
+chatAddReviewComment()
+function chatAddReviewComment() { w.__chat.addReviewComment = async (threadId: string, c: any) => { w.__sent.push({ threadId, ...c }); return true } }
+const gatewaySvc: any = { async startTask(o: any) { w.__log.push(`startTask:${String(o.userMessage).slice(0, 40)}`) } }
+w.__evidence = { gitDiffStat: '', diagnosticsSummary: '', checksDetected: true, checks: [{ name: 'Type check', command: 'tsc', passed: true, exitCode: 0, outputTail: '' }, { name: 'Lint', command: 'eslint', passed: true, exitCode: 0, outputTail: '' }] }
+w.__verdict = { passed: false, summary: 'Needs changes', findings: [{ severity: 'blocker', description: 'limiter.ts:21 never clears old hits, so a key stays blocked.', location: 'limiter.ts:21' }, { severity: 'info', description: 'No test covers a burst of requests.' }] }
+const verifySvc: any = { async gatherEvidence() { await new Promise(r => setTimeout(r, 50)); return w.__evidence }, async runIndependentVerification() { await new Promise(r => setTimeout(r, 50)); return { evidence: w.__evidence, verdict: w.__verdict } } }
+w.__commitFail = ''
+const reviewSvc: any = {
+	async commit(m: string) { if (w.__commitFail) throw new Error(w.__commitFail); w.__log.push(`commit:${m}`); return 'a1b2c3d' },
+	async repoInfo() { return { branch: 'agent/context-budget', pullRequestUrl: w.__noRemote ? undefined : 'https://github.com/o/r/compare/agent/context-budget?expand=1' } },
+	async openPullRequestPage() { w.__log.push('pr'); return true },
+}
+const workspaceSvc: any = { getWorkspace: () => ({ folders: [{ uri: { fsPath: ROOT } }] }) }
 w.__accessor = {
-	get: (name: string) => ({ IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc } as any)[name],
+	get: (name: string) => ({ IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc } as any)[name],
 }
 Date.now = () => NOW
 

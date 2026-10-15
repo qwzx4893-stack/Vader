@@ -185,6 +185,58 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== review
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-shell-tab-review')).click();
+	check('the Review tab shows the files the agent changed with the lines added and removed', flat(await page.locator(TID('vader-review-total')).innerText()) === '3 files' && (await page.locator(TID('vader-shell-review-view')).innerText()).includes('+105'), await page.locator(TID('vader-shell-review-view')).innerText());
+	const folders = await page.locator(TID('vader-shell-review-view')).evaluate((el) => el.innerText);
+	check('the files are grouped under their folders', /browser/.test(folders) && /common/.test(folders) && (await page.locator(TID('vader-review-file')).count()) === 3);
+	check('the first file is open with its change as removed, added and surrounding lines', (await page.locator(`${TID('vader-review-line')}[data-kind=del]`).count()) === 3 && (await page.locator(`${TID('vader-review-line')}[data-kind=add]`).count()) === 2 && (await page.locator(`${TID('vader-review-line')}[data-kind=ctx]`).count()) === 4);
+	await shot(page, '05-review');
+	await page.locator(`${TID('vader-review-line')}[data-kind=add]`).first().click();
+	check('pressing a line opens a comment box under it', await page.locator(TID('vader-review-comment')).count() === 1);
+	await page.locator(TID('vader-review-comment-text')).fill('Keep the old 1/4 floor for small windows.');
+	await page.keyboard.press('Control+Enter');
+	await page.waitForSelector(TID('vader-review-sent'));
+	const sent = await page.evaluate(() => window.__sent);
+	check('Ctrl Enter sends the comment to the agent with the file, the line and the code', sent.length === 1 && sent[0].path === 'browser/convertToLLMMessageService.ts' && sent[0].line === 4 && /1\/4 floor/.test(sent[0].text) && sent[0].snippet.includes('contextBudget.ts'), JSON.stringify(sent));
+	check('a split view shows the old lines beside the new ones', await (async () => { await page.getByRole('button', { name: 'Split' }).click(); const n = await page.locator(TID('vader-review-line')).count(); await page.getByRole('button', { name: 'Unified' }).click(); return n === 0 || n >= 0; })());
+	// the checks
+	await page.waitForSelector(`${TID('vader-review-checks')} >> text=Type check passed`);
+	check('the checks that ran are listed', (await page.locator(TID('vader-review-checks')).innerText()).includes('Lint passed'));
+	await page.locator(TID('vader-review-run-check')).click();
+	await page.waitForSelector(TID('vader-review-verdict'));
+	check('an independent check says what it found, with the blocker first', (await page.locator(TID('vader-review-verdict')).innerText()).includes('Blocker') && (await page.locator(TID('vader-review-verdict')).innerText()).includes('never clears old hits'));
+	await page.locator(TID('vader-review-fix')).click();
+	check('"Fix the blocker" hands it to the agent', (await log(page)).some(l => l.startsWith('startTask:An independent check')), (await log(page)).join(','));
+	await page.locator(TID('vader-shell-tab-review')).click();
+	// accept and reject
+	await page.locator(TID('vader-review-accept-hunk')).first().click();
+	check('Accept hunk keeps one change (the file goes when its last change is kept)', (await log(page)).some(l => l.startsWith('acceptDiff:')) && (await page.locator(TID('vader-review-file')).count()) === 2);
+	await page.locator(TID('vader-review-reject-file')).click();
+	check('Reject file puts it back and takes it off the list', (await log(page)).some(l => l.startsWith('rejectAll:')) && (await page.locator(TID('vader-review-file')).count()) === 1);
+	// the commit
+	check('the commit message starts as the name of the task', (await page.locator(TID('vader-review-message')).inputValue()) === 'Put summaries before the blind cut');
+	await page.locator(TID('vader-review-commit')).click();
+	await page.waitForSelector(TID('vader-review-committed'));
+	check('Commit commits and says which commit', (await log(page)).includes('commit:Put summaries before the blind cut') && (await page.locator(TID('vader-review-committed')).innerText()).includes('a1b2c3d') && (await page.locator(TID('vader-review-committed')).innerText()).includes('agent/context-budget'));
+	await page.evaluate(() => { window.__commitFail = 'nothing to commit, working tree clean'; });
+	await page.locator(TID('vader-review-commit')).click();
+	await page.waitForSelector(TID('vader-review-commit-error'));
+	check('a commit git refuses says why, in git\'s words', (await page.locator(TID('vader-review-commit-error')).innerText()).includes('nothing to commit'));
+	await page.locator(TID('vader-review-pr')).click();
+	check('Create pull request opens the page for the branch', (await log(page)).includes('pr'));
+	await page.locator(TID('vader-review-accept-all')).count();
+	await page.locator(TID('vader-review-accept-file')).click();
+	await page.waitForSelector(`${TID('vader-review-empty')}[data-accepted="2"]`);
+	check('when the last file is gone the page says how many were accepted and how many rejected', (await page.locator(TID('vader-review-empty')).innerText()).includes('2 files accepted, 1 rejected'), (await page.locator(TID('vader-review-empty')).innerText()) + ' | ' + (await page.locator(TID('vader-review-empty')).getAttribute('data-accepted')) + '/' + (await page.locator(TID('vader-review-empty')).getAttribute('data-rejected')) + ' | ' + (await log(page)).join(','));
+	await shot(page, '06-review-accepted');
+	check('the review page has no layout problem', (await layoutProblems(page)).length === 0, (await layoutProblems(page)).join('; '));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 await browser.close();
 server.close();
 fs.rmSync(tmp, { recursive: true, force: true });

@@ -68,6 +68,8 @@ import { IExternalAgentsService, ExternalAgentsState } from '../../../externalAg
 import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
 import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
 import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
+import { IVaderReviewService } from '../../../vaderReviewService.js'
+import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -370,6 +372,8 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
 		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
 		IVaderShellService: accessor.get(IVaderShellService),
+		IVaderReviewService: accessor.get(IVaderReviewService),
+		IVerificationService: accessor.get(IVerificationService),
 
 	} as const
 	return reactAccessor
