@@ -4,8 +4,9 @@
  *--------------------------------------------------------------------------------------*/
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { displayInfoOfProviderName, FeatureName, featureNames, isFeatureNameDisabled, ModelSelection, modelSelectionsEqual, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js'
-import { useSettingsState, useRefreshModelState, useAccessor } from '../util/services.js'
+import { displayInfoOfProviderName, FeatureName, featureNames, isFeatureNameDisabled, localProviderNames, ModelSelection, modelSelectionsEqual, nonlocalProviderNames, ProviderName, providerNames, SettingsOfProvider } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js'
+import { useSettingsState, useRefreshModelState, useAccessor, useCloudModelListState } from '../util/services.js'
+import { isCloudListedProvider } from '../../../../common/cloudModelListTypes.js'
 import { _VaderSelectBox } from '../util/inputs.js'
 import { ProviderModelPicker } from './ProviderModelPicker.js'
 import { SelectBox } from '../../../../../../../base/browser/ui/selectBox/selectBox.js'
@@ -43,11 +44,31 @@ const ModelSelectBox = ({ options, featureName, className }: { options: ModelOpt
 	// the picker shows one provider's live list flat, and several providers as a list of providers that open into their models (ProviderModelPicker)
 	const pickerOptions = useMemo(() => options.map(o => ({ selection: o.selection, providerName: o.selection.providerName, providerTitle: displayInfoOfProviderName(o.selection.providerName).title, modelName: o.selection.modelName })), [options])
 
+	// what the picker says besides the models: the providers that have no key (offered, not hidden), whether each list is being asked for or could not be, and where to add a key
+	const settingsState = useSettingsState()
+	const cloud = useCloudModelListState()
+	const refresh = accessor.get('IRefreshModelService')
+	const commands = accessor.get('ICommandService')
+	const keyed = useMemo(() => Array.from(new Set(options.map(o => o.selection.providerName))), [options])
+	const providerStates = useMemo(() => keyed.map(p => {
+		const st = isCloudListedProvider(p) ? cloud[p] : undefined
+		return { providerName: p, providerTitle: displayInfoOfProviderName(p).title, status: st ? (st.status === 'loading' ? 'loading' as const : st.status === 'error' ? 'error' as const : st.status === 'ok' ? 'ok' as const : 'idle' as const) : 'idle' as const, fetchedAt: isCloudListedProvider(p) ? refresh.cloudFetchedAt[p] : undefined }
+	}), [keyed, cloud, refresh])
+	const unkeyed = useMemo(() => nonlocalProviderNames.filter(p => !(settingsState.settingsOfProvider[p] as { _didFillInProviderSettings?: boolean })._didFillInProviderSettings && !keyed.includes(p)), [settingsState.settingsOfProvider, keyed])
+	const offered = useMemo(() => (['openAI', 'anthropic', 'gemini', 'groq', 'openRouter', 'xAI', 'mistral', 'deepseek'] as ProviderName[]).filter(p => unkeyed.includes(p)).slice(0, 3).map(p => ({ providerName: p, providerTitle: displayInfoOfProviderName(p).title })), [unkeyed])
+
 	return <ProviderModelPicker
 		options={pickerOptions}
 		selected={selectedOption?.selection}
 		onChange={(o) => onChangeOption({ name: o.modelName, selection: o.selection })}
 		className={className}
+		providerStates={providerStates}
+		withoutKey={featureName === 'Chat' ? offered : []}
+		addableCount={featureName === 'Chat' ? unkeyed.length : undefined}
+		isLocal={(p) => (localProviderNames as string[]).includes(p)}
+		onRetry={(p) => { if (isCloudListedProvider(p)) void refresh.refreshCloudModels(p) }}
+		onAddKey={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID, 'models') }}
+		onOpen={() => { for (const p of keyed) { if (isCloudListedProvider(p)) void refresh.refreshCloudModelsIfStale(p) } }}
 	/>
 }
 

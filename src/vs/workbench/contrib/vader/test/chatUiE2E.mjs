@@ -353,6 +353,31 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 }
 
 
+// ===================================================================== the chat is bigger than the model's window (board S04)
+{
+	const { page, errors } = await newPage();
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.a] }); }, { u: userMsg('x'.repeat(420_000)), a: asstMsg('Done reading.') });
+	await page.waitForSelector(TID('vader-context-overflow'));
+	const t = flat(await page.locator(TID('vader-context-overflow')).innerText());
+	check('a chat bigger than the window says so before the request fails, with the figures', t.includes('This chat is bigger than the model’s window') && /The chat is about \d+K tokens\. claude-sonnet-4-5 reads 100K\. Vader would have to cut the oldest \d+K\./.test(t), t);
+	check('it offers a larger model, a summary first, or going on and cutting', (await page.locator(TID('vader-overflow-larger')).count()) === 1 && (await page.locator(TID('vader-overflow-summarise')).count()) === 1 && (await page.locator(TID('vader-overflow-goon')).count()) === 1);
+	await shot(page, '14-overflow');
+	await page.locator(TID('vader-overflow-summarise')).click();
+	await page.waitForFunction(() => window.__log.includes('compact'));
+	check('Summarise first asks the chat to summarise', true);
+	await page.waitForSelector(TID('vader-context-result'));
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.a] }); }, { u: userMsg('x'.repeat(430_000)), a: asstMsg('Done again.') });
+	await page.waitForTimeout(200);
+	await page.reload();
+	await page.waitForFunction(() => window.__mounted === true);
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.a] }); }, { u: userMsg('x'.repeat(420_000)), a: asstMsg('Done reading.') });
+	await page.waitForSelector(TID('vader-context-overflow'));
+	await page.locator(TID('vader-overflow-goon')).click();
+	check('Go on and cut puts the card away, and the usual banner is what is left', (await page.locator(TID('vader-context-overflow')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== reading size and the box
 {
 	const { page } = await newPage();

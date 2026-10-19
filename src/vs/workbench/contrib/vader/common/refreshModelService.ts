@@ -10,6 +10,7 @@ import { Disposable, IDisposable } from '../../../../base/common/lifecycle.js';
 import { RefreshableProviderName, refreshableProviderNames, SettingsOfProvider } from './vaderSettingsTypes.js';
 import { OllamaModelResponse, OpenaiCompatibleModelResponse } from './sendLLMMessageTypes.js';
 import { CloudListedProviderName, CloudListState, cloudListedProviderNames } from './cloudModelListTypes.js';
+import { listIsStale } from './modelPickerGroups.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 
@@ -74,6 +75,10 @@ export interface IRefreshModelService {
 	readonly onDidChangeCloudState: Event<CloudListedProviderName>;
 	/** asks the provider which models the current key can use and applies the answer (called automatically when a key changes) */
 	refreshCloudModels(providerName: CloudListedProviderName): Promise<void>;
+	/** when each provider's list last arrived (the picker says "fetched just now" from this) */
+	readonly cloudFetchedAt: Partial<Record<CloudListedProviderName, number>>;
+	/** asks again only when the list is older than ten minutes or was never fetched: what the picker does when it opens */
+	refreshCloudModelsIfStale(providerName: CloudListedProviderName): Promise<void>;
 }
 
 export const IRefreshModelService = createDecorator<IRefreshModelService>('RefreshModelService');
@@ -87,6 +92,7 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 
 	private readonly _onDidChangeCloudState = new Emitter<CloudListedProviderName>();
 	readonly onDidChangeCloudState: Event<CloudListedProviderName> = this._onDidChangeCloudState.event;
+	readonly cloudFetchedAt: Partial<Record<CloudListedProviderName, number>> = {}
 	readonly cloudState = Object.fromEntries(cloudListedProviderNames.map(p => [p, { status: 'idle' } as CloudListState])) as Record<CloudListedProviderName, CloudListState>
 
 
@@ -257,11 +263,18 @@ export class RefreshModelService extends Disposable implements IRefreshModelServ
 
 		if (result.ok) {
 			this.vaderSettingsService.setLiveModels(providerName, result.models)
+			this.cloudFetchedAt[providerName] = Date.now()
 			this._setCloudState(providerName, { status: 'ok', count: result.models.length })
 		}
 		else {
 			this._setCloudState(providerName, { status: 'error', reason: result.reason, message: result.message })
 		}
+	}
+
+	refreshCloudModelsIfStale = async (providerName: CloudListedProviderName): Promise<void> => {
+		if (this.cloudState[providerName].status === 'loading') return
+		if (!listIsStale(this.cloudFetchedAt[providerName], Date.now())) return
+		await this.refreshCloudModels(providerName)
 	}
 
 	_clearAllTimeouts() {

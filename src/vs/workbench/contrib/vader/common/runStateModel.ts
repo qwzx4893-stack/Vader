@@ -90,6 +90,21 @@ export function contextBanner(share: number): { title: string, body: string } | 
 	return { title: `${pct}% of the room is used`, body: `From ${sum}% Vader summarises the older messages and keeps the newest ones as they are. Old tool output is dropped first, from ${Math.round(PRUNE_START_FRACTION * 100)}% of the room.` };
 }
 
+/** 62000 -> "62K", 900 -> "900" */
+export const kTokens = (n: number): string => n >= 1000 ? `${Math.round(n / 1000)}K` : `${Math.max(0, Math.round(n))}`;
+
+/** a conversation that is already bigger than what the model can take (after a smaller model was chosen): said before the request fails, with the figures */
+export function contextOverflow(messageChars: number, contextWindow: number, reservedOutputTokenSpace: number | null | undefined, modelName: string): { title: string, body: string, usedTokens: number, windowTokens: number, cutTokens: number } | undefined {
+	if (!(contextWindow > 0) || contextShare(messageChars, contextWindow, reservedOutputTokenSpace) < 1) return undefined;
+	const usedTokens = Math.round((messageChars + systemOverheadChars(contextWindow)) / CHARS_PER_TOKEN);
+	const cutTokens = Math.max(0, usedTokens - Math.round(inputBudgetChars(contextWindow, reservedOutputTokenSpace) / CHARS_PER_TOKEN));
+	return {
+		title: 'This chat is bigger than the model’s window',
+		body: `The chat is about ${kTokens(usedTokens)} tokens. ${modelName} reads ${kTokens(contextWindow)}. Vader would have to cut the oldest ${kTokens(cutTokens)}.`,
+		usedTokens, windowTokens: contextWindow, cutTokens,
+	};
+}
+
 /** the characters of a conversation as the model will be asked about it: what was said, what the tools returned (a result that was dropped counts as nothing), and a summary */
 export function messageChars(messages: readonly { readonly role: string, readonly displayContent?: unknown, readonly content?: unknown, readonly summary?: unknown, readonly outputPruned?: unknown }[]): number {
 	let n = 0;

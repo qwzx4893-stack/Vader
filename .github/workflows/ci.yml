@@ -88,3 +88,4 @@ jobs:
           node src/vs/workbench/contrib/vader/test/onboardingUiE2E.mjs
           node src/vs/workbench/contrib/vader/test/settingsUiE2E.mjs
           node src/vs/workbench/contrib/vader/test/chatUiE2E.mjs
+          node src/vs/workbench/contrib/vader/test/pickerUiE2E.mjs

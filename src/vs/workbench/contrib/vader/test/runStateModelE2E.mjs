@@ -51,6 +51,12 @@ check('a conversation that takes half the room is roomy: nothing is said', M.con
 const at = (f) => M.contextShare(Math.round(budgetChars * f - B.systemOverheadChars(W)), W);
 check('the share counts the room a request may use, with the system prompt in it', Math.abs(at(0.6) - 0.6) < 0.001 && Math.abs(at(0.9) - 0.9) < 0.001, `${at(0.6)} ${at(0.9)}`);
 check('from 60% the chat says it is filling, from 70% that the next request summarises', M.contextStage(0.6) === 'filling' && M.contextStage(0.69) === 'filling' && M.contextStage(0.7) === 'summarising' && M.contextStage(0.95) === 'summarising');
+check('a chat inside the window has no overflow to say', M.contextOverflow(Math.round(budgetChars * 0.9 - B.systemOverheadChars(W)), W, null, 'm') === undefined);
+{
+	const o = M.contextOverflow(budgetChars * 2, W, null, 'llama3.1 8B');
+	check('a chat bigger than the window says so with the figures of the model', o && o.title === 'This chat is bigger than the model’s window' && o.windowTokens === W && o.cutTokens > 0 && o.body === `The chat is about ${M.kTokens(o.usedTokens)} tokens. llama3.1 8B reads ${M.kTokens(W)}. Vader would have to cut the oldest ${M.kTokens(o.cutTokens)}.`, JSON.stringify(o));
+	check('tokens are said in thousands', M.kTokens(62000) === '62K' && M.kTokens(900) === '900' && M.kTokens(32768) === '33K');
+}
 check('the banner names the real figures: 70% to summarise, half of the room for tool output', /From 70% Vader summarises/.test(M.contextBanner(0.62).body) && /from 50% of the room/.test(M.contextBanner(0.62).body) && /^62% of the room/.test(M.contextBanner(0.62).title));
 check('above the summary threshold it says the next request summarises', /summarises the older messages before the next request/.test(M.contextBanner(0.8).body));
 check('a model with no known window has no share', M.contextShare(10_000, 0) === 0 && M.contextShare(10_000, NaN) === 0);

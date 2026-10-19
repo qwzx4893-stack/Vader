@@ -7,7 +7,7 @@ import { useAccessor, useChatThreadsState, useSettingsState, useShellState } fro
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { getModelCapabilities } from '../../../../common/modelCapabilities.js'
 import { isFeatureNameDisabled } from '../../../../common/vaderSettingsTypes.js'
-import { contextBanner, contextShare, describePaste, messageChars, QueuedMessage } from '../../../../common/runStateModel.js'
+import { contextBanner, contextOverflow, contextShare, describePaste, messageChars, QueuedMessage } from '../../../../common/runStateModel.js'
 import { changedFilePaths } from '../../../../common/shellModel.js'
 import { formatUsd } from '../../../../common/usageAccounting.js'
 
@@ -112,12 +112,14 @@ export const ContextBanner = ({ threadId, isRunning }: { threadId: string, isRun
 	const threads = useChatThreadsState()
 	const [busy, setBusy] = useState<'summarise' | 'new' | undefined>()
 	const [result, setResult] = useState<string | undefined>()
+	const [goOn, setGoOn] = useState(false)
 	const thread = threads.allThreads[threadId]
 	const sel = settings.modelSelectionOfFeature?.Chat
 	if (!thread || !sel || thread.messages.length === 0) return null
 	const caps = getModelCapabilities(sel.providerName, sel.modelName, settings.overridesOfModel)
 	if (!caps.contextWindow) return null
 	const share = contextShare(messageChars(thread.messages as never), caps.contextWindow, caps.reservedOutputTokenSpace)
+	const overflow = contextOverflow(messageChars(thread.messages as never), caps.contextWindow, caps.reservedOutputTokenSpace, sel.modelName)
 	const banner = contextBanner(share)
 	if (!banner && !result) return null
 	const run = async (what: 'summarise' | 'new') => {
@@ -131,6 +133,18 @@ export const ContextBanner = ({ threadId, isRunning }: { threadId: string, isRun
 				if (!ok) setResult('The model did not answer, so the new chat was not started.')
 			}
 		} finally { setBusy(undefined) }
+	}
+	// bigger than the whole window (a smaller model was chosen): said before the request fails, with what can be done
+	if (overflow && !goOn && !result) {
+		return <div className='motion-safe:animate-card-in rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2.5' data-testid='vader-context-overflow'>
+			<div className='flex items-center gap-2'><Triangle color='#e2a93f' /><span className='font-semibold text-vader-fg-1'>{overflow.title}</span></div>
+			<div className='text-vader-fg-2 leading-relaxed'>{overflow.body}</div>
+			<div className='flex flex-wrap gap-2 items-center'>
+				<button data-testid='vader-overflow-larger' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { (document.querySelector('[data-testid="vader-picker-button"]') as HTMLElement | null)?.click() }}>Choose a larger model</button>
+				<button data-testid='vader-overflow-summarise' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' disabled={!!busy || isRunning} onClick={() => { void run('summarise') }}>{busy === 'summarise' ? 'Summarising...' : 'Summarise first'}</button>
+				<button data-testid='vader-overflow-goon' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={() => setGoOn(true)}>Go on and cut</button>
+			</div>
+		</div>
 	}
 	return <div className='rounded-xl border border-yellow-600/50 bg-yellow-500/10 px-4 py-3 flex flex-col gap-2' data-testid='vader-context-banner' data-share={Math.round(share * 100)}>
 		{banner ? <>
