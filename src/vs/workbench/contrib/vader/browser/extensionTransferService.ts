@@ -10,12 +10,15 @@ import { URI } from '../../../../base/common/uri.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
 import { InstantiationType, registerSingleton } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
-import { TransferEditorType, TransferFilesInfo } from './extensionTransferTypes.js';
+import { EditorInspection, TransferEditorType, TransferFilesInfo, TransferPart } from './extensionTransferTypes.js';
 
 
 export interface IExtensionTransferService {
 	readonly _serviceBrand: undefined; // services need this, just leave it undefined
-	transferExtensions(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType): Promise<string | undefined>
+	/** brings the chosen parts over (all of them when none are named); resolves with an error text, or undefined */
+	transferExtensions(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType, parts?: readonly TransferPart[]): Promise<string | undefined>
+	/** what the other editor has that could be brought over; nothing is changed */
+	inspectEditor(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType): Promise<EditorInspection>
 	deleteBlacklistExtensions(os: 'mac' | 'windows' | 'linux' | null): Promise<void>
 
 }
@@ -55,8 +58,24 @@ class ExtensionTransferService extends Disposable implements IExtensionTransferS
 		super()
 	}
 
-	async transferExtensions(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType) {
-		const transferTheseFiles = transferTheseFilesOfOS(os, fromEditor)
+	async inspectEditor(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType): Promise<EditorInspection> {
+		const files = transferTheseFilesOfOS(os, fromEditor)
+		const fileService = this._fileService
+		const out: EditorInspection = { found: false, theme: false, extensions: 0, snippets: false }
+		for (const f of files) {
+			try {
+				if (!(await fileService.exists(f.from))) continue
+				if (f.part === 'theme') out.theme = true
+				else if (f.part === 'snippets') { const st = await fileService.resolve(f.from); out.snippets = (st.children ?? []).length > 0 }
+				else if (f.part === 'extensions') { const st = await fileService.resolve(f.from); out.extensions = (st.children ?? []).filter(c => c.isDirectory && !isBlacklisted(c.resource.fsPath)).length }
+			} catch { /* a part that cannot be read is not offered */ }
+		}
+		out.found = out.theme || out.extensions > 0 || out.snippets
+		return out
+	}
+
+	async transferExtensions(os: 'mac' | 'windows' | 'linux' | null, fromEditor: TransferEditorType, parts?: readonly TransferPart[]) {
+		const transferTheseFiles = transferTheseFilesOfOS(os, fromEditor).filter(f => !parts || parts.includes(f.part))
 		const fileService = this._fileService
 
 		let errAcc = ''
@@ -228,9 +247,10 @@ const transferTheseFilesOfOS = (os: 'mac' | 'windows' | 'linux' | null, fromEdit
 		throw new Error(`os '${os}' not recognized`)
 	}
 	return [
-		{ from: URI.joinPath(base, folders.userData, 'User', 'settings.json'), to: URI.joinPath(base, 'Vader', 'User', 'settings.json') },
-		{ from: URI.joinPath(base, folders.userData, 'User', 'keybindings.json'), to: URI.joinPath(base, 'Vader', 'User', 'keybindings.json') },
-		{ from: URI.joinPath(file, home, folders.extensions, 'extensions'), to: URI.joinPath(file, home, '.vader-editor', 'extensions'), isExtensions: true },
+		{ from: URI.joinPath(base, folders.userData, 'User', 'settings.json'), to: URI.joinPath(base, 'Vader', 'User', 'settings.json'), part: 'theme' },
+		{ from: URI.joinPath(base, folders.userData, 'User', 'keybindings.json'), to: URI.joinPath(base, 'Vader', 'User', 'keybindings.json'), part: 'theme' },
+		{ from: URI.joinPath(base, folders.userData, 'User', 'snippets'), to: URI.joinPath(base, 'Vader', 'User', 'snippets'), part: 'snippets' },
+		{ from: URI.joinPath(file, home, folders.extensions, 'extensions'), to: URI.joinPath(file, home, '.vader-editor', 'extensions'), isExtensions: true, part: 'extensions' },
 	]
 }
 

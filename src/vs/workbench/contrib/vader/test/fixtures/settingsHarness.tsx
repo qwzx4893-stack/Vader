@@ -117,7 +117,10 @@ const configListeners = new Set<any>()
 const notifications: any = { info: (m: string) => w.__log.push(`notify:${m}`), notify: (n: any) => w.__log.push(`notify-error:${n.message}`) }
 const env: any = { logsHome: { fsPath: 'C:\\logs' } }
 const nativeHost: any = { async showItemInFolder(p: string) { w.__log.push(`folder:${p}`) } }
-const transfer: any = { async transferExtensions(_os: any, from: string) { w.__log.push(`transfer:${from}`); return from === 'Trae' ? 'Trae was not found at C:\\Users\\me\\AppData\\Roaming\\Trae.' : undefined } }
+const transfer: any = {
+	async inspectEditor(_os: any, from: string) { w.__log.push(`inspect:${from}`); return from === 'Trae' ? { found: false, theme: false, extensions: 0, snippets: false } : { found: true, theme: true, extensions: 12, snippets: true } },
+	async transferExtensions(_os: any, from: string, parts?: string[]) { w.__log.push(`transfer:${from}:${(parts ?? ['all']).join('+')}`); return undefined },
+}
 // ---- the models and providers: what each provider answers when its models are asked for is set by the test (window.__answers)
 const P: any = w.__settings.settingsOfProvider
 const model = (modelName: string, type = 'default', isHidden = false) => ({ modelName, type, isHidden })

@@ -9,4 +9,9 @@ export const transferEditorTypes = ['VS Code', 'VS Code Insiders', 'VSCodium', '
 export type TransferEditorType = typeof transferEditorTypes[number]
 // https://github.com/VSCodium/vscodium/blob/master/docs/index.md#migrating-from-visual-studio-code-to-vscodium
 // https://code.visualstudio.com/docs/editor/extension-marketplace#_where-are-extensions-installed
-export type TransferFilesInfo = { from: URI, to: URI, isExtensions?: boolean }[]
+/** the parts of an editor's setup that can be brought over one by one: the settings and keybindings (the theme is in the settings), the extensions list, the snippets */
+export type TransferPart = 'theme' | 'extensions' | 'snippets'
+export type TransferFilesInfo = { from: URI, to: URI, isExtensions?: boolean, part: TransferPart }[]
+
+/** what another editor has that can be brought over (nothing is changed to find out) */
+export type EditorInspection = { found: boolean, theme: boolean, extensions: number, snippets: boolean }

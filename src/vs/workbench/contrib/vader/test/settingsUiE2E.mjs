@@ -393,11 +393,22 @@ async function layoutProblems(page) {
 	check('a file that is not JSON is refused with the file name and the reason', (await page.locator(TID('vader-data-message')).innerText()).includes('broken.json could not be read as chats'));
 	check('one button per editor to bring things over from', (await page.locator(TID('vader-switch-editor')).count()) === 7);
 	await page.locator('[data-editor="Cursor"]').click();
+	await page.waitForSelector(TID('vader-switch-found'));
+	check('an editor is looked at first, and what it has is offered as a list, not brought over silently', (await log(page)).includes('inspect:Cursor') && !(await log(page)).some(l => l.startsWith('transfer:')) && (await page.locator(TID('vader-switch-found')).innerText()).includes('Cursor settings found') && (await page.locator(TID('vader-switch-found')).innerText()).includes('Keys and chats are not copied.'));
+	const parts = (await page.locator(TID('vader-switch-found') + ' label').allInnerTexts()).map(flat);
+	check('each part says what it is, with how many extensions', parts.join(' | ') === 'Theme and keybindings | Extensions list (12) | Snippets', parts.join(' | '));
+	await shot(page, 'switch-found');
+	await page.locator(TID('vader-switch-part-snippets')).uncheck();
+	await page.locator(TID('vader-switch-import')).click();
 	await page.waitForSelector(TID('vader-switch-done'));
-	check('bringing things over from an editor says it is done', (await log(page)).includes('transfer:Cursor') && (await page.locator(TID('vader-switch-done')).innerText()).includes('Cursor'));
+	check('Import brings over only what is ticked', (await log(page)).includes('transfer:Cursor:theme+extensions') && (await page.locator(TID('vader-switch-done')).innerText()).includes('Cursor: theme and keybindings, extensions list'));
+	await page.locator('[data-editor="Cursor"]').click();
+	await page.waitForSelector(TID('vader-switch-found'));
+	await page.locator(TID('vader-switch-notnow')).click();
+	check('Not now changes nothing', (await page.locator(TID('vader-switch-found')).count()) === 0 && (await log(page)).filter(l => l.startsWith('transfer:')).length === 1);
 	await page.locator('[data-editor="Trae"]').click();
 	await page.waitForSelector(TID('vader-switch-failed'));
-	check('when it fails, the real reason is shown', (await page.locator(TID('vader-switch-failed')).innerText()).includes('Trae was not found'));
+	check('an editor that is not there says so', (await page.locator(TID('vader-switch-failed')).innerText()).includes('Trae was not found on this computer'));
 	// ---- the backup of everything, and its restore
 	await page.locator(TID('vader-data-backup')).click();
 	check('Back up says what is in it and what is not, before anything is saved', (await page.locator(TID('vader-data-backup-ask-title')).innerText()) === 'Back up your data' && (await page.locator(TID('vader-data-backup-ask-text')).innerText()).includes('Not included: API keys and the contents of your projects.'));
