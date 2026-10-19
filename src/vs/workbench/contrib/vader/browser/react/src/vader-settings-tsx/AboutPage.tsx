@@ -36,7 +36,7 @@ export const AboutPage = () => {
 			<Line title='Built' right={<span className='t2'>{product.date ? new Date(product.date).toLocaleString() : 'not recorded'}</span>} />
 		</Group>
 		<Group title='Updates'>
-			<Line first title='Check for new releases automatically' detail='Looks at the public list of Vader releases and sends nothing about you. Off by default.' right={<Switch on={auto} label='Check for new releases automatically' testId='vader-settings-about-autocheck' onChange={v => settings.setGlobalSetting('autoCheckUpdates', v)} />} />
+			<Line first title='Check for new releases automatically' lockKey='autoCheckUpdates' detail='Looks at the public list of Vader releases and sends nothing about you. Off by default.' right={<Switch on={auto} label='Check for new releases automatically' testId='vader-settings-about-autocheck' onChange={v => settings.setGlobalSetting('autoCheckUpdates', v)} />} />
 			<Line testId='vader-about-result' title={result ? result.message : `Vader ${version}`} detail={checking ? 'Looking at the public list of releases\u2026' : result ? 'Checked just now. Nothing is installed without your click.' : 'Not checked yet in this session. Nothing is installed without your click.'} right={<span className='r' style={{ gap: 6 }}><button className='tx' data-testid='vader-about-releases' onClick={() => open(`${REPO_URL}/releases`)}>All releases</button><button className='gb' data-testid='vader-about-check-row' disabled={checking} onClick={check}>Check for updates</button></span>} />
 		</Group>
 		<UpdateCards current={version} openUrl={open} />

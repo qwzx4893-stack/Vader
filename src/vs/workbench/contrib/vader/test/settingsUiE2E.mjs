@@ -378,6 +378,29 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== set by your organisation (board S10)
+{
+	const { page, errors } = await newPage(() => { window.__managed = { autoCheckUpdates: false, dailySpendLimitUsd: 5, taskCopies: true }; }, 'privacy');
+	const row = page.locator(`${TID('vader-settings-privacy')} [data-locked="true"]`);
+	check('a setting the organisation locked shows its value with the lock mark, not a switch to turn', (await row.count()) === 1 && (await row.locator(TID('vader-locked-detail')).innerText()) === 'Set to off by your organisation' && (await row.locator(TID('vader-locked-control')).count()) === 1 && await row.locator('button[role=switch]').isDisabled());
+	check('...and says whom to ask', (await page.locator(TID('vader-locked-note')).innerText()) === 'Ask the person who manages Vader for your team to change it.');
+	check('the switch that would have changed it is not there to click', (await page.locator(TID('vader-settings-privacy-autocheck')).count()) === 0);
+	await page.waitForTimeout(200);
+	await shot(page, 'locked-privacy');
+	await page.locator(TID('vader-settings-nav-permissions')).click();
+	await page.waitForTimeout(150);
+	const lockedRows = page.locator(`${TID('vader-settings-permissions')} [data-locked="true"]`);
+	check('the others of the page that are locked say so too, a number as its number', (await lockedRows.count()) === 2 && (await lockedRows.allInnerTexts()).some(t => t.includes('Set to on by your organisation')) && (await lockedRows.allInnerTexts()).some(t => t.includes('Set to 5 by your organisation')), (await lockedRows.allInnerTexts()).join(' | '));
+	check('one that is not locked is as it was', (await page.locator(TID('vader-perm-lint')).count()) === 1);
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+{
+	const { page } = await newPage(undefined, 'privacy');
+	check('with nothing locked there is no lock mark and the switch is there', (await page.locator('[data-locked="true"]').count()) === 0 && (await page.locator(TID('vader-settings-privacy-autocheck')).count()) === 1);
+	await page.close();
+}
+
 // ===================================================================== updating Vader (board S11)
 {
 	const { page, errors } = await newPage(undefined, 'about');

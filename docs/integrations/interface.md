@@ -71,6 +71,10 @@ In Agent mode the agent works in a copy of the project made with git (`taskCopyS
 - The conflict code (`common/worktree/conflictResolution.ts`) is the one parallel tasks use.
 - **All agents** lists the branch of each task (its copy's branch, the branch it merged into, or "in place" for a task with no copy), the lines it added and removed, and in the detail the copy's folder and how many files differ from the branch it came from.
 
+## Settings set by an organisation (board S10)
+
+An administrator can lock settings with a file (`common/managedSettings.ts`): `C:\ProgramData\Vader\managed-settings.json` on Windows, `/Library/Application Support/Vader/managed-settings.json` on macOS, `/etc/vader/managed-settings.json` on Linux, in the form `{ "locked": { "autoCheckUpdates": false, "dailySpendLimitUsd": 5 } }`. Only settings that are one plain value (a switch, a number or none, a word) can be locked; a name Vader does not have or a value of the wrong kind is ignored for that setting and the rest applies. A locked setting is stored at the organisation's value, refused when changed (`setGlobalSetting`), and shown in Settings with the lock mark, "Set to off by your organisation" and "Ask the person who manages Vader for your team to change it." (`Line lockKey`, on the update check, the daily limit, accepting changes as they are made, the lint errors and working in a copy). If the file is removed the setting keeps that value until the person changes it. **A restart-needed card (board S10) is not built: no setting of Vader's own needs a restart.**
+
 ## Motion
 
 A page settles in when it opens (the Vader window, each Settings page), popovers and questions rise, hover changes ease and the switch slides, all in 120 to 180 ms (`vader-shell-tsx/shell.css`; the chat's cards and menus use `animate-card-in`, `react/tailwind.config.js`). With the system setting "reduce motion" none of it moves (`prefers-reduced-motion`); `shellUiE2E` and `pickerUiE2E` check both. Searching Settings for something that is not there offers the nearest places (`common/settingsSearch.ts`).
@@ -95,6 +99,7 @@ A number that cannot be used (`five`, `250%`) is refused in words and the text s
 | `pickerUiE2E` | the real model picker in each state of board S04 | 26 |
 | `shellModelE2E`, `runStateModelE2E`, `chatExportE2E`, `settingsInputE2E`, `usageAccountingE2E` | the pure rules | 28, 32, 12, 8, 46 |
 | `gateModelE2E`, `policyGateRulesE2E`, `slashCommandsE2E`, `contextSourcesE2E`, `attachmentRulesE2E`, `modelPickerE2E` | the words and rules of the gate, the commands, the sources and the drop | 21, 16, 12, 11, 14, 32 |
+| `managedSettingsE2E` | the organisation's file: where it is, what is accepted and ignored, the words | 9 |
 | `updateE2E` | the update words and rules, and the download run for real against a local web server: whole file, progress, redirect, a host that is not GitHub, a 404, a dropped connection, a wrong size or checksum, Cancel | 23 |
 | `taskCopyModelE2E`, `gitWorktreeCopyE2E` | the branch names, path moves and words of a task's own copy; the git work behind it (copy, merge, undo, conflict, stash) **run for real** against throw-away repositories | 29, 25 |
 | `test/e2e/scenarios/shell.mjs` | the **packaged app** (CI only): first run, a conversation, All agents, search, Add-ons, Settings, to the editor and back, with screenshots | runs in `windows-e2e.yml` |

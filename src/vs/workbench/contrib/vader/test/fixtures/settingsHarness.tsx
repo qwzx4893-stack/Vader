@@ -34,6 +34,7 @@ const policy: any = {
 
 // ---- the settings service
 const settingsSvc: any = {
+	get managed() { return w.__managed ?? {} },
 	get state() { return w.__settings },
 	setModelSelectionOfFeature(f: string, v: any) { w.__log.push(`select:${f}=${v.modelName}`); w.__settings = { ...w.__settings, modelSelectionOfFeature: { ...w.__settings.modelSelectionOfFeature, [f]: v } }; notify() },
 	async setSettingOfProvider(p: string, k: string, v: any) { w.__log.push(`provider:${p}.${k}=${v}`); w.__settings = { ...w.__settings, settingsOfProvider: { ...w.__settings.settingsOfProvider, [p]: { ...w.__settings.settingsOfProvider[p], [k]: v } } }; notify() },

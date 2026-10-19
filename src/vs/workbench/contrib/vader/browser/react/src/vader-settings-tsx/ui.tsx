@@ -4,6 +4,8 @@
 
 import React, { useEffect, useRef, useState } from 'react'
 import { NumberInput } from '../../../../common/settingsInput.js'
+import { LOCKED_NOTE, lockedDetail } from '../../../../common/managedSettings.js'
+import { useAccessor } from '../util/services.js'
 
 // The parts every Settings page is made of, in the shape of the interface boards (R08 to R30): a title with one short paragraph, small group labels in sentence
 // case, rows between hairlines, a switch that is a button (so it is reached by the keyboard and read by a screen reader), a two-way choice. Class names are
@@ -33,11 +35,20 @@ export const Group = ({ title, note, right, children, first }: { title: string, 
 	{children}
 </section>
 
-/** one line of a list: what it is on the left, what is set or what can be done on the right */
-export const Line = ({ title, detail, right, testId, first }: { title: React.ReactNode, detail?: React.ReactNode, right?: React.ReactNode, testId?: string, first?: boolean }) => <div className='r' data-testid={testId} style={{ gap: 14, minHeight: 44, padding: '8px 0', borderTop: first === false ? undefined : '1px solid var(--ln)' }}>
-	<div className='c fl' style={{ gap: 1, minWidth: 0 }}><span className='t1'>{title}</span>{detail ? <span className='hint' style={{ lineHeight: 1.45 }}>{detail}</span> : null}</div>
-	{right}
-</div>
+/**
+ * one line of a list: what it is on the left, what is set or what can be done on the right. With `lockKey`, a setting that the organisation has locked
+ * (common/managedSettings.ts, board S10) shows the lock mark and its value instead of the control, says who set it, and cannot be changed.
+ */
+export const Line = ({ title, detail, right, testId, first, lockKey }: { title: React.ReactNode, detail?: React.ReactNode, right?: React.ReactNode, testId?: string, first?: boolean, lockKey?: string }) => {
+	const managed = lockKey ? (useAccessor().get('IVaderSettingsService').managed as { [k: string]: unknown } | undefined) : undefined
+	const locked = !!managed && !!lockKey && lockKey in managed
+	const value = locked ? managed![lockKey!] : undefined
+	const row = <div className='r' data-testid={testId} data-locked={locked ? 'true' : undefined} style={{ gap: 14, minHeight: 44, padding: '8px 0', borderTop: first === false ? undefined : '1px solid var(--ln)' }}>
+		<div className='c fl' style={{ gap: 1, minWidth: 0 }}><span className='t1'>{title}</span>{locked || detail ? <span className='hint' style={{ lineHeight: 1.45 }} data-testid={locked ? 'vader-locked-detail' : undefined}>{locked ? lockedDetail(value) : detail}</span> : null}</div>
+		{locked ? <span className='r' style={{ gap: 10 }} data-testid='vader-locked-control'><LockMark />{typeof value === 'boolean' ? <button role='switch' aria-checked={value} aria-disabled='true' disabled aria-label={`Locked: ${typeof title === 'string' ? title : lockKey}`} className={value ? 'sw' : 'sw off'} style={{ opacity: .6, cursor: 'not-allowed' }}><i /></button> : <span className='t2'>{value === null ? 'none' : String(value)}</span>}</span> : right}
+	</div>
+	return locked ? <>{row}<div className='hint' data-testid='vader-locked-note' style={{ padding: '2px 0 10px', lineHeight: 1.5, maxWidth: 420 }}>{LOCKED_NOTE}</div></> : row
+}
 
 export const Switch = ({ on, onChange, label, testId }: { on: boolean, onChange: (v: boolean) => void, label: string, testId?: string }) =>
 	<button role='switch' aria-checked={on} aria-label={label} data-testid={testId} className={on ? 'sw' : 'sw off'} onClick={() => onChange(!on)}><i /></button>

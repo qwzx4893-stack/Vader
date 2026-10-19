@@ -10,6 +10,10 @@ import { IEncryptionService } from '../../../../platform/encryption/common/encry
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IStorageService, StorageScope, StorageTarget } from '../../../../platform/storage/common/storage.js';
+import { IFileService } from '../../../../platform/files/common/files.js';
+import { URI } from '../../../../base/common/uri.js';
+import { isMacintosh, isWindows } from '../../../../base/common/platform.js';
+import { managedSettingsPath, parseManagedSettings, withManaged } from './managedSettings.js';
 import { IMetricsService } from './metricsService.js';
 import { defaultProviderSettings, getModelCapabilities, ModelOverrides } from './modelCapabilities.js';
 import { VADER_RETIRED_STORAGE_KEYS, VADER_SETTINGS_STORAGE_KEY } from './storageKeys.js';
@@ -56,6 +60,8 @@ export interface IVaderSettingsService {
 	readonly _serviceBrand: undefined;
 	readonly state: VaderSettingsState; // in order to play nicely with react, you should immutably change state
 	readonly waitForInitState: Promise<void>;
+	/** settings an organisation has locked (common/managedSettings.ts): shown as such in Settings, and refused when changed */
+	readonly managed: Readonly<Partial<GlobalSettings>>;
 
 	onDidChangeState: Event<void>;
 
@@ -241,11 +247,13 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 
 	private readonly _resolver: () => void
 	waitForInitState: Promise<void> // await this if you need a valid state initially
+	managed: Readonly<Partial<GlobalSettings>> = {}
 
 	constructor(
 		@IStorageService private readonly _storageService: IStorageService,
 		@IEncryptionService private readonly _encryptionService: IEncryptionService,
 		@IMetricsService private readonly _metricsService: IMetricsService,
+		@IFileService private readonly _fileService: IFileService,
 		// could have used this, but it's clearer the way it is (+ slightly different eg StorageTarget.USER)
 		// @ISecretStorageService private readonly _secretStorageService: ISecretStorageService,
 	) {
@@ -267,7 +275,7 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 
 
 	dangerousSetState = async (newState: VaderSettingsState) => {
-		this.state = _validatedModelState(newState)
+		this.state = _validatedModelState(Object.keys(this.managed).length ? { ...newState, globalSettings: withManaged(newState.globalSettings, this.managed) } : newState)
 		await this._storeState()
 		this._onDidChangeState.fire()
 		this._onUpdate_syncApplyToChat()
@@ -310,6 +318,8 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 			readS = {
 				...defaultState(),
 				...readS,
+				// a setting added after the person's settings were stored takes its default (a plain spread would drop it, leaving it undefined)
+				globalSettings: { ...deepClone(defaultGlobalSettings), ...readS.globalSettings },
 				// no idea why this was here, seems like a bug
 				// ...defaultSettingsOfProvider,
 				// ...readS.settingsOfProvider,
@@ -351,7 +361,21 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 
 		this._resolver();
 		this._onDidChangeState.fire();
+		void this._loadManaged()
+	}
 
+	/** the organisation's file, if there is one: its settings are locked at the values it names */
+	private async _loadManaged() {
+		try {
+			const file = managedSettingsPath(isWindows ? 'win32' : isMacintosh ? 'darwin' : 'linux')
+			const text = (await this._fileService.readFile(URI.file(file))).value.toString()
+			const { locked } = parseManagedSettings(text)
+			if (Object.keys(locked).length === 0) return
+			this.managed = locked
+			this.state = _validatedModelState({ ...this.state, globalSettings: withManaged(this.state.globalSettings, locked) })
+			await this._storeState()
+			this._onDidChangeState.fire()
+		} catch { /* no such file, or not readable: nothing is locked */ }
 	}
 
 
@@ -418,6 +442,7 @@ class VaderSettingsService extends Disposable implements IVaderSettingsService {
 	}
 
 	setGlobalSetting: SetGlobalSettingFn = async (settingName, newVal) => {
+		if (settingName in this.managed) return // locked by the organisation
 		const newState: VaderSettingsState = {
 			...this.state,
 			globalSettings: {

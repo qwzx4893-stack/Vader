@@ -40,7 +40,7 @@ export const PrivacyPage = () => {
 		</Group>
 
 		<Group title='Updates'>
-			<Line first title='Check for new releases automatically' detail='Looks at the public list of Vader releases and sends nothing about you. Off by default.' right={<Switch on={auto} label='Check for new releases automatically' testId='vader-settings-privacy-autocheck' onChange={v => settings.setGlobalSetting('autoCheckUpdates', v)} />} />
+			<Line first title='Check for new releases automatically' lockKey='autoCheckUpdates' detail='Looks at the public list of Vader releases and sends nothing about you. Off by default.' right={<Switch on={auto} label='Check for new releases automatically' testId='vader-settings-privacy-autocheck' onChange={v => settings.setGlobalSetting('autoCheckUpdates', v)} />} />
 		</Group>
 		<div style={{ paddingTop: 14 }}><button className='gb' data-testid='vader-privacy-verified' onClick={() => { void opener.open(URI.parse(`${REPO_URL}/blob/main/docs/integrations/privacy.md`)) }}>How this is verified</button></div>
 	</div>

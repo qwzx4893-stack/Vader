@@ -101,19 +101,19 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 		<Group title='Allow without asking, by kind' note='on top of the mode'>
 			{KIND_ROWS.filter(r => toolApprovalTypes.has(r.type)).map((r, i) => <Line key={r.type} first={i === 0} title={r.title} right={<>{r.detail ? <span className='hint'>{r.detail}</span> : null}<Switch on={g.autoApprove[r.type] ?? false} label={`Allow without asking: ${r.title}`} testId={`vader-perm-kind-${r.type.replace(/\s+/g, '-')}`} onChange={v => settings.setGlobalSetting('autoApprove', { ...settings.state.globalSettings.autoApprove, [r.type]: v })} />
 			</>} />)}
-			<Line title='Accept the agent&rsquo;s changes as they are made' right={<><span className='hint'>no Accept button per file</span><Switch on={g.autoAcceptLLMChanges} label='Accept the agent&rsquo;s changes as they are made' testId='vader-perm-autoaccept' onChange={v => settings.setGlobalSetting('autoAcceptLLMChanges', v)} /></>} />
-			<Line title='Fix the lint errors it causes' right={<Switch on={g.includeToolLintErrors} label='Fix the lint errors it causes' testId='vader-perm-lint' onChange={v => settings.setGlobalSetting('includeToolLintErrors', v)} />} />
+			<Line title='Accept the agent&rsquo;s changes as they are made' lockKey='autoAcceptLLMChanges' right={<><span className='hint'>no Accept button per file</span><Switch on={g.autoAcceptLLMChanges} label='Accept the agent&rsquo;s changes as they are made' testId='vader-perm-autoaccept' onChange={v => settings.setGlobalSetting('autoAcceptLLMChanges', v)} /></>} />
+			<Line title='Fix the lint errors it causes' lockKey='includeToolLintErrors' right={<Switch on={g.includeToolLintErrors} label='Fix the lint errors it causes' testId='vader-perm-lint' onChange={v => settings.setGlobalSetting('includeToolLintErrors', v)} />} />
 		</Group>
 
 		<Group title='Where the agent works'>
-			<Line first title='Work in a copy of the project' detail='Agent mode edits a separate copy on its own branch, and your folder changes only when you merge it. Needs a git project; Vader offers to start git in one that is not.'
+			<Line first title='Work in a copy of the project' lockKey='taskCopies' detail='Agent mode edits a separate copy on its own branch, and your folder changes only when you merge it. Needs a git project; Vader offers to start git in one that is not.'
 				right={<Switch on={g.taskCopies} label='Work in a copy of the project' testId='vader-perm-taskcopies' onChange={v => settings.setGlobalSetting('taskCopies', v)} />} />
 		</Group>
 
 		<Group title='Spending'>
 			<Line first title='Today' detail={<>An estimate from list prices. <button className='tx' style={{ height: 'auto', padding: 0, color: 'var(--ac)' }} data-testid='vader-perm-to-usage' onClick={() => goto('usage')}>Usage and cost</button></>}
 				right={<span className='t1' data-testid='vader-perm-today' style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCost(today.costUsd, today.billedCostUsd)}{today.unpricedTurns > 0 ? ' +' : ''}</span>} />
-			<Line title='Daily limit' detail='at the estimate a running task pauses and asks before it goes on'
+			<Line title='Daily limit' lockKey='dailySpendLimitUsd' detail='at the estimate a running task pauses and asks before it goes on'
 			right={<NumberBox testId='vader-perm-limit' label='Daily limit in dollars' prefix='$' placeholder='none' initial={limit === null ? '' : String(limit)} parse={t => parseMoney(t, { allowEmpty: true })} onCommit={v => settings.setGlobalSetting('dailySpendLimitUsd', v)} saved={v => v === null ? 'No daily limit' : `Daily limit set to ${formatUsd(v)}`} />} />
 		</Group>
 
