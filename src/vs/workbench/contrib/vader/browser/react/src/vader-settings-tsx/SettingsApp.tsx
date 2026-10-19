@@ -93,7 +93,7 @@ export const Settings = () => {
 			<button className='nv' data-testid='vader-settings-close' onClick={() => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID) }} style={{ marginBottom: 6 }}><Icon k='left' small />Back to the app</button>
 			<label className='srch' style={{ margin: '0 2px 6px' }}><Icon k='search' small /><input data-testid='vader-settings-search' className='fl' placeholder='Search settings' aria-label='Search settings' value={query} onChange={e => setQuery(e.target.value)} /></label>
 			<nav className='c fl scroll' aria-label='Settings pages'>
-				{needle && groups.length === 0 ? <span className='t3' style={{ padding: '8px 10px' }}>Nothing in Settings matches that.</span> : null}
+				{needle && groups.length === 0 ? <span className='t3' style={{ padding: '8px 10px', lineHeight: 1.5 }} data-testid='vader-settings-nomatch'>No setting called &ldquo;{query.trim()}&rdquo;.</span> : null}
 				{groups.map(g => <React.Fragment key={g.title}>
 					<span className='nvh'>{g.title}</span>
 					{g.items.map(it => <button key={it.id} className={page === it.id ? 'nv on' : 'nv'} data-testid={`vader-settings-nav-${it.id}`} aria-current={page === it.id ? 'page' : undefined} onClick={() => setPage(it.id)}>{it.label}</button>)}

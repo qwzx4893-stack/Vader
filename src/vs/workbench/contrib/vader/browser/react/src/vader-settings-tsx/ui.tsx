@@ -2,7 +2,8 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import { NumberInput } from '../../../../common/settingsInput.js'
 
 // The parts every Settings page is made of, in the shape of the interface boards (R08 to R30): a title with one short paragraph, small group labels in sentence
 // case, rows between hairlines, a switch that is a button (so it is reached by the keyboard and read by a screen reader), a two-way choice. Class names are
@@ -40,3 +41,37 @@ export const Field = ({ label, children, width }: { label: string, children: Rea
 /** a short result sentence with a mark: green for done, amber for a problem */
 export const Note = ({ kind, children, testId }: { kind: 'ok' | 'warn' | 'plain', children: React.ReactNode, testId?: string }) =>
 	<span className='r' data-testid={testId} role={kind === 'warn' ? 'alert' : undefined} style={{ gap: 7, overflowWrap: 'anywhere', color: kind === 'ok' ? '#4cc38a' : kind === 'warn' ? 'var(--wa)' : 'var(--t2)' }}>{kind === 'ok' ? '✓' : kind === 'warn' ? '△' : null}<span>{children}</span></span>
+
+/**
+ * A number typed into Settings (board S10): it is read when the person leaves the box or presses Enter. A value that cannot be used is refused with words under the
+ * box and the text stays so it can be fixed; one that can is saved, and the box says what was set. `initial` is the saved value as text.
+ */
+export const NumberBox = ({ initial, parse, onCommit, saved, label, placeholder, testId, prefix, suffix, width = 96, disabled }: {
+	initial: string, parse: (text: string) => NumberInput, onCommit: (value: number | null) => void, saved?: (value: number | null) => string, label: string,
+	placeholder?: string, testId: string, prefix?: string, suffix?: string, width?: number, disabled?: boolean,
+}) => {
+	const [text, setText] = useState(initial)
+	const [problem, setProblem] = useState<string | undefined>()
+	const [done, setDone] = useState<string | undefined>()
+	const focused = useRef(false)
+	// the saved value changed somewhere else: show it, unless the person is typing here
+	useEffect(() => { if (!focused.current) { setText(initial); setProblem(undefined) } }, [initial])
+	const commit = () => {
+		const r = parse(text)
+		if (!r.ok) { setProblem(r.message); setDone(undefined); return }
+		setProblem(undefined)
+		onCommit(r.value)
+		setDone(saved ? saved(r.value) : undefined)
+	}
+	return <span className='c' style={{ gap: 4, alignItems: 'flex-end' }}>
+		<span className='fld' style={{ width, opacity: disabled ? .5 : 1, borderColor: problem ? '#f06a6e' : undefined }}>
+			{prefix ? <span className='t3'>{prefix}&nbsp;</span> : null}
+			<input data-testid={testId} inputMode='decimal' aria-label={label} aria-invalid={problem ? true : undefined} placeholder={placeholder} value={text} disabled={disabled} style={{ width: '100%' }}
+				onFocus={() => { focused.current = true }} onChange={e => { setText(e.target.value); setProblem(undefined); setDone(undefined) }}
+				onBlur={() => { focused.current = false; commit() }} onKeyDown={e => { if (e.key === 'Enter') commit() }} />
+			{suffix ? <span className='t3'>{suffix}</span> : null}
+		</span>
+		{problem ? <span role='alert' data-testid={`${testId}-problem`} style={{ color: '#f06a6e', fontSize: 12, maxWidth: 260, textAlign: 'right' }}>{problem}</span>
+			: done ? <span role='status' data-testid={`${testId}-saved`} className='hint' style={{ maxWidth: 260, textAlign: 'right' }}>{'\u2713 '}{done}</span> : null}
+	</span>
+}

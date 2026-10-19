@@ -2,9 +2,10 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React from 'react'
+import React, { useState } from 'react'
 import { useAccessor, useSettingsState } from '../util/services.js'
 import { FeatureModelSelect } from './FeatureModelSelect.js'
+import { defaultGlobalSettings } from '../../../../common/vaderSettingsTypes.js'
 import { Group, Line, PageHead, Switch } from './ui.js'
 
 // Editor (board R27): the help that appears inside a file, and which model gives it. Each model choice is the real feature setting; "Same as chat" is the real
@@ -15,6 +16,8 @@ export const EditorPage = () => {
 	const settings = accessor.get('IVaderSettingsService')
 	const g = useSettingsState().globalSettings
 	const set = (k: any, v: any) => settings.setGlobalSetting(k, v)
+	const [confirmReset, setConfirmReset] = useState(false)
+	const RESET: (keyof typeof defaultGlobalSettings)[] = ['enableAutocomplete', 'showInlineSuggestions', 'syncApplyToChat', 'syncSCMToChat', 'enableFastApply', 'includeToolLintErrors']
 	return <div data-testid='vader-settings-editor'>
 		<PageHead title='Editor' desc='Help that appears inside a file, and which model gives it.' />
 
@@ -38,5 +41,13 @@ export const EditorPage = () => {
 			<Line first title='Write the commit message with the chat model' detail='The button next to the message box' right={<Switch on={g.syncSCMToChat} label='Write the commit message with the chat model' testId='vader-editor-sync-scm' onChange={v => set('syncSCMToChat', v)} />} />
 			{!g.syncSCMToChat ? <Line title='Model for commit messages' right={<FeatureModelSelect feature='SCM' testId='vader-editor-model-scm' />} /> : null}
 		</Group>
+
+		<div style={{ marginTop: 30 }}>
+			{confirmReset ? <div className='c' data-testid='vader-editor-reset-confirm' role='alertdialog' style={{ gap: 10, padding: '16px 18px', border: '1px solid var(--ln2)', borderRadius: 12, background: 'var(--g2)', maxWidth: 440 }}>
+				<span className='t1' style={{ fontWeight: 600, fontSize: 15 }}>Reset Editor settings?</span>
+				<span className='t2' style={{ lineHeight: 1.55 }}>Suggestions, Ctrl K, applying and commit messages go back to how a new install has them. The models you chose, your keys and your chats are not touched.</span>
+				<span className='r' style={{ gap: 8, justifyContent: 'flex-end' }}><button className='gb' onClick={() => setConfirmReset(false)}>Cancel</button><button className='pb' data-testid='vader-editor-reset-do' onClick={() => { for (const k of RESET) set(k, defaultGlobalSettings[k]); setConfirmReset(false) }}>Reset</button></span>
+			</div> : <button className='tx' style={{ padding: 0 }} data-testid='vader-editor-reset' onClick={() => setConfirmReset(true)}>Reset these settings</button>}
+		</div>
 	</div>
 }

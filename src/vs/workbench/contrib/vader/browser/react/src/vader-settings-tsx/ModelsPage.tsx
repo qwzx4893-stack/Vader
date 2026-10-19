@@ -81,11 +81,12 @@ const ProviderBody = ({ p, onOverrides }: { p: ProviderName, onOverrides: (t: Ov
 				const isKey = isPasswordField && !!value && !replacing[n]
 				return <label key={n} className='c' style={{ gap: 5 }}><span className='hint'>{title}</span>
 					<span className='fld r' style={{ gap: 8 }}>
-						{isKey ? <><span className='mo fl tr' data-testid={`vader-provider-${n}-masked`}>{value.slice(0, 5)}{'•'.repeat(8)}{value.slice(-4)}</span><button className='tx' style={{ height: 22, padding: '0 4px' }} data-testid={`vader-provider-${n}-replace`} onClick={() => setReplacing(r => ({ ...r, [n]: true }))}>Replace</button></>
+						{isKey ? <><span className='mo fl tr' data-testid={`vader-provider-${n}-masked`}>{value.slice(0, 5)}{'•'.repeat(8)}{value.slice(-4)}</span><button className='tx' style={{ height: 22, padding: '0 4px' }} data-testid={`vader-provider-${n}-replace`} onClick={() => setReplacing(r => ({ ...r, [n]: true }))}>Replace</button><button className='tx' style={{ height: 22, padding: '0 4px' }} data-testid={`vader-provider-${n}-remove`} onClick={() => { void settings.setSettingOfProvider(p, n, '') }}>Remove</button></>
 							: <input className={isPasswordField ? 'fl mo' : 'fl'} data-testid={`vader-provider-${n}`} type={isPasswordField ? 'password' : 'text'} autoComplete='off' spellCheck={false} aria-label={title} placeholder={`${title} (${placeholder})`} value={value} autoFocus={!!replacing[n]} onFocus={() => setReplacing(r => ({ ...r, [n]: true }))} onChange={e => { void settings.setSettingOfProvider(p, n, e.target.value) }} onBlur={() => setReplacing(r => ({ ...r, [n]: false }))} />}
 					</span></label>
 			})}
 		</div>
+		{names.some(n => displayInfoOfSettingName(p, n).isPasswordField && !!of[n]) ? <span className='hint' style={{ lineHeight: 1.5 }} data-testid='vader-provider-key-note'>The key is stored on this computer and shown by its end only. Removing it erases it here; the provider keeps its own copy.</span> : null}
 		<span className='hint' style={{ lineHeight: 1.5 }}><Notes text={subTextMdOfProviderName(p)} onOpen={u => { void opener.open(URI.parse(u)) }} /></span>
 
 		<div className='r' style={{ gap: 10, flexWrap: 'wrap' }}>

@@ -7,7 +7,8 @@ import { URI } from '../../../../../../../base/common/uri.js'
 import { useAccessor, useSettingsState } from '../util/services.js'
 import { ProviderLogo } from '../util/ProviderLogo.js'
 import { formatCost, formatTokens, formatUsd, lastDays, modelRows, ModelRow, PROVIDER_USAGE_PAGES } from '../../../../common/usageAccounting.js'
-import { Group, PageHead, Switch } from './ui.js'
+import { parseMoney, parsePercent, parsePrice } from '../../../../common/settingsInput.js'
+import { Group, NumberBox, Note, PageHead, Switch } from './ui.js'
 
 // Usage and cost (board C01, C02, C03): the tokens each provider reported, the money worked out from list prices (shown with "≈" unless the provider billed it),
 // which model it went to and where each number comes from, the daily limit, the provider pages that show the real bill, and the person's own prices.
@@ -39,23 +40,24 @@ export const UsagePage = () => {
 
 	// the daily limit: off means no limit; on keeps the amount last typed
 	const limit = g.dailySpendLimitUsd
-	const [limitText, setLimitText] = useState(limit === null ? '5.00' : limit.toFixed(2))
-	const saveLimit = (text: string) => { const n = Number(text); if (Number.isFinite(n) && n > 0) settings.setGlobalSetting('dailySpendLimitUsd', n) }
+	const [lastLimit, setLastLimit] = useState(limit === null ? 5 : limit)
 
 	// the person's own prices and discount
 	const withKey = Object.entries(PROVIDER_USAGE_PAGES).filter(([provider]) => (state.settingsOfProvider as any)[provider]?._didFillInProviderSettings)
-	const [discountText, setDiscountText] = useState(String(g.priceDiscountPercent || ''))
 	const [model, setModel] = useState('')
 	const [inText, setInText] = useState('')
 	const [outText, setOutText] = useState('')
 	const [ownOpen, setOwnOpen] = useState(false)
 	const ownRef = useRef<HTMLDivElement>(null)
 	const overrides = g.modelPriceOverrides ?? {}
-	const saveDiscount = (text: string) => { const n = Number(text); settings.setGlobalSetting('priceDiscountPercent', text.trim() === '' || !Number.isFinite(n) || n < 0 || n > 100 ? 0 : n) }
+	const [priceProblem, setPriceProblem] = useState<string | undefined>()
 	const addOverride = () => {
-		const i = Number(inText), o = Number(outText)
-		if (!model.trim() || !inText.trim() || !outText.trim() || !Number.isFinite(i) || !Number.isFinite(o) || i < 0 || o < 0) return
-		settings.setGlobalSetting('modelPriceOverrides', { ...overrides, [model.trim()]: { input: i, output: o } })
+		if (!model.trim()) { setPriceProblem('Name the model the price is for.'); return }
+		const i = parsePrice(inText), o = parsePrice(outText)
+		if (!i.ok) { setPriceProblem(`Input: ${i.message}`); return }
+		if (!o.ok) { setPriceProblem(`Output: ${o.message}`); return }
+		setPriceProblem(undefined)
+		settings.setGlobalSetting('modelPriceOverrides', { ...overrides, [model.trim()]: { input: i.value ?? 0, output: o.value ?? 0 } })
 		setModel(''); setInText(''); setOutText('')
 	}
 	const removeOverride = (name: string) => { const { [name]: _drop, ...rest } = overrides; settings.setGlobalSetting('modelPriceOverrides', rest) }
@@ -98,8 +100,8 @@ export const UsagePage = () => {
 		<Group title='Daily limit'>
 			<div className='r' style={{ gap: 14, padding: '10px 0', borderTop: '1px solid var(--ln)', borderBottom: '1px solid var(--ln)' }}>
 				<div className='c fl' style={{ gap: 2 }}><span className='t1' style={{ fontWeight: 600 }}>Pause a task when today&rsquo;s estimate reaches</span><span className='hint' style={{ lineHeight: 1.5 }}>The limit counts the estimate. A provider that bills more than the list price can still spend more than this.</span></div>
-				<span className='fld' style={{ width: 96, opacity: limit === null ? .5 : 1 }}><span className='t3'>$&nbsp;</span><input data-testid='vader-usage-limit' inputMode='decimal' aria-label='Daily limit in dollars' value={limitText} disabled={limit === null} onChange={e => setLimitText(e.target.value)} onBlur={() => saveLimit(limitText)} onKeyDown={e => { if (e.key === 'Enter') saveLimit(limitText) }} style={{ width: '100%' }} /></span>
-				<Switch on={limit !== null} label='Daily limit' testId='vader-usage-limit-switch' onChange={v => { if (v) { const n = Number(limitText); settings.setGlobalSetting('dailySpendLimitUsd', Number.isFinite(n) && n > 0 ? n : 5) } else settings.setGlobalSetting('dailySpendLimitUsd', null) }} />
+				<NumberBox testId='vader-usage-limit' label='Daily limit in dollars' prefix='$' disabled={limit === null} initial={(limit ?? lastLimit).toFixed(2)} parse={t => parseMoney(t, { allowEmpty: false })} onCommit={v => { if (v !== null) { setLastLimit(v); settings.setGlobalSetting('dailySpendLimitUsd', v) } }} saved={v => `Daily limit set to ${formatUsd(v ?? 0)}`} />
+				<Switch on={limit !== null} label='Daily limit' testId='vader-usage-limit-switch' onChange={v => { if (v) settings.setGlobalSetting('dailySpendLimitUsd', lastLimit); else settings.setGlobalSetting('dailySpendLimitUsd', null) }} />
 			</div>
 		</Group>
 
@@ -115,7 +117,7 @@ export const UsagePage = () => {
 			{ownOpen ? <div className='c' style={{ gap: 14, padding: '14px 16px', border: '1px solid var(--ln)', borderRadius: 10, background: 'var(--g1)' }} data-testid='vader-usage-own'>
 				<div className='r' style={{ gap: 14 }}>
 					<div className='c fl' style={{ gap: 2 }}><span className='t1'>Discount on list prices</span><span className='hint'>For a flat discount, such as 20% off. It changes the estimate only, never what you are charged.</span></div>
-					<span className='fld' style={{ width: 84 }}><input data-testid='vader-usage-discount' inputMode='decimal' aria-label='Discount in percent' placeholder='0' value={discountText} onChange={e => setDiscountText(e.target.value)} onBlur={() => saveDiscount(discountText)} onKeyDown={e => { if (e.key === 'Enter') saveDiscount(discountText) }} style={{ width: '100%' }} /><span className='t3'>%</span></span>
+					<NumberBox testId='vader-usage-discount' label='Discount in percent' suffix='%' placeholder='0' width={84} initial={String(g.priceDiscountPercent || '')} parse={parsePercent} onCommit={v => settings.setGlobalSetting('priceDiscountPercent', v ?? 0)} saved={v => (v ?? 0) > 0 ? `Estimates are ${v}% lower` : 'No discount'} />
 				</div>
 				<div className='c' style={{ gap: 8 }}>
 					<span className='t1'>Your own prices</span>
@@ -125,8 +127,9 @@ export const UsagePage = () => {
 						<input className='fld fl mo' data-testid='vader-usage-own-model' aria-label='Model name' placeholder='Model name' value={model} onChange={e => setModel(e.target.value)} />
 						<input className='fld' style={{ width: 90 }} data-testid='vader-usage-own-in' aria-label='Input price' inputMode='decimal' placeholder='Input' value={inText} onChange={e => setInText(e.target.value)} />
 						<input className='fld' style={{ width: 90 }} data-testid='vader-usage-own-out' aria-label='Output price' inputMode='decimal' placeholder='Output' value={outText} onChange={e => setOutText(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') addOverride() }} />
-						<button className='pb' data-testid='vader-usage-own-add' disabled={!model.trim() || !inText.trim() || !outText.trim()} onClick={addOverride}>Add</button>
+						<button className='pb' data-testid='vader-usage-own-add' onClick={addOverride}>Add</button>
 					</div>
+					{priceProblem ? <Note kind='warn' testId='vader-usage-own-problem'>{priceProblem}</Note> : null}
 				</div>
 			</div> : null}
 		</div>

@@ -4,11 +4,12 @@
 
 import React, { useEffect, useState } from 'react'
 import { useAccessor, usePolicyServiceState, useSettingsState } from '../util/services.js'
-import { formatCost } from '../../../../common/usageAccounting.js'
+import { formatCost, formatUsd } from '../../../../common/usageAccounting.js'
 import { toolApprovalTypes, ToolApprovalType } from '../../../../common/toolsServiceTypes.js'
 import { PolicyRequestKind, UserPolicyRuleInput } from '../../../../common/policy/policyService.js'
 import { validateUserPattern } from '../../../../common/helpers/safeRegex.js'
-import { Group, LockMark, Line, PageHead, Switch, Note } from './ui.js'
+import { parseMoney } from '../../../../common/settingsInput.js'
+import { Group, LockMark, Line, NumberBox, PageHead, Switch, Note } from './ui.js'
 
 // Permissions (board R08): how much the agent may do on its own, the commands allowed in this project, what is allowed without asking by kind, the daily limit,
 // and the rules that always apply. All of it is the real policy engine and settings, nothing here is a copy.
@@ -50,8 +51,6 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 	const projectName = projectKey ? projectKey.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : undefined
 	const today = chat.getUsageToday()
 	const limit = g.dailySpendLimitUsd
-	const [limitText, setLimitText] = useState(limit === null ? '' : String(limit))
-	const saveLimit = (text: string) => { const n = Number(text); settings.setGlobalSetting('dailySpendLimitUsd', text.trim() === '' || !Number.isFinite(n) || n <= 0 ? null : n) }
 
 	const rules = policy.getAllRules()
 	const locked = rules.filter(r => r.builtIn && r.locked)
@@ -110,7 +109,7 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 			<Line first title='Today' detail={<>An estimate from list prices. <button className='tx' style={{ height: 'auto', padding: 0, color: 'var(--ac)' }} data-testid='vader-perm-to-usage' onClick={() => goto('usage')}>Usage and cost</button></>}
 				right={<span className='t1' data-testid='vader-perm-today' style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCost(today.costUsd, today.billedCostUsd)}{today.unpricedTurns > 0 ? ' +' : ''}</span>} />
 			<Line title='Daily limit' detail='at the estimate a running task pauses and asks before it goes on'
-				right={<span className='fld' style={{ width: 96 }}><span className='t3'>$&nbsp;</span><input data-testid='vader-perm-limit' inputMode='decimal' aria-label='Daily limit in dollars' placeholder='none' value={limitText} onChange={e => setLimitText(e.target.value)} onBlur={() => saveLimit(limitText)} onKeyDown={e => { if (e.key === 'Enter') saveLimit(limitText) }} style={{ width: '100%' }} /></span>} />
+			right={<NumberBox testId='vader-perm-limit' label='Daily limit in dollars' prefix='$' placeholder='none' initial={limit === null ? '' : String(limit)} parse={t => parseMoney(t, { allowEmpty: true })} onCommit={v => settings.setGlobalSetting('dailySpendLimitUsd', v)} saved={v => v === null ? 'No daily limit' : `Daily limit set to ${formatUsd(v)}`} />} />
 		</Group>
 
 		<Group title='Locked rules' note='cannot be turned off in any mode'>
