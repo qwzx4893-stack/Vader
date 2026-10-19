@@ -42,6 +42,8 @@ import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { ChoiceMenu } from './ComposerMenus.js';
+import { peekContextSources, readContextSource } from './contextSourcesReader.js';
+import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
 import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
 import { INIT_PROMPT, noteLabel, parseSlash, slashMatches, SlashCommand } from '../../../../common/slashCommands.js';
@@ -3197,7 +3199,7 @@ export const SidebarChat = () => {
 
 		// what is typed, then each long paste in a block, as one message
 		const typed = _forceSubmit || textAreaRef.current?.value || ''
-		const userMessage = _forceSubmit ? typed : [typed.trim() ? typed : '', ...pastes.map(p => '```\n' + p.text + '\n```')].filter(Boolean).join('\n\n')
+		const userMessage = _forceSubmit ? typed : [typed.trim() ? typed : '', ...pastes.map(p => attachmentBlock(p.title, p.text))].filter(Boolean).join('\n\n')
 
 		// a key in the text never leaves this computer: it is taken out of the message, which is kept in the box so the person can go on from it
 		const hits = findSecrets(userMessage)
@@ -3480,6 +3482,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5 bg-transparent`}
 			placeholder={isRunning ? 'Add a message for after this run' : `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			extraSources={() => peekContextSources(accessor)}
+			onPickExtra={(id: ContextSourceId) => { void readContextSource(accessor, id).then(r => { if (!r) { setSlashNote({ text: 'There is nothing to attach from there right now.', busy: false }); return } setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text: r.text, title: r.title }]); if (r.cut) setSlashNote({ text: `${r.title} was long, so only part of it is attached.`, busy: false }) }) }}
 			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}

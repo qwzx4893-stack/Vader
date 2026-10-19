@@ -16,6 +16,7 @@ import { ITextModel } from '../../../../../../../editor/common/model.js';
 import { asCssVariable } from '../../../../../../../platform/theme/common/colorUtils.js';
 import { inputBackground, inputForeground } from '../../../../../../../platform/theme/common/colorRegistry.js';
 import { useFloating, autoUpdate, offset, flip, shift, size, autoPlacement } from '@floating-ui/react';
+import { ContextSourceId, ContextSourceInfo } from '../../../../common/contextSources.js'
 import { URI } from '../../../../../../../base/common/uri.js';
 import { getBasename, getFolderName } from '../sidebar-tsx/SidebarChat.js';
 import { ChevronRight, File, Folder, FolderClosed, LucideProps } from 'lucide-react';
@@ -67,6 +68,8 @@ type Option = {
 		| { leafNodeType?: undefined, nextOptions: Option[], generateNextOptions?: undefined, }
 		| { leafNodeType?: undefined, nextOptions?: undefined, generateNextOptions: GenerateNextOptions, }
 		| { leafNodeType: 'File' | 'Folder', uri: URI, nextOptions?: undefined, generateNextOptions?: undefined, }
+		/** something other than a file: the terminal output, the open page, the git changes (common/contextSources.ts) */
+		| { leafNodeType: 'Extra', extraId: ContextSourceId, rightLabel: string, nextOptions?: undefined, generateNextOptions?: undefined, }
 	)
 
 
@@ -141,8 +144,11 @@ function getRelativeWorkspacePath(accessor: ReturnType<typeof useAccessor>, uri:
 	const workspaceService = accessor.get('IWorkspaceContextService');
 	const workspaceFolders = workspaceService.getWorkspace().folders;
 
+	// the separator is not the same on every system (Windows writes C:\work\app): paths are compared, and shown, with /
+	const slashed = (p: string) => p.replace(/\\/g, '/');
+
 	if (!workspaceFolders.length) {
-		return uri.fsPath; // No workspace folders, return original path
+		return slashed(uri.fsPath); // No workspace folders, return original path
 	}
 
 	// Sort workspace folders by path length (descending) to match the most specific folder first
@@ -151,28 +157,20 @@ function getRelativeWorkspacePath(accessor: ReturnType<typeof useAccessor>, uri:
 	);
 
 	// Add trailing slash to paths for exact matching
-	const uriPath = uri.fsPath.endsWith('/') ? uri.fsPath : uri.fsPath + '/';
+	const uriPath = slashed(uri.fsPath).endsWith('/') ? slashed(uri.fsPath) : slashed(uri.fsPath) + '/';
 
 	// Check if the URI is inside any workspace folder
 	for (const folder of sortedFolders) {
-
-
-		const folderPath = folder.uri.fsPath.endsWith('/') ? folder.uri.fsPath : folder.uri.fsPath + '/';
-		if (uriPath.startsWith(folderPath)) {
-			// Calculate the relative path by removing the workspace folder path
-			let relativePath = uri.fsPath.slice(folder.uri.fsPath.length);
-			// Remove leading slash if present
-			if (relativePath.startsWith('/')) {
-				relativePath = relativePath.slice(1);
-			}
-			// console.log({ folderPath, relativePath, uriPath });
-
-			return relativePath;
+		const folderFs = slashed(folder.uri.fsPath);
+		const folderPath = folderFs.endsWith('/') ? folderFs : folderFs + '/';
+		if (uriPath.toLowerCase().startsWith(folderPath.toLowerCase())) {
+			// the relative path: what follows the workspace folder, without a leading slash
+			return slashed(uri.fsPath).slice(folderFs.length).replace(/^\/+/, '');
 		}
 	}
 
 	// URI is not in any workspace folder, return original path
-	return uri.fsPath;
+	return slashed(uri.fsPath);
 }
 
 
@@ -186,7 +184,7 @@ const getAbbreviatedName = (relativePath: string) => {
 	return getBasename(relativePath, 1)
 }
 
-const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: string[], optionText: string): Promise<Option[]> => {
+const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: string[], optionText: string, extras: readonly ContextSourceInfo[] = []): Promise<Option[]> => {
 
 	const toolsService = accessor.get('IToolsService')
 
@@ -325,6 +323,11 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 		nextOptionsAtPath = [...foldersResults, ...filesResults,]
 	}
 
+	// at the top, the sources besides files come after the files
+	const extraOptions: Option[] = path.length === 0 ? extras
+		.filter(x => isSubsequence(x.name, optionText))
+		.map(x => ({ leafNodeType: 'Extra' as const, extraId: x.id, rightLabel: x.detail, fullName: x.name, abbreviatedName: x.name, iconInMenu: File })) : []
+
 	const optionsAtPath = nextOptionsAtPath
 		.filter(o => isSubsequence(o.fullName, optionText))
 		.sort((a, b) => { // this is a hack but good for now
@@ -334,7 +337,7 @@ const getOptionsAtPath = async (accessor: ReturnType<typeof useAccessor>, path: 
 		})
 		.slice(0, numOptionsToShow) // should go last because sorting/filtering should happen on all datapoints
 
-	return optionsAtPath
+	return [...optionsAtPath, ...extraOptions]
 
 }
 
@@ -355,8 +358,12 @@ type InputBox2Props = {
 	onChangeHeight?: (newHeight: number) => void;
 	/** a text is being pasted: return true to take it (nothing is inserted), false to let it be inserted as usual */
 	onPasteText?: (text: string) => boolean;
+	/** what the @ menu offers besides files, read when the menu opens */
+	extraSources?: () => Promise<ContextSourceInfo[]>;
+	/** one of those was chosen */
+	onPickExtra?: (id: ContextSourceId) => void;
 }
-export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText }, ref) {
+export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText, extraSources, onPickExtra }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -381,6 +388,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 	const [didLoadInitialOptions, setDidLoadInitialOptions] = useState(false);
 
 	const currentPathRef = useRef<string>(JSON.stringify([]));
+	const extrasRef = useRef<ContextSourceInfo[]>([]);
 
 	// dont show breadcrums if first page and user hasnt typed anything
 	const isTypingEnabled = true
@@ -418,17 +426,19 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 	};
 
 
-	const onSelectOption = async () => {
+	const onSelectOption = async (idx?: number) => { // a click names its row, so it does not depend on the mark having been moved there first
 
 		if (!options.length) { return; }
 
-		const option = options[optionIdx];
+		const option = options[idx ?? optionIdx];
 		const newPath = [...optionPath, option.fullName]
 		const isLastOption = !option.generateNextOptions && !option.nextOptions
 		setDidLoadInitialOptions(false)
 		if (isLastOption) {
 			setIsMenuOpen(false)
 			insertTextAtCursor(option.abbreviatedName)
+
+			if (option.leafNodeType === 'Extra') { onPickExtra?.(option.extraId); return }
 
 			let newSelection: StagingSelectionItem
 			if (option.leafNodeType === 'File') newSelection = {
@@ -451,7 +461,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 
 
 			currentPathRef.current = JSON.stringify(newPath);
-			const newOpts = await getOptionsAtPath(accessor, newPath, '') || []
+			const newOpts = await getOptionsAtPath(accessor, newPath, '', extrasRef.current) || []
 			if (currentPathRef.current !== JSON.stringify(newPath)) { return; }
 			setOptionPath(newPath)
 			setOptionText('')
@@ -464,7 +474,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 	const onRemoveOption = async () => {
 		const newPath = [...optionPath.slice(0, optionPath.length - 1)]
 		currentPathRef.current = JSON.stringify(newPath);
-		const newOpts = await getOptionsAtPath(accessor, newPath, '') || []
+		const newOpts = await getOptionsAtPath(accessor, newPath, '', extrasRef.current) || []
 		if (currentPathRef.current !== JSON.stringify(newPath)) { return; }
 		setOptionPath(newPath)
 		setOptionText('')
@@ -474,8 +484,9 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 
 	const onOpenOptionMenu = async () => {
 		const newPath: [] = []
+		try { extrasRef.current = (await extraSources?.()) ?? [] } catch { extrasRef.current = [] }
 		currentPathRef.current = JSON.stringify([]);
-		const newOpts = await getOptionsAtPath(accessor, [], '') || []
+		const newOpts = await getOptionsAtPath(accessor, [], '', extrasRef.current) || []
 		if (currentPathRef.current !== JSON.stringify([])) { return; }
 		setOptionPath(newPath)
 		setOptionText('')
@@ -536,7 +547,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 		currentPathRef.current = JSON.stringify(optionPath);
 
 		const fetchOptions = async () => {
-			const newOpts = await getOptionsAtPath(accessor, optionPath, newStr) || [];
+			const newOpts = await getOptionsAtPath(accessor, optionPath, newStr, extrasRef.current) || [];
 			if (currentPathRef.current !== JSON.stringify(optionPath)) { return; }
 			setOptions(newOpts);
 			setOptionIdx(0);
@@ -812,7 +823,8 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 		{isMenuOpen && (
 			<div
 				ref={refs.setFloating}
-				className="z-[100] border-vader-border-3 bg-vader-bg-2-alt border rounded shadow-lg flex flex-col overflow-hidden"
+				data-testid='vader-mention-menu'
+				className="motion-safe:animate-card-in z-[100] border-vader-border-2 bg-vader-bg-1 border rounded-xl shadow-lg flex flex-col overflow-hidden"
 				style={{
 					position: strategy,
 					top: y ?? 0,
@@ -821,54 +833,48 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 				}}
 				onWheel={(e) => e.stopPropagation()}
 			>
-				{/* Breadcrumbs Header */}
-				{isBreadcrumbsShowing && <div className="px-2 py-1 text-vader-fg-1 bg-vader-bg-2-alt border-b border-vader-border-3 sticky top-0 bg-vader-bg-1 z-10 select-none pointer-events-none">
-					{optionText ?
-						<div className="flex items-center">
-							{/* {optionPath.map((path, index) => (
-								<React.Fragment key={index}>
-									<span>{path}</span>
-									<ChevronRight size={12} className="mx-1" />
-								</React.Fragment>
-							))} */}
-							<span>{optionText}</span>
-						</div>
-						: <div className='opacity-50'>Enter text to filter...</div>
-					}
+				{/* what is typed to filter */}
+				{isBreadcrumbsShowing && <div className="flex items-center gap-2 px-3 h-8 text-[13px] text-vader-fg-1 border-b border-vader-border-3 select-none pointer-events-none">
+					<span className='text-vader-fg-3'>@</span>
+					{optionText ? <span>{optionText}</span> : <span className='text-vader-fg-3'>Type to filter</span>}
 				</div>}
 
-
 				{/* Options list */}
-				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-auto'>
-					<div className="w-max min-w-full flex flex-col gap-0 text-nowrap flex-nowrap">
+				<div className='max-h-[400px] w-full max-w-full overflow-y-auto overflow-x-hidden py-1'>
+					<div className="flex flex-col gap-0 text-nowrap flex-nowrap">
 						{options.length === 0 ?
-							<div className="text-vader-fg-3 px-3 py-0.5">No results found</div>
+							<div className="text-vader-fg-3 px-3 py-2 text-[13px]" data-testid='vader-mention-empty'>No results found</div>
 							: options.map((o, oIdx) => {
-
+								const firstExtra = o.leafNodeType === 'Extra' && options.findIndex(x => x.leafNodeType === 'Extra') === oIdx
+								const firstFile = (o.leafNodeType === 'File' || o.leafNodeType === 'Folder') && options.findIndex(x => x.leafNodeType === 'File' || x.leafNodeType === 'Folder') === oIdx
 								return (
-									// Option
-									<div
-										ref={oIdx === optionIdx ? selectedOptionRef : null}
-										key={o.fullName}
-										className={`
-											flex items-center gap-2
-											px-3 py-1 cursor-pointer
-											${oIdx === optionIdx ? 'bg-blue-500 text-white/80' : 'bg-vader-bg-2-alt text-vader-fg-1'}
-										`}
-										onClick={() => { onSelectOption(); }}
-										onMouseMove={() => { setOptionIdx(oIdx) }}
-									>
-										{<o.iconInMenu size={12} />}
+									<React.Fragment key={o.fullName + (o.leafNodeType ?? '')}>
+										{firstFile ? <div className='px-3 pt-1.5 pb-1 text-xs text-vader-fg-3 select-none'>Files</div> : null}
+										{firstExtra ? <div className='px-3 pt-2 pb-1 text-xs text-vader-fg-3 select-none border-t border-vader-border-3 mt-1' data-testid='vader-mention-also'>Also</div> : null}
+										<div
+											ref={oIdx === optionIdx ? selectedOptionRef : null}
+											data-testid='vader-mention-option'
+											data-kind={o.leafNodeType ?? 'category'}
+											className={`
+												flex items-center gap-2
+												px-3 h-[30px] cursor-pointer text-[13px] text-vader-fg-1 transition-colors duration-100
+												${oIdx === optionIdx ? 'bg-vader-bg-2-hover' : ''}
+											`}
+											onClick={() => { onSelectOption(oIdx); }}
+											onMouseMove={() => { setOptionIdx(oIdx) }}
+										>
+											{o.leafNodeType === 'Extra' ? null : <o.iconInMenu size={12} className='text-vader-fg-3 flex-none' />}
 
-										<span>{o.abbreviatedName}</span>
+											<span className={o.leafNodeType === 'File' || o.leafNodeType === 'Folder' ? 'font-mono text-[12px] truncate' : 'truncate'}>{o.leafNodeType === 'File' || o.leafNodeType === 'Folder' ? o.fullName : o.abbreviatedName}</span>
 
-										{o.fullName && o.fullName !== o.abbreviatedName && <span className="opacity-60 text-sm">{o.fullName}</span>}
+											<span className='flex-1' />
+											{o.leafNodeType === 'Extra' ? <span className={`text-vader-fg-3 text-xs ${/[:/.]/.test(o.rightLabel) ? 'font-mono' : ''}`}>{o.rightLabel}</span> : null}
+											{o.nextOptions || o.generateNextOptions ? (
+												<ChevronRight size={12} className='text-vader-fg-3 flex-none' />
+											) : null}
 
-										{o.nextOptions || o.generateNextOptions ? (
-											<ChevronRight size={12} />
-										) : null}
-
-									</div>
+										</div>
+									</React.Fragment>
 								)
 							})
 						}

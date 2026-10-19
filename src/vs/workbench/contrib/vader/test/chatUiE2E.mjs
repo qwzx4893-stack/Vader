@@ -378,6 +378,59 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== the @ menu (board R06)
+{
+	const { page, errors } = await newPage();
+	const box = page.locator(INPUT);
+	await box.click();
+	await page.keyboard.type('@');
+	await page.waitForSelector(TID('vader-mention-menu'));
+	await page.waitForSelector(TID('vader-mention-also'));
+	const kinds = await page.locator(TID('vader-mention-option')).evaluateAll(els => els.map(e => e.getAttribute('data-kind')));
+	check('after @ the menu offers files and folders to look into, and under Also the other sources', kinds.join() === 'category,category,Extra,Extra,Extra', kinds.join());
+	const extra = (await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).allInnerTexts()).map(flat);
+	check('each other source says what is in it', extra.join(' | ') === 'Terminal output last command | Browser page localhost:5173 | Git changes 3 files', extra.join(' | '));
+	await page.waitForTimeout(260);
+	await shot(page, '19-mention-menu');
+	await page.keyboard.type('app');
+	await page.waitForFunction(() => document.querySelectorAll('[data-testid="vader-mention-option"][data-kind="File"]').length === 2);
+	const files = (await page.locator(`${TID('vader-mention-option')}[data-kind="File"]`).allInnerTexts()).map(flat);
+	check('typing finds files by what is typed, with their path in the project', files.join(' | ') === 'src/app.js | src/app.test.js', files.join(' | '));
+	check('and the other sources are filtered by it too (none matches "app")', (await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).count()) === 0);
+	await page.keyboard.press('Escape');
+	await box.fill('');
+	await page.keyboard.type('@');
+	await page.waitForSelector(TID('vader-mention-also'));
+	await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).nth(2).click();
+	await page.waitForSelector(TID('vader-paste-chip'));
+	check('choosing Git changes puts it beside the message as one line with its size', (await page.locator(TID('vader-paste-chip')).innerText()).includes('Git changes') && (await page.locator(TID('vader-paste-label')).innerText()).includes('lines'));
+	await page.locator(TID('vader-paste-show')).click();
+	check('Show shows what will be sent', (await page.locator(TID('vader-paste-text')).innerText()).includes('3 files changed'));
+	await box.fill('what did I break?');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:')));
+	const task = (await log(page)).find(x => x.startsWith('task:'));
+	check('it is sent in full with the message, under its heading', task.includes('what did I break?') && task.includes('Git changes:\n```\n a | 1 +\n 3 files changed\n```'), task);
+	await box.click();
+	await page.keyboard.type('@');
+	await page.waitForSelector(TID('vader-mention-also'));
+	await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).nth(1).click();
+	await page.waitForSelector(TID('vader-paste-chip'));
+	check('the open page is attached under its host', (await page.locator(TID('vader-paste-chip')).innerText()).includes('Browser page (localhost:5173)'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__sources = null; });
+	await page.evaluate(() => { window.__sources = { terminal: '', page: null, git: { files: 0, text: '' } }; });
+	await page.locator(INPUT).click();
+	await page.keyboard.type('@');
+	await page.waitForSelector(TID('vader-mention-menu'));
+	await page.waitForTimeout(200);
+	check('a source with nothing in it is not offered', (await page.locator(TID('vader-mention-also')).count()) === 0);
+	await page.close();
+}
+
 // ===================================================================== the Mode and Permissions menus (board R06)
 {
 	const { page, errors } = await newPage();

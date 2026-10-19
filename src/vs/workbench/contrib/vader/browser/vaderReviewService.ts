@@ -11,6 +11,7 @@ import { IMainProcessService } from '../../../../platform/ipc/common/mainProcess
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IVaderSCMService } from '../common/vaderSCMTypes.js';
+import { filesInStat } from '../common/contextSources.js';
 import { pullRequestPageUrl } from '../common/reviewModel.js';
 
 // What the review page does with git once the person is happy with the changes: commit them, and open the page where a pull request is made.
@@ -24,6 +25,8 @@ export interface IVaderReviewService {
 	repoInfo(): Promise<{ branch: string; pullRequestUrl: string | undefined }>;
 	/** open the pull request page in the browser; false when there is no GitHub remote to make it on */
 	openPullRequestPage(): Promise<boolean>;
+	/** the changes in the open project as text for a message (the summary of what changed, then the changes themselves, kept to a size), and how many files they touch; none when there is no git repository or nothing changed */
+	changesForContext(): Promise<{ files: number; text: string }>;
 }
 
 export const IVaderReviewService = createDecorator<IVaderReviewService>('vaderReviewService');
@@ -55,6 +58,15 @@ class VaderReviewService extends Disposable implements IVaderReviewService {
 		const root = this.root();
 		const [branch, remote] = await Promise.all([this.scm.gitBranch(root).catch(() => ''), this.scm.gitRemoteUrl(root).catch(() => '')]);
 		return { branch, pullRequestUrl: pullRequestPageUrl(remote, branch) };
+	}
+
+	async changesForContext(): Promise<{ files: number; text: string }> {
+		let root: string;
+		try { root = this.root(); } catch { return { files: 0, text: '' }; }
+		const [stat, diffs] = await Promise.all([this.scm.gitStat(root).catch(() => ''), this.scm.gitSampledDiffs(root).catch(() => '')]);
+		return { files: filesInStat(stat), text: `${stat.trim()}
+
+${diffs}`.trim() };
 	}
 
 	async openPullRequestPage(): Promise<boolean> {
