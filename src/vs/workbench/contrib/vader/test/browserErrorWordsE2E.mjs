@@ -31,6 +31,13 @@ check('a reference that went stale says the page changed', B.explainBrowserError
 check('a click that timed out is not called a page that did not load', B.explainBrowserError('locator.click: Timeout 10000ms exceeded.') === null);
 check('anything else gets no words, only its own message', B.explainBrowserError('net::ERR_CONNECTION_REFUSED') === null && B.explainBrowserError('') === null);
 
+// ---- a field the agent must not type into
+check('a password field is a secret', B.isSecretField({ type: 'password' }) && B.isSecretField({ type: 'PASSWORD' }));
+check('a one-time code, a card number and its security code are secrets by what the page says they are', B.isSecretField({ type: 'text', autocomplete: 'one-time-code' }) && B.isSecretField({ type: 'text', autocomplete: 'cc-number' }) && B.isSecretField({ type: 'text', autocomplete: 'section-pay cc-csc' }));
+check('a field named like a password is one, whatever its type', B.isSecretField({ type: 'text', name: 'user_password' }) && B.isSecretField({ type: 'text', label: 'Security code' }) && B.isSecretField({ type: 'text', id: 'cvv' }) && B.isSecretField({ type: 'text', label: 'Card number' }));
+check('an ordinary field is not', !B.isSecretField({ type: 'text', name: 'email', autocomplete: 'email', label: 'Email address' }) && !B.isSecretField({ type: 'search', name: 'q' }) && !B.isSecretField({}));
+check('a refusal to type into one is explained as a sign-in page, with the agent not entering a password', B.explainBrowserError(B.SECRET_FIELD_REFUSAL)?.title === 'This page asks you to sign in' && B.explainBrowserError(B.SECRET_FIELD_REFUSAL).text === 'The agent will not enter a password. Sign in yourself, then let it go on.');
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);
