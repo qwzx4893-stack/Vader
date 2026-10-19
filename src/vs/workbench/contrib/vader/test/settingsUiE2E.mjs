@@ -306,6 +306,9 @@ async function layoutProblems(page) {
 	check('only models that can fill in the middle are offered for suggestions', (await page.locator(`${TID('vader-editor-model-autocomplete')} option`).allInnerTexts()).filter(t => t !== 'Choose a model').join('|') === 'codestral-latest');
 	await page.locator(TID('vader-editor-model-autocomplete')).selectOption('mistral/codestral-latest');
 	check('choosing one sets the model of that feature', (await log(page)).includes('select:Autocomplete=codestral-latest'));
+	check('the next edit is off by default and has its own switch that says it costs requests', (await page.locator(`${TID('vader-editor-next-edit')}[aria-checked=false]`).count()) === 1 && (await page.locator('[data-testid=vader-settings-editor]').innerText()).includes('at most 20 a minute'));
+	await page.locator(TID('vader-editor-next-edit')).click();
+	check('turning it on writes the real setting', (await log(page)).includes('global:nextEdit=true'));
 	await page.locator(TID('vader-editor-selection')).click();
 	check('Add to chat and Edit next to selected code has its own switch', (await log(page)).includes('global:showInlineSuggestions=false'));
 	check('applying uses the chat model, and the model of its own appears only when that is turned off', (await page.locator(TID('vader-editor-model-apply')).count()) === 0);

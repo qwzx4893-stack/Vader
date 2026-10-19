@@ -20,6 +20,7 @@ import './quickEditActions.js'
 
 // register Autocomplete
 import './autocompleteService.js'
+import './nextEditService.js'
 
 // settings pane
 import './vaderSettingsPane.js'

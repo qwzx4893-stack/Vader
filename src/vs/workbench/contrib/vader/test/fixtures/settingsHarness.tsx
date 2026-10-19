@@ -18,7 +18,7 @@ for (const p of ['anthropic', 'openRouter']) { settingsOfProvider[p]._didFillInP
 const mo = (providerName: string, modelName: string) => ({ name: modelName, selection: { providerName, modelName } })
 w.__settings = { settingsOfProvider, modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' }, Autocomplete: null, Apply: null, SCM: null },
 	_modelOptions: [mo('anthropic', 'claude-sonnet-4-5'), mo('openAI', 'gpt-5'), mo('mistral', 'codestral-latest'), mo('ollama', 'qwen2.5-coder:7b')],
-	globalSettings: { autoApprove: { edits: true }, autoAcceptLLMChanges: false, includeToolLintErrors: true, dailySpendLimitUsd: 5, priceDiscountPercent: 0, modelPriceOverrides: {}, enableAutocomplete: false, showInlineSuggestions: true, syncApplyToChat: true, syncSCMToChat: true, enableFastApply: true, autoCheckUpdates: false, chatMode: 'agent', isOnboardingComplete: true }, overridesOfModel: {} }
+	globalSettings: { autoApprove: { edits: true }, autoAcceptLLMChanges: false, includeToolLintErrors: true, dailySpendLimitUsd: 5, priceDiscountPercent: 0, modelPriceOverrides: {}, enableAutocomplete: false, nextEdit: false, showInlineSuggestions: true, syncApplyToChat: true, syncSCMToChat: true, enableFastApply: true, autoCheckUpdates: false, chatMode: 'agent', isOnboardingComplete: true }, overridesOfModel: {} }
 
 // ---- the policy
 let customRules: any[] = []

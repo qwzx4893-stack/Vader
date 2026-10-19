@@ -548,6 +548,8 @@ export type GlobalSettings = {
 	taskCopies: boolean;
 	/** keep an index of the open project on this computer, so that the agent can find code by what it does (common/codebaseIndex/); nothing leaves the computer */
 	codebaseIndex: boolean;
+	/** suggest the next edit, not only the next characters: a change somewhere near the cursor, drawn in the editor, that Tab accepts (common/nextEdit/); asks a model after a pause, so it costs requests */
+	nextEdit: boolean;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -573,6 +575,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	addonSourcesOff: [],
 	taskCopies: true,
 	codebaseIndex: true,
+	nextEdit: false,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

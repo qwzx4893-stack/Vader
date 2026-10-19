@@ -17,13 +17,14 @@ export const EditorPage = () => {
 	const g = useSettingsState().globalSettings
 	const set = (k: any, v: any) => settings.setGlobalSetting(k, v)
 	const [confirmReset, setConfirmReset] = useState(false)
-	const RESET: (keyof typeof defaultGlobalSettings)[] = ['enableAutocomplete', 'showInlineSuggestions', 'syncApplyToChat', 'syncSCMToChat', 'enableFastApply', 'includeToolLintErrors']
+	const RESET: (keyof typeof defaultGlobalSettings)[] = ['enableAutocomplete', 'nextEdit', 'showInlineSuggestions', 'syncApplyToChat', 'syncSCMToChat', 'enableFastApply', 'includeToolLintErrors']
 	return <div data-testid='vader-settings-editor'>
 		<PageHead title='Editor' desc='Help that appears inside a file, and which model gives it.' />
 
 		<Group title='Suggestions while you type' first>
 			<Line first title='Suggest the next lines' detail='Tab accepts, Esc dismisses. Off by default. It works with models that can fill in the middle of a file.' right={<Switch on={g.enableAutocomplete} label='Suggest the next lines' testId='vader-editor-autocomplete' onChange={v => set('enableAutocomplete', v)} />} />
 			{g.enableAutocomplete ? <Line title='Model for suggestions' detail='A fast model works best here' right={<FeatureModelSelect feature='Autocomplete' testId='vader-editor-model-autocomplete' />} /> : null}
+			<Line title='Suggest the next edit' detail='After you pause, a model suggests a change near the cursor, such as the same rename in the next place. Tab accepts, Esc dismisses. Each suggestion is a request to a model, at most 20 a minute; the code around the cursor and your last few edits are sent to it.' right={<Switch on={g.nextEdit} label='Suggest the next edit' testId='vader-editor-next-edit' onChange={v => set('nextEdit', v)} />} />
 			<Line title='Show Add to chat and Edit next to selected code' right={<Switch on={g.showInlineSuggestions} label='Show Add to chat and Edit next to selected code' testId='vader-editor-selection' onChange={v => set('showInlineSuggestions', v)} />} />
 		</Group>
 
