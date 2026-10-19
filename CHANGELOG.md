@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased - The message box and the safety gate of the boards, as the app
+
+- **The gate says what it decided** (`common/gateModel.ts`, `GateCards.tsx`): cards for a command, a file outside the project, a page on a new site, installing a skill, an MCP tool and a rule of the person's own; refusals for a locked rule, an agent's own scope and a read-only mode. New rules: reading outside the project and a new host ask (a site can be allowed for the project), and private keys and stored logins are refused outright and cannot be switched off.
+- **A key in a message is not sent** (`common/secretScan.ts`): it is taken out of the text and the card says which kind it looked like.
+- **The message box**: one footer row, Thinking as a chip, Mode and Permissions menus with Ctrl 1 to 4, `/plan /review /compact /remember /init` calling the real services, `@` for files and, under Also, the terminal output, the open page and the git changes, text files dropped on the box (images are refused with the reason), the context ring with what the window is made of and Compact now, a chat bigger than the model's window said before it fails.
+- **The model picker** has the states of board S04: providers without a key offered with Add, a list being asked for, a list that could not be fetched, nothing found; lists are asked for again when the picker opens if they are ten minutes old.
+- **Fixed**: the `@` menu showed absolute paths on Windows; a click on a row of the `@` menu could choose the row the mark was on; popovers of the message box were cut off by its frame; the answer text was 11 pixels.
+- Tests: `chatUiE2E` (178), `pickerUiE2E` (26), `gateModelE2E` (21), `policyGateRulesE2E` (16), `slashCommandsE2E` (12), `contextSourcesE2E` (11), `attachmentRulesE2E` (14), `modelPickerE2E` (32), `runStateModelE2E` (32); the chat is also photographed at the width it has in the window.
+- Honest limits: images cannot be attached; the packaged app was not run on this machine; a copy of the project per task, the checkpoint list, the MCP and browser states of boards S07 and S14 and the backup and update dialogs of S11 are not built yet.
+
 ## Unreleased - The interface of the design canvas, as the app: the Vader window, a first run in three steps, Settings in 14 pages, a chat that says what the run is doing
 
 - **The Vader window** opens first (`vader.window.agentsFirst`, on by default): a sidebar of projects and conversations ("Needs you" first), the conversation with its Review, Browser and Terminal tabs, All agents, search (Ctrl+K), Add-ons, and Settings over everything. Open in editor goes to the editor layout and back. Review accepts and rejects a hunk, a file or all, sends a comment on a line to the agent, runs the checks and the independent check, and commits (`common/reviewModel.ts`, `vaderReviewService.ts`). Details and limits: [`docs/integrations/interface.md`](./docs/integrations/interface.md).
