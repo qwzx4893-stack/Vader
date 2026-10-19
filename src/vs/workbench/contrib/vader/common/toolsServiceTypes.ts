@@ -182,7 +182,7 @@ export type BuiltinToolCallParams = {
 
 // RESULT OF TOOL CALL
 export type BuiltinToolResultType = {
-	'read_file': { fileContents: string, totalFileLen: number, totalNumLines: number, hasNextPage: boolean },
+	'read_file': { fileContents: string, totalFileLen: number, totalNumLines: number, hasNextPage: boolean, /** rules files in the folders above this file (common/instructions/nestedRules.ts) */ nestedRules?: string },
 	'ls_dir': { children: ShallowDirectoryItem[] | null, hasNextPage: boolean, hasPrevPage: boolean, itemsRemaining: number },
 	'get_dir_tree': { str: string, },
 	'search_pathnames_only': { uris: URI[], hasNextPage: boolean },

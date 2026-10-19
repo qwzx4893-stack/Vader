@@ -17,6 +17,7 @@ import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVaderCommandBarService } from './vaderCommandBarServiceTypes.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
+import { foldersBetween, FoundRules, NestedRulesGiven, nestedRulesText, rulesFileNames } from '../common/instructions/nestedRules.js'
 import { awaitOutput, awaitWords, DEFAULT_AWAIT_SECONDS, MAX_AWAIT_SECONDS, parsePattern } from '../common/awaitOutput.js'
 import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
@@ -218,6 +219,30 @@ export class ToolsService implements IToolsService {
 		@IPathService pathService: IPathService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+
+		// Rules files inside folders, for the file just read (common/instructions/nestedRules.ts)
+		const nestedGiven = new NestedRulesGiven()
+		const nestedRulesFor = async (uri: URI): Promise<string> => {
+			try {
+				for (const folder of workspaceContextService.getWorkspace().folders) {
+					const root = folder.uri.fsPath.replace(/\\/g, '/').replace(/\/+$/, '')
+					const dirs = foldersBetween(folder.uri.fsPath, uri.fsPath)
+					if (dirs.length === 0) continue
+					const found: FoundRules[] = []
+					for (const dir of dirs) {
+						for (const name of rulesFileNames()) {
+							const ruleUri = URI.joinPath(folder.uri, dir.slice(root.length + 1), name)
+							const text = await fileService.readFile(ruleUri, { limits: { size: 200_000 } }).then(f => f.value.toString(), () => undefined)
+							if (text === undefined) continue
+							if (nestedGiven.fresh(ruleUri.fsPath, text, Date.now())) found.push({ dir, file: name, text })
+							break
+						}
+					}
+					return nestedRulesText(root, found)
+				}
+			} catch { /* a rules file that cannot be read is left out */ }
+			return ''
+		}
 
 		// paths the model writes are resolved against the folder that is open (see resolveFilePath)
 		const validateURI = (uriStr: unknown) => validateURIWith(uriStr, workspaceContextService.getWorkspace().folders[0]?.uri, pathService.userHome({ preferLocal: true }))
@@ -624,7 +649,8 @@ export class ToolsService implements IToolsService {
 				const fileContents = contents.slice(fromIdx, toIdx + 1) // paginate
 				const hasNextPage = (contents.length - 1) - toIdx >= 1
 				const totalFileLen = contents.length
-				return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines } }
+				const nestedRules = await nestedRulesFor(uri)
+				return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines, ...(nestedRules ? { nestedRules } : {}) } }
 			},
 
 			ls_dir: async ({ uri, pageNumber }) => {
@@ -1038,7 +1064,7 @@ export class ToolsService implements IToolsService {
 		// given to the LLM after the call for successful tool calls
 		this.stringOfResult = {
 			read_file: (params, result) => {
-				return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}`
+				return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}${result.nestedRules ?? ''}`
 			},
 			ls_dir: (params, result) => {
 				const dirTreeStr = stringifyDirectoryTree1Deep(params, result)

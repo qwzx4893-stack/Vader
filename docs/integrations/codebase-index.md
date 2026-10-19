@@ -30,3 +30,10 @@ Settings, Privacy and network, "Search in the project": a switch (on by default;
 - No symbol-level index of references (who calls this): `repo_map` and the editor's own language features cover that.
 - The index lives in the main process; a project of hundreds of thousands of files is cut at 20,000 files (the settings page says so).
 - The packaged app has not been run on this machine; the index is tested against real folders and a real git repository, the tool and the settings page against their test pages.
+
+## Rules inside folders
+
+A rules file (`.vaderrules`, `AGENTS.md`, `CLAUDE.md`) at the project root is in the agent's instructions from the start. One inside a folder
+(`packages/api/AGENTS.md`) is added to the result when the agent reads a file under that folder (`common/instructions/nestedRules.ts`):
+the nearest three, framed as text that may have been written by someone else, cut at 3000 characters each, and not repeated for ten minutes.
+The ten-minute rule approximates "once per task", because the tool does not know which chat is asking.
