@@ -764,8 +764,10 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.locator(TID('vader-terminal-waiting-open')).click();
 	check('Open the terminal opens it', (await log(page)).some(x => x.includes('terminal')), (await log(page)).join(','));
 	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.t] }), { u: userMsg('run'), t: cmd('npm run build', 'built', { type: 'done', exitCode: 0 }) });
+	await page.waitForTimeout(80);
 	check('a command that finished has no such card', (await page.locator(TID('vader-terminal-waiting')).count()) === 0);
 	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.t] }), { u: userMsg('run'), t: cmd('sleep 100', '', { type: 'timeout' }) });
+	await page.waitForTimeout(80);
 	check('nor one that only went quiet without asking anything', (await page.locator(TID('vader-terminal-waiting')).count()) === 0);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
