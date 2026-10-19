@@ -39,6 +39,8 @@ import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAccounting.js';
 import { parseTaskList } from '../../../../common/taskList.js';
 import { projectNameOf } from '../../../../common/threadProjects.js';
+import { contextShare, messageChars, shouldFoldPaste } from '../../../../common/runStateModel.js';
+import { ContextBanner, FinishedCard, NoModelCard, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
 
 
 
@@ -331,13 +333,10 @@ const ContextMeter = () => {
 	const caps = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
 	const windowTokens = caps.contextWindow
 	if (!windowTokens) return null
-	let chars = 0
-	for (const m of thread.messages) {
-		if (m.role === 'user' || m.role === 'assistant') chars += (m.displayContent ?? '').length
-		else if (m.role === 'tool') chars += String((m as { content?: unknown }).content ?? '').length
-	}
-	const tokens = Math.round(chars / 4 + 8000)
-	const pct = Math.min(100, Math.round(100 * tokens / windowTokens))
+	// the share of the room a request may use (the window less what is kept for the answer), as the banner and the real thresholds measure it
+	const share = contextShare(messageChars(thread.messages as never), windowTokens, caps.reservedOutputTokenSpace)
+	const tokens = Math.round(share * windowTokens)
+	const pct = Math.min(100, Math.round(100 * share))
 	const r = 6.5, c = 2 * Math.PI * r
 	const color = pct >= 90 ? '#f06a6e' : pct >= 70 ? '#e2a93f' : '#8a8a91'
 	return <span className='flex items-center gap-1.5 text-xs text-vader-fg-3' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter'>
@@ -3153,33 +3152,42 @@ export const SidebarChat = () => {
 	// state of current message
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
+	// long pasted texts are folded to one line each above the message box, and sent in full with the message
+	const [pastes, setPastes] = useState<Paste[]>([])
 
 	// a coding agent chosen for the chat brings its own model, so no model has to be configured
-	const isDisabled = instructionsAreEmpty || (!settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState))
+	const noModel = !settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState)
+	const isDisabled = (instructionsAreEmpty && pastes.length === 0) || noModel
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
-		if (isRunning) return
 
 		const threadId = chatThreadsService.state.currentThreadId
 
-		// send message to LLM
-		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
+		// what is typed, then each long paste in a block, as one message
+		const typed = _forceSubmit || textAreaRef.current?.value || ''
+		const userMessage = _forceSubmit ? typed : [typed.trim() ? typed : '', ...pastes.map(p => '```\n' + p.text + '\n```')].filter(Boolean).join('\n\n')
 
-		try {
-			await agentGatewayService.startTask({ userMessage, threadId })
-		} catch (e) {
-			console.error('Error while sending message in chat:', e)
+		if (isRunning) {
+			// a run is going: the message waits for it to end (Send now stops the run and sends it at once)
+			if (!chatThreadsService.queueMessage(threadId, userMessage)) return
+		} else {
+			try {
+				await agentGatewayService.startTask({ userMessage, threadId })
+			} catch (e) {
+				console.error('Error while sending message in chat:', e)
+			}
 		}
 
+		setPastes([])
 		setSelections([]) // clear staging
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, pastes, textAreaRef, textAreaFnsRef, setSelections, settingsState])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3306,6 +3314,10 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		</ProseWrapper> : null}
 
 
+		{/* the person stopped the run, or it finished and changed files */}
+		{!isRunning ? <ErrorBoundary><StoppedCard threadId={threadId} /></ErrorBoundary> : null}
+		{!isRunning && latestError === undefined ? <ErrorBoundary><FinishedCard threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary> : null}
+
 		{/* error message */}
 		{latestError === undefined ? null :
 			<div className='px-2 my-1'>
@@ -3359,10 +3371,12 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		showFooter
 		onAddContext={() => { const t = textAreaRef.current; if (t) { t.focus(); try { document.execCommand('insertText', false, '@') } catch { /* the @ menu opens when typing it */ } } }}
 	>
+		<PastedChips pastes={pastes} onRemove={id => setPastes(ps => ps.filter(p => p.id !== id))} />
 		<VaderInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			placeholder={isRunning ? 'Add a message for after this run' : `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -3395,18 +3409,22 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 
 
 
+	const aboveComposer = <div className='flex flex-col gap-2'>
+		<ErrorBoundary><NoModelCard /></ErrorBoundary>
+		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
+		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
+		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>
+	</div>
+	const hint = instructionsAreEmpty && pastes.length === 0 && !isRunning ? <div className='px-3 pt-1.5 text-xs text-vader-fg-3 select-none' data-testid='vader-composer-hint'>Enter sends, Shift Enter adds a line.</div> : null
+
 	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
 		<div className='px-4'>
 			<CommandBarInChat />
 		</div>
-		<div className='px-2 pb-2'>
+		<div className='px-2 pb-2 flex flex-col gap-2'>
+			{aboveComposer}
 			{inputChatArea}
-		</div>
-	</div>
-
-	const landingPageInput = <div>
-		<div className='pt-8'>
-			{inputChatArea}
+			{hint}
 		</div>
 	</div>
 
@@ -3435,7 +3453,9 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 					<h2 className='text-xl font-semibold text-vader-fg-1'>{projectName ? `New chat in ${projectName}` : 'New chat'}</h2>
 					<p className='text-vader-fg-3 leading-relaxed'>{projectName ? 'Agent mode reads and edits the files of this project and shows every change for you to accept or reject.' : 'No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project.'}</p>
 				</div>
+				{aboveComposer}
 				{inputChatArea}
+				{hint}
 			</ErrorBoundary>
 
 			<ErrorBoundary>

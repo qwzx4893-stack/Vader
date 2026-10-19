@@ -62,6 +62,7 @@ import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsServic
 import { addToLedger, addTurnToThreadUsage, budgetState, priceTurn, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
 import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
 import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
+import { enqueue, QueuedMessage, queueIsFull, removeQueued, RunSnapshot, shouldSendQueued, StoppedRun, stoppedWhile, takeNext } from '../common/runStateModel.js';
 import { ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
 import { composeReviewComment, ReviewComment } from '../common/reviewComment.js';
 import { localProviderNames } from '../common/vaderSettingsTypes.js';
@@ -215,6 +216,12 @@ export type ThreadType = {
 	// if any. undefined/null on old, pre-Vader threads and on threads never assigned one -
 	// both mean "no agent, use default Chat behavior".
 	agentId?: string | null;
+
+	// Vader addition: set when the person stopped a run, cleared by the next message. The chat says what it was doing when it stopped.
+	stopped?: StoppedRun;
+
+	// Vader addition: messages the person wrote while a run was going. They are sent, in order, when the run ends on its own (not after a stop or an error), or at once with "Send now".
+	queued?: QueuedMessage[];
 
 	// Vader addition: the conversation this thread has with an external coding agent (Settings > Coding Agents): the agent's own id of it, so that a
 	// restart of the app or of the agent's process can pick the conversation up again. Absent on every thread that never used one.
@@ -450,6 +457,17 @@ export interface IChatThreadService {
 	// entry pts
 	abortRunning(threadId: string): Promise<void>;
 	dismissStreamError(threadId: string): void;
+
+	// messages that wait for the run to end, and a conversation that is getting full (Vader addition)
+	/** false when the message was empty or five already wait */
+	queueMessage(threadId: string, text: string): boolean;
+	removeQueuedMessage(threadId: string, id: string): void;
+	/** stops the run that is going and sends this waiting message at once */
+	sendQueuedMessageNow(threadId: string, id: string): Promise<void>;
+	/** summarises the older messages now, instead of waiting for the threshold: 'nothing' when there is too little to summarise, 'failed' when the model did not answer */
+	compactThreadNow(threadId: string): Promise<'done' | 'nothing' | 'failed'>;
+	/** a new chat that starts from the summary of this one; false when the summary could not be made */
+	startNewChatWithSummary(threadId: string): Promise<boolean>;
 
 	// call to edit a message
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
@@ -1082,6 +1100,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 		this._bumpToolQueueEpoch(threadId) // tool calls of this turn that are still waiting for their turn must not start
+		const wasRunning = this.streamState[threadId]?.isRunning !== undefined
+		const snapshot = this._snapshotOfRun(threadId)
 		this._releasePause(threadId, 'aborted')
 
 		// add assistant message
@@ -1113,6 +1133,85 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 		this._setStreamState(threadId, undefined)
+		if (wasRunning) this._patchThread(threadId, { stopped: { at: Date.now(), doing: stoppedWhile(snapshot) } })
+	}
+
+	/** what the run is doing right now, for the words after a stop */
+	private _snapshotOfRun(threadId: string): RunSnapshot {
+		const st = this.streamState[threadId]
+		if (st?.isRunning === 'LLM') return { phase: 'writing' }
+		if (st?.isRunning === 'tool') {
+			const params = st.toolInfo.toolParams as { command?: unknown } | undefined
+			return { phase: 'tool', toolName: st.toolInfo.toolName, command: typeof params?.command === 'string' ? params.command : undefined }
+		}
+		if (st?.isRunning === 'awaiting_user') {
+			const last = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'tool')
+			const params = last && last.role === 'tool' ? ((last as { params?: unknown }).params as { command?: unknown } | undefined) : undefined
+			return { phase: 'awaiting_approval', command: typeof params?.command === 'string' ? params.command : undefined }
+		}
+		return { phase: 'idle' }
+	}
+
+	/** a change to one field of a thread, stored and announced */
+	private _patchThread(threadId: string, patch: Partial<ThreadType>) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, ...patch } }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads }, true)
+	}
+
+	// ---------- messages that wait ----------
+
+	queueMessage(threadId: string, text: string): boolean {
+		const thread = this.state.allThreads[threadId]
+		if (!thread || !text.trim() || queueIsFull(thread.queued)) return false
+		this._patchThread(threadId, { queued: enqueue(thread.queued, text, generateUuid()) })
+		return true
+	}
+
+	removeQueuedMessage(threadId: string, id: string): void {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		this._patchThread(threadId, { queued: removeQueued(thread.queued, id) })
+	}
+
+	async sendQueuedMessageNow(threadId: string, id: string): Promise<void> {
+		const thread = this.state.allThreads[threadId]
+		const message = thread?.queued?.find(m => m.id === id)
+		if (!thread || !message) return
+		this._patchThread(threadId, { queued: removeQueued(thread.queued, id) })
+		// sending a message while a run is going already stops that run first (see _addUserMessageAndStreamResponse)
+		await this.addUserMessageAndStreamResponse({ userMessage: message.text, threadId })
+	}
+
+	/** called when a run's promise has settled: the next waiting message goes out after a run that finished on its own */
+	private _afterRun(threadId: string, threw: boolean) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread?.queued?.length) return
+		const end = threw || this.streamState[threadId]?.error ? 'error' : thread.stopped ? 'stopped' : 'finished'
+		if (!shouldSendQueued(end, thread.queued.length) || this.streamState[threadId]?.isRunning !== undefined) return
+		const { next, rest } = takeNext(thread.queued)
+		if (!next) return
+		this._patchThread(threadId, { queued: rest })
+		void this.addUserMessageAndStreamResponse({ userMessage: next.text, threadId })
+	}
+
+	async compactThreadNow(threadId: string): Promise<'done' | 'nothing' | 'failed'> {
+		const { modelSelection } = this._currentModelSelectionProps(threadId)
+		return this._maybeCompactThread(threadId, modelSelection, true)
+	}
+
+	async startNewChatWithSummary(threadId: string): Promise<boolean> {
+		const result = await this.compactThreadNow(threadId)
+		if (result === 'failed') return false
+		const summary = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'compacted_summary')
+		this.openNewThread()
+		const fresh = this.state.currentThreadId
+		if (summary && summary.role === 'compacted_summary' && fresh !== threadId) {
+			this._addMessageToThread(fresh, { role: 'compacted_summary', originalMessageCount: summary.originalMessageCount, compactedAt: new Date().toISOString(), summary: summary.summary })
+		}
+		return true
 	}
 
 
@@ -1517,10 +1616,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		})
 	}
 
-	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null): Promise<void> {
-		if (!modelSelection) return
+	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null, force = false): Promise<'done' | 'nothing' | 'failed'> {
+		if (!modelSelection) return 'nothing'
 		let thread = this.state.allThreads[threadId]
-		if (!thread) return
+		if (!thread) return 'nothing'
 
 		const { overridesOfModel } = this._settingsService.state
 		const { contextWindow, reservedOutputTokenSpace } = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, overridesOfModel)
@@ -1535,18 +1634,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setState({ allThreads: prunedThreads })
 			thread = prunedThread
 		}
-		if (!plan.summarise) return // plenty of room left - the common case, checked cheaply every turn
+		if (!plan.summarise && !force) return 'nothing' // plenty of room left - the common case, checked cheaply every turn
 
 		// step 2: a structured summary of the older messages
 		const lastSummaryIdx = findLastIdx(thread.messages, m => m.role === 'compacted_summary') ?? -1
 		const compactableRange = thread.messages.slice(lastSummaryIdx + 1)
-		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return 'nothing'
 
 		const toCompact = compactableRange.slice(0, compactableRange.length - ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP)
-		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return 'nothing'
 
 		const conversationText = toCompact.map(m => this._renderMessageForCompaction(m)).filter(Boolean).join('\n\n')
-		if (!conversationText.trim()) return
+		if (!conversationText.trim()) return 'nothing'
 
 		// Vader addition: route the summarization call itself through the Model Router's
 		// 'summarization' category (favors cheap/configured models - see
@@ -1562,7 +1661,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// summarization call itself fails, do nothing this round. Vader's original
 			// per-message truncation (prepareMessages, convertToLLMMessageService.ts) is
 			// still the final safety net if the raw context genuinely overflows.
-			return
+			return 'failed'
 		}
 
 		const summary = this._parseCompactionTags(summaryText)
@@ -1590,6 +1689,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		this._storeAllThreads(newThreads)
 		this._setState({ allThreads: newThreads })
+		return 'done'
 	}
 
 	// Vader addition: Plan Mode's plan capture. Parses a <vader_plan> block (see
@@ -1711,7 +1811,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		const model = new VaderAgentModel(this._llmMessageService, this._convertToLLMMessagesService, {
 			getThreadMessages: () => this.state.allThreads[threadId]?.messages ?? [],
-			maybeCompactThread: () => this._maybeCompactThread(threadId, modelSelection),
+			maybeCompactThread: async () => { await this._maybeCompactThread(threadId, modelSelection) },
 			chatMode,
 			agentId,
 			modelSelection,
@@ -2276,8 +2376,10 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		p.then(() => {
 			if (threadId !== this.state.currentThreadId) notify({ error: null })
+			this._afterRun(threadId, false)
 		}).catch((e) => {
 			if (threadId !== this.state.currentThreadId) notify({ error: getErrorMessage(e) })
+			this._afterRun(threadId, true)
 			throw e
 		})
 	}
@@ -2309,6 +2411,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
 		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
+		if (this.state.allThreads[threadId]?.stopped) this._patchThread(threadId, { stopped: undefined })
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
 

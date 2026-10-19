@@ -353,8 +353,10 @@ type InputBox2Props = {
 	onFocus?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onBlur?: (e: React.FocusEvent<HTMLTextAreaElement>) => void;
 	onChangeHeight?: (newHeight: number) => void;
+	/** a text is being pasted: return true to take it (nothing is inserted), false to let it be inserted as usual */
+	onPasteText?: (text: string) => boolean;
 }
-export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText }, ref) {
+export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -750,6 +752,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 
 			onFocus={onFocus}
 			onBlur={onBlur}
+			onPaste={onPasteText ? (e: React.ClipboardEvent<HTMLTextAreaElement>) => { if (onPasteText(e.clipboardData.getData('text/plain'))) e.preventDefault() } : undefined}
 
 			disabled={!isEnabled}
 

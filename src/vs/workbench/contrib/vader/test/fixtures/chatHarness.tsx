@@ -1,0 +1,81 @@
+// The chat as it is built for the app (react/src2), mounted in a plain browser page. The conversation, the run state and the settings are objects of this page: the test
+// puts the thread in the state it wants to look at (running, paused, stopped, waiting for approval, nearly full, no model) and reads what the chat did to it.
+// The markdown, the apply buttons and the model picker are stand-ins; everything else is the real component. Used by test/chatUiE2E.mjs.
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import '../../browser/react/src2/styles.css'
+import { SidebarChat } from '../../browser/react/src2/sidebar-tsx/SidebarChat'
+import { notify } from './chatHarnessServices'
+import { providerNames } from '../../common/vaderSettingsTypes'
+
+const w = window as any
+w.__log = [] as string[]
+const log = (s: string) => w.__log.push(s)
+
+// ---- settings: one provider with a key and a model, so the chat has something to ask
+const settingsOfProvider: any = {}
+for (const p of providerNames) settingsOfProvider[p] = { models: [], _didFillInProviderSettings: false, apiKey: '' }
+settingsOfProvider.anthropic = { models: [{ modelName: 'claude-sonnet-4-5', type: 'default', isHidden: false }], _didFillInProviderSettings: true, apiKey: 'sk-ant-x' }
+w.__settings = {
+	settingsOfProvider, modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' }, Autocomplete: null, Apply: null, SCM: null },
+	_modelOptions: [{ name: 'claude-sonnet-4-5', selection: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' } }], overridesOfModel: { anthropic: { 'claude-sonnet-4-5': { contextWindow: 100000 } } }, optionsOfModelSelection: { Chat: {}, Autocomplete: {}, Apply: {}, SCM: {} },
+	globalSettings: { chatMode: 'agent', autoApprove: {}, externalAgentId: null, dailySpendLimitUsd: null, autoAcceptLLMChanges: false, isOnboardingComplete: true },
+}
+if (w.__noModel) { w.__settings.modelSelectionOfFeature.Chat = null; w.__settings.settingsOfProvider.anthropic = { models: [], _didFillInProviderSettings: false, apiKey: '' }; w.__settings._modelOptions = [] }
+w.__policy = { state: { mode: 'balanced' } }
+const settingsSvc: any = {
+	get state() { return w.__settings },
+	setGlobalSetting(k: string, v: any) { log(`global:${k}=${JSON.stringify(v)}`); w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
+	setModelSelectionOfFeature(f: string, v: any) { log(`select:${f}=${v?.modelName}`) },
+}
+
+// ---- the conversation
+const thread = () => ({ id: 't1', createdAt: new Date().toISOString(), lastModified: new Date().toISOString(), messages: [] as any[], filesWithUserChanges: new Set(), state: { stagingSelections: [], currCheckpointIdx: null, focusedMessageIdx: undefined, linksOfMessageIdx: {} }, queued: [] as any[] })
+const T: any = thread()
+w.__chat = { state: { allThreads: { t1: T }, currentThreadId: 't1' }, streamState: {} as any, paused: undefined as any, usage: undefined as any }
+w.__thread = T
+const setThread = (patch: any) => { w.__chat.state = { ...w.__chat.state, allThreads: { t1: { ...w.__chat.state.allThreads.t1, ...patch } } }; notify() }
+w.__setThread = setThread
+w.__setStream = (s: any) => { w.__chat.streamState = { t1: s }; notify() }
+w.__addMessages = (...m: any[]) => setThread({ messages: [...w.__chat.state.allThreads.t1.messages, ...m] })
+
+const known: any = {
+	getCurrentThread: () => w.__chat.state.allThreads[w.__chat.state.currentThreadId],
+	setCurrentThreadState(p: any) { log(`threadstate:${Object.keys(p).join(',')}`); const t = w.__chat.state.allThreads.t1; setThread({ state: { ...t.state, ...p } }) },
+	setCurrentlyFocusedMessageIdx() { }, getCurrentMessageState: () => ({ stagingSelections: [], isBeingEdited: false }), setCurrentMessageState() { }, focusCurrentChat() { },
+	getThreadUsage: () => w.__chat.usage, getUsageToday: () => ({ costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }),
+	onDidChangeUsage: () => ({ dispose() { } }), onDidChangeProjectApprovals: () => ({ dispose() { } }),
+	getPause: () => w.__chat.paused, pauseRun() { log('pause'); w.__chat.paused = { reason: 'user' }; notify() }, resumeRun() { log('resume'); w.__chat.paused = undefined; notify() },
+	getCurrentProjectKey: () => 'C:\\work\\vader-app', listProjectGroups: () => [], getThreadStatus: () => 'idle', switchToThread() { }, canRememberForProject: () => true,
+	approveLatestToolRequest() { log('approve') }, rejectLatestToolRequest() { log('reject') }, clearThreadPlan() { }, addNewStagingSelection() { }, popStagingSelections() { },
+	openNewThread() { log('new-thread') },
+	queueMessage(_t: string, text: string) { log(`queue:${text}`); const th = w.__chat.state.allThreads.t1; if ((th.queued ?? []).length >= 5) return false; setThread({ queued: [...(th.queued ?? []), { id: 'q' + (th.queued ?? []).length + text.length, text }] }); return true },
+	removeQueuedMessage(_t: string, id: string) { log(`unqueue:${id}`); setThread({ queued: (w.__chat.state.allThreads.t1.queued ?? []).filter((m: any) => m.id !== id) }) },
+	async sendQueuedMessageNow(_t: string, id: string) { log(`sendnow:${id}`); setThread({ queued: (w.__chat.state.allThreads.t1.queued ?? []).filter((m: any) => m.id !== id) }) },
+	async compactThreadNow() { log('compact'); await new Promise(r => setTimeout(r, 150)); return w.__compactResult ?? 'done' },
+	async startNewChatWithSummary() { log('new-with-summary'); return w.__summaryResult ?? true },
+}
+const chat: any = new Proxy({}, {
+	get: (_t, k: string) => {
+		if (k === 'state') return w.__chat.state
+		if (k === 'streamState') return w.__chat.streamState
+		if (known[k]) return known[k]
+		if (w.__chatMethods?.[k]) return w.__chatMethods[k]
+		return (...a: any[]) => { log(`chat.${k}(${a.map(x => typeof x === 'string' ? x : '').join(',')})`); return undefined }
+	},
+})
+w.__chatMethods = {}
+const gateway: any = {
+	async startTask(a: any) { log(`task:${a.userMessage}`); if (w.__onTask) await w.__onTask(a) }, async cancelTask() { log('cancel'); if (w.__onCancel) await w.__onCancel() }, dismissError() { log('dismiss-error') },
+}
+const commands: any = { async executeCommand(id: string, ...a: any[]) { log(`command:${id}${a.length ? ':' + a.join(',') : ''}`) } }
+const keybinding: any = { lookupKeybinding: () => ({ getLabel: () => 'Ctrl+L' }) }
+const metrics: any = { capture() { } }
+const language: any = { guessLanguageIdByFilepathOrFirstLine: () => 'typescript' }
+const shell: any = { state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false }, setTab(t: string) { log(`shell:tab:${t}`) }, show() { log('shell:show') }, openEditor() { log('shell:editor') } }
+w.__shell = shell
+const empty: any = new Proxy({}, { get: () => () => undefined })
+w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
+
+createRoot(document.getElementById('root')!).render(<div className='vader-scope' style={{ width: 480, height: 820, display: 'flex', flexDirection: 'column', background: 'var(--vscode-sideBar-background, #18191a)' }}><SidebarChat /></div>)
+w.__mounted = true
