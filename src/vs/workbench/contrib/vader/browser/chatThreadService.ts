@@ -27,7 +27,9 @@ import { baseName } from '../common/externalAgents/externalAgentProtocol.js';
 import { IExternalAgentsService } from './externalAgents/externalAgentsService.js';
 import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
-import { ITaskCopyService } from './taskCopyService.js';
+import { ITaskCopyService } from './taskCopyService.js'
+import { ISkillService } from '../common/skills/skillService.js'
+import { selectSkills, toUsed } from '../common/skillMatch.js';
 import { EDITING_TOOLS } from '../common/taskCopyModel.js';
 import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
 import { createClineAgentRuntime } from './agentRuntime/clineRuntimeAdapter.js';
@@ -575,6 +577,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IExternalAgentsService private readonly _externalAgents: IExternalAgentsService,
 		@IDialogService private readonly _dialogService: IDialogService,
 		@ITaskCopyService private readonly _taskCopyService: ITaskCopyService,
+		@ISkillService private readonly _skillService: ISkillService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -2482,7 +2485,9 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
-		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState, ...(images && images.length > 0 ? { images } : {}) }
+		// the skills this task uses: the ones it names or fits (the others are only listed to the model), kept with the message so the chat can say so
+		const usedSkills = selectSkills(this._skillService.listActive().map(s => ({ id: s.id, name: s.name, description: s.description })), instructions).used.map(toUsed)
+		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState, ...(images && images.length > 0 ? { images } : {}), ...(usedSkills.length > 0 ? { skillsUsed: usedSkills } : {}) }
 		this._addMessageToThread(threadId, userHistoryElt)
 		if (this.state.allThreads[threadId]?.stopped) this._patchThread(threadId, { stopped: undefined })
 

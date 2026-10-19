@@ -8,7 +8,8 @@ import { VaderFileSnapshot } from './editCodeServiceTypes.js';
 import { AnthropicReasoning, RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { ToolCallParams, ToolName, ToolResult } from './toolsServiceTypes.js';
 import { GateInfo } from './gateModel.js';
-import { ChatImage } from './imageRules.js';
+import { ChatImage } from './imageRules.js'
+import { UsedSkill } from './skillMatch.js';
 
 export type ToolMessage<T extends ToolName> = {
 	role: 'tool';
@@ -85,6 +86,8 @@ export type ChatMessage =
 		displayContent: string; // content displayed to user  - allowed to be '', will be ignored
 		/** images sent with the message, to the model the person chose (common/imageRules.ts); optional so saved chats stay valid */
 		images?: ChatImage[];
+		/** the skills this message used, and why (common/skillMatch.ts): what was put in front of the model, and what the chat says under the message */
+		skillsUsed?: UsedSkill[];
 		selections: StagingSelectionItem[] | null; // the user's selection
 		state: {
 			stagingSelections: StagingSelectionItem[];

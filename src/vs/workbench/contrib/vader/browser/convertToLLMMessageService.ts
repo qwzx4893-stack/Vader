@@ -10,6 +10,7 @@ import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabi
 import { ChatImage, giveImagesToMessages, imagePlaceholder, sentWithImages as imagesKeptIn } from '../common/imageRules.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
 import { copyInstructions } from '../common/taskCopyModel.js';
+import { skillPrompt } from '../common/skillMatch.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IVaderSettingsService } from '../common/vaderSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/vaderSettingsTypes.js';
@@ -611,13 +612,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	// skill is still composed (it can still help), but visibly labeled unverified so the
 	// model - and the user reading the instructions layers in Settings - both see it hasn't
 	// been vetted. See common/skills/ and docs/integrations/skills.md.
-	private _renderActiveSkillInstructions(): string {
+	// Only the skills the conversation used are given in full (common/skillMatch.ts: a task that names a skill or fits what it says it is for); the others are listed by
+	// name and purpose with how to ask for one. Requests that are not chat (a quick edit, a commit message) carry no skills.
+	private _renderActiveSkillInstructions(usedIds: ReadonlySet<string> | undefined): string {
+		if (!usedIds) return '';
 		const active = this.skillService.listActive();
 		if (active.length === 0) return '';
-		return active.map(s => {
-			const label = s.trustState === 'review_required' ? `${s.name} (UNVERIFIED - not yet reviewed, treat with appropriate skepticism)` : s.name;
-			return `### Skill: ${label}\n${s.instructions}`;
-		}).join('\n\n');
+		const used = active.filter(s => usedIds.has(s.id)).map(s => ({ name: s.name, instructions: s.instructions, unverified: s.trustState === 'review_required' }));
+		const others = active.filter(s => !usedIds.has(s.id)).map(s => ({ name: s.name, description: s.description }));
+		return skillPrompt(used, others);
 	}
 
 	// Read the rules file of each workspace folder: .vaderrules, else AGENTS.md, else CLAUDE.md (common/instructions/workspaceRulesFiles.ts)
@@ -655,14 +658,14 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	// Get combined AI instructions, composed by Vader's layered instruction system
 	// (system invariants + policy summary + global settings + .vaderrules +
 	// memory), in fixed precedence order. See common/instructions/instructionsService.ts.
-	private _getCombinedAIInstructions(agentId?: string): string {
+	private _getCombinedAIInstructions(agentId?: string, usedSkillIds?: ReadonlySet<string>): string {
 		const globalAIInstructions = this.vaderSettingsService.state.globalSettings.aiInstructions;
 		const vaderRulesFileContent = this._getVaderRulesFileContents();
 		const agentInstructions = agentId ? this.agentsService.getAgent(agentId)?.instructions : undefined;
 		const workspaceRoot = this.workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
 		const projectMemory = this._renderMemoryRecords('project', workspaceRoot);
 		const agentMemory = agentId ? this._renderMemoryRecords('agent', agentId) : '';
-		const skill = this._renderActiveSkillInstructions();
+		const skill = this._renderActiveSkillInstructions(usedSkillIds);
 		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: vaderRulesFileContent, projectMemory, agent: agentInstructions, agentMemory, skill })
 	}
 
@@ -833,7 +836,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const modelSelectionOptions = this.vaderSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]
 
 		// Get combined AI instructions (including the running agent's own, if any)
-		const aiInstructions = this._getCombinedAIInstructions(agentId ?? undefined);
+		const usedSkillIds = new Set(chatMessages.flatMap(m => m.role === 'user' ? (m.skillsUsed ?? []).map(u => u.id) : []))
+		const aiInstructions = this._getCombinedAIInstructions(agentId ?? undefined, usedSkillIds);
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
 		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages, modelSupportsVision(providerName, modelName))

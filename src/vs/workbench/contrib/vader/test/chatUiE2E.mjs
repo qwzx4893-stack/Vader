@@ -700,6 +700,23 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== a skill was used (board S13)
+{
+	const { page, errors } = await newPage();
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.a] }), { u: { ...userMsg('Fill in the W-9 form'), skillsUsed: [{ id: 'pdf', name: 'pdf', reason: 'to fill in the form' }] }, a: asstMsg('Done.') });
+	await page.waitForSelector(TID('vader-skills-used'));
+	check('a message that used a skill says which, and why', (await page.locator(TID('vader-skill-used-line')).innerText()) === 'Used the skill pdf' && (await page.locator(TID('vader-skill-used-reason')).innerText()) === 'to fill in the form');
+	check('...and that skills are only used when a task matches what they say they are for', (await page.locator(TID('vader-skills-used')).getAttribute('title')) === 'Skills are only used when a task matches what they say they are for.');
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.a] }), { u: userMsg('Add a rate limiter'), a: asstMsg('Done.') });
+	check('a message that used none says nothing about skills', (await page.locator(TID('vader-skills-used')).count()) === 0);
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.a] }), { u: { ...userMsg('Make the report'), skillsUsed: [{ id: 'pdf', name: 'pdf', reason: 'to fill in the form' }, { id: 'xlsx', name: 'xlsx', reason: '' }] }, a: asstMsg('Done.') });
+	check('each skill has its own line, and one without a purpose has no reason', (await page.locator(TID('vader-skill-used-line')).count()) === 2 && (await page.locator(TID('vader-skill-used-reason')).count()) === 1);
+	await page.waitForTimeout(260);
+	await shot(page, '36-skill-used');
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== files dropped on the box (board S03)
 {
 	const { page, errors } = await newPage();

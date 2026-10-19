@@ -51,6 +51,7 @@ import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } fro
 import { ChatImage, checkImages, dataUrlOf, looksLikeImage, MAX_IMAGES } from '../../../../common/imageRules.js';
 import { chatImageOfFile, imagesOnClipboard } from './imageFiles.js';
 import { ImageChips, ImagesBlockedCard } from './ImageChips.js';
+import { SKILLS_FOOTNOTE } from '../../../../common/skillMatch.js'
 import { TaskCopyArea } from './TaskCopyCards.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
@@ -1449,6 +1450,11 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		</div>
 
 
+
+		{/* the skills this message used and why (board S13): what was put in front of the model, nothing more */}
+		{mode === 'display' && (chatMessage.skillsUsed?.length ?? 0) > 0 ? <div className='flex flex-col gap-0.5 px-1 pt-1.5 text-xs text-vader-fg-3' data-testid='vader-skills-used' title={SKILLS_FOOTNOTE}>
+			{chatMessage.skillsUsed!.map(u => <div key={u.id} className='flex items-baseline gap-2'><span data-testid='vader-skill-used-line'>Used the skill <code className='font-mono text-vader-fg-1'>{u.name}</code></span>{u.reason ? <span className='flex-1 text-right truncate' data-testid='vader-skill-used-reason'>{u.reason}</span> : null}</div>)}
+		</div> : null}
 
 		{/* looking back: a copy of the chat from before this message, to try another way; the original stays as it is */}
 		{mode === 'display' && messageIdx !== undefined && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
