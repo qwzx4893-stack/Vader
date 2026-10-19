@@ -76,7 +76,9 @@ const language: any = { guessLanguageIdByFilepathOrFirstLine: () => 'typescript'
 const shell: any = { state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false }, setTab(t: string) { log(`shell:tab:${t}`) }, show() { log('shell:show') }, openEditor() { log('shell:editor') } }
 w.__shell = shell
 const empty: any = new Proxy({}, { get: () => () => undefined })
-w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
+const memorySvc: any = { write(o: any) { log(`remember:${o.scope}:${o.scopeKey}:${o.label}:${o.content}`); return { id: 'm1' } } }
+const verifySvc: any = { async runIndependentVerification(o: any) { log(`review:${o.objective}`); await new Promise(r => setTimeout(r, 120)); return { evidence: {}, verdict: { passed: false, findings: [{ severity: 'blocker', description: 'x' }], summary: 'limiter.ts never clears old hits.' } } } }
+w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IMemoryService: memorySvc, IVerificationService: verifySvc, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
 
 createRoot(document.getElementById('root')!).render(<div className='vader-scope' style={{ width: '100%', height: 820, display: 'flex', flexDirection: 'column', background: 'var(--vscode-sideBar-background, #18191a)' }}><SidebarChat /></div>)
 w.__mounted = true

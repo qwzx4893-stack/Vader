@@ -10,6 +10,7 @@ import { isFeatureNameDisabled } from '../../../../common/vaderSettingsTypes.js'
 import { contextBanner, contextOverflow, contextShare, describePaste, messageChars, QueuedMessage } from '../../../../common/runStateModel.js'
 import { changedFilePaths } from '../../../../common/shellModel.js'
 import { formatUsd } from '../../../../common/usageAccounting.js'
+import { SlashCommand } from '../../../../common/slashCommands.js'
 
 // What the chat says about the run, in the shape of the interface boards S01 and S03: stopped by you, paused, finished with changes, messages that wait their turn, a
 // conversation that is getting full, no model to ask, a long paste folded to one line. Each card says what happened and offers what can be done, and is drawn
@@ -246,3 +247,23 @@ export const NoProjectCard = ({ onChatOnly }: { onChatOnly: () => void }) => {
 		</div>
 	</div>
 }
+
+// ---- commands (board R06, "Commands, after typing /")
+
+/** the commands offered while a line that begins with / is typed; the arrows move, Enter or a click runs the one that is marked */
+export const SlashMenu = ({ commands, index, onPick, onHover }: { commands: readonly SlashCommand[], index: number, onPick: (c: SlashCommand) => void, onHover: (i: number) => void }) =>
+	<div role='listbox' aria-label='Commands' data-testid='vader-slash-menu' className='motion-safe:animate-card-in rounded-xl border border-vader-border-2 bg-vader-bg-1 py-1 overflow-hidden'>
+		{commands.map((c, i) => <button key={c.id} type='button' role='option' aria-selected={i === index} data-testid='vader-slash-item'
+			className={`flex w-full items-center gap-4 h-8 px-3 text-left text-[13px] transition-colors duration-100 ${i === index ? 'bg-vader-bg-2-hover' : ''}`}
+			onMouseEnter={() => onHover(i)} onMouseDown={e => e.preventDefault()} onClick={() => onPick(c)}>
+			<span className='font-mono text-[12px] font-semibold text-vader-fg-1 w-[84px] shrink-0'>/{c.id}</span>
+			<span className='text-vader-fg-2 truncate'>{c.detail}</span>
+		</button>)}
+	</div>
+
+/** what a command did, or is doing, in one line above the box */
+export const SlashNote = ({ text, busy, onDismiss }: { text: string, busy: boolean, onDismiss: () => void }) =>
+	<div className='motion-safe:animate-card-in rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-2.5 flex items-center gap-3 text-[13px] text-vader-fg-2' data-testid='vader-slash-note' role='status'>
+		<span className='flex-1 leading-relaxed'>{text}</span>
+		{busy ? null : <button type='button' data-testid='vader-slash-note-dismiss' className='text-vader-fg-3 hover:text-vader-fg-1 text-sm' onClick={onDismiss}>Dismiss</button>}
+	</div>

@@ -378,6 +378,58 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== commands after / (board R06)
+{
+	const { page, errors } = await newPage();
+	const box = page.locator(INPUT);
+	check('no menu until a slash is typed', (await page.locator(TID('vader-slash-menu')).count()) === 0);
+	await box.fill('/');
+	await page.waitForSelector(TID('vader-slash-menu'));
+	const items = (await page.locator(TID('vader-slash-item')).allInnerTexts()).map(flat);
+	check('a slash offers the five commands, each with what it does', items.join(' | ') === '/plan Switch to plan mode | /review Check the changes with a second agent | /compact Summarise the earlier steps now | /remember Save a note for this project | /init Write an AGENTS.md for this project', items.join(' | '));
+	await page.waitForTimeout(260);
+	await shot(page, '16-slash-menu');
+	await box.fill('/re');
+	check('typing narrows the list', (await page.locator(TID('vader-slash-item')).count()) === 2);
+	await box.fill('/zzz');
+	check('a command that does not exist closes the menu', (await page.locator(TID('vader-slash-menu')).count()) === 0);
+	await box.fill('/pl');
+	await page.keyboard.press('Enter');
+	await page.waitForSelector(TID('vader-slash-note'));
+	check('Enter on /plan switches to plan mode, says so, and empties the box', (await log(page)).includes('global:chatMode="plan"') && (await page.locator(TID('vader-slash-note')).innerText()).includes('Plan mode.') && (await box.inputValue()) === '');
+	check('and it did not send a message', !(await log(page)).some(x => x.startsWith('task:')));
+	await box.fill('/');
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.includes('compact'));
+	check('the arrows move the mark, and Enter runs the marked command (/compact asks the chat to summarise)', true);
+	await page.waitForFunction(() => /summarised|too little|did not answer/.test(document.querySelector('[data-testid="vader-slash-note"]')?.textContent ?? ''));
+	await box.fill('/remember');
+	await page.keyboard.press('Enter');
+	check('/remember with no note asks for it, and keeps the box ready', (await box.inputValue()) === '/remember ' && (await page.locator(TID('vader-slash-note')).innerText()).includes('Write the note after /remember'));
+	await box.fill('/remember use pnpm, not npm');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('remember:')));
+	check('/remember with a note saves it for the project, as the person’s own', (await log(page)).includes('remember:project:C:/work/vader-app:use pnpm, not npm:use pnpm, not npm') && (await page.locator(TID('vader-slash-note')).innerText()).includes('Saved for vader-app.'));
+	await box.fill('/review');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => /The check found 1 blocker\./.test(document.querySelector('[data-testid="vader-slash-note"]')?.textContent ?? ''));
+	check('/review runs the independent check and says what it found', (await log(page)).some(x => x.startsWith('review:')) && (await page.locator(TID('vader-slash-note')).innerText()).includes('limiter.ts never clears old hits.'));
+	await box.fill('/init');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:Look at this project and write an AGENTS.md')));
+	check('/init switches to Agent and asks for an AGENTS.md', (await log(page)).includes('global:chatMode="agent"'));
+	await box.fill('/pl');
+	await page.keyboard.press('Escape');
+	check('Escape puts the menu away and leaves the text', (await page.locator(TID('vader-slash-menu')).count()) === 0 && (await box.inputValue()) === '/pl');
+	await box.fill('/');
+	await page.locator(TID('vader-slash-item')).nth(0).click();
+	check('a click on a command runs it too', (await log(page)).filter(x => x === 'global:chatMode="plan"').length >= 2);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== the context meter (board R06)
 {
 	const { page, errors } = await newPage();

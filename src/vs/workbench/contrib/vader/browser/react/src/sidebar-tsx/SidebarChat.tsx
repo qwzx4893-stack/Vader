@@ -42,7 +42,8 @@ import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
-import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
+import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
+import { INIT_PROMPT, noteLabel, parseSlash, slashMatches, SlashCommand } from '../../../../common/slashCommands.js';
 
 
 
@@ -3410,16 +3411,76 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	</ScrollToBottomContainer>
 
 
+	// commands: a line that begins with / offers them; each one calls the real service
+	const [typed, setTyped] = useState('')
+	const [slashIdx, setSlashIdx] = useState(0)
+	const [slashHidden, setSlashHidden] = useState(false)
+	const [slashNote, setSlashNote] = useState<{ text: string, busy: boolean } | undefined>()
+	const slashList = slashHidden ? undefined : slashMatches(typed)
+	const memoryService = accessor.get('IMemoryService')
+	const verificationService = accessor.get('IVerificationService')
+	const runSlash = useCallback(async (command: SlashCommand, arg: string) => {
+		const id = chatThreadsService.state.currentThreadId
+		const clear = () => { textAreaFnsRef.current?.setValue(''); setTyped(''); setInstructionsAreEmpty(true) }
+		const project = chatThreadsService.getCurrentProjectKey()
+		if (command.id === 'plan') {
+			vaderSettingsService.setGlobalSetting('chatMode', 'plan'); clear()
+			setSlashNote({ text: 'Plan mode. It writes a plan and changes nothing until you approve it.', busy: false })
+		}
+		else if (command.id === 'compact') {
+			clear(); setSlashNote({ text: 'Summarising the earlier steps...', busy: true })
+			const r = await chatThreadsService.compactThreadNow(id)
+			setSlashNote({ text: r === 'done' ? 'The earlier steps are summarised.' : r === 'nothing' ? 'There is too little to summarise yet.' : 'The model did not answer, so nothing was summarised.', busy: false })
+		}
+		else if (command.id === 'remember') {
+			if (!arg) { textAreaFnsRef.current?.setValue('/remember '); setTyped('/remember '); setSlashNote({ text: 'Write the note after /remember, then press Enter.', busy: false }); return }
+			if (!project) { setSlashNote({ text: 'Open a folder first: a note is kept for a project.', busy: false }); return }
+			memoryService.write({ scope: 'project', scopeKey: project, label: noteLabel(arg), content: arg, source: 'user_written' })
+			clear(); setSlashNote({ text: `Saved for ${projectNameOf(project)}. The agent reads it in this project from now on. You can change it in Settings, Memory.`, busy: false })
+		}
+		else if (command.id === 'init') {
+			clear(); vaderSettingsService.setGlobalSetting('chatMode', 'agent')
+			try { await agentGatewayService.startTask({ userMessage: INIT_PROMPT, threadId: id }) } catch (e) { console.error('Error while starting /init:', e) }
+		}
+		else if (command.id === 'review') {
+			const thread = chatThreadsService.state.allThreads[id]
+			const lastUser = [...(thread?.messages ?? [])].reverse().find(m => m.role === 'user')
+			const objective = lastUser && lastUser.role === 'user' && lastUser.displayContent ? lastUser.displayContent : 'Check the changes made in this project.'
+			clear(); setSlashNote({ text: 'Checking the changes with a second agent. It reads them and runs the project\u2019s checks, and cannot change anything...', busy: true })
+			try {
+				const { verdict } = await verificationService.runIndependentVerification({ objective })
+				const blockers = verdict.findings.filter(f => f.severity === 'blocker').length
+				setSlashNote({ text: `${verdict.passed ? 'The check passed.' : `The check found ${blockers} blocker${blockers === 1 ? '' : 's'}.`} ${verdict.summary}`.trim(), busy: false })
+			} catch (e) { setSlashNote({ text: 'The check could not run: ' + (e instanceof Error ? e.message : String(e)), busy: false }) }
+		}
+	}, [chatThreadsService, vaderSettingsService, agentGatewayService, memoryService, verificationService, textAreaFnsRef])
+	const pickSlash = useCallback((c: SlashCommand) => {
+		if (c.takesText) { textAreaFnsRef.current?.setValue('/' + c.id + ' '); setTyped('/' + c.id + ' '); setInstructionsAreEmpty(false); textAreaRef.current?.focus(); return }
+		void runSlash(c, '')
+	}, [runSlash, textAreaFnsRef, textAreaRef])
+
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
+		setTyped(newStr); setSlashIdx(0); setSlashHidden(false)
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		if (slashList && slashList.length > 0 && !e.nativeEvent.isComposing) {
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx(i => (i + (e.key === 'ArrowDown' ? 1 : slashList.length - 1)) % slashList.length); return }
+			if (e.key === 'Escape') { e.preventDefault(); setSlashHidden(true); return }
+			if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+				e.preventDefault()
+				const whole = parseSlash(typed)
+				if (whole) void runSlash(whole.command, whole.arg)
+				else pickSlash(slashList[Math.min(slashIdx, slashList.length - 1)])
+				return
+			}
+		}
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 			onSubmit()
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onAbort, isRunning])
+	}, [onSubmit, onAbort, isRunning, slashList, slashIdx, typed, runSlash, pickSlash])
 
 	const inputChatArea = <VaderChatArea
 		featureName='Chat'
@@ -3484,6 +3545,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const aboveComposer = <div className='flex flex-col gap-2'>
 		<ErrorBoundary><NoModelCard /></ErrorBoundary>
 		{!isLandingPage ? <ErrorBoundary><OfflineBanner /></ErrorBoundary> : null}
+		{slashNote ? <ErrorBoundary><SlashNote text={slashNote.text} busy={slashNote.busy} onDismiss={() => setSlashNote(undefined)} /></ErrorBoundary> : null}
+		{slashList && slashList.length > 0 ? <ErrorBoundary><SlashMenu commands={slashList} index={Math.min(slashIdx, slashList.length - 1)} onPick={pickSlash} onHover={setSlashIdx} /></ErrorBoundary> : null}
 		{secretHits ? <ErrorBoundary><SecretBlockedCard hits={secretHits} onEdit={() => { setSecretHits(null); textAreaRef.current?.focus() }} onDismiss={() => setSecretHits(null)} /></ErrorBoundary> : null}
 		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
 		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
