@@ -89,11 +89,12 @@ export const autocompleteScenarios = [
 		timeout: 150_000,
 		fn: async (t) => {
 			await t.ui.runCommand(t.page, 'Vader: Open Settings');
-			await t.page.getByText('Editor Features', { exact: true }).first().click({ timeout: 20_000 });
+			await t.page.locator('[data-testid="vader-settings-nav-editor"]').click({ timeout: 20_000 });
 			await t.sleep(800);
-			await t.page.getByText('Disabled', { exact: true }).first().locator('xpath=..').locator('div').first().click({ force: true });
+			await t.page.locator('[data-testid="vader-editor-autocomplete"]').click();
 			await t.sleep(800);
-			t.check('autocomplete is switched on in settings', await t.page.getByText('Enabled', { exact: true }).first().isVisible());
+			t.check('autocomplete is switched on in settings', (await t.page.locator('[data-testid="vader-editor-autocomplete"]').getAttribute('aria-checked')) === 'true');
+			t.check('and a model that can fill in the middle is chosen for it', await t.waitFor(async () => /codestral|fim/i.test(await t.page.locator('[data-testid="vader-editor-model-autocomplete"]').evaluate(e => e.value).catch(() => '')), 10_000));
 			await t.page.locator('[data-testid="vader-settings-close"]').click(); // close the Settings page
 			t.useFim(({ prompt, suffix }) => '  return a + b;');
 			await t.ui.openFile(t.page, 'app.js');

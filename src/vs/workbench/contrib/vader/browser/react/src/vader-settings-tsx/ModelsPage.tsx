@@ -53,6 +53,7 @@ const ProviderBody = ({ p, onOverrides }: { p: ProviderName, onOverrides: (t: Ov
 	const shownCount = models.filter(m => !m.isHidden).length
 	const list = listed ? cloud[p as keyof typeof cloud] as any : undefined
 
+	// a saved secret is shown masked; while it is being typed or replaced the field is a real input (focus keeps it one, so typing is never cut off)
 	const [replacing, setReplacing] = useState<{ [name: string]: boolean }>({})
 	const [test, setTest] = useState<{ at: number, ms?: number } | undefined>()
 	const [adding, setAdding] = useState(false)
@@ -81,7 +82,7 @@ const ProviderBody = ({ p, onOverrides }: { p: ProviderName, onOverrides: (t: Ov
 				return <label key={n} className='c' style={{ gap: 5 }}><span className='hint'>{title}</span>
 					<span className='fld r' style={{ gap: 8 }}>
 						{isKey ? <><span className='mo fl tr' data-testid={`vader-provider-${n}-masked`}>{value.slice(0, 5)}{'•'.repeat(8)}{value.slice(-4)}</span><button className='tx' style={{ height: 22, padding: '0 4px' }} data-testid={`vader-provider-${n}-replace`} onClick={() => setReplacing(r => ({ ...r, [n]: true }))}>Replace</button></>
-							: <input className={isPasswordField ? 'fl mo' : 'fl'} data-testid={`vader-provider-${n}`} type={isPasswordField ? 'password' : 'text'} autoComplete='off' spellCheck={false} aria-label={title} placeholder={`${title} (${placeholder})`} value={value} onChange={e => { void settings.setSettingOfProvider(p, n, e.target.value) }} onBlur={() => setReplacing(r => ({ ...r, [n]: false }))} />}
+							: <input className={isPasswordField ? 'fl mo' : 'fl'} data-testid={`vader-provider-${n}`} type={isPasswordField ? 'password' : 'text'} autoComplete='off' spellCheck={false} aria-label={title} placeholder={`${title} (${placeholder})`} value={value} autoFocus={!!replacing[n]} onFocus={() => setReplacing(r => ({ ...r, [n]: true }))} onChange={e => { void settings.setSettingOfProvider(p, n, e.target.value) }} onBlur={() => setReplacing(r => ({ ...r, [n]: false }))} />}
 					</span></label>
 			})}
 		</div>

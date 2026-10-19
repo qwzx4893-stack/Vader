@@ -2,7 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React from 'react'
+import React, { useEffect } from 'react'
 import { useAccessor, useSettingsState } from '../util/services.js'
 import { ProviderLogo } from '../util/ProviderLogo.js'
 import { FeatureName, ModelSelection, modelSelectionsEqual } from '../../../../common/vaderSettingsTypes.js'
@@ -28,6 +28,9 @@ export const FeatureModelSelect = ({ feature, testId, special, onModel, width = 
 	const options: Option[] = state._modelOptions.filter((o: Option) => filter(o.selection, { chatMode: state.globalSettings.chatMode, overridesOfModel: state.overridesOfModel }))
 	const chosen: ModelSelection | null = state.modelSelectionOfFeature[feature]
 	const current = chosen && options.some(o => modelSelectionsEqual(o.selection, chosen)) ? chosen : undefined
+	// a feature with no usable choice (a provider was removed, or the feature needs a kind of model) takes the first model it can use, unless it is off or follows the chat
+	const needsPick = !special?.active && options.length > 0 && !current
+	useEffect(() => { if (needsPick) settings.setModelSelectionOfFeature(feature, options[0].selection) }, [needsPick, feature]) // eslint-disable-line react-hooks/exhaustive-deps
 	if (options.length === 0 && !special) return <span className='t3' data-testid={testId} style={{ maxWidth: width, textAlign: 'right' }}>{emptyMessage?.message ?? 'No model is set up for this yet'}</span>
 	const value = special?.active ? '' : current ? key(current) : ''
 	return <span className='fld r' style={{ gap: 8, width }}>{!special?.active && current ? <ProviderLogo providerName={current.providerName} size={14} /> : null}

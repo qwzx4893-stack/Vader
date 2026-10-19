@@ -22,6 +22,7 @@ import { realLlmScenarios } from './scenarios/realLlm.mjs';
 import { realLlmTaskScenarios, oracleTaskScenarios } from './scenarios/realLlmTasks.mjs';
 import { externalAgentScenarios } from './scenarios/externalAgents.mjs';
 import { runPrivacyGroup } from './scenarios/privacy.mjs';
+import { runShellGroup } from './scenarios/shell.mjs';
 import { runPersistenceGroup, runUpgradeGroup } from './scenarios/persistence.mjs';
 
 if (!config.exe || !fs.existsSync(config.exe)) { console.error(`VADER_EXE missing or not found: ${config.exe}`); process.exit(2); }
@@ -35,6 +36,7 @@ await runGroup({ name: 'external-agents', model: 'gpt-4o', scenarios: externalAg
 await runGroup({ name: 'no-workspace', model: 'gpt-4o', noWorkspace: true, scenarios: noWorkspaceScenarios });
 await runGroup({ name: 'agent-tasks', model: 'gpt-4o', scenarios: oracleTaskScenarios });
 await runGroup({ name: 'autocomplete', model: 'codestral-latest', scenarios: autocompleteScenarios });
+await runShellGroup();
 await runPersistenceGroup();
 await runUpgradeGroup();
 await runPrivacyGroup();

@@ -31,13 +31,22 @@ export function loadPlaywright() {
 
 /**
  * @param {{ exe: string, workspace?: string, userDataDir?: string, extensionsDir?: string, port?: number,
- *           extraArgs?: string[], env?: Record<string,string>, label?: string }} opts
+ *           extraArgs?: string[], env?: Record<string,string>, label?: string, window?: boolean }} opts
  */
 export async function launchApp(opts) {
 	const { chromium } = loadPlaywright();
 	const port = opts.port ?? await freePort();
 	const userDataDir = opts.userDataDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-ud-'));
 	const extensionsDir = opts.extensionsDir ?? fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-ext-'));
+	// The app opens in the Vader window (a page over the editor). The scenarios that drive the editor, its tabs, the Source Control view and so on need the
+	// editor layout, so it is the default here; a scenario that is about the window asks for it with `window: true`.
+	if (!opts.window) {
+		const userSettings = path.join(userDataDir, 'User', 'settings.json');
+		let current = {};
+		try { current = JSON.parse(fs.readFileSync(userSettings, 'utf8')); } catch { /* none yet */ }
+		fs.mkdirSync(path.dirname(userSettings), { recursive: true });
+		fs.writeFileSync(userSettings, JSON.stringify({ ...current, 'vader.window.agentsFirst': false }));
+	}
 	const args = [
 		`--remote-debugging-port=${port}`, `--user-data-dir=${userDataDir}`, `--extensions-dir=${extensionsDir}`,
 		'--skip-welcome', '--skip-release-notes', '--disable-telemetry', '--disable-workspace-trust', '--disable-updates',

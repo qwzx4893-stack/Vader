@@ -34,20 +34,16 @@ export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key'
 /** In the Settings page: point the OpenAI-Compatible provider at `baseURL` and add one model (this is how a user adds their first provider). */
 export async function configureOpenAICompatible(page, { baseURL, apiKey = 'sk-test-key', model }) {
 	await runCommand(page, 'Vader: Open Settings');
-	await page.locator(TID('vader-settings-nav-providers')).click({ timeout: 20_000 });
-	await sleep(600);
-	const block = page.locator('.vader-scope h3', { hasText: 'OpenAI-Compatible' }).first().locator('xpath=../..');
-	await block.locator('input[placeholder^="baseURL (https://my-website.com"]').first().fill(baseURL);
-	await block.locator('input[placeholder^="API Key (sk-key"]').first().fill(apiKey);
-	await page.locator(TID('vader-settings-nav-models')).click();
-	await sleep(500);
-	const settings = page.locator(TID('vader-settings-page'));   // the chat behind the page has its own "Add a model" prompt: stay inside the page
-	const visible = (l) => l.filter({ visible: true });         // the sections of the other tabs stay in the DOM, hidden
-	await visible(settings.getByText('Add a model')).last().click();
-	await visible(settings.getByText('Provider Na', { exact: false })).first().click();
-	await visible(settings.getByText('OpenAI-Compatible', { exact: true })).last().click();
-	await visible(settings.locator('input[placeholder="Model Name"]')).first().fill(model);
-	await visible(settings.getByText('Add', { exact: true })).last().click();
+	await page.locator(TID('vader-settings-nav-models')).click({ timeout: 20_000 });
+	// the providers are one list on the Models page: search for the one that takes any OpenAI-compatible address, and open it
+	await page.locator(TID('vader-models-search')).fill('compatible');
+	const row = page.locator('[data-testid="vader-provider-row"][data-provider="openAICompatible"]');
+	await row.locator(TID('vader-provider-toggle')).click({ timeout: 20_000 });
+	await row.locator('input[placeholder^="baseURL (https://my-website.com"]').first().fill(baseURL);
+	await row.locator('input[placeholder^="API Key (sk-key"]').first().fill(apiKey);
+	await row.locator(TID('vader-provider-add-open')).click();
+	await row.locator(TID('vader-provider-add-input')).fill(model);
+	await row.locator(TID('vader-provider-add')).click();
 	await sleep(400);
 	await page.locator(TID('vader-settings-close')).click();
 	await sleep(300);

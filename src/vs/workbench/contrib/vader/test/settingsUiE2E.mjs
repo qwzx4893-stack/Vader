@@ -459,8 +459,8 @@ async function layoutProblems(page) {
 
 	const oa = page.locator(`${TID('vader-provider-row')}[data-provider=openAI]`);
 	await oa.locator(TID('vader-provider-add-key')).click();
-	await oa.locator(TID('vader-provider-apiKey')).fill('sk-proj-abcdef');
-	check('typing a key writes it for that provider', (await log(page)).some(x => x.startsWith('provider:openAI.apiKey=sk-proj-abcdef')));
+	await oa.locator(TID('vader-provider-apiKey')).pressSequentially('sk-proj-abcdef');
+	check('typing a key one character at a time keeps the field a field, and writes the whole key for that provider', (await log(page)).some(x => x === 'provider:openAI.apiKey=sk-proj-abcdef'), (await log(page)).filter(x => x.startsWith('provider:openAI')).join(','));
 	await oa.locator(TID('vader-provider-test')).click();
 	await oa.locator('[data-status=error]').waitFor();
 	check('a provider that cannot be reached says so, and nothing is made up', (await oa.locator(TID('vader-provider-status')).innerText()).includes('Could not reach the provider'));
