@@ -98,7 +98,7 @@ for (const p of ['/w/p/.vscode/tasks.json', '/w/p/.vscode/settings.json', '/w/p/
 for (const p of ['/w/p/src/index.ts', '/w/p/package.json', '/w/p/.vscode/extensions.json', '/w/p/README.md', '/w/p/.github/workflows/ci.yml'])
 	check(`writing ${p} does not ask`, !askWrite(p));
 for (const p of ['/home/me/.git-credentials', '/home/me/.config/gh/hosts.yml', '/home/me/.config/gcloud/credentials.db', '/home/me/.azure/accessTokens.json', '/home/me/.gnupg/private-keys-v1.d/x.key', '/home/me/.pgpass', '/home/me/.pypirc', '/w/p/infra/prod.tfvars', '/w/p/id_ecdsa', '/w/p/release.jks'])
-	check(`reading ${p} asks (credential file)`, verdict('file-read', [p]) === 'ask');
+	check(`reading ${p} asks or is refused (credential file; a private key or a stored login is refused outright, vader.deny.credential-files)`, ['ask', 'deny'].includes(verdict('file-read', [p])) && (!/\.git-credentials$|private-keys-v1\.d|id_ecdsa$/.test(p) || verdict('file-read', [p]) === 'deny'));
 for (const p of ['/proc/self/environ', '/proc/1234/environ', '/proc/1234/mem', '/proc/42/cmdline', '/home/me/.bash_history', '/home/me/.zsh_history', 'c:/Users/me/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt', '/home/me/.config/google-chrome/Default/Login Data', '/home/me/.mozilla/firefox/abc.default/logins.json', '/home/me/Library/Keychains/login.keychain-db'])
 	check(`reading ${p} asks (process environment, shell history or browser credential store)`, verdict('file-read', [p]) === 'ask');
 check('/proc/self/stat is an ordinary read', verdict('file-read', ['/proc/self/stat']) === 'allow');
