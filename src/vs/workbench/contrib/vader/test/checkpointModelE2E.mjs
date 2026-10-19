@@ -58,6 +58,13 @@ check('the last step is compared with what the file is now, and left out when it
 }
 check('changes are said as the board says them', C.changeWords(12, 1) === '+12 −1' && C.changeWords(48, 0) === '+48' && C.changeWords(0, 3) === '−3');
 
+// ---- a file made or deleted is a step with its own words
+{
+	const cpOf = (type) => ({ role: 'checkpoint', type, vaderFileSnapshotOfURI: {} });
+	const made = C.stepsOfThread([cpOf('user_edit'), { role: 'user', displayContent: 'x' }, cpOf('tool_edit'), { role: 'tool', type: 'success', name: 'create_file_or_folder', params: { uri: { fsPath: '/p/src/limiter.ts' } } }, cpOf('tool_edit'), { role: 'tool', type: 'success', name: 'delete_file_or_folder', params: { uri: { fsPath: '/p/old.ts' } } }], () => undefined);
+	check('a step that made a file, and one that deleted a file, say so', made[1].label === 'Created limiter.ts' && made[2].label === 'Deleted old.ts', JSON.stringify(made.map(m => m.label)));
+}
+
 // ---- the two versions side by side
 {
 	const nums = (n, f = i => 'line ' + i) => Array.from({ length: n }, (_, i) => f(i + 1)).join('\n');

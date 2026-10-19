@@ -6,6 +6,8 @@
 // changed is the difference between those files and the same files at the next checkpoint that kept them (or as they are now). Pure: the lines are compared here, and
 // where a file is now is asked of the caller.
 
+import { opsLabel } from './checkpointFileOps.js';
+
 export type SnapshotLike = { readonly entireFileCode: string } | undefined;
 
 export type MessageLike = {
@@ -58,6 +60,10 @@ function labelOf(messages: readonly MessageLike[], at: number): string {
 	for (let i = at + 1; i < messages.length; i++) {
 		const m = messages[i];
 		if (m.role === 'checkpoint' && (cp.type === 'tool_edit' || m.type === 'user_edit')) break;
+		if (cp.type === 'tool_edit' && m.role === 'tool' && (m.name === 'create_file_or_folder' || m.name === 'delete_file_or_folder')) {
+			const u = (m.params as { uri?: { fsPath?: string } | string } | undefined)?.uri;
+			return opsLabel(m.name, typeof u === 'string' ? u : u?.fsPath);
+		}
 		if (cp.type === 'tool_edit' && m.role === 'tool' && (m.name === 'edit_file' || m.name === 'rewrite_file')) {
 			const u = (m.params as { uri?: { fsPath?: string } | string } | undefined)?.uri;
 			const p = typeof u === 'string' ? u : u?.fsPath;

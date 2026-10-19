@@ -9,6 +9,7 @@ import { AnthropicReasoning, RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { ToolCallParams, ToolName, ToolResult } from './toolsServiceTypes.js';
 import { GateInfo } from './gateModel.js';
 import { ChatImage } from './imageRules.js'
+import { FileOps } from './checkpointFileOps.js'
 import { UsedSkill } from './skillMatch.js';
 
 export type ToolMessage<T extends ToolName> = {
@@ -75,6 +76,8 @@ export type CheckpointEntry = {
 	userModifications: {
 		vaderFileSnapshotOfURI: { [fsPath: string]: VaderFileSnapshot | undefined };
 	};
+	/** files the agent made or deleted right after this checkpoint, so that going back can remove or bring them back (common/checkpointFileOps.ts) */
+	fileOps?: FileOps;
 }
 
 

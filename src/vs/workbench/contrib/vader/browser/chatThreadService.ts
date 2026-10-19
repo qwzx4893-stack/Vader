@@ -56,7 +56,9 @@ import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
+import { IFileService, IFileStat } from '../../../../platform/files/common/files.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
+import { FileAction, FileOps, MAX_KEPT_FILE_BYTES, MAX_KEPT_FOLDER_FILES, redoActions, undoActions } from '../common/checkpointFileOps.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IPolicyService } from '../common/policy/policyService.js';
@@ -1462,6 +1464,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				const inCopy = !!this._taskCopyService.copyOf(threadId)
 				if (inCopy && (toolName === 'run_command' || toolName === 'run_persistent_command' || toolName === 'run_verification')) { await this._taskCopyService.saveOpenFiles(threadId) }
 				const callParams = this._taskCopyService.remapToolParams(threadId, toolName, toolParams as object)
+				if (toolName === 'create_file_or_folder' || toolName === 'delete_file_or_folder') { await this._recordFileOps(threadId, toolName, callParams as { uri: URI, isFolder?: boolean }) }
 				const { result, interruptTool } = await this._toolsService.callTool[toolName](callParams as any)
 				const interruptor = () => { interrupted = true; interruptTool?.() }
 				resolveInterruptor(interruptor)
@@ -2233,6 +2236,59 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		})
 	}
 	// call this right after LLM edits a file
+	// A file the agent makes or deletes is kept with a checkpoint taken just before, so that going back can remove it or bring it back (common/checkpointFileOps.ts). A deleted file is
+	// kept with its text, up to a size; a bigger one is deleted without that safety net.
+	private async _recordFileOps(threadId: string, toolName: 'create_file_or_folder' | 'delete_file_or_folder', params: { uri: URI, isFolder?: boolean }): Promise<void> {
+		try {
+			const ops: FileOps = { created: [], createdFolders: [], deleted: [] }
+			const uri = params.uri
+			if (toolName === 'create_file_or_folder') {
+				if (await this._fileService.exists(uri)) return // nothing new is made
+				if (params.isFolder) ops.createdFolders.push(uri.fsPath); else ops.created.push(uri.fsPath)
+			} else {
+				const stat = await this._fileService.resolve(uri, { resolveMetadata: true }).catch(() => undefined)
+				if (!stat) return
+				const keep = async (s: IFileStat, budget: { files: number }): Promise<void> => {
+					if (s.isDirectory) {
+						const dir = await this._fileService.resolve(s.resource, { resolveMetadata: true }).catch(() => undefined)
+						for (const c of dir?.children ?? []) { if (budget.files > 0) await keep(c, budget) }
+					} else if (s.isFile && budget.files > 0 && (s.size ?? 0) <= MAX_KEPT_FILE_BYTES) {
+						const content = (await this._fileService.readFile(s.resource)).value.toString()
+						ops.deleted.push({ fsPath: s.resource.fsPath, content })
+						budget.files--
+					}
+				}
+				await keep(stat, { files: MAX_KEPT_FOLDER_FILES })
+			}
+			if (ops.created.length + ops.createdFolders.length + ops.deleted.length === 0) return
+			this._addCheckpoint(threadId, { role: 'checkpoint', type: 'tool_edit', vaderFileSnapshotOfURI: {}, userModifications: { vaderFileSnapshotOfURI: {} }, fileOps: ops })
+		} catch { /* the file could not be looked at: the tool runs, and going back will not cover it */ }
+	}
+
+	private async _applyFileActions(actions: readonly FileAction[]): Promise<void> {
+		for (const a of actions) {
+			const uri = URI.file(a.fsPath)
+			try {
+				if (a.kind === 'delete') { if (await this._fileService.exists(uri)) await this._fileService.del(uri, { useTrash: true }).catch(() => this._fileService.del(uri)) }
+				else if (a.kind === 'write') { await this._fileService.writeFile(uri, VSBuffer.fromString(a.content)) }
+				else if (a.kind === 'make-folder') { await this._fileService.createFolder(uri) }
+				else if (a.kind === 'remove-folder-if-empty') {
+					const dir = await this._fileService.resolve(uri).catch(() => undefined)
+					if (dir && dir.isDirectory && (dir.children?.length ?? 0) === 0) await this._fileService.del(uri)
+				}
+			} catch { /* one file that cannot be changed does not stop the others */ }
+		}
+	}
+
+	private _fileOpsBetween(thread: { messages: readonly ChatMessage[] }, loIdx: number, hiIdx: number): FileOps[] {
+		const out: FileOps[] = []
+		for (let k = Math.max(0, loIdx); k <= hiIdx && k < thread.messages.length; k++) {
+			const m = thread.messages[k]
+			if (m.role === 'checkpoint' && m.fileOps) out.push(m.fileOps)
+		}
+		return out
+	}
+
 	private _addToolEditCheckpoint({ threadId, uri, }: { threadId: string, uri: URI }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
@@ -2396,6 +2452,8 @@ A B C D E F G H I J
 We need to apply latest change for anything that happened between from+1 and to.
 We only need to do it for files that were edited since `from`, ie files between from+1...to.
 */
+		// going forward again: files made are made again (empty; the edit checkpoints below put their text back) and files deleted are deleted again, before the edits are applied
+		if (toIdx > fromIdx) { void this._applyFileActions(redoActions(this._fileOpsBetween(thread, fromIdx + 1, toIdx))) }
 		if (toIdx > fromIdx) {
 			const { lastIdxOfURI } = this._getCheckpointsBetween({ threadId, loIdx: fromIdx + 1, hiIdx: toIdx })
 			for (const fsPath in lastIdxOfURI) {
@@ -2413,6 +2471,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 			}
 		}
 
+		// files the agent made or deleted between the two checkpoints: undone after the edits are put back, so a file made and then edited is not made again by its own snapshot
+		if (toIdx < fromIdx) { void this._applyFileActions(undoActions(this._fileOpsBetween(thread, toIdx + 1, fromIdx))) }
 		this._setThreadState(threadId, { currCheckpointIdx: toIdx })
 	}
 
