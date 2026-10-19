@@ -8,6 +8,7 @@ import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js'
 import { Icon, Spinner } from '../vader-shell-tsx/icons.js'
 import { Note, PageHead, Switch } from './ui.js'
 import { explainStart, startingHint, toolsLine } from '../../../../common/mcpStateWords.js'
+import { McpToolChangedCard } from '../sidebar-tsx/McpToolChanged.js'
 
 // MCP servers (board R16): the servers the agent can use. A server runs on this computer or talks to a service, and each tool it offers goes through the safety gate.
 // State is what the app's MCP service reports (running, starting, stopped, failed with the real error); the switch is the real on/off of that server.
@@ -42,6 +43,8 @@ export const McpPage = () => {
 						const st = STATE[server.status] ?? STATE.offline
 						const tools = server.tools ?? []
 						const isOpen = open === name
+						const pending = mcp.pendingToolsOf(name)
+						const keptOff = settings.mcpUserStateOfName[name]?.offTools ?? []
 						return <div key={name} data-testid='vader-mcp-server' data-server={name} data-status={server.status} style={{ borderBottom: '1px solid var(--ln)' }}>
 							<div className='td' style={{ gridTemplateColumns: '38px minmax(0,1fr) 130px 56px', height: 58, padding: '0 2px', borderBottom: 0 }}>
 								<span className='logo sm'><Icon k='plug' /></span>
@@ -65,9 +68,10 @@ export const McpPage = () => {
 									</span>
 								</div>
 							})() : null}
+							{pending.length > 0 ? <div style={{ padding: '0 2px 14px 52px', maxWidth: 620 }}><McpToolChangedCard server={name} pending={pending} onKeepOff={() => { void mcp.keepToolsOff(name, pending) }} onAllow={() => { void mcp.allowTools(name, pending) }} onRemove={() => { void mcp.removeServer(name) }} /></div> : null}
 							{isOpen ? <div className='c' style={{ gap: 8, padding: '0 2px 14px 52px' }} data-testid='vader-mcp-tools'>
 								<span className='hint'>Tools it offers</span>
-								{tools.length === 0 ? <span className='t3'>{on ? 'None yet.' : 'Switch it on to see its tools.'}</span> : <><div className='r' style={{ gap: 6, flexWrap: 'wrap' }}>{tools.map(t => <span key={t.name} title={t.description} className='mo t2' style={{ border: '1px solid var(--ln2)', borderRadius: 5, padding: '2px 7px' }}>{toolName(t.name)}</span>)}</div><span className='hint' data-testid='vader-mcp-tools-line'>{toolsLine(tools.length)}</span></>}
+								{tools.length === 0 ? <span className='t3'>{on ? 'None yet.' : 'Switch it on to see its tools.'}</span> : <><div className='r' style={{ gap: 6, flexWrap: 'wrap' }}>{tools.map(t => <span key={t.name} role={keptOff.includes(toolName(t.name)) ? 'button' : undefined} tabIndex={keptOff.includes(toolName(t.name)) ? 0 : undefined} data-testid='vader-mcp-tool' onClick={keptOff.includes(toolName(t.name)) ? () => { void mcp.allowTools(name, [toolName(t.name)]) } : undefined} title={pending.includes(toolName(t.name)) ? 'New: waiting for your answer' : keptOff.includes(toolName(t.name)) ? 'Kept off. Click to allow it' : t.description} data-state={pending.includes(toolName(t.name)) ? 'new' : keptOff.includes(toolName(t.name)) ? 'off' : 'on'} className='mo t2' style={{ border: '1px solid var(--ln2)', borderRadius: 5, padding: '2px 7px', opacity: pending.includes(toolName(t.name)) || keptOff.includes(toolName(t.name)) ? .55 : 1, textDecoration: keptOff.includes(toolName(t.name)) ? 'line-through' : undefined }}>{toolName(t.name)}</span>)}</div><span className='hint' data-testid='vader-mcp-tools-line'>{toolsLine(tools.length)}</span></>}
 							</div> : null}
 						</div>
 					})}

@@ -26,7 +26,7 @@ export const useCtrlKZoneStreamingState = () => ({})
 export const useCommandBarURIListener = () => { }
 export const useCommandBarState = () => { useTick(); return { stateOfURI: {}, sortedURIs: [] } }
 export const useActiveURI = () => ({ uri: undefined })
-export const useMCPServiceState = () => { useTick(); return { mcpServerOfName: {} } }
+export const useMCPServiceState = () => { useTick(); return { mcpServerOfName: w.__mcpServers ?? {} } }
 export const useAgentsServiceState = () => { useTick(); return { agents: [] } }
 export const usePolicyServiceState = () => { useTick(); return w.__policy.state }
 export const useModelRouterServiceState = () => { useTick(); return { mode: 'manual', categoryOverrides: {} } }

@@ -53,6 +53,7 @@ import { chatImageOfFile, imagesOnClipboard } from './imageFiles.js';
 import { ImageChips, ImagesBlockedCard } from './ImageChips.js';
 import { SKILLS_FOOTNOTE } from '../../../../common/skillMatch.js'
 import { TaskCopyArea } from './TaskCopyCards.js';
+import { McpToolChangedArea } from './McpToolChanged.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
@@ -3662,6 +3663,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		{secretHits ? <ErrorBoundary><SecretBlockedCard hits={secretHits} onEdit={() => { setSecretHits(null); textAreaRef.current?.focus() }} onDismiss={() => setSecretHits(null)} /></ErrorBoundary> : null}
 		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
 		<ErrorBoundary><TaskCopyArea threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
+		<ErrorBoundary><McpToolChangedArea /></ErrorBoundary>
 		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
 		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>
 	</div>

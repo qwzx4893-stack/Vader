@@ -14,11 +14,12 @@ import { IProductService } from '../../../../platform/product/common/productServ
 import { VSBuffer } from '../../../../base/common/buffer.js';
 import { IChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { IMainProcessService } from '../../../../platform/ipc/common/mainProcessService.js';
-import { MCPServerOfName, MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, MCPToolCallParams, RawMCPToolCall, MCPServerEventResponse } from './mcpServiceTypes.js';
+import { MCPServerOfName, MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, MCPToolCallParams, RawMCPToolCall, MCPServerEventResponse, removeMCPToolNamePrefix } from './mcpServiceTypes.js';
 import { Event, Emitter } from '../../../../base/common/event.js';
 import { InternalToolInfo } from './prompt/prompts.js';
 import { IVaderSettingsService } from './vaderSettingsService.js';
 import { MCPUserStateOfName } from './vaderSettingsTypes.js';
+import { allowTools, keepToolsOff, reviewTools, toolCallRefusal } from './mcpToolReview.js';
 
 
 type MCPServiceState = {
@@ -47,6 +48,10 @@ export interface IMCPService {
 	onDidChangeState: Event<void>;
 
 	getMCPTools(): InternalToolInfo[] | undefined;
+	/** the tools a server added since the person set it up, waiting for an answer ("A tool changed", board S07) */
+	pendingToolsOf(serverName: string): string[];
+	allowTools(serverName: string, names: string[]): Promise<void>;
+	keepToolsOff(serverName: string, names: string[]): Promise<void>;
 	callMCPTool(toolData: MCPToolCallParams): Promise<{ result: RawMCPToolCall }>;
 	stringifyResult(result: RawMCPToolCall): string
 }
@@ -146,8 +151,37 @@ class MCPService extends Disposable implements IMCPService {
 					[serverName]: newServer
 				}
 			}
+			// the first time a server lists its tools, those are the tools the person is adding it for: they are recorded as allowed, and later additions wait for an answer
+			if (newServer.status === 'success' && newServer.tools) void this._recordFirstLook(serverName, newServer.tools.map(t => removeMCPToolNamePrefix(t.name)))
 		}
 		this._onDidChangeState.fire();
+	}
+
+	private async _recordFirstLook(serverName: string, tools: string[]) {
+		try {
+			await this.vaderSettingsService.waitForInitState
+			const us = this.vaderSettingsService.state.mcpUserStateOfName[serverName]
+			if (!us || us.approvedTools !== undefined) return
+			await this.vaderSettingsService.setMCPServerState(serverName, { ...us, approvedTools: tools })
+		} catch { /* the settings could not be written: the server stays unreviewed and offers all its tools, as before */ }
+	}
+
+	public pendingToolsOf(serverName: string): string[] {
+		// the names are the tools' own: the service puts a random prefix on each listing, so a prefixed name would not be the same tool tomorrow
+		const tools = this.state.mcpServerOfName[serverName]?.tools?.map(t => removeMCPToolNamePrefix(t.name)) ?? []
+		return reviewTools(this.vaderSettingsService.state.mcpUserStateOfName[serverName], tools).pending
+	}
+
+	public async allowTools(serverName: string, names: string[]): Promise<void> {
+		const us = this.vaderSettingsService.state.mcpUserStateOfName[serverName] ?? { isOn: true }
+		await this.vaderSettingsService.setMCPServerState(serverName, { ...us, ...allowTools(us, names) } as typeof us & { approvedTools: string[], offTools: string[] })
+		this._onDidChangeState.fire()
+	}
+
+	public async keepToolsOff(serverName: string, names: string[]): Promise<void> {
+		const us = this.vaderSettingsService.state.mcpUserStateOfName[serverName] ?? { isOn: true }
+		await this.vaderSettingsService.setMCPServerState(serverName, { ...us, ...keepToolsOff(us, names) } as typeof us & { approvedTools: string[], offTools: string[] })
+		this._onDidChangeState.fire()
 	}
 
 	private readonly _setHasError = async (errMsg: string | undefined) => {
@@ -217,7 +251,9 @@ class MCPService extends Disposable implements IMCPService {
 		const allTools: InternalToolInfo[] = []
 		for (const serverName in this.state.mcpServerOfName) {
 			const server = this.state.mcpServerOfName[serverName];
+			const allowed = new Set(reviewTools(this.vaderSettingsService.state.mcpUserStateOfName[serverName], server.tools?.map(t => removeMCPToolNamePrefix(t.name)) ?? []).allowed)
 			server.tools?.forEach(tool => {
+				if (!allowed.has(removeMCPToolNamePrefix(tool.name))) return // new and not answered yet, or kept off: the agent is not told it exists
 				allTools.push({
 					description: tool.description || '',
 					params: this._transformInputSchemaToParams(tool.inputSchema),
@@ -347,12 +383,15 @@ class MCPService extends Disposable implements IMCPService {
 	public async toggleServerIsOn(serverName: string, isOn: boolean): Promise<void> {
 		this._setMCPServerState(serverName, { status: 'loading', tools: [] })
 
-		await this.vaderSettingsService.setMCPServerState(serverName, { isOn });
+		await this.vaderSettingsService.setMCPServerState(serverName, { ...this.vaderSettingsService.state.mcpUserStateOfName[serverName], isOn });
 		this.channel.call('toggleMCPServer', { serverName, isOn })
 	}
 
 
 	public async callMCPTool(toolData: MCPToolCallParams): Promise<{ result: RawMCPToolCall }> {
+		// the agent is not offered a tool that is new or kept off, but a call that names one anyway is refused here too
+		const refusal = toolCallRefusal(this.vaderSettingsService.state.mcpUserStateOfName[toolData.serverName], toolData.serverName, removeMCPToolNamePrefix(toolData.toolName))
+		if (refusal) throw new Error(refusal)
 		const result = await this.channel.call<RawMCPToolCall>('callTool', toolData);
 		if (result.event === 'error') {
 			throw new Error(`Error: ${result.text}`)

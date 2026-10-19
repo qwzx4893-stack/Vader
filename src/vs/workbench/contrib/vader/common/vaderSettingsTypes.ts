@@ -623,4 +623,8 @@ export interface MCPUserStateOfName {
 
 export interface MCPUserState {
 	isOn: boolean;
+	/** the tools the person has seen and allowed (common/mcpToolReview.ts); a tool the server adds later waits for an answer. Absent: never looked at. */
+	approvedTools?: string[];
+	/** tools the person keeps off */
+	offTools?: string[];
 }

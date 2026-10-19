@@ -727,6 +727,30 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== a tool changed (board S07)
+{
+	const { page, errors } = await newPage();
+	const set = async (pending) => { await page.evaluate((p) => { window.__mcpServers = { GitHub: { status: 'success', tools: [{ name: 'create_pull_request' }, { name: 'delete_repository' }] } }; window.__pending = p; window.__setThread({}); }, pending); await page.waitForTimeout(80); };
+	check('no server has anything waiting, so no card', (await page.locator(TID('vader-mcp-changed')).count()) === 0);
+	await set({ GitHub: ['delete_repository'] });
+	await page.waitForSelector(TID('vader-mcp-changed'));
+	check('a tool a server added is asked about, by server and tool', (await page.locator(TID('vader-mcp-changed-title')).innerText()) === 'GitHub added a tool' && flat(await page.locator(TID('vader-mcp-changed-body')).innerText()) === 'The server now offers delete_repository. It was not there when you added the server.' && (await page.locator(`${TID('vader-mcp-changed-body')} code`).innerText()) === 'delete_repository');
+	check('with three answers', (await page.locator(`${TID('vader-mcp-changed')} button`).allInnerTexts()).map(flat).join('|') === 'Keep it off|Allow it|Remove the server');
+	await page.waitForTimeout(260);
+	await shot(page, '38-mcp-tool-changed');
+	await page.locator(TID('vader-mcp-keep-off')).click();
+	await page.locator(TID('vader-mcp-allow')).click().catch(() => { });
+	check('Keep it off tells the service, and the card goes away', (await log(page)).includes('mcp:off:GitHub:delete_repository') && (await page.locator(TID('vader-mcp-changed')).count()) === 0);
+	await set({ GitHub: ['delete_repository'] });
+	await page.locator(TID('vader-mcp-allow')).click();
+	check('Allow it tells the service', (await log(page)).includes('mcp:allow:GitHub:delete_repository'));
+	await set({ GitHub: ['delete_repository'] });
+	await page.locator(TID('vader-mcp-remove')).click();
+	check('Remove the server tells the service', (await log(page)).includes('mcp:remove:GitHub'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== files dropped on the box (board S03)
 {
 	const { page, errors } = await newPage();

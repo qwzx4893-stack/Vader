@@ -378,6 +378,22 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== MCP: a tool changed (board S07)
+{
+	const { page, errors } = await newPage(() => { window.__pending = { GitHub: ['delete_repository'] }; window.__mcpOverride = { state: { mcpServerOfName: { GitHub: { status: 'success', command: 'npx @github/mcp', tools: [{ name: 'GitHub_create_issue' }, { name: 'GitHub_delete_repository' }] } } } }; }, 'mcp');
+	await page.waitForSelector(TID('vader-mcp-changed'));
+	check('a server with a new tool shows the question under its row', (await page.locator(`${TID('vader-mcp-server')} ${TID('vader-mcp-changed-title')}`).innerText()) === 'GitHub added a tool');
+	await page.locator(TID('vader-mcp-expand')).click();
+	check('and the new tool is marked among the tools it offers', (await page.locator('[data-state="new"]').count()) === 1);
+	await page.locator(TID('vader-mcp-keep-off')).click();
+	check('Keep it off is the real answer, and the card goes', (await log(page)).includes('mcp:off:GitHub:delete_repository') && (await page.locator(TID('vader-mcp-changed')).count()) === 0);
+	check('the tool kept off is shown struck through among the tools', (await page.locator('[data-state="off"]').count()) === 1);
+	await page.locator('[data-state="off"]').click();
+	check('and a click on it allows it after all', (await log(page)).includes('mcp:allow:GitHub:delete_repository'));
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+
 // ===================================================================== set by your organisation (board S10)
 {
 	const { page, errors } = await newPage(() => { window.__managed = { autoCheckUpdates: false, dailySpendLimitUsd: 5, taskCopies: true }; }, 'privacy');
