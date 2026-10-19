@@ -13,20 +13,18 @@ const TID = (id) => `[data-testid="${id}"]`;
 export async function isOnboarding(page) {
 	// The onboarding is a full-screen overlay that stays in the DOM after setup and is only faded out (opacity 0, no pointer
 	// events); VS Code's own Welcome page also has 'Get Started' text. So: is Vader's overlay present AND not faded out?
-	const el = page.locator('.vader-scope').getByText('Welcome to Vader', { exact: true }).first();
+	const el = page.locator(TID('vader-onboarding')).first();
 	if (!(await el.count())) { return false; }
 	return await el.evaluate(node => {
-		for (let e = node; e; e = e.parentElement) {
-			const s = getComputedStyle(e);
-			if (s.position === 'fixed' && s.zIndex === '99999') { return Number(s.opacity) > 0.5 && s.pointerEvents !== 'none'; }
-		}
-		return false;
+		const s = getComputedStyle(node);
+		return Number(s.opacity) > 0.5 && s.pointerEvents !== 'none';
 	}).catch(() => false);
 }
 
-/** First-run flow, exactly as a new user sees it: Welcome -> Import settings (skipped here) -> the IDE; then the provider is set up in the Settings page. */
+/** First-run flow, exactly as a new user sees it: Models (skipped here) -> Project -> First task (skipped) -> the IDE; then the provider is set up in the Settings page. */
 export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model }) {
 	await page.locator(TID('vader-welcome-continue')).click({ timeout: 30_000 });
+	await page.locator(TID('vader-onboarding-continue')).click({ timeout: 15_000 });
 	await page.locator(TID('vader-import-done')).click({ timeout: 15_000 });
 	await sleep(1200); // the welcome overlay fades out
 	await configureOpenAICompatible(page, { baseURL, apiKey, model });
