@@ -4,8 +4,6 @@
  *--------------------------------------------------------------------------------------*/
 
 import { mountFnGenerator } from '../util/mountFnGenerator.js'
-import { Settings } from './Settings.js'
+import { Settings } from './SettingsApp.js'
 
 export const mountVaderSettings = mountFnGenerator(Settings)
-
-

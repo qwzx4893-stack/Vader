@@ -10,13 +10,12 @@ import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../plat
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { Codicon } from '../../../../base/common/codicons.js';
-import { ThemeIcon } from '../../../../base/common/themables.js';
 import { mountVaderSettings } from './react/out/vader-settings-tsx/index.js'
 
 
 // Vader's settings are a full-window page that opens over the editor (below the title bar), not a tab in the editor area:
-// a header with the title and a close button, then the React settings page (a navigation column on the left, the section on the right).
-// It stays mounted once opened, so reopening is instant and nothing typed is lost. Esc or the close button hides it.
+// the React settings page: a column on the left with "Back to the app", a search and the pages, and the page on the right (interface boards R08 to R30).
+// It stays mounted once opened, so reopening is instant and nothing typed is lost. Esc or "Back to the app" hides it.
 
 class VaderSettingsOverlay {
 	private root: HTMLElement | undefined
@@ -26,12 +25,14 @@ class VaderSettingsOverlay {
 
 	get isOpen(): boolean { return !!this.root && this.root.style.display !== 'none' }
 
-	open(): void {
+	/** opens on the page the caller names (for example "usage"), or on the page it was left on */
+	open(page?: string): void {
 		const win = getActiveWindow()
 		const workbench = win.document.querySelector('.monaco-workbench')
 		if (!workbench) { return }
 		if (!this.root) { this.create(workbench as HTMLElement) }
 		const root = this.root!
+		if (page) { (win as unknown as { vaderSettingsPendingPage?: string }).vaderSettingsPendingPage = page; win.dispatchEvent(new win.CustomEvent('vader-settings-goto', { detail: { page } })) }
 		if (this.isOpen) { return }
 		this.previouslyFocused = win.document.activeElement
 		this.position()
@@ -66,26 +67,9 @@ class VaderSettingsOverlay {
 		root.style.display = 'none'
 		root.addEventListener('keydown', e => { if (e.key === 'Escape') { e.stopPropagation(); this.close() } })
 
-		const header = doc.createElement('div')
-		header.className = 'vader-settings-overlay-header'
-		const title = doc.createElement('div')
-		title.className = 'vader-settings-overlay-title'
-		title.textContent = nls.localize('vaderSettingsOverlayTitle', "Vader Settings")
-		const closeButton = doc.createElement('button')
-		closeButton.className = 'vader-settings-overlay-close'
-		closeButton.type = 'button'
-		closeButton.setAttribute('aria-label', nls.localize('vaderSettingsClose', "Close settings (Esc)"))
-		closeButton.setAttribute('title', nls.localize('vaderSettingsClose', "Close settings (Esc)"))
-		closeButton.setAttribute('data-testid', 'vader-settings-close')
-		const icon = doc.createElement('span')
-		icon.className = ThemeIcon.asClassName(Codicon.close)
-		closeButton.appendChild(icon)
-		closeButton.addEventListener('click', () => this.close())
-		header.append(title, closeButton)
-
 		const body = doc.createElement('div')
 		body.className = 'vader-settings-overlay-body'
-		root.append(header, body)
+		root.append(body)
 		workbench.appendChild(root)
 		this.root = root
 
@@ -139,8 +123,8 @@ registerAction2(class extends Action2 {
 			icon: Codicon.settingsGear,
 		});
 	}
-	async run(accessor: ServicesAccessor): Promise<void> {
-		overlayOf(accessor).open()
+	async run(accessor: ServicesAccessor, page?: string): Promise<void> {
+		overlayOf(accessor).open(typeof page === 'string' ? page : undefined)
 	}
 })
 

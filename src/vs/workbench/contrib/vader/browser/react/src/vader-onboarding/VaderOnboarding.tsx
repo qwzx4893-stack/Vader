@@ -13,7 +13,7 @@ import React, { useEffect, useState } from 'react'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { StorageScope, StorageTarget } from '../../../../../../../platform/storage/common/storage.js'
 import { useAccessor, useCloudModelListState, usePolicyServiceState, useRefreshModelState, useSettingsState, useExternalAgentsState } from '../util/services.js'
-import { OneClickSwitchButton } from '../vader-settings-tsx/Settings.js'
+import { EditorSwitchButton } from '../vader-settings-tsx/EditorSwitch.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { ProviderLogo } from '../util/ProviderLogo.js'
 import { transferEditorTypes } from '../../../extensionTransferTypes.js'
@@ -239,7 +239,7 @@ const Pages = () => {
 						</button>)}
 				</div>
 				<span className='t3' style={{ lineHeight: 1.5, padding: '8px 0' }}>Some rules are locked in every mode: never touching your keys or system files, and always asking before installing anything. You can change all of this in Settings.</span>
-				{showImport ? <div className='c' style={{ gap: 10, padding: '6px 0' }} data-testid='vader-import-editors'><span className='t2'>Bring your theme, keybindings and extensions over. Nothing is changed in the original editor.</span><div className='r' style={{ gap: 8, flexWrap: 'wrap' }}>{transferEditorTypes.map(editor => <OneClickSwitchButton key={editor} fromEditor={editor} className='px-3 py-1.5' />)}</div></div> : null}
+				{showImport ? <div className='c' style={{ gap: 10, padding: '6px 0' }} data-testid='vader-import-editors'><span className='t2'>Bring your theme, keybindings and extensions over. Nothing is changed in the original editor.</span><div className='r' style={{ gap: 8, flexWrap: 'wrap' }}>{transferEditorTypes.map(editor => <EditorSwitchButton key={editor} fromEditor={editor} />)}</div></div> : null}
 				<span className='fl' />
 				<div className='r' style={{ height: 70, flex: 'none', gap: 10, paddingBottom: 6 }}>
 					<button className='tx' data-testid='vader-import-toggle' style={{ padding: 0 }} onClick={() => setShowImport(v => !v)}>Import settings from VS Code or Cursor</button>

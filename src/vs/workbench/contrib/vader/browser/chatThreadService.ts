@@ -469,6 +469,8 @@ export interface IChatThreadService {
 	getThreadStatus(threadId: string): ThreadStatus;
 	getThreadUsage(threadId: string): ThreadUsage | undefined;
 	getUsageToday(): DayTotals;
+	/** what was used on each of the last days, and by which model (Settings > Usage and cost) */
+	getUsageLedger(): UsageLedger;
 	readonly onDidChangeUsage: Event<void>;
 
 	// pause: the run holds at its next step (the next request or the next tool call) until resumed
@@ -929,6 +931,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	getThreadUsage(threadId: string): ThreadUsage | undefined { return this.state.allThreads[threadId]?.usage }
 
+	getUsageLedger(): UsageLedger { return this._ledger }
+
 	getUsageToday(): DayTotals {
 		return this._ledger[dayKey(new Date())] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }
 	}
@@ -948,7 +952,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._storeAllThreads(newThreads)
 			this._setState({ allThreads: newThreads }, true)
 		}
-		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost, source)
+		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost, source, { providerName: modelSelection.providerName, modelName: modelSelection.modelName, isLocal })
 		this._storageService.store(USAGE_LEDGER_STORAGE_KEY, JSON.stringify(this._ledger), StorageScope.APPLICATION, StorageTarget.USER)
 		this._onDidChangeUsage.fire()
 	}

@@ -37,7 +37,7 @@ import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js';
 import { formatUsd, formatTokens, formatCost, PROVIDER_USAGE_PAGES } from '../../../../common/usageAccounting.js';
 import { computeTrust } from '../../../../common/marketplace/trustScore.js';
 
-type Tab =
+export type Tab =
 	| 'models'
 	| 'externalAgents'
 	| 'localProviders'
@@ -1578,7 +1578,7 @@ export const OllamaSetupInstructions = ({ sayWeAutoDetect }: { sayWeAutoDetect?:
 }
 
 
-const RedoOnboardingButton = ({ className }: { className?: string }) => {
+export const RedoOnboardingButton = ({ className }: { className?: string }) => {
 	const accessor = useAccessor()
 	const vaderSettingsService = accessor.get('IVaderSettingsService')
 	return <div
@@ -1971,57 +1971,10 @@ const AboutSection = () => {
 	</div>
 }
 
-export const Settings = () => {
+// Until every page is rebuilt in the shape of the interface boards, the pages that still hold their old content are drawn by this (SettingsApp.tsx has the frame and the pages that are new).
+export const LegacySettings = ({ tabs }: { tabs: Tab[] }) => {
 	const isDark = useIsDark()
-	// ─── sidebar nav ──────────────────────────
-	const [selectedSection, setSelectedSection] =
-		useState<Tab>('models');
-
-	const mainRef = useRef<HTMLElement>(null)
-	const navGroups: { title: string | null; items: { tab: Tab; label: string; Icon: typeof Brain }[] }[] = [
-		{ title: 'Models', items: [
-			{ tab: 'models', label: 'Models', Icon: Brain },
-			{ tab: 'externalAgents', label: 'Connected agents', Icon: Terminal },
-			{ tab: 'localProviders', label: 'Local Providers', Icon: HardDrive },
-			{ tab: 'providers', label: 'Main Providers', Icon: Cloud },
-		] },
-		{ title: 'Agent', items: [
-			{ tab: 'agent', label: 'Permissions and saved agents', Icon: Bot },
-			{ tab: 'context', label: 'Context & Instructions', Icon: BookOpen },
-			{ tab: 'skills', label: 'Skills', Icon: Sparkles },
-			{ tab: 'mcp', label: 'MCP', Icon: Plug },
-			{ tab: 'featureOptions', label: 'Editor Features', Icon: SlidersHorizontal },
-		] },
-		{ title: 'Workspace', items: [
-			{ tab: 'extensions', label: 'Extensions', Icon: Puzzle },
-			{ tab: 'privacy', label: 'Privacy & Network', Icon: ShieldCheck },
-			{ tab: 'data', label: 'Data & Backup', Icon: Database },
-			{ tab: 'about', label: 'About & Updates', Icon: Info },
-		] },
-		{ title: null, items: [
-			{ tab: 'all', label: 'All Settings', Icon: List },
-		] },
-	];
-	const [navQuery, setNavQuery] = useState('')
-	// words people look for, besides the page's own name
-	const navKeywords: { [tab in Tab]?: string } = {
-		models: 'model provider key api openai anthropic gemini openrouter ollama autocomplete apply commit',
-		externalAgents: 'coding agent codex copilot cursor opencode claude acp',
-		localProviders: 'ollama lm studio vllm local',
-		providers: 'cloud provider key',
-		agent: 'approve permission safe balanced autonomous spend cost limit budget approval project agent',
-		context: 'instructions rules memory agents.md',
-		skills: 'skill store install trust sources github skillnet',
-		mcp: 'mcp server tools registry',
-		featureOptions: 'autocomplete editor quick edit apply fast',
-		extensions: 'extension marketplace open vsx vsix',
-		privacy: 'privacy network telemetry contact',
-		data: 'export import backup chats switch editor',
-		about: 'update version release licence credits',
-	}
-	const navNeedle = navQuery.trim().toLowerCase()
-	const shownNavGroups = navNeedle ? navGroups.map(g => ({ ...g, items: g.items.filter(it => it.tab !== 'all' && (it.label + ' ' + (navKeywords[it.tab] ?? '')).toLowerCase().includes(navNeedle)) })).filter(g => g.items.length > 0) : navGroups
-	const shouldShowTab = (tab: Tab) => selectedSection === 'all' || selectedSection === tab;
+	const shouldShowTab = (tab: Tab) => tabs.includes(tab);
 	const accessor = useAccessor()
 	const commandService = accessor.get('ICommandService')
 	const environmentService = accessor.get('IEnvironmentService')
@@ -2099,42 +2052,10 @@ export const Settings = () => {
 
 
 	return (
-		<div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', display: 'flex' }} data-testid='vader-settings-page'>
-			{/* ──────────────  SIDEBAR  ────────────── */}
-			<aside className='w-60 shrink-0 h-full flex flex-col border-r border-vader-border-2 bg-vader-bg-2 py-4 px-3 select-none'>
-				<input data-testid='vader-settings-search' className='mb-3 w-full px-3 py-1.5 rounded-md border border-vader-border-2 bg-vader-bg-1 text-vader-fg-1 text-sm outline-none select-text' placeholder='Search settings' value={navQuery} onChange={e => setNavQuery(e.target.value)} />
-				{navNeedle && shownNavGroups.length === 0 ? <div className='px-3 text-vader-fg-3 text-sm'>Nothing in Settings matches that.</div> : null}
-				<nav className='flex flex-col gap-1 flex-1 overflow-y-auto' aria-label='Settings sections'>
-					{shownNavGroups.map((group, gi) => (
-						<div key={gi} className='flex flex-col gap-1'>
-							{group.title && <div className={`px-3 ${gi === 0 ? '' : 'mt-3'} mb-0.5 text-[10px] uppercase tracking-wider text-vader-fg-3`}>{group.title}</div>}
-							{!group.title && <div className='h-px bg-vader-border-2 my-2 mx-1' />}
-							{group.items.map(({ tab, label, Icon }) => (
-								<button
-									key={tab}
-									data-testid={`vader-settings-nav-${tab}`}
-									onClick={() => {
-										setSelectedSection(tab);
-										if (tab === 'all') { mainRef.current?.scrollTo({ top: 0, behavior: 'smooth' }) }
-									}}
-									className={`flex items-center gap-3 py-2 px-3 rounded-md text-left text-sm transition-colors duration-150
-										${selectedSection === tab ? 'bg-[#0e70c0]/80 text-white font-medium' : 'text-vader-fg-1 hover:bg-vader-bg-3'}`}
-								>
-									<Icon size={16} className='shrink-0 opacity-90' />
-									{label}
-								</button>
-							))}
-						</div>
-					))}
-				</nav>
-				<ErrorBoundary>
-					<RedoOnboardingButton className='text-xs px-3 pt-3' />
-				</ErrorBoundary>
-			</aside>
-
+		<div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ width: '100%' }}>
 			{/* ───────────── MAIN PANE ───────────── */}
-			<main ref={mainRef} className='flex-1 h-full overflow-y-auto select-none'>
-				<div className={`${selectedSection === 'skills' || selectedSection === 'mcp' ? 'max-w-6xl' : 'max-w-3xl'} mx-auto px-10 py-8 mb-24`}>
+			<main className='select-none'>
+				<div className='mb-24'>
 
 						{/* All sections in flex container with gap-12 */}
 						<div className='flex flex-col gap-12'>
