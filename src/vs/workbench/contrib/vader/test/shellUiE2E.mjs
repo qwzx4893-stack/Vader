@@ -138,6 +138,23 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== motion, and none of it when less motion is asked for
+{
+	const { page } = await newPage();
+	await page.locator(TID('vader-shell-all-agents')).click();
+	await page.waitForSelector(TID('vader-shell-agents-page'));
+	const name = await page.evaluate(() => getComputedStyle(document.querySelector('.vader-pg')).animationName);
+	check('a page settles in when it opens', name === 'vader-page-in', name);
+	await page.emulateMedia({ reducedMotion: 'reduce' });
+	await page.locator(TID('vader-shell-new-chat')).click().catch(() => { });
+	await page.locator(TID('vader-shell-all-agents')).click();
+	const reduced = await page.evaluate(() => getComputedStyle(document.querySelector('.vader-pg')).animationName);
+	check('with less motion asked for, it does not move', reduced === 'none', reduced);
+	const sw = await page.evaluate(() => { const i = document.querySelector('.vader-sw i'); return i ? getComputedStyle(i).transitionDuration : 'no switch'; });
+	check('a switch (when there is one) does not animate either', sw === 'no switch' || sw === '0s', sw);
+	await page.close();
+}
+
 // ===================================================================== a parallel run (board R05)
 {
 	const { page } = await newPage();

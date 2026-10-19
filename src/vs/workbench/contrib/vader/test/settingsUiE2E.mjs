@@ -108,6 +108,11 @@ async function layoutProblems(page) {
 	check('the search keeps the pages that match what was typed', (await nav.locator('button').allInnerTexts()).join('|') === 'Usage and cost', (await nav.locator('button').allInnerTexts()).join('|'));
 	await page.locator(TID('vader-settings-search')).fill('zzzz');
 	check('a search that matches nothing says what was searched', (await page.locator(TID('vader-settings-nomatch')).innerText()) === 'No setting called “zzzz”.');
+	await page.locator(TID('vader-settings-search')).fill('proxi');
+	await page.waitForSelector(TID('vader-settings-nearest'));
+	check('a word that is nearly a setting offers the nearest places', (await page.locator(TID('vader-settings-nearest-page')).first().innerText()).includes('Privacy and network'));
+	await page.locator(TID('vader-settings-nearest-page')).first().click();
+	check('a click on one goes there and clears the search', (await page.locator(TID('vader-settings-main-privacy')).count()) === 1 && (await page.locator(TID('vader-settings-search')).inputValue()) === '');
 	await page.locator(TID('vader-settings-search')).fill('');
 	await page.evaluate(() => window.dispatchEvent(new CustomEvent('vader-settings-goto', { detail: { page: 'usage' } })));
 	await page.waitForSelector(`${TID('vader-settings-nav-usage')}[aria-current=page]`, { timeout: 3000 }).catch(() => { });

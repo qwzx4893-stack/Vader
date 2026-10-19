@@ -133,3 +133,21 @@ width:100%;height:100%;box-sizing:border-box;background:var(--g0);color:var(--t1
 	--vader-fg-0:#ffffff;--vader-fg-1:#ededee;--vader-fg-2:#b0b0b5;--vader-fg-3:#8a8a91;--vader-fg-4:#6f6f76;
 	--vader-border-1:rgba(255,255,255,.22);--vader-border-2:rgba(255,255,255,.14);--vader-border-3:rgba(255,255,255,.075);--vader-border-4:rgba(255,255,255,.075);
 }
+
+/* motion: pages settle in, popovers and questions rise, hover and the switch ease; none of it when the person asks for less motion */
+.vader-shell .vader-gb,.vader-shell .vader-pb,.vader-shell .vader-tx,.vader-shell .vader-nv,.vader-shell .vader-ag,.vader-shell .vader-ic,.vader-shell .vader-opt,.vader-shell .vader-fr{transition:background-color .12s ease,color .12s ease,border-color .12s ease}
+.vader-shell .vader-sw{justify-content:flex-start;transition:background-color .16s ease,border-color .16s ease}
+.vader-shell .vader-sw i{transform:translateX(12px);transition:transform .16s cubic-bezier(.2,.7,.2,1),background-color .16s ease}
+.vader-shell .vader-sw.vader-off i{transform:none}
+@media (prefers-reduced-motion:no-preference){
+	@keyframes vader-page-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+	@keyframes vader-pop-in{from{opacity:0;transform:translateY(4px) scale(.985)}to{opacity:1;transform:none}}
+	@keyframes vader-fade-in{from{opacity:0}to{opacity:1}}
+	.vader-shell .vader-pg{animation:vader-page-in .18s cubic-bezier(.2,.7,.2,1) both}
+	.vader-shell .vader-pop{animation:vader-pop-in .14s cubic-bezier(.2,.7,.2,1) both}
+	.vader-shell [role=alertdialog]{animation:vader-fade-in .12s ease-out both}
+	.vader-shell [role=alertdialog]>div{animation:vader-pop-in .16s cubic-bezier(.2,.7,.2,1) both}
+}
+@media (prefers-reduced-motion:reduce){
+	.vader-shell .vader-sw i,.vader-shell .vader-sw{transition:none}
+}

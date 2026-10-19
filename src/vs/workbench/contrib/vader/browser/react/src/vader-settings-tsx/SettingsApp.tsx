@@ -21,6 +21,7 @@ import { ConnectedAgentsPage } from './ConnectedAgentsPage.js'
 import { SkillsPage } from './SkillsPage.js'
 import { McpPage } from './McpPage.js'
 import { MemoryPage } from './MemoryPage.js'
+import { matchPages, nearestPages } from '../../../../common/settingsSearch.js'
 import '../vader-shell-tsx/shell.css'
 
 // Vader's Settings in the shape of the interface boards (R08 to R30): a column on the left with a way back to the app, a search, and the pages in three groups
@@ -59,7 +60,10 @@ export const Settings = () => {
 	const [page, setPage] = useState<SettingsPage>('models')
 	const [query, setQuery] = useState('')
 	const needle = query.trim().toLowerCase()
-	const groups = needle ? GROUPS.map(g => ({ ...g, items: g.items.filter(it => (it.label + ' ' + it.words).toLowerCase().includes(needle)) })).filter(g => g.items.length > 0) : GROUPS
+	const allPages = GROUPS.flatMap(g => g.items.map(it => ({ id: it.id, label: it.label, words: it.words, group: g.title })))
+	const found = new Set(matchPages(allPages, query).map(p => p.id))
+	const groups = needle ? GROUPS.map(g => ({ ...g, items: g.items.filter(it => found.has(it.id)) })).filter(g => g.items.length > 0) : GROUPS
+	const nearest = needle && groups.length === 0 ? nearestPages(allPages, query) : []
 
 	useEffect(() => {
 		// the page asked for before this one was drawn (the first time Settings opens) is waiting on the window
@@ -94,6 +98,10 @@ export const Settings = () => {
 			<label className='srch' style={{ margin: '0 2px 6px' }}><Icon k='search' small /><input data-testid='vader-settings-search' className='fl' placeholder='Search settings' aria-label='Search settings' value={query} onChange={e => setQuery(e.target.value)} /></label>
 			<nav className='c fl scroll' aria-label='Settings pages'>
 				{needle && groups.length === 0 ? <span className='t3' style={{ padding: '8px 10px', lineHeight: 1.5 }} data-testid='vader-settings-nomatch'>No setting called &ldquo;{query.trim()}&rdquo;.</span> : null}
+				{nearest.length > 0 ? <div className='c' data-testid='vader-settings-nearest' style={{ gap: 2 }}>
+					<span className='nvh'>Nearest places</span>
+					{nearest.map(p => <button key={p.id} className='nv' data-testid='vader-settings-nearest-page' onClick={() => { setQuery(''); setPage(p.id as SettingsPage) }}><span className='fl tr' style={{ textAlign: 'left' }}>{p.label}</span><span className='t4' style={{ fontSize: 12 }}>{p.group}</span></button>)}
+				</div> : null}
 				{groups.map(g => <React.Fragment key={g.title}>
 					<span className='nvh'>{g.title}</span>
 					{g.items.map(it => <button key={it.id} className={page === it.id ? 'nv on' : 'nv'} data-testid={`vader-settings-nav-${it.id}`} aria-current={page === it.id ? 'page' : undefined} onClick={() => setPage(it.id)}>{it.label}</button>)}
@@ -102,7 +110,7 @@ export const Settings = () => {
 		</aside>
 		<main className='main-sheet fl scroll' data-testid={`vader-settings-main-${page}`} style={{ minHeight: 0, overflowY: 'auto' }}>
 			<div style={{ maxWidth: page === 'skills' || page === 'mcp' ? 980 : 820, margin: '0 auto', padding: '40px 40px 96px', width: '100%' }}>
-				<ErrorBoundary>{body}</ErrorBoundary>
+				<div key={page} className='pg'><ErrorBoundary>{body}</ErrorBoundary></div>
 			</div>
 		</main>
 	</div>

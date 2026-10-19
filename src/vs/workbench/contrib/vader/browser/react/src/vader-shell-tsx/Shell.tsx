@@ -21,7 +21,7 @@ export const Shell = () => {
 		<div className='r fl' style={{ alignItems: 'stretch' }}>
 			<Nav />
 			<div className='main-sheet fl' data-testid='vader-shell-main'>
-				{shell.page === 'conversation' ? <ConversationPage /> : shell.page === 'agents' ? <AgentsPage /> : <AddonsPage />}
+				<div key={shell.page} className='pg c' style={{ flex: 1, minHeight: 0, minWidth: 0, height: '100%' }}>{shell.page === 'conversation' ? <ConversationPage /> : shell.page === 'agents' ? <AgentsPage /> : <AddonsPage />}</div>
 			</div>
 		</div>
 		{shell.searchOpen ? <SearchPalette /> : null}

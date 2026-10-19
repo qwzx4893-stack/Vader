@@ -60,6 +60,10 @@ The words are made from the messages the app really raises, the real error is al
 
 The tasks an agent splits a job into (`IAgentOrchestrationService`, one copy of the project and one branch for each task that edits files) are listed at the top of All agents (`vader-shell-tsx/ParallelRuns.tsx`, `common/parallelRunModel.ts`): the task and how long it took, its helper, its branch, where it stands (Merged cleanly, No changes, Conflict in N files, Working, Could not merge, Checks failed, Failed) and how many files. A conflict names the file and offers the three ways out the service really has: **Let an agent merge them** (in the task's own folder first), **Keep the current version**, **Keep this task's version**, and Open the file; when the service cannot do it, its reason is shown. Stop all cancels the run.
 
+## Motion
+
+A page settles in when it opens (the Vader window, each Settings page), popovers and questions rise, hover changes ease and the switch slides, all in 120 to 180 ms (`vader-shell-tsx/shell.css`; the chat's cards and menus use `animate-card-in`, `react/tailwind.config.js`). With the system setting "reduce motion" none of it moves (`prefers-reduced-motion`); `shellUiE2E` and `pickerUiE2E` check both. Searching Settings for something that is not there offers the nearest places (`common/settingsSearch.ts`).
+
 ## Settings (boards R08 to R30)
 
 Models (features, local servers, 45 cloud providers with live lists and Test connection), Model router, Connected agents, Permissions (mode, commands allowed in this project, the locked rules and the rules that ask, your own rules), Usage and cost (per model, per day, "estimate" or "billed by provider" for every number; `common/usageAccounting.ts` keeps a per-model ledger for 62 days), Saved agents, Skills (trust computed from live facts, with the reasons), MCP servers, Memory and instructions, Editor extensions, Editor, Privacy and network, Data and backup, About and updates.
