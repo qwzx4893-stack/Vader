@@ -326,12 +326,15 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 {
-	const { page, errors } = await newPage(() => { window.__projectKey = null; });
+	const { page, errors } = await newPage(() => { window.__projectKey = null; window.__groups = [{ key: 'C:/work/vader-app', name: 'vader-app', threadIds: [] }, { key: 'C:/work/docs-site', name: 'docs-site', threadIds: [] }]; });
 	check('with no folder open the first thing is to open one', (await page.locator(TID('vader-no-project')).innerText()).includes('Vader works inside a folder'));
 	await shot(page, '10-no-project');
 	await page.locator(TID('vader-open-folder')).click();
 	await page.locator(TID('vader-clone')).click();
 	check('Open a folder and Clone a repository run the editor’s own commands', (await log(page)).includes('command:workbench.action.files.openFolder') && (await log(page)).includes('command:git.clone'));
+	check('the projects it has had chats in are listed as Recent', (await page.locator(TID('vader-recent-projects')).innerText()).includes('vader-app') && (await page.locator(TID('vader-recent-project')).count()) === 2);
+	await page.locator(TID('vader-recent-project')).nth(1).click();
+	check('a click on one opens that folder', (await log(page)).some(x => /command:vscode\.openFolder/.test(x)));
 	await page.locator(TID('vader-chat-only')).click();
 	check('Chat only puts the card away and leaves a plain conversation', (await page.locator(TID('vader-no-project')).count()) === 0 && (await page.locator(INPUT).count()) === 1);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));

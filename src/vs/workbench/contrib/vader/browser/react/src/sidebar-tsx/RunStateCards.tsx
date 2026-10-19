@@ -5,6 +5,7 @@
 import React, { useEffect, useState } from 'react'
 import { useAccessor, useChatThreadsState, useSettingsState, useShellState } from '../util/services.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
+import { URI } from '../../../../../../../base/common/uri.js'
 import { getModelCapabilities } from '../../../../common/modelCapabilities.js'
 import { isFeatureNameDisabled } from '../../../../common/vaderSettingsTypes.js'
 import { contextBanner, contextOverflow, contextShare, describePaste, messageChars, QueuedMessage } from '../../../../common/runStateModel.js'
@@ -238,6 +239,9 @@ export const OfflineBanner = () => {
 export const NoProjectCard = ({ onChatOnly }: { onChatOnly: () => void }) => {
 	const accessor = useAccessor()
 	const commands = accessor.get('ICommandService')
+	const chat = accessor.get('IChatThreadService')
+	// the projects this computer has had chats in, newest first: a way back in that is one click (board S09, "No project is open")
+	const recent = chat.listProjectGroups().filter(g => g.key !== null && g.key !== '').slice(0, 4)
 	return <div className='flex flex-col gap-2.5' data-testid='vader-no-project'>
 		<div className='text-xl font-semibold text-vader-fg-1'>Open a project</div>
 		<div className='text-vader-fg-3 leading-relaxed'>Vader works inside a folder. Open one to start a task, or chat without a project.</div>
@@ -246,6 +250,13 @@ export const NoProjectCard = ({ onChatOnly }: { onChatOnly: () => void }) => {
 			<button data-testid='vader-clone' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => { void commands.executeCommand('git.clone') }}>Clone a repository</button>
 			<button data-testid='vader-chat-only' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={onChatOnly}>Chat only</button>
 		</div>
+		{recent.length > 0 ? <div className='flex flex-col mt-3' data-testid='vader-recent-projects'>
+			<div className='text-vader-fg-3 text-xs pb-1'>Recent</div>
+			{recent.map(g => <button key={g.key as string} data-testid='vader-recent-project' title={g.key as string} className='flex items-center gap-2.5 h-9 border-t border-vader-border-3 text-left text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-sm px-1 transition-colors duration-150' onClick={() => { void commands.executeCommand('vscode.openFolder', URI.file(g.key as string)) }}>
+				<svg width='14' height='14' viewBox='0 0 15 15' fill='none' aria-hidden='true' className='text-vader-fg-3 shrink-0'><path d='M1.8 4.2a1 1 0 0 1 1-1h3l1.4 1.5h5a1 1 0 0 1 1 1v5.6a1 1 0 0 1-1 1H2.8a1 1 0 0 1-1-1z' stroke='currentColor' strokeWidth='1.2' strokeLinejoin='round' /></svg>
+				<span className='truncate'>{g.name}</span>
+			</button>)}
+		</div> : null}
 	</div>
 }
 
