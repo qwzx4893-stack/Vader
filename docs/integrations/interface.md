@@ -43,6 +43,10 @@ The gate keeps what it decided with each tool message (`ToolMessage.gate`: the r
 - **The context ring** opens what the window is made of (system and tools, files and tool output, the conversation, a summary) with the real thresholds and Compact now. A chat that is already bigger than a smaller model's window says so before the request fails (Choose a larger model, Summarise first, Go on and cut).
 - **The model picker** (`vader-settings-tsx/ProviderModelPicker.tsx`): search across providers, providers without a key offered with Add, a list being asked for keeps the saved one (marked "saved list"), a list that could not be fetched says so with Try again, a search that finds nothing says where it looked. Lists are asked for again when the picker opens if they are older than ten minutes.
 
+## Looking back through a chat (board S13)
+
+Under each message: Copy, **Redo from here** (the same message sent again from its place, what came after is replaced) and Branch the chat. A long command result is folded to its head with "… 406 more lines" and Show all (`common/outputFold.ts`; the agent always got all of it). **Checkpoints** (under the message box once a chat has two) lists every checkpoint newest first with what its step changed (`common/checkpointModel.ts`): pick one to Go back to it (after the question), pick two to see the files that changed between them.
+
 ## Settings (boards R08 to R30)
 
 Models (features, local servers, 45 cloud providers with live lists and Test connection), Model router, Connected agents, Permissions (mode, commands allowed in this project, the locked rules and the rules that ask, your own rules), Usage and cost (per model, per day, "estimate" or "billed by provider" for every number; `common/usageAccounting.ts` keeps a per-model ledger for 62 days), Saved agents, Skills (trust computed from live facts, with the reasons), MCP servers, Memory and instructions, Editor extensions, Editor, Privacy and network, Data and backup, About and updates.
@@ -69,5 +73,5 @@ All of these run without opening a window. The packaged app itself can only be r
 - **Images cannot be attached to a message** (no provider path carries them yet), so the boards' image states (the model cannot read images, an image from the clipboard) are not built; a dropped image is refused with that reason. Text files can be dropped, and files and sources are mentioned with `@`.
 - The window screenshots of the test show the chat at 780 pixels (its width in the window) beside a stand-in model button; the packaged app itself has not been run on this machine.
 - The Browser tab shows a picture of the agent's page every second and a half; **taking over the page** is not possible because the agent's browser has no window of its own (Open in my browser opens the same address in yours).
-- Skills that were used in a task are not announced in the chat ("Used the skill pdf"); an MCP server that asks for a sign-in is shown as failed with its real error, with no Sign in button.
-- Checkpoints list ("Compare 1 and 3") and the per-step change counts of board S13 are not built; Restore (with its question) is.
+- **"Used the skill pdf" (board S13) is not shown, on purpose**: Vader puts every enabled skill into the instructions of every request, it does not pick a skill per task, so the chat cannot truthfully say that one was used for this task. An MCP server that asks for a sign-in is shown as failed with its real error, with no Sign in button.
+- **Compare 1 and 3** lists the files that changed between two checkpoints and how many lines; it does not open a side-by-side diff. The counts come from the file copies the checkpoints keep, so they are exact for those files only.

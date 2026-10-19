@@ -26,7 +26,7 @@ const tmp = fs.mkdtempSync(path.join(repo, 'node_modules', '.vader-chat-ui-'));
 const shots = path.join(os.tmpdir(), 'chat-ui-shots');
 fs.mkdirSync(shots, { recursive: true });
 
-const stubbed = [/\/util\/services\.js$/, /\/markdown\/(ChatMarkdownRender|ApplyBlockHoverButtons)\.js$/, /\/vader-settings-tsx\/(ModelDropdown|ExternalAgents)\.js$/, /\/sidebar-tsx\/SidebarThreadSelector\.js$/];
+const stubbed = [/\/util\/services\.js$/, /\/markdown\/(ChatMarkdownRender|ApplyBlockHoverButtons)\.js$/, /\/vader-settings-tsx\/(ModelDropdown|ExternalAgents)\.js$/, /\/sidebar-tsx\/SidebarThreadSelector\.js$/, /\/util\/BlockCodeExport\.js$/];
 const plugin = {
 	name: 'harness',
 	setup(build) {
@@ -299,6 +299,9 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 
 	const second = page.locator(TID('vader-branch'));
 	check('the first message has no Branch (there is nothing before it), the later ones have it', (await second.count()) === 1);
+	check('every message can be copied and sent again from there', (await page.locator(TID('vader-copy-message')).count()) === (await page.locator(TID('vader-redo')).count()) && (await page.locator(TID('vader-redo')).count()) >= 2);
+	await page.locator(TID('vader-redo')).first().evaluate(e => e.click());
+	check('Redo from here sends that message again from its place in the chat', (await log(page)).some(x => /^revise:0:./.test(x)));
 	await page.locator(`${TID('vader-branch')}`).evaluate(e => e.click());
 	await page.waitForSelector(TID('vader-branched'));
 	check('Branch the chat copies the chat from before that message, in the chat service', (await log(page)).some(x => /^branch:\d+$/.test(x)));
@@ -399,6 +402,72 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('the line under the box says what this chat and today have cost', flat(await page.locator('body').innerText()).includes('36K tokens') || flat(await page.locator('body').innerText()).includes('41k tokens') || /tokens/.test(await page.locator('body').innerText()));
 	await page.waitForTimeout(260);
 	await shot(page, '21-window-r01');
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== a long result, folded (board S13)
+{
+	const { page, errors } = await newPage();
+	const out = Array.from({ length: 412 }, (_, i) => `PASS tests/file-${i + 1}.test.ts`).join(String.fromCharCode(10));
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('run the tests'), t: { role: 'tool', type: 'success', name: 'run_command', params: { command: 'npm test', cwd: null, terminalId: 't1' }, rawParams: {}, id: 'r1', result: { result: out, resolveReason: { type: 'done', exitCode: 0 } }, content: out, mcpServerName: undefined } });
+	await page.waitForSelector('text=Ran terminal');
+	check('a long result says how many lines it has beside the command', (await page.locator('body').innerText()).includes('412 lines'));
+	await page.locator('text=Ran terminal').first().click();
+	await page.waitForSelector(TID('vader-command-output'));
+	check('only the head is shown, and it says how many lines are not', (await page.locator(TID('vader-command-output')).getAttribute('data-folded')) === 'yes' && (await page.locator('[data-testid="stub-code"]').innerText()).split(String.fromCharCode(10)).length === 6 && (await page.locator(TID('vader-command-more')).innerText()) === '… 406 more lines');
+	await shot(page, '22-folded-result');
+	await page.locator(TID('vader-command-showall')).click();
+	check('Show all shows every line', (await page.locator('[data-testid="stub-code"]').innerText()).split(String.fromCharCode(10)).length === 412 && (await page.locator(TID('vader-command-showall')).innerText()) === 'Show less');
+	await page.locator(TID('vader-command-showall')).click();
+	check('Show less folds it again', (await page.locator(TID('vader-command-output')).getAttribute('data-folded')) === 'yes');
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('x'), t: { role: 'tool', type: 'success', name: 'run_command', params: { command: 'ls', cwd: null, terminalId: 't2' }, rawParams: {}, id: 'r2', result: { result: 'a' + String.fromCharCode(10) + 'b', resolveReason: { type: 'done', exitCode: 0 } }, content: 'a', mcpServerName: undefined } });
+	await page.locator('text=Ran terminal').first().click();
+	await page.waitForSelector(TID('vader-command-output'));
+	check('a short result is whole, with no fold', (await page.locator(TID('vader-command-showall')).count()) === 0 && (await page.locator(TID('vader-command-output')).getAttribute('data-folded')) === 'no');
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== the checkpoints of a chat (board S13)
+{
+	const { page, errors } = await newPage();
+	const f = (p) => ({ fsPath: p, path: p, scheme: 'file' });
+	const cp = (type, snap) => ({ role: 'checkpoint', type, vaderFileSnapshotOfURI: snap, userModifications: { vaderFileSnapshotOfURI: {} } });
+	const snap = (code) => ({ entireFileCode: code, snapshottedDiffAreaOfId: {} });
+	const msgs = [
+		cp('user_edit', {}), userMsg('Add a rate limiter to the API server'),
+		{ role: 'tool', type: 'success', name: 'read_file', params: { uri: f('/work/vader-app/server.ts'), startLine: null, endLine: null, pageNumber: 1 }, result: { fileContents: 'x', totalFileLen: 1, hasNextPage: false }, content: 'x', id: 'c1', rawParams: {} },
+		cp('tool_edit', { '/work/vader-app/limiter.ts': snap('') }),
+		{ role: 'tool', type: 'success', name: 'rewrite_file', params: { uri: f('/work/vader-app/limiter.ts'), newContent: 'x' }, result: {}, content: '', id: 'c2', rawParams: {} },
+		cp('tool_edit', { '/work/vader-app/limiter.ts': snap('a%sb') }),
+		{ role: 'tool', type: 'success', name: 'edit_file', params: { uri: f('/work/vader-app/limiter.ts'), searchReplaceBlocks: '' }, result: {}, content: '', id: 'c3', rawParams: {} },
+		asstMsg('Done.'),
+	].map(m => JSON.parse(JSON.stringify(m).split('%s').join('NLX')));
+	await page.evaluate((a) => { window.__files['/work/vader-app/limiter.ts'] = ['a', 'b', 'c', 'd'].join(String.fromCharCode(10)); window.__setThread({ messages: a.m.map(m => m.vaderFileSnapshotOfURI ? { ...m, vaderFileSnapshotOfURI: Object.fromEntries(Object.entries(m.vaderFileSnapshotOfURI).map(([k, v]) => [k, { ...v, entireFileCode: v.entireFileCode.split('NLX').join(String.fromCharCode(10)) }])) } : m) }); }, { m: msgs });
+	await page.evaluate(() => { window.__chatMethods.jumpToCheckpointBeforeMessageIdx = (o) => { window.__log.push(`jump:${o.messageIdx}`); }; });
+	await page.waitForSelector(TID('vader-checkpoints-button'));
+	await page.locator(TID('vader-checkpoints-button')).click();
+	await page.waitForSelector(TID('vader-checkpoints'));
+	const rows = (await page.locator(TID('vader-checkpoint-row')).allInnerTexts()).map(flat);
+	check('the checkpoints are listed newest first, each with what its step changed', rows.join(' | ') === '3 Edited limiter.ts +2 | 2 Wrote limiter.ts +2 | 1 Before “Add a rate limiter to the API server” no changes', rows.join(' | '));
+	await page.waitForTimeout(260);
+	await shot(page, '23-checkpoints');
+	check('nothing is chosen at first, so nothing can be gone back to', await page.locator(TID('vader-checkpoints-goback')).isDisabled() && await page.locator(TID('vader-checkpoints-compare-button')).isDisabled());
+	await page.locator(`${TID('vader-checkpoint-row')}[data-n="2"]`).click();
+	check('choosing one offers to go back to it', (await page.locator(TID('vader-checkpoints-goback')).innerText()) === 'Go back to 2');
+	await page.locator(TID('vader-checkpoints-goback')).click();
+	check('going back asks first, and says what happens to the files and the messages', (await page.locator(TID('vader-checkpoints-confirm')).innerText()).includes('Files return to how they were at this checkpoint') && !(await log(page)).some(x => x.startsWith('jump:')));
+	await page.locator(TID('vader-checkpoints-go')).click();
+	check('Go back asks the chat to go back to that checkpoint', (await log(page)).some(x => x.startsWith('jump:')));
+	await page.locator(TID('vader-checkpoints-button')).click();
+	await page.locator(`${TID('vader-checkpoint-row')}[data-n="1"]`).click();
+	await page.locator(`${TID('vader-checkpoint-row')}[data-n="3"]`).click();
+	check('two chosen offer to compare them', (await page.locator(TID('vader-checkpoints-compare-button')).innerText()) === 'Compare 1 and 3');
+	await page.locator(TID('vader-checkpoints-compare-button')).click();
+	check('the comparison says which files changed between them', (await page.locator(TID('vader-checkpoints-compare')).innerText()).includes('limiter.ts'));
+	await page.keyboard.press('Escape');
+	check('Escape puts the list away', (await page.locator(TID('vader-checkpoints')).count()) === 0);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
 }

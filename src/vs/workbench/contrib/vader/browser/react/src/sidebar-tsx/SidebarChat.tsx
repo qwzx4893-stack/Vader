@@ -42,6 +42,9 @@ import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { ChoiceMenu } from './ComposerMenus.js';
+import { CheckpointsButton } from './CheckpointsPanel.js';
+import { foldOutput, lineCount } from '../../../../common/outputFold.js';
+import { FoldedOutput } from './FoldedOutput.js';
 import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
@@ -472,6 +475,7 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 		{usage && usage.turns > 0 ? <span title='Tokens the providers reported for this chat'>{formatTokens(usage.inputTokens + usage.outputTokens)} tokens</span> : null}
 		{usage && usage.turns > 0 ? <span title={unpriced ? `${usage.unpricedTurns} answer(s) came from a model whose price Vader does not know, so they are not in this amount. Set a price in Settings, Spending.` : usage.costUsd === 0 ? 'A model on this computer is free' : (usage.billedCostUsd ?? 0) >= usage.costUsd - 1e-9 ? 'The amount the provider says it charged' : 'Worked out from list prices. Your provider\'s bill can differ (discounts, taxes, cache writes). See Settings, Spending.'}>{usage.costUsd === 0 && !unpriced ? 'free' : formatCost(usage.costUsd, usage.billedCostUsd)}{unpriced ? ' +' : ''} this chat</span> : null}
 		{today.costUsd > 0 ? <span title='Worked out from list prices unless the provider reported the charge'>{formatCost(today.costUsd, today.billedCostUsd)} today</span> : null}
+		<CheckpointsButton />
 	</div>
 }
 
@@ -1426,9 +1430,10 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 
 		{/* looking back: a copy of the chat from before this message, to try another way; the original stays as it is */}
-		{mode === 'display' && messageIdx !== undefined && messageIdx > 0 && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
+		{mode === 'display' && messageIdx !== undefined && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
 			<button data-testid='vader-copy-message' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
-			<button data-testid='vader-branch' className='hover:text-vader-fg-1' title='A new chat that starts with everything before this message. This chat stays as it is.' onClick={() => { const id = chatThreadsService.branchThread(chatThreadsService.state.currentThreadId, messageIdx); if (id) setBranchedTo(id) }}>Branch the chat</button>
+			<button data-testid='vader-redo' className='hover:text-vader-fg-1' title='Send this message again from here: what came after it is replaced' onClick={() => { void agentGatewayService.reviseTask({ userMessage: chatMessage.displayContent ?? '', fromMessageIdx: messageIdx, threadId: chatThreadsService.state.currentThreadId }) }}>Redo from here</button>
+			{messageIdx > 0 ? <button data-testid='vader-branch' className='hover:text-vader-fg-1' title='A new chat that starts with everything before this message. This chat stays as it is.' onClick={() => { const id = chatThreadsService.branchThread(chatThreadsService.state.currentThreadId, messageIdx); if (id) setBranchedTo(id) }}>Branch the chat</button> : null}
 		</div> : null}
 		{branchedTo ? <div className='mt-2 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2' data-testid='vader-branched'>
 			<div className='font-semibold text-vader-fg-1'>Branched here</div>
@@ -2021,10 +2026,10 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 			componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId)
 		}
 
+		const fold = foldOutput(msg.trim())
+		if (fold.folded) componentParams.desc2 = lineCount(fold.total)
 		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
-			<div className='!select-text cursor-auto'>
-				<BlockCode initValue={`${msg.trim()}`} language='shellscript' />
-			</div>
+			<FoldedOutput full={msg.trim()} fold={fold} />
 		</ToolChildrenWrapper>
 	}
 	else if (toolMessage.type === 'tool_error') {

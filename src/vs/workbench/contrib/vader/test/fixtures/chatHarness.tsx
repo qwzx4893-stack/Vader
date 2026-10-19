@@ -68,6 +68,7 @@ const chat: any = new Proxy({}, {
 w.__chatMethods = {}
 const gateway: any = {
 	async startTask(a: any) { log(`task:${a.userMessage}`); if (w.__onTask) await w.__onTask(a) }, async cancelTask() { log('cancel'); if (w.__onCancel) await w.__onCancel() }, dismissError() { log('dismiss-error') },
+	async reviseTask(a: any) { log(`revise:${a.fromMessageIdx}:${a.userMessage}`) },
 	approveToolRequest(_t: string, o?: any) { log(`approve:${o?.rememberForProject ? 'project' : 'once'}`) }, rejectToolRequest() { log('reject-tool') },
 }
 const commands: any = { async executeCommand(id: string, ...a: any[]) { log(`command:${id}${a.length ? ':' + a.join(',') : ''}`) } }
@@ -78,16 +79,18 @@ const shell: any = { state: { mode: 'window', page: 'conversation', tab: 'conver
 w.__shell = shell
 const empty: any = new Proxy({}, { get: () => () => undefined })
 const fileUris = ['/src/app.js', '/src/app.test.js', '/src/server/limiter.ts'].map(x => URI.file('/work/vader-app' + x))
-const toolsSvc: any = { callTool: { async search_pathnames_only(a: any) { log(`search:${a.query}`); return { result: Promise.resolve({ uris: fileUris.filter(u => !a.query || (u.path.split('/').pop() ?? '').includes(a.query)) }) } } } }
+const toolsSvc: any = { stringOfResult: { run_command: (_p: any, r: any) => r.result, run_persistent_command: (_p: any, r: any) => r.result }, callTool: { async search_pathnames_only(a: any) { log(`search:${a.query}`); return { result: Promise.resolve({ uris: fileUris.filter(u => !a.query || (u.path.split('/').pop() ?? '').includes(a.query)) }) } } } }
 const workspaceBase: any = { getWorkspace: () => ({ folders: [{ uri: URI.file('/work/vader-app') }] }) }
 const workspaceSvc: any = new Proxy(workspaceBase, { get: (t, k: string) => k in t ? t[k] : () => undefined })
 w.__sources = { terminal: 'npm test\n12 passing\n1 failing', page: { pageId: 'p1', url: 'http://localhost:5173/app', title: 'My app', isActive: true, isClosed: false }, git: { files: 3, text: ' a | 1 +\n 3 files changed' } }
 const terminalSvc: any = { get activeInstance() { return w.__sources.terminal ? { xterm: { getContentsAsText: () => w.__sources.terminal } } : undefined } }
 const browserSvc: any = { async listPages() { return w.__sources.page ? [w.__sources.page] : [] }, async snapshot() { return { ...w.__sources.page, snapshotText: '- heading "Hello"' } } }
+w.__files = {} as Record<string, string>
+const modelSvc: any = { getModel: (u: any) => (u.path in w.__files ? { getValue: () => w.__files[u.path] } : null) }
 const reviewSvc: any = { async changesForContext() { return w.__sources.git } }
 const memorySvc: any = { write(o: any) { log(`remember:${o.scope}:${o.scopeKey}:${o.label}:${o.content}`); return { id: 'm1' } } }
 const verifySvc: any = { async runIndependentVerification(o: any) { log(`review:${o.objective}`); await new Promise(r => setTimeout(r, 120)); return { evidence: {}, verdict: { passed: false, findings: [{ severity: 'blocker', description: 'x' }], summary: 'limiter.ts never clears old hits.' } } } }
-w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IToolsService: toolsSvc, IWorkspaceContextService: workspaceSvc, ITerminalService: terminalSvc, IBrowserToolMainService: browserSvc, IVaderReviewService: reviewSvc, IMemoryService: memorySvc, IPolicyService: { setMode(m: string) { log(`mode:${m}`); w.__policy = { state: { mode: m } }; notify() } }, IVerificationService: verifySvc, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
+w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IModelService: modelSvc, IToolsService: toolsSvc, IWorkspaceContextService: workspaceSvc, ITerminalService: terminalSvc, IBrowserToolMainService: browserSvc, IVaderReviewService: reviewSvc, IMemoryService: memorySvc, IPolicyService: { setMode(m: string) { log(`mode:${m}`); w.__policy = { state: { mode: m } }; notify() } }, IVerificationService: verifySvc, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
 
 createRoot(document.getElementById('root')!).render(<div className='vader-scope' style={{ width: '100%', height: 820, display: 'flex', flexDirection: 'column', background: 'var(--vscode-sideBar-background, #18191a)' }}><SidebarChat /></div>)
 w.__mounted = true
