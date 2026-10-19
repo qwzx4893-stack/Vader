@@ -136,6 +136,8 @@ async function layoutProblems(page) {
 	check('turning one on writes the real setting and keeps the others', (await log(page)).some(x => x.startsWith('global:autoApprove=') && x.includes('"terminal":true') && x.includes('"edits":true')), (await log(page)).join(','));
 	await page.locator(TID('vader-perm-autoaccept')).click();
 	check('accepting changes as they are made is its own switch', (await log(page)).includes('global:autoAcceptLLMChanges=true'));
+	await page.locator(TID('vader-perm-taskcopies')).click();
+	check('working in a copy of the project is its own switch, in a group of its own', (await log(page)).includes('global:taskCopies=true') && (await page.getByText('Where the agent works').count()) === 1);
 	check('today’s spending is an estimate, with the approximate sign', /^≈ \$/.test(await page.locator(TID('vader-perm-today')).innerText()), await page.locator(TID('vader-perm-today')).innerText());
 	await page.locator(TID('vader-perm-limit')).fill('8');
 	await page.keyboard.press('Enter');

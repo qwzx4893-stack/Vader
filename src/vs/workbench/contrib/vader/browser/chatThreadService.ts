@@ -27,6 +27,8 @@ import { baseName } from '../common/externalAgents/externalAgentProtocol.js';
 import { IExternalAgentsService } from './externalAgents/externalAgentsService.js';
 import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
+import { ITaskCopyService } from './taskCopyService.js';
+import { EDITING_TOOLS } from '../common/taskCopyModel.js';
 import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
 import { createClineAgentRuntime } from './agentRuntime/clineRuntimeAdapter.js';
 import { getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -572,6 +574,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IExternalAgentMainService private readonly _externalAgentMain: IExternalAgentMainService,
 		@IExternalAgentsService private readonly _externalAgents: IExternalAgentsService,
 		@IDialogService private readonly _dialogService: IDialogService,
+		@ITaskCopyService private readonly _taskCopyService: ITaskCopyService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -1380,8 +1383,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		const hard = await this._hardRulesCheck(threadId, toolName, mcpServerName, unvalidatedToolParams, (validated) => {
 			// once validated, add checkpoint for edit
-			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['edit_file']).uri }) }
-			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['rewrite_file']).uri }) }
+			// (the checkpoint is of the file the edit will really change: in the task's own copy when there is one)
+			const copyUri = (uri: URI) => this._taskCopyService.remapToolParams(threadId, toolName, { uri }).uri
+			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: copyUri((validated as BuiltinToolCallParams['edit_file']).uri) }) }
+			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: copyUri((validated as BuiltinToolCallParams['rewrite_file']).uri) }) }
 		})
 		if (hard.kind === 'invalid_params') {
 			this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName })
@@ -1449,7 +1454,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setStreamState(threadId, { isRunning: 'tool', interrupt: interruptorPromise, toolInfo: { toolName, toolParams, id: toolId, content: 'interrupted...', rawParams: unvalidatedToolParams, mcpServerName } })
 
 			if (isBuiltInTool) {
-				const { result, interruptTool } = await this._toolsService.callTool[toolName](toolParams as any)
+				// In a task's own copy every path (and the folder a command runs in) is the copy's; the gate above saw the paths as the model wrote them.
+				// Commands and tests read the copy from disk, so what the agent changed in an open editor is written first.
+				const inCopy = !!this._taskCopyService.copyOf(threadId)
+				if (inCopy && (toolName === 'run_command' || toolName === 'run_persistent_command' || toolName === 'run_verification')) { await this._taskCopyService.saveOpenFiles(threadId) }
+				const callParams = this._taskCopyService.remapToolParams(threadId, toolName, toolParams as object)
+				const { result, interruptTool } = await this._toolsService.callTool[toolName](callParams as any)
 				const interruptor = () => { interrupted = true; interruptTool?.() }
 				resolveInterruptor(interruptor)
 
@@ -1497,6 +1507,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		// 5. add to history and keep going
 		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, durationMs: Date.now() - startedAt })
+		// a step that can change files updates the count on the task's copy
+		if (EDITING_TOOLS.has(toolName) && this._taskCopyService.copyOf(threadId)) { void this._taskCopyService.afterRun(threadId, { keepIfEmpty: true }) }
 		return { resultStr: toolResultStr, isError: false }
 	}
 
@@ -1849,6 +1861,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const chatMode = (isVerificationThread || isResearchThread) ? 'gather' : globalChatMode
 		const agentId = this.state.allThreads[threadId]?.agentId
 
+		// In Agent mode the agent works in its own copy of the project (common/taskCopyModel.ts): made here, before its first step, after asking what must be asked.
+		// The hidden threads Vader starts for itself (sub-agents, verification, research) are not given one: parallel tasks have their own, and the others do not write.
+		if (chatMode === 'agent' && !thisThread?.isSubagentThread && !isVerificationThread && !isResearchThread) {
+			const lastUser = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'user')
+			this._setStreamState(threadId, { isRunning: 'idle', interrupt: Promise.resolve(() => this._taskCopyService.answerQuestion(threadId, 'cancel')) })
+			const prepared = await this._taskCopyService.prepareForTask(threadId, lastUser?.role === 'user' ? lastUser.displayContent : '')
+			if (prepared === 'cancel') { this._setStreamState(threadId, undefined); return }
+		}
+
 		const mcpTools = this._mcpService.getMCPTools()
 		const tools = buildClineTools({
 			chatMode,
@@ -1862,6 +1883,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			maybeCompactThread: async () => { await this._maybeCompactThread(threadId, modelSelection) },
 			chatMode,
 			agentId,
+			getCopy: () => this._taskCopyService.copyOf(threadId),
 			modelSelection,
 			modelSelectionOptions,
 			overridesOfModel: this._settingsService.state.overridesOfModel,
@@ -2000,6 +2022,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		} catch (error) {
 			unsubscribe()
 			throw error // handled by _runChatAgent, which surfaces it as a per-task stream error
+		} finally {
+			// the count of changed files on the task's copy is brought up to date; a copy where nothing changed is removed (unless a step is still waiting for a yes)
+			if (this._taskCopyService.getState(threadId)) { void this._taskCopyService.afterRun(threadId, { keepIfEmpty: this._currentIsRunning(threadId) === 'awaiting_user' }) }
 		}
 	}
 

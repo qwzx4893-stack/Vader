@@ -61,6 +61,15 @@ The words are made from the messages the app really raises, the real error is al
 
 The tasks an agent splits a job into (`IAgentOrchestrationService`, one copy of the project and one branch for each task that edits files) are listed at the top of All agents (`vader-shell-tsx/ParallelRuns.tsx`, `common/parallelRunModel.ts`): the task and how long it took, its helper, its branch, where it stands (Merged cleanly, No changes, Conflict in N files, Working, Could not merge, Checks failed, Failed) and how many files. A conflict names the file and offers the three ways out the service really has: **Let an agent merge them** (in the task's own folder first), **Keep the current version**, **Keep this task's version**, and Open the file; when the service cannot do it, its reason is shown. Stop all cancels the run.
 
+## A task's own copy of the project (boards S06 and R01)
+
+In Agent mode the agent works in a copy of the project made with git (`taskCopyService.ts`, `common/taskCopyModel.ts`): a worktree on its own branch (`agent/rate-limiter-a1b2`) next to the folder, never inside it. It is made before the agent's first step; if the task changes nothing it is removed again.
+
+- **Before it starts**: a folder that is not a git project asks "Start git here" (a first commit of what is there) or "Use Chat"; uncommitted changes ask "Start anyway", "Commit them first" or "Cancel" (once for a chat, not before every message); a copy that could not be made offers "Work in the folder instead".
+- **While it works**: the agent is told the copy's folder is its workspace; every file path and every command folder it uses is moved from your folder to the copy when the call runs (`remapToolParams`). The Review page shows the copy's files, relative to the copy. The card says the branch, where it came from and how many files changed.
+- **Merge into main**: commits the copy and merges it into the branch you are on. Cards: "Merged into main" (Undo the merge, Done), "This task conflicts with main" (Keep my version, Keep the task's version, Ask an agent to merge, which shows each file as Resolving or Resolved while the agent works in the copy), "Could not merge" (git's own words; when it stopped on your uncommitted changes it says that this is not a conflict between tasks and offers "Stash my changes and retry", which puts them back afterwards or keeps them in git's stash and says so), and "Discard this task?", which says exactly what disappears.
+- The conflict code (`common/worktree/conflictResolution.ts`) is the one parallel tasks use.
+
 ## Motion
 
 A page settles in when it opens (the Vader window, each Settings page), popovers and questions rise, hover changes ease and the switch slides, all in 120 to 180 ms (`vader-shell-tsx/shell.css`; the chat's cards and menus use `animate-card-in`, `react/tailwind.config.js`). With the system setting "reduce motion" none of it moves (`prefers-reduced-motion`); `shellUiE2E` and `pickerUiE2E` check both. Searching Settings for something that is not there offers the nearest places (`common/settingsSearch.ts`).
@@ -78,18 +87,19 @@ A number that cannot be used (`five`, `250%`) is refused in words and the text s
 |---|---|---|
 | `shellUiE2E` | the window in headless Chromium: sidebar, All agents, search, Review, Browser, Terminal, rename/export/delete | 86 |
 | `onboardingUiE2E` | the three steps, a key that works / is refused (401) / cannot be reached, a local model, the folder, permissions, the first task | 47 |
-| `settingsUiE2E` | every Settings page against objects of the page | 214 |
-| `chatUiE2E` | the **real** chat component (markdown, apply buttons and the model picker stubbed): each state above, the gate cards, the menus, `/` and `@`, the drop zone, and the chat at the width it has in the window (screenshots go to the temp folder) | 178 |
+| `settingsUiE2E` | every Settings page against objects of the page | 232 |
+| `chatUiE2E` | the **real** chat component (markdown, apply buttons and the model picker stubbed): each state above, the gate cards, the menus, `/` and `@`, the drop zone, images, the task's own copy, and the chat at the width it has in the window (screenshots go to the temp folder) | 257 |
 | `pickerUiE2E` | the real model picker in each state of board S04 | 26 |
 | `shellModelE2E`, `runStateModelE2E`, `chatExportE2E`, `settingsInputE2E`, `usageAccountingE2E` | the pure rules | 28, 32, 12, 8, 46 |
 | `gateModelE2E`, `policyGateRulesE2E`, `slashCommandsE2E`, `contextSourcesE2E`, `attachmentRulesE2E`, `modelPickerE2E` | the words and rules of the gate, the commands, the sources and the drop | 21, 16, 12, 11, 14, 32 |
+| `taskCopyModelE2E`, `gitWorktreeCopyE2E` | the branch names, path moves and words of a task's own copy; the git work behind it (copy, merge, undo, conflict, stash) **run for real** against throw-away repositories | 29, 25 |
 | `test/e2e/scenarios/shell.mjs` | the **packaged app** (CI only): first run, a conversation, All agents, search, Add-ons, Settings, to the editor and back, with screenshots | runs in `windows-e2e.yml` |
 
 All of these run without opening a window. The packaged app itself can only be run on the Windows build (`windows-build.yml`, `windows-smoke.yml`, `windows-e2e.yml`).
 
 ## Honest limits
 
-- A task edits the project in place. **A copy of the project per task (the branch names in boards R01 and S06) is only used for parallel tasks** (`orchestrationService`), not for the main agent. So the cards of board S06 that belong to that copy ("Merged into main, Undo the merge", "Discard this task", "Stash my changes and retry", uncommitted changes before a task starts, "This folder is not a git project") are not built; a parallel task that conflicts, fails to merge or fails its checks is shown as in board R05.
+- **The task's own copy is only as good as git and the open editors.** It needs a git project (Vader offers to start git in a folder that is not one, with a first commit of what is there). Files the agent changes in an open editor are written to disk before a command runs and before the merge; the agent's searches by file name still look at your folder, but every path it then reads, edits or runs a command in is moved to the copy (`taskCopyService.remapToolParams`, applied after the safety gate, which judges the paths as the agent wrote them). MCP tools and the agent's browser know nothing of the copy. Undo the merge makes a new commit that reverses the merge (history is never rewritten), so it is refused by git while your own uncommitted changes touch the same files. Turn the whole thing off in Settings, Permissions, Work in a copy of the project: the agent then edits the folder directly, as before. The packaged app has not been run on this machine; the git work is tested against real repositories (`gitWorktreeCopyE2E`).
 - **Images are sent as the model's own image input only when the model reads images** (`modelSupportsVision`, a list by model family: a model it does not know is treated as not reading them, so it is told so rather than sent one). The latest three messages that carry images keep them in every request; an older one is named, not repeated. An image is made smaller (longest side 1568) before it is kept with the chat. A connected agent (Codex and the others) is not offered images, because Vader cannot know what its own model reads.
 - The window screenshots of the test show the chat at 780 pixels (its width in the window) beside a stand-in model button; the packaged app itself has not been run on this machine.
 - The Browser tab shows a picture of the agent's page every second and a half; **taking over the page** is not possible because the agent's browser has no window of its own (Open in my browser opens the same address in yours).

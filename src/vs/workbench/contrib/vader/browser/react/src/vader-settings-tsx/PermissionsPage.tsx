@@ -105,6 +105,11 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 			<Line title='Fix the lint errors it causes' right={<Switch on={g.includeToolLintErrors} label='Fix the lint errors it causes' testId='vader-perm-lint' onChange={v => settings.setGlobalSetting('includeToolLintErrors', v)} />} />
 		</Group>
 
+		<Group title='Where the agent works'>
+			<Line first title='Work in a copy of the project' detail='Agent mode edits a separate copy on its own branch, and your folder changes only when you merge it. Needs a git project; Vader offers to start git in one that is not.'
+				right={<Switch on={g.taskCopies} label='Work in a copy of the project' testId='vader-perm-taskcopies' onChange={v => settings.setGlobalSetting('taskCopies', v)} />} />
+		</Group>
+
 		<Group title='Spending'>
 			<Line first title='Today' detail={<>An estimate from list prices. <button className='tx' style={{ height: 'auto', padding: 0, color: 'var(--ac)' }} data-testid='vader-perm-to-usage' onClick={() => goto('usage')}>Usage and cost</button></>}
 				right={<span className='t1' data-testid='vader-perm-today' style={{ fontVariantNumeric: 'tabular-nums' }}>{formatCost(today.costUsd, today.billedCostUsd)}{today.unpricedTurns > 0 ? ' +' : ''}</span>} />

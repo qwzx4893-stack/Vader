@@ -9,6 +9,7 @@ import { ChatMessage, CompactedSummaryEntry } from '../common/chatThreadServiceT
 import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities, modelSupportsVision } from '../common/modelCapabilities.js';
 import { ChatImage, giveImagesToMessages, imagePlaceholder, sentWithImages as imagesKeptIn } from '../common/imageRules.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
+import { copyInstructions } from '../common/taskCopyModel.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IVaderSettingsService } from '../common/vaderSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/vaderSettingsTypes.js';
@@ -575,7 +576,8 @@ const prepareMessages = (params: {
 export interface IConvertToLLMMessageService {
 	readonly _serviceBrand: undefined;
 	prepareLLMSimpleMessages: (opts: { simpleMessages: SimpleLLMMessage[], systemMessage: string, modelSelection: ModelSelection | null, featureName: FeatureName }) => { messages: LLMChatMessage[], separateSystemMessage: string | undefined }
-	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null, agentId?: string | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
+	/** `copy`: the agent works in its own copy of the project (common/taskCopyModel.ts); the prompt names that folder as the workspace and says so */
+	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null, agentId?: string | null, copy?: { worktreePath: string, branchName: string } }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
 	prepareFIMMessage(opts: { messages: LLMFIMMessage, }): { prefix: string, suffix: string, stopTokens: string[] }
 }
 
@@ -691,8 +693,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	}
 
 	// system message
-	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, contextEngineOpts: { userMessage: string, mentionedURIs: URI[], contextWindow: number }) => {
-		const workspaceFolders = this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
+	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, contextEngineOpts: { userMessage: string, mentionedURIs: URI[], contextWindow: number }, copy?: { worktreePath: string, branchName: string }) => {
+		const workspaceFolders = copy ? [copy.worktreePath] : this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 
 		const openedURIModels = this.modelService.getModels().filter(m => m.isAttachedToEditor()).map(m => m.uri)
 		const openedURIs = openedURIModels.map(u => u.fsPath) || [];
@@ -717,7 +719,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
 		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, contextEngineBlock })
-		return systemMessage
+		return copy ? `${systemMessage}\n\n${copyInstructions(copy.worktreePath, copy.branchName)}` : systemMessage
 	}
 
 
@@ -804,7 +806,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		})
 		return { messages, separateSystemMessage };
 	}
-	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection, agentId }) => {
+	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection, agentId, copy }) => {
 		if (modelSelection === null) return { messages: [], separateSystemMessage: undefined }
 
 		const { overridesOfModel } = this.vaderSettingsService.state
@@ -825,7 +827,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 			userMessage: lastUserMessage?.role === 'user' ? lastUserMessage.displayContent : '',
 			mentionedURIs,
 			contextWindow,
-		})
+		}, copy)
 		const systemMessage = disableSystemMessage ? '' : fullSystemMessage;
 
 		const modelSelectionOptions = this.vaderSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]

@@ -12,7 +12,7 @@ import { IAgentGatewayService } from '../common/agentGateway/agentGatewayTypes.j
 import { IGitWorktreeMainService } from '../common/worktree/gitWorktreeService.js';
 import { IAgentsService } from '../common/agents/agentsService.js';
 import { IVerificationService } from '../common/verification/verificationTypes.js';
-import { conflictResolutionPrompt } from '../common/orchestration/conflictPrompt.js';
+import { resolveTaskConflict } from '../common/worktree/conflictResolution.js';
 
 export * from '../common/orchestration/orchestrationTypes.js';
 
@@ -303,27 +303,16 @@ This is an isolated git worktree - a separate checkout of this same repository, 
 		};
 		const keep = (reason: string): { ok: false; reason: string } => { t.errorMessage = reason; this._fire(); return { ok: false, reason }; };
 
-		if (choice !== 'agent') {
-			const merged = await this._gitWorktreeService.mergeWorktreeBranchPreferring({ repoPath, worktreePath, branchName, targetBranch, prefer: choice, commitMessage });
-			return merged.ok ? finish() : keep(`Nothing was merged: ${merged.reason}`);
-		}
-
-		// let an agent merge: the current branch goes into the task's worktree, an agent removes the markers there, then the result is merged as usual
-		const started = await this._gitWorktreeService.startMergeInWorktree({ worktreePath, targetBranch });
-		if (!started.ok) return keep(`The merge could not be started: ${started.reason}`);
-		if (started.conflictFiles.length) {
-			const files = started.conflictFiles;
-			const result = await this._agentGatewayService.runIsolatedTask({
-				task: conflictResolutionPrompt({ worktreePath, targetBranch, files, task: t.task }),
+		// one implementation for every task that meets changes already on its target branch (common/worktree/conflictResolution.ts)
+		const resolved = await resolveTaskConflict({
+			git: this._gitWorktreeService,
+			runAgent: (prompt) => this._agentGatewayService.runIsolatedTask({
+				task: prompt,
 				agentId: this._resolveAgentId(t.agentName),
 				onThreadCreated: (threadId) => { t.threadId = threadId; this._fire(); },
-			});
-			if (result.hadError || result.stalledAwaitingApproval) return keep('The agent could not finish merging the two versions. The worktree is left as it is for you to look at.');
-		}
-		const done = await this._gitWorktreeService.finishMergeInWorktree({ worktreePath, commitMessage: `Merge ${targetBranch} into ${branchName}` });
-		if (!done.ok) return keep(done.stillConflicted?.length ? `The agent left conflict markers in: ${done.stillConflicted.join(', ')}. Nothing was merged.` : `Nothing was merged: ${done.reason}`);
-		const merged = await this._gitWorktreeService.commitAndMergeWorktreeBranch({ repoPath, worktreePath, branchName, targetBranch, commitMessage });
-		return merged.ok ? finish() : keep(`The two versions were merged in the worktree, but the final merge failed: ${merged.reason}`);
+			}),
+		}, { repoPath, worktreePath, branchName, targetBranch, task: t.task, choice, commitMessage });
+		return resolved.ok ? finish() : keep(resolved.reason);
 	}
 }
 

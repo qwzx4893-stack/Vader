@@ -29,6 +29,15 @@ class GitWorktreeService implements IGitWorktreeMainService {
 	mergeWorktreeBranchPreferring: IGitWorktreeMainService['mergeWorktreeBranchPreferring'] = (opts) => this._mainService.mergeWorktreeBranchPreferring(opts);
 	startMergeInWorktree: IGitWorktreeMainService['startMergeInWorktree'] = (opts) => this._mainService.startMergeInWorktree(opts);
 	finishMergeInWorktree: IGitWorktreeMainService['finishMergeInWorktree'] = (opts) => this._mainService.finishMergeInWorktree(opts);
+	inspectRepo: IGitWorktreeMainService['inspectRepo'] = (path) => this._mainService.inspectRepo(path);
+	initRepo: IGitWorktreeMainService['initRepo'] = (path) => this._mainService.initRepo(path);
+	commitAllChanges: IGitWorktreeMainService['commitAllChanges'] = (opts) => this._mainService.commitAllChanges(opts);
+	headOf: IGitWorktreeMainService['headOf'] = (path) => this._mainService.headOf(path);
+	changedFilesVsBase: IGitWorktreeMainService['changedFilesVsBase'] = (opts) => this._mainService.changedFilesVsBase(opts);
+	conflictMarkersIn: IGitWorktreeMainService['conflictMarkersIn'] = (path) => this._mainService.conflictMarkersIn(path);
+	stashChanges: IGitWorktreeMainService['stashChanges'] = (opts) => this._mainService.stashChanges(opts);
+	popStash: IGitWorktreeMainService['popStash'] = (path) => this._mainService.popStash(path);
+	undoMerge: IGitWorktreeMainService['undoMerge'] = (opts) => this._mainService.undoMerge(opts);
 }
 
 registerSingleton(IGitWorktreeMainService, GitWorktreeService, InstantiationType.Delayed);

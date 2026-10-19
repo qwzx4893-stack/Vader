@@ -34,4 +34,5 @@ export const useSkillsState = () => { useTick(); return [] }
 export const useMemoryState = () => { useTick(); return { project: [], agent: [] } }
 export const useExternalAgentsState = () => { useTick(); return { statuses: {}, busy: {}, errors: {}, probes: {}, signIn: {}, opened: {}, configOfThread: {} } }
 export const useOrchestrationRunsState = () => { useTick(); return { runs: [] } }
+export const useTaskCopyState = (threadId: string) => { useTick(); const service = w.__accessor.get('ITaskCopyService'); return { service, state: service.getState(threadId), question: service.getQuestion(threadId) } }
 export const useIsOptedOut = () => false

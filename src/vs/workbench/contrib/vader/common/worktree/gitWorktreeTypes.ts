@@ -52,6 +52,37 @@ export interface IGitWorktreeMainService {
 
 	/** Second half: after the markers are gone, stages everything in the worktree and commits the merge. Refuses while any file still has conflict markers or is unmerged. */
 	finishMergeInWorktree(opts: { worktreePath: string; commitMessage: string }): Promise<{ ok: true } | { ok: false; reason: string; stillConflicted?: string[] }>;
+
+	// ---- what a task's own copy of the project needs (boards S06 and R01): the checks before it starts, its changes, and getting the merge back out
+
+	/** is the folder a git repository, which branch is it on, and how many files have uncommitted changes (Vader's own `.vader/` folder is not counted) */
+	inspectRepo(repoPath: string): Promise<RepoInspection>;
+
+	/** `git init` and a first commit of what is there, so that a copy can be made from it */
+	initRepo(repoPath: string): Promise<{ ok: true } | { ok: false; reason: string }>;
+
+	/** stages and commits everything uncommitted in the folder */
+	commitAllChanges(opts: { repoPath: string; message: string }): Promise<{ ok: true } | { ok: false; reason: string }>;
+
+	/** the commit HEAD is at; empty when it cannot be read */
+	headOf(repoPath: string): Promise<string>;
+
+	/** the files the copy changed compared with the branch it was made from, committed or not (names only) */
+	changedFilesVsBase(opts: { worktreePath: string; baseBranch: string }): Promise<string[]>;
+
+	/** files in the worktree that still hold git's conflict markers */
+	conflictMarkersIn(worktreePath: string): Promise<string[]>;
+
+	/** sets the person's uncommitted changes (and new files) aside so that a merge can run; `stashed` is false when there was nothing to set aside */
+	stashChanges(opts: { repoPath: string; message: string }): Promise<{ ok: true; stashed: boolean } | { ok: false; reason: string }>;
+
+	/** brings the stashed changes back; if they now clash with the merged files they are kept in the stash and `kept` says so */
+	popStash(repoPath: string): Promise<{ ok: true } | { ok: false; reason: string; kept: boolean }>;
+
+	/** undoes a merge commit with a new commit that reverses it (never rewrites history, never touches uncommitted work) */
+	undoMerge(opts: { repoPath: string; mergeSha: string }): Promise<{ ok: true } | { ok: false; reason: string }>;
 }
+
+export type RepoInspection = { isRepo: boolean; hasCommits: boolean; branch: string; dirtyFiles: number };
 
 export const IGitWorktreeMainService = createDecorator<IGitWorktreeMainService>('vaderGitWorktreeMainService');

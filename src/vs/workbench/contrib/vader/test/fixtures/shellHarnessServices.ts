@@ -22,3 +22,4 @@ export const useChatThreadsStreamState = (id: string) => { useTick(); return w._
 export const useUsageTick = () => { useTick(); return 0 }
 export const useCommandBarState = () => { useTick(); return { stateOfURI: w.__cb.stateOfURI, sortedURIs: w.__cb.sortedURIs } }
 export const useOrchestrationRunsState = () => { useTick(); return w.__runs ?? [] }
+export const useTaskCopyState = (_threadId: string) => ({ service: undefined as any, state: undefined, question: undefined })

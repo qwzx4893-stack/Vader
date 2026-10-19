@@ -544,6 +544,8 @@ export type GlobalSettings = {
 	modelPriceOverrides: { [modelName: string]: { input: number, output: number, cache_read?: number, cache_write?: number } };
 	/** ids of the Add-ons sources the person turned off (common/marketplace/addonSources.ts); all others are on, including ones added later */
 	addonSourcesOff: string[];
+	/** Agent mode works in a copy of the project (a git worktree on its own branch) that the person merges when they accept; off: it edits the folder directly (common/taskCopyModel.ts) */
+	taskCopies: boolean;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -567,6 +569,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	priceDiscountPercent: 0,
 	modelPriceOverrides: {},
 	addonSourcesOff: [],
+	taskCopies: true,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

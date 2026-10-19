@@ -69,6 +69,7 @@ import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntime
 import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
 import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
 import { IVaderReviewService } from '../../../vaderReviewService.js'
+import { ITaskCopyService } from '../../../taskCopyService.js'
 import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
 import { IBrowserToolMainService } from '../../../../common/browser/browserToolService.js'
 
@@ -374,6 +375,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
 		IVaderShellService: accessor.get(IVaderShellService),
 		IVaderReviewService: accessor.get(IVaderReviewService),
+		ITaskCopyService: accessor.get(ITaskCopyService),
 		IVerificationService: accessor.get(IVerificationService),
 		IBrowserToolMainService: accessor.get(IBrowserToolMainService),
 
@@ -672,6 +674,19 @@ export const useOrchestrationRunsState = () => {
 	return s
 }
 
+
+
+/** the thread's own copy of the project and the question it waits on; the window follows the service as it changes */
+export const useTaskCopyState = (threadId: string) => {
+	const accessor = useAccessor()
+	const service = accessor.get('ITaskCopyService')
+	const [, bump] = useState(0)
+	useEffect(() => {
+		const d = service.onDidChange(() => bump(n => n + 1))
+		return () => d.dispose()
+	}, [service])
+	return { service, state: service.getState(threadId), question: service.getQuestion(threadId) }
+}
 
 
 export const useIsOptedOut = () => {

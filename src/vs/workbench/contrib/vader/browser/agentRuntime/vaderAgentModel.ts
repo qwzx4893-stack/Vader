@@ -52,6 +52,8 @@ export class VaderAgentModel implements AgentModel {
 			maybeCompactThread: () => Promise<void>;
 			chatMode: ChatMode;
 			agentId: string | null | undefined;
+			/** the task's own copy of the project, while there is one: the prompt names it as the workspace */
+			getCopy?: () => { worktreePath: string, branchName: string } | undefined;
 			modelSelection: ModelSelection | null;
 			modelSelectionOptions: ModelSelectionOptions | undefined;
 			overridesOfModel: OverridesOfModel | undefined;
@@ -91,6 +93,7 @@ export class VaderAgentModel implements AgentModel {
 			chatMode: this._opts.chatMode,
 			modelSelection: this._opts.modelSelection,
 			agentId: this._opts.agentId,
+			copy: this._opts.getCopy?.(),
 		});
 
 		const events: AgentModelEvent[] = [];

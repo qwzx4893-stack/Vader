@@ -34,8 +34,9 @@ export const ReviewView = () => {
 	const shellService = accessor.get('IVaderShellService')
 	const data = useShellData()
 	const { stateOfURI, sortedURIs } = useCommandBarState()
-	const root = workspace.getWorkspace().folders[0]?.uri.fsPath
 	const thread = data.all.find(t => t.id === data.currentId)
+	// a task working in its own copy of the project changes files there: paths are shown relative to the copy, as they are relative to the folder otherwise
+	const root = accessor.get('ITaskCopyService')?.copyOf(thread?.id ?? '')?.worktreePath ?? workspace.getWorkspace().folders[0]?.uri.fsPath
 
 	const files = useMemo<FileEntry[]>(() => sortedURIs.map(uri => {
 		const st = stateOfURI[uri.fsPath]

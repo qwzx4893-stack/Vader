@@ -581,6 +581,125 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== a task's own copy of the project (boards S06 and R01)
+{
+	const { page, errors } = await newPage();
+	const copy = (o = {}) => ({ threadId: 't', title: 'Add a rate limiter', repoPath: 'C:\\proj\\vader-app', worktreePath: 'C:\\proj\\.vader-worktrees\\agent-rate-limiter-a1b2', branchName: 'agent/rate-limiter-a1b2', baseBranch: 'main', phase: 'working', files: 3, ...o });
+	const set = async (state, question) => { await page.evaluate((a) => window.__setTaskCopy(a.state, a.question), { state, question }); await page.waitForTimeout(80); };
+	const words = async (id) => flat(await page.locator(TID(id)).first().innerText());
+
+	check('a thread with no copy shows nothing about one', (await page.locator('[data-testid^="vader-taskcopy-"]').count()) === 0);
+
+	// the copy, with what it changed
+	await set(copy());
+	await page.waitForSelector(TID('vader-taskcopy-card'));
+	check('the own-copy card names the branch, where it came from, and how many files', (await words('vader-taskcopy-branch')) === 'agent/rate-limiter' && (await words('vader-taskcopy-from')) === 'from main, 3 files');
+	check('...and says the folder does not change until the person accepts', (await words('vader-taskcopy-body')) === 'The agent edits a copy of vader-app on its own branch. Your folder does not change until you accept.');
+	await page.waitForTimeout(260);
+	await shot(page, '28-taskcopy-own');
+	await page.locator(TID('vader-taskcopy-merge')).click();
+	check('Merge into main asks the service to merge', (await log(page)).includes('tc-merge') && (await words('vader-taskcopy-merge')) === 'Merge into main');
+	await set(copy({ files: 0 }));
+	check('a copy where nothing changed yet is not shown while nothing runs', (await page.locator(TID('vader-taskcopy-card')).count()) === 0);
+	await page.evaluate((r) => window.__setStream(r), running);
+	await set(copy({ files: 2 }));
+	check('while the agent still works, the merge waits for it', await page.locator(TID('vader-taskcopy-merge')).isDisabled());
+	await page.evaluate(() => window.__setStream(undefined));
+
+	// merged
+	await set(copy({ phase: 'merged', mergeSha: 'abc1234' }));
+	await page.waitForSelector(TID('vader-taskcopy-merged'));
+	check('a merge says where it went and that the copy was removed', (await words('vader-taskcopy-title')) === 'Merged into main' && (await words('vader-taskcopy-body')) === 'agent/rate-limiter was merged into main without conflicts. The copy was removed.');
+	await page.waitForTimeout(260);
+	await shot(page, '29-taskcopy-merged');
+	await page.locator(TID('vader-taskcopy-undo')).click();
+	check('Undo the merge asks the service to undo it', (await log(page)).includes('tc-undo'));
+	await set(copy({ phase: 'merged', mergeSha: 'abc1234', undone: true, note: 'The merge was undone. main is as it was before.' }));
+	check('once undone there is nothing more to undo, and it says so', (await page.locator(TID('vader-taskcopy-undo')).count()) === 0 && (await words('vader-taskcopy-note')) === 'The merge was undone. main is as it was before.');
+	await page.locator(TID('vader-taskcopy-done')).click();
+	check('Done puts the card away', (await log(page)).includes('tc-dismiss') && (await page.locator('[data-testid^="vader-taskcopy-"]').count()) === 0);
+
+	// two tasks met
+	await set(copy({ phase: 'conflict', conflictFiles: ['server/app.ts', 'server/limiter.ts'] }));
+	await page.waitForSelector(TID('vader-taskcopy-conflict'));
+	check('a conflict names the files and gives three ways out', (await words('vader-taskcopy-title')) === 'This task conflicts with main' && (await words('vader-taskcopy-body')) === 'Both changed server/app.ts and server/limiter.ts.' && (await page.locator(`${TID('vader-taskcopy-conflict')} button`).allInnerTexts()).map(flat).join('|') === 'Keep my version|Keep the task\u2019s version|Ask an agent to merge');
+	check('the file names are set in code', (await page.locator(`${TID('vader-taskcopy-body')} code`).count()) === 2);
+	await page.waitForTimeout(260);
+	await shot(page, '30-taskcopy-conflict');
+	await page.locator(TID('vader-taskcopy-keep-mine')).click();
+	await page.locator(TID('vader-taskcopy-keep-task')).click();
+	await page.locator(TID('vader-taskcopy-ask-agent')).click();
+	check('each way out reaches the service as its own choice', (await log(page)).filter(x => x.startsWith('tc-resolve:')).join() === 'tc-resolve:target,tc-resolve:branch,tc-resolve:agent');
+
+	// an agent merging
+	await set(copy({ phase: 'agent-merging', conflictFiles: ['server/app.ts', 'server/limiter.ts'], resolved: ['server/app.ts'], resolving: ['server/limiter.ts'] }));
+	await page.waitForSelector(TID('vader-taskcopy-agent-merging'));
+	check('an agent merge says what goes into what, and which files are done', (await words('vader-taskcopy-title')) === 'Merging main into agent/rate-limiter' && (await page.locator(TID('vader-taskcopy-progress-row')).allInnerTexts()).map(flat).join('|') === 'Resolved server/app.ts|Resolving server/limiter.ts');
+	check('...with a spinner, and that the person reviews the result before main', (await page.locator(TID('vader-taskcopy-spinner')).count()) === 1 && (await page.locator(TID('vader-taskcopy-agent-merging')).innerText()).includes('You review the result before it reaches main.'));
+	await page.waitForTimeout(260);
+	await shot(page, '31-taskcopy-agent-merging');
+
+	// the merge failed
+	await set(copy({ phase: 'failed', failure: { kind: 'local-changes', reason: 'error: Your local changes to the following files would be overwritten by merge:\n\tserver/app.ts\nAborting', files: ['server/app.ts'] } }));
+	await page.waitForSelector(TID('vader-taskcopy-merge-failed'));
+	check('a merge git refused because of the person\u2019s own changes says that, and that it is not a conflict', (await words('vader-taskcopy-title')) === 'Could not merge agent/rate-limiter' && (await words('vader-taskcopy-body')) === 'git said: your local changes to server/app.ts would be overwritten. This is not a conflict between tasks.');
+	await page.waitForTimeout(260);
+	await shot(page, '32-taskcopy-failed');
+	await page.locator(TID('vader-taskcopy-retry')).click();
+	check('Stash my changes and retry reaches the service', (await log(page)).includes('tc-stash') && (await words('vader-taskcopy-retry')) === 'Stash my changes and retry');
+	await page.locator(TID('vader-taskcopy-show-output')).click();
+	check('Show the git output shows what git said, and can be hidden', (await page.locator(TID('vader-taskcopy-output')).innerText()).includes('would be overwritten by merge') && (await words('vader-taskcopy-show-output')) === 'Hide the git output');
+	await page.locator(TID('vader-taskcopy-show-output')).click();
+	check('...hidden again', (await page.locator(TID('vader-taskcopy-output')).count()) === 0);
+	await set(copy({ phase: 'failed', failure: { kind: 'other', reason: 'fatal: boom', files: [] }, note: 'Your own changes could not be put back.' }));
+	check('any other failure offers to try again, and notes are kept under the card', (await words('vader-taskcopy-retry')) === 'Try again' && (await words('vader-taskcopy-note')) === 'Your own changes could not be put back.');
+	await page.locator(TID('vader-taskcopy-retry')).click();
+	check('Try again merges again', (await log(page)).filter(x => x === 'tc-merge').length === 2);
+
+	// discard
+	await set(copy());
+	await page.locator(TID('vader-taskcopy-discard-open')).click();
+	await page.waitForSelector(TID('vader-taskcopy-discard'));
+	check('discarding says exactly what disappears and that the folder is not touched', (await words('vader-taskcopy-title')) === 'Discard this task?' && (await words('vader-taskcopy-body')) === 'agent/rate-limiter and its 3 changed files will be deleted. Your folder is not touched.');
+	await page.waitForTimeout(260);
+	await shot(page, '33-taskcopy-discard');
+	await page.locator(TID('vader-taskcopy-discard-cancel')).click();
+	check('Cancel keeps the copy', (await page.locator(TID('vader-taskcopy-card')).count()) === 1 && !(await log(page)).includes('tc-discard'));
+	await page.locator(TID('vader-taskcopy-discard-open')).click();
+	await page.locator(TID('vader-taskcopy-discard-confirm')).click();
+	check('Discard deletes it', (await log(page)).includes('tc-discard') && (await page.locator('[data-testid^="vader-taskcopy-"]').count()) === 0);
+
+	// the questions before a task starts
+	await set(undefined, { kind: 'dirty', files: 4, project: 'vader-app' });
+	await page.waitForSelector(TID('vader-taskcopy-dirty'));
+	check('uncommitted changes are asked about before the task starts, and what the task will not see is said', (await words('vader-taskcopy-title')) === 'You have uncommitted changes' && (await words('vader-taskcopy-body')) === '4 files in vader-app are changed. The task starts from the last commit, so it will not see them.' && (await page.locator(`${TID('vader-taskcopy-dirty')} button`).allInnerTexts()).map(flat).join('|') === 'Start anyway|Commit them first|Cancel');
+	await page.waitForTimeout(260);
+	await shot(page, '34-taskcopy-dirty');
+	await page.locator(TID('vader-taskcopy-commit-first')).click();
+	check('each answer reaches the service, and the question goes away', (await log(page)).includes('tc-answer:commit') && (await page.locator(TID('vader-taskcopy-dirty')).count()) === 0);
+	await set(undefined, { kind: 'dirty', files: 1, project: 'vader-app' });
+	await page.locator(TID('vader-taskcopy-start-anyway')).click();
+	await set(undefined, { kind: 'dirty', files: 1, project: 'vader-app' });
+	await page.locator(TID('vader-taskcopy-cancel')).click();
+	check('Start anyway and Cancel too', (await log(page)).includes('tc-answer:start-anyway') && (await log(page)).includes('tc-answer:cancel'));
+	await set(undefined, { kind: 'not-git' });
+	await page.waitForSelector(TID('vader-taskcopy-notgit'));
+	check('a folder that is not a git project says why Agent mode needs it and offers the fix', (await words('vader-taskcopy-title')) === 'This folder is not a git project' && (await words('vader-taskcopy-body')) === 'Agent mode works in a copy made with git. You can still use Chat here.' && (await page.locator(`${TID('vader-taskcopy-notgit')} button`).allInnerTexts()).map(flat).join('|') === 'Start git here|Use Chat');
+	await page.waitForTimeout(260);
+	await shot(page, '35-taskcopy-notgit');
+	await page.locator(TID('vader-taskcopy-init-git')).click();
+	await set(undefined, { kind: 'not-git' });
+	await page.locator(TID('vader-taskcopy-use-chat')).click();
+	check('Start git here and Use Chat reach the service', (await log(page)).includes('tc-answer:init-git') && (await log(page)).includes('tc-answer:use-chat'));
+	await set(undefined, { kind: 'copy-failed', reason: 'fatal: not a valid object name: HEAD' });
+	await page.waitForSelector(TID('vader-taskcopy-failed-start'));
+	check('a copy that could not be made says so and lets the person work in the folder instead', (await words('vader-taskcopy-title')) === 'Could not make a copy of the project' && (await page.locator(`${TID('vader-taskcopy-failed-start')} button`).allInnerTexts()).map(flat).join('|') === 'Work in the folder instead|Cancel');
+	await page.locator(TID('vader-taskcopy-work-here')).click();
+	check('Work in the folder instead reaches the service', (await log(page)).includes('tc-answer:work-in-folder'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== files dropped on the box (board S03)
 {
 	const { page, errors } = await newPage();

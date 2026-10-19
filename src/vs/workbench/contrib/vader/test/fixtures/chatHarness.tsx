@@ -88,9 +88,20 @@ const browserSvc: any = { async listPages() { return w.__sources.page ? [w.__sou
 w.__files = {} as Record<string, string>
 const modelSvc: any = { getModel: (u: any) => (u.path in w.__files ? { getValue: () => w.__files[u.path] } : null) }
 const reviewSvc: any = { async changesForContext() { return w.__sources.git } }
+const tcListeners = new Set<() => void>()
+const tcFire = () => { tcListeners.forEach(f => f()); notify() }
+w.__taskCopy = { state: undefined, question: undefined }
+const taskCopySvc: any = {
+	onDidChange: (fn: () => void) => { tcListeners.add(fn); return { dispose: () => { tcListeners.delete(fn) } } },
+	getState: () => w.__taskCopy.state, getQuestion: () => w.__taskCopy.question,
+	answerQuestion(_t: string, a: string) { log(`tc-answer:${a}`); w.__taskCopy.question = undefined; tcFire() },
+	async merge() { log('tc-merge') }, async stashAndRetry() { log('tc-stash') }, async resolveConflict(_t: string, c: string) { log(`tc-resolve:${c}`) }, async undoMerge() { log('tc-undo') },
+	async discard() { log('tc-discard'); w.__taskCopy.state = undefined; tcFire() }, dismiss() { log('tc-dismiss'); w.__taskCopy.state = undefined; tcFire() },
+}
+w.__setTaskCopy = (state: any, question?: any) => { w.__taskCopy = { state, question }; tcFire() }
 const memorySvc: any = { write(o: any) { log(`remember:${o.scope}:${o.scopeKey}:${o.label}:${o.content}`); return { id: 'm1' } } }
 const verifySvc: any = { async runIndependentVerification(o: any) { log(`review:${o.objective}`); await new Promise(r => setTimeout(r, 120)); return { evidence: {}, verdict: { passed: false, findings: [{ severity: 'blocker', description: 'x' }], summary: 'limiter.ts never clears old hits.' } } } }
-w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IModelService: modelSvc, IToolsService: toolsSvc, IWorkspaceContextService: workspaceSvc, ITerminalService: terminalSvc, IBrowserToolMainService: browserSvc, IVaderReviewService: reviewSvc, IMemoryService: memorySvc, IPolicyService: { setMode(m: string) { log(`mode:${m}`); w.__policy = { state: { mode: m } }; notify() } }, IVerificationService: verifySvc, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
+w.__accessor = { get: (name: string) => ({ IChatThreadService: chat, IModelService: modelSvc, IToolsService: toolsSvc, IWorkspaceContextService: workspaceSvc, ITerminalService: terminalSvc, IBrowserToolMainService: browserSvc, IVaderReviewService: reviewSvc, ITaskCopyService: taskCopySvc, IMemoryService: memorySvc, IPolicyService: { setMode(m: string) { log(`mode:${m}`); w.__policy = { state: { mode: m } }; notify() } }, IVerificationService: verifySvc, IAgentGatewayService: gateway, IVaderSettingsService: settingsSvc, ICommandService: commands, IKeybindingService: keybinding, IMetricsService: metrics, ILanguageService: language, IVaderShellService: shell } as any)[name] ?? empty }
 
 createRoot(document.getElementById('root')!).render(<div className='vader-scope' style={{ width: '100%', height: 820, display: 'flex', flexDirection: 'column', background: 'var(--vscode-sideBar-background, #18191a)' }}><SidebarChat /></div>)
 w.__mounted = true
