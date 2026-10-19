@@ -476,6 +476,23 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== an edit that could not be applied (board S08)
+{
+	const { page, errors } = await newPage();
+	const err = 'The edit was not applied. The text in ORIGINAL must EXACTLY match lines of code in the file, but there was no match for:' + String.fromCharCode(10) + '"x"' + '. Ensure you have the latest version of the file.';
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('add the header'), t: { role: 'tool', type: 'tool_error', name: 'edit_file', params: { uri: { fsPath: 'C:/work/vader-app/server/limiter.ts', path: '/work/vader-app/server/limiter.ts', scheme: 'file' }, searchReplaceBlocks: '' }, rawParams: {}, result: err, content: err, id: 'e1', mcpServerName: undefined } });
+	await page.waitForSelector(TID('vader-edit-error'));
+	check('an edit that did not fit says which part did not, and that nothing was written', (await page.locator(TID('vader-edit-error')).innerText()).includes('The change did not fit') && (await page.locator(TID('vader-edit-error')).innerText()).includes('Nothing was written.'));
+	check('and the real message is under it', (await page.locator('body').innerText()).includes('there was no match for'));
+	await shot(page, '25-edit-did-not-fit');
+	await page.locator(TID('vader-edit-again')).click();
+	check('Try again asks the agent to read the file again and make the change once more', (await log(page)).some(x => x.startsWith('task:The last edit was not applied. Read the file again')));
+	await page.locator(TID('vader-edit-rewrite')).click();
+	check('Rewrite the whole file asks for the whole file, by its name', (await log(page)).includes('task:The last edit to limiter.ts was not applied. Rewrite the whole file with the change instead of editing parts of it.'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== the agent's browser fails (board S14)
 {
 	const { page, errors } = await newPage();

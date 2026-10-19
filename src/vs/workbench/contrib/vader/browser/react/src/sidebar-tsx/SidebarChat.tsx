@@ -46,6 +46,7 @@ import { CheckpointsButton } from './CheckpointsPanel.js';
 import { commandEndWords, foldOutput, lineCount } from '../../../../common/outputFold.js';
 import { FoldedOutput } from './FoldedOutput.js';
 import { explainBrowserError } from '../../../../common/browserErrorWords.js';
+import { explainEditError, rewriteMessage, TRY_AGAIN_MESSAGE } from '../../../../common/editErrorWords.js';
 import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
@@ -1107,6 +1108,7 @@ const ToolHeaderWrapper = ({
 
 const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<ResultWrapper<'edit_file' | 'rewrite_file'>>[0] & { content: string }) => {
 	const accessor = useAccessor()
+	const runningHere = !!useChatThreadsStreamState(threadId)?.isRunning
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
 
@@ -1166,11 +1168,24 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 		else if (toolMessage.type === 'tool_error') {
 			// error
 			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Error'>
-				<CodeChildren>
-					{result}
-				</CodeChildren>
-			</BottomChildren>
+			// an edit that did not fit says which part did not and that nothing was written, with the two ways on (board S08); the real message is under it
+			const words = explainEditError(String(result ?? ''))
+			const fileName = getBasename(params.uri.fsPath)
+			componentParams.bottomChildren = <>
+				{words ? <div className='flex flex-col gap-2 px-3 py-2.5 mt-1 rounded-lg border border-vader-border-2 bg-vader-bg-1' data-testid='vader-edit-error'>
+					<span className='font-semibold text-vader-fg-1'>{words.title}</span>
+					<span className='text-vader-fg-2 leading-relaxed'>{words.text}</span>
+					{!runningHere && name === 'edit_file' ? <div className='flex gap-2'>
+						<button type='button' data-testid='vader-edit-again' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { void accessor.get('IAgentGatewayService').startTask({ userMessage: TRY_AGAIN_MESSAGE, threadId }) }}>Try again</button>
+						<button type='button' data-testid='vader-edit-rewrite' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => { void accessor.get('IAgentGatewayService').startTask({ userMessage: rewriteMessage(fileName), threadId }) }}>Rewrite the whole file</button>
+					</div> : null}
+				</div> : null}
+				<BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			</>
 		}
 	}
 
@@ -2163,13 +2178,15 @@ const GenericToolWrapper = ({ toolMessage }: WrapperProps<ToolName>) => {
 		const errorText = String(toolMessage.content ?? toolMessage.result ?? '')
 		// what the agent's browser said, in words (board S14); the real message is always under them
 		const words = toolMessage.name.startsWith('browser_') ? explainBrowserError(errorText) : null
-		componentParams.bottomChildren = <BottomChildren title='Error'>
-			{words ? <div className='flex flex-col gap-1 pb-2' data-testid='vader-browser-error'>
+		componentParams.bottomChildren = <>
+			{words ? <div className='flex flex-col gap-1 px-3 py-2.5 mt-1 rounded-lg border border-vader-border-2 bg-vader-bg-1' data-testid='vader-browser-error'>
 				<span className='font-semibold text-vader-fg-1'>{words.title}</span>
 				<span className='text-vader-fg-2 leading-relaxed'>{words.text}</span>
 			</div> : null}
-			<CodeChildren>{errorText}</CodeChildren>
-		</BottomChildren>
+			<BottomChildren title='Error'>
+				<CodeChildren>{errorText}</CodeChildren>
+			</BottomChildren>
+		</>
 	}
 	return <ToolHeaderWrapper {...componentParams} />
 }
