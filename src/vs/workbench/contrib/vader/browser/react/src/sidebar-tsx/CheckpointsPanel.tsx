@@ -6,6 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useAccessor, useChatThreadsState, useChatThreadsStreamState } from '../util/services.js'
 import { URI } from '../../../../../../../base/common/uri.js'
 import { changeWords, compareSteps, stepsOfThread } from '../../../../common/checkpointModel.js'
+import { CompareDiff } from './CompareDiff.js'
 
 // The checkpoints of a chat, each with what its step changed (board S13, "Checkpoints"): pick one to go back to it (after the same question as on the line in the chat),
 // or pick two to see what changed between them. A checkpoint keeps the files as they were; "what changed" is worked out from those copies, so it is exact for the files kept.
@@ -24,10 +25,11 @@ export const CheckpointsButton = () => {
 	const [picked, setPicked] = useState<number[]>([])
 	const [asking, setAsking] = useState(false)
 	const [comparing, setComparing] = useState(false)
+	const [diffOf, setDiffOf] = useState<string | undefined>()
 	const ref = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		if (!open) return
-		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node) && !(e.target as Element).closest?.('[data-testid="vader-compare-diff"]')) setOpen(false) }
 		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
 		document.addEventListener('mousedown', away)
 		document.addEventListener('keydown', esc)
@@ -77,12 +79,13 @@ export const CheckpointsButton = () => {
 			</div> : null}
 			{comparing && cmp ? <div className='mx-3 mt-2 rounded-lg border border-vader-border-2 px-3 py-2.5 flex flex-col gap-1' data-testid='vader-checkpoints-compare'>
 				<div className='text-xs text-vader-fg-3'>Between checkpoint {Math.min(...picked)} and {Math.max(...picked)}: {cmp.files.length} file{cmp.files.length === 1 ? '' : 's'}, {changeWords(cmp.added, cmp.removed)}</div>
-				{cmp.files.length === 0 ? <div className='text-vader-fg-2'>Nothing changed in the files the checkpoints kept.</div> : cmp.files.map(f => <div key={f.path} className='flex gap-3 font-mono text-[12px]'><span className='truncate flex-1' title={f.path}>{baseName(f.path)}</span><span className='text-vader-fg-2'>{changeWords(f.added, f.removed)}</span></div>)}
+				{cmp.files.length === 0 ? <div className='text-vader-fg-2'>Nothing changed in the files the checkpoints kept.</div> : cmp.files.map(f => <button key={f.path} type='button' disabled={f.before === undefined || f.after === undefined} data-testid='vader-compare-file' title={f.before === undefined ? f.path : `Open ${f.path} side by side`} className='flex gap-3 font-mono text-[12px] text-left rounded px-1 -mx-1 hover:bg-vader-bg-2-hover disabled:hover:bg-transparent' onClick={() => setDiffOf(f.path)}><span className='truncate flex-1'>{baseName(f.path)}</span><span className='text-vader-fg-2'>{changeWords(f.added, f.removed)}</span></button>)}
 			</div> : null}
 			<div className='flex items-center gap-2 px-3 pt-2'>
 				<button type='button' data-testid='vader-checkpoints-goback' disabled={goTo === undefined || running} title={running ? 'Wait for the run to end, or stop it' : undefined} className='px-3 py-1 rounded-md text-sm border border-vader-border-2 hover:bg-vader-bg-2-hover disabled:opacity-40 disabled:hover:bg-transparent' onClick={() => { setComparing(false); setAsking(true) }}>{goTo === undefined ? 'Go back to…' : `Go back to ${goTo}`}</button>
 				<button type='button' data-testid='vader-checkpoints-compare-button' disabled={picked.length !== 2} className='px-2 py-1 text-sm text-vader-fg-2 hover:text-vader-fg-1 disabled:opacity-40 disabled:hover:text-vader-fg-2' onClick={() => { setAsking(false); setComparing(true) }}>{picked.length === 2 ? `Compare ${Math.min(...picked)} and ${Math.max(...picked)}` : 'Compare…'}</button>
 			</div>
 		</div></div> : null}
+		{diffOf && cmp ? (() => { const f = cmp.files.find(x => x.path === diffOf); return f && f.before !== undefined && f.after !== undefined ? <CompareDiff path={f.path} before={f.before} after={f.after} from={Math.min(...picked)} to={Math.max(...picked)} added={f.added} removed={f.removed} host={ref.current?.closest('.vader-scope') ?? null} onClose={() => setDiffOf(undefined)} /> : null })() : null}
 	</div>
 }

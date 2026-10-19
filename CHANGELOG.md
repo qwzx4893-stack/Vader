@@ -21,6 +21,7 @@
 - **Updating Vader** (board S11): a newer release is offered with its notes, its installer is downloaded from GitHub with the progress shown (size and checksum checked, Cancel, a failure that says where it stopped), and Vader restarts into it on a click, now or when no task is working. About and updates shows the result of a check in the page itself. Windows only; nothing is installed without a click.
 - **Settings set by an organisation** (board S10): a file an administrator owns (`managed-settings.json` under ProgramData, /Library/Application Support/Vader or /etc/vader) locks settings at the values it names; they show a lock mark with who set them and cannot be changed. Also fixed: a setting added in a newer version took no default for people who already had settings stored, so it was off or empty until they touched it.
 - **Skills are used by task** (board S13): a skill is put in front of the model only when the message names it (`@pdf`) or fits what it says it is for; the others are listed by name and purpose. The message says "Used the skill pdf" and why, and that is exactly what was sent.
+- **Compare two checkpoints side by side** (board S13): a file of the comparison opens as the two versions in two columns, changed lines marked, unchanged stretches folded.
 
 ## Unreleased - The interface of the design canvas, as the app: the Vader window, a first run in three steps, Settings in 14 pages, a chat that says what the run is doing
 

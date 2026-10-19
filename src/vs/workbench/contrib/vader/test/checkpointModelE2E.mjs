@@ -58,6 +58,26 @@ check('the last step is compared with what the file is now, and left out when it
 }
 check('changes are said as the board says them', C.changeWords(12, 1) === '+12 −1' && C.changeWords(48, 0) === '+48' && C.changeWords(0, 3) === '−3');
 
+// ---- the two versions side by side
+{
+	const nums = (n, f = i => 'line ' + i) => Array.from({ length: n }, (_, i) => f(i + 1)).join('\n');
+	check('two equal files have nothing to show', C.sideBySide('a\nb', 'a\nb').length === 0);
+	const r = C.sideBySide(nums(10), nums(10, i => i === 5 ? 'LINE FIVE' : 'line ' + i), 2);
+	check('a changed line is the removed one on the left against the added one on the right, with two lines around it and the rest folded', r.length === 7 && r[0].gap === 2 && r[1].left.text === 'line 3' && r[3].left.text === 'line 5' && r[3].left.changed && r[3].right.text === 'LINE FIVE' && r[3].right.changed && r[6].gap === 3, JSON.stringify(r.map(x => x.gap ?? (x.left?.text + '|' + x.right?.text))));
+	check('line numbers are those of each version', r[3].left.no === 5 && r[3].right.no === 5);
+	const ins = C.sideBySide('a\nb\nc', 'a\nb\nNEW\nc', 1);
+	check('an added line has nothing opposite it, and numbers move on', ins.some(x => !x.left && x.right?.text === 'NEW' && x.right.no === 3) && ins.find(x => x.left?.text === 'c').right.no === 4, JSON.stringify(ins));
+	const del = C.sideBySide('a\nGONE\nb', 'a\nb', 1);
+	check('a removed line has nothing opposite it', del.some(x => x.left?.text === 'GONE' && !x.right));
+	const rep = C.sideBySide('a\nx\ny\nb', 'a\n1\n2\n3\nb', 1);
+	check('a run removed and a longer run added are set against each other line by line', rep.filter(x => x.left?.changed || x.right?.changed).map(x => (x.left?.text ?? '-') + '>' + (x.right?.text ?? '-')).join(' ') === 'x>1 y>2 ->3', JSON.stringify(rep));
+	check('a new file is all added, a deleted one all removed', C.sideBySide('', 'a\nb').every(x => !x.left && x.right.changed) && C.sideBySide('a\nb', '').every(x => x.left.changed && !x.right));
+	const big = C.sideBySide(nums(3000), nums(3000, i => i % 7 === 0 ? 'x' + i : 'line ' + i), 1, 10);
+	check('a very large change falls back to all removed then all added, without freezing', big.length > 0);
+	const kept = C.compareSteps(steps, 1, 3).files[0];
+	check('comparing two checkpoints keeps the file as it was at the first and as it is at the last, for the diff', typeof kept.before === 'string' && typeof kept.after === 'string' && kept.before !== kept.after, JSON.stringify(kept));
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

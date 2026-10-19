@@ -470,6 +470,16 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('two chosen offer to compare them', (await page.locator(TID('vader-checkpoints-compare-button')).innerText()) === 'Compare 1 and 3');
 	await page.locator(TID('vader-checkpoints-compare-button')).click();
 	check('the comparison says which files changed between them', (await page.locator(TID('vader-checkpoints-compare')).innerText()).includes('limiter.ts'));
+	await page.locator(TID('vader-compare-file')).first().click();
+	await page.waitForSelector(TID('vader-compare-diff'));
+	check('a file of the comparison opens as two versions side by side, named, with the two checkpoints and the count', (await page.locator(TID('vader-compare-title')).innerText()) === 'limiter.ts' && (await page.locator(TID('vader-compare-between')).innerText()) === 'checkpoint 1 to 3' && (await page.locator(TID('vader-compare-counts')).innerText()) === '+2');
+	check('the lines it gained are on the right, marked, with nothing opposite them', (await page.locator(TID('vader-compare-row')).count()) === 2 && (await page.locator(TID('vader-compare-row')).allInnerTexts()).every((t, i) => flat(t).includes('+ ' + ['a', 'b'][i]) || flat(t).includes(['a', 'b'][i])), (await page.locator(TID('vader-compare-row')).allInnerTexts()).join('|'));
+	await page.waitForTimeout(260);
+	await shot(page, '37-compare-diff');
+	await page.locator(TID('vader-compare-rows')).click();
+	check('clicking inside it does not close the list behind it', (await page.locator(TID('vader-compare-diff')).count()) === 1);
+	await page.keyboard.press('Escape');
+	check('Escape closes the diff and keeps the list', (await page.locator(TID('vader-compare-diff')).count()) === 0 && (await page.locator(TID('vader-checkpoints')).count()) === 1);
 	await page.keyboard.press('Escape');
 	check('Escape puts the list away', (await page.locator(TID('vader-checkpoints')).count()) === 0);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));

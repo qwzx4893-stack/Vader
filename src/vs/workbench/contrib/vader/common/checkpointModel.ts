@@ -17,7 +17,7 @@ export type MessageLike = {
 	readonly vaderFileSnapshotOfURI?: { readonly [fsPath: string]: SnapshotLike };
 };
 
-export type FileChange = { readonly path: string, readonly added: number, readonly removed: number };
+export type FileChange = { readonly path: string, readonly added: number, readonly removed: number, /** the file before the step and after it, for the side-by-side view */ readonly before?: string, readonly after?: string };
 
 export type Step = {
 	/** the number the chat shows for this checkpoint (the first is 1) */
@@ -90,7 +90,7 @@ export function stepsOfThread(messages: readonly MessageLike[], currentCode: (fs
 			if (after === undefined) after = currentCode(path);
 			if (after === undefined) continue;
 			const d = lineDiffCounts(before, after);
-			if (d.added || d.removed) files.push({ path, added: d.added, removed: d.removed });
+			if (d.added || d.removed) files.push({ path, added: d.added, removed: d.removed, before, after });
 		}
 		return { n: k + 1, messageIdx: idx, label: labelOf(messages, idx), added: files.reduce((n, f) => n + f.added, 0), removed: files.reduce((n, f) => n + f.removed, 0), files };
 	});
@@ -99,12 +99,13 @@ export function stepsOfThread(messages: readonly MessageLike[], currentCode: (fs
 /** what changed from checkpoint a to checkpoint b: the files of the steps from a up to (not including) b, added together by file */
 export function compareSteps(steps: readonly Step[], a: number, b: number): { files: FileChange[], added: number, removed: number } {
 	const lo = Math.min(a, b), hi = Math.max(a, b);
-	const byPath = new Map<string, { added: number, removed: number }>();
+	const byPath = new Map<string, { added: number, removed: number, before?: string, after?: string }>();
 	for (const s of steps) {
 		if (s.n < lo || s.n >= hi) continue;
 		for (const f of s.files) {
-			const t = byPath.get(f.path) ?? { added: 0, removed: 0 };
+			const t = byPath.get(f.path) ?? { added: 0, removed: 0, before: f.before };
 			t.added += f.added; t.removed += f.removed;
+			t.after = f.after; // the file as the last of these steps left it; "before" stays as the first of them found it
 			byPath.set(f.path, t);
 		}
 	}
@@ -116,4 +117,67 @@ export function compareSteps(steps: readonly Step[], a: number, b: number): { fi
 export function changeWords(added: number, removed: number): string {
 	if (!added && !removed) return 'no changes';
 	return [added ? `+${added}` : '', removed ? `−${removed}` : ''].filter(Boolean).join(' ');
+}
+
+// ---- side by side (board S13, "Compare 1 and 3": what changed between two checkpoints, opened as a diff)
+
+export type DiffCell = { readonly no: number; readonly text: string; readonly changed: boolean };
+export type DiffRow = { readonly left?: DiffCell; readonly right?: DiffCell; /** a run of unchanged lines left out */ readonly gap?: number };
+
+/**
+ * The two versions of a file side by side: unchanged lines on both sides, removed lines on the left and added lines on the right (a removed and an added run are set
+ * against each other line by line), and only `context` unchanged lines around each change, with the rest folded into a gap row that says how many were left out.
+ */
+export function sideBySide(a: string, b: string, context = 2, maxCells = 4_000_000): DiffRow[] {
+	if (a === b) return [];
+	const x = a === '' ? [] : a.split('\n'), y = b === '' ? [] : b.split('\n');
+	let s = 0;
+	while (s < x.length && s < y.length && x[s] === y[s]) s++;
+	let ex = x.length, ey = y.length;
+	while (ex > s && ey > s && x[ex - 1] === y[ey - 1]) { ex--; ey--; }
+	type Op = { t: '=' | '-' | '+', xi: number, yi: number };
+	const ops: Op[] = [];
+	for (let i = 0; i < s; i++) ops.push({ t: '=', xi: i, yi: i });
+	const m = ex - s, n = ey - s;
+	if (m === 0 || n === 0 || m * n > maxCells) {
+		for (let i = 0; i < m; i++) ops.push({ t: '-', xi: s + i, yi: -1 });
+		for (let j = 0; j < n; j++) ops.push({ t: '+', xi: -1, yi: s + j });
+	} else {
+		const w = n + 1;
+		const t = new Uint32Array((m + 1) * w);
+		for (let i = m - 1; i >= 0; i--) for (let j = n - 1; j >= 0; j--) t[i * w + j] = x[s + i] === y[s + j] ? t[(i + 1) * w + j + 1] + 1 : Math.max(t[(i + 1) * w + j], t[i * w + j + 1]);
+		let i = 0, j = 0;
+		while (i < m && j < n) {
+			if (x[s + i] === y[s + j]) { ops.push({ t: '=', xi: s + i, yi: s + j }); i++; j++; }
+			else if (t[(i + 1) * w + j] >= t[i * w + j + 1]) { ops.push({ t: '-', xi: s + i, yi: -1 }); i++; }
+			else { ops.push({ t: '+', xi: -1, yi: s + j }); j++; }
+		}
+		while (i < m) { ops.push({ t: '-', xi: s + i, yi: -1 }); i++; }
+		while (j < n) { ops.push({ t: '+', xi: -1, yi: s + j }); j++; }
+	}
+	for (let k = 0; k < x.length - ex; k++) ops.push({ t: '=', xi: ex + k, yi: ey + k });
+
+	// rows: a run of removed and a run of added lines side by side, unchanged lines on both sides
+	const rows: (DiffRow & { changed: boolean })[] = [];
+	for (let k = 0; k < ops.length;) {
+		if (ops[k].t === '=') { rows.push({ left: { no: ops[k].xi + 1, text: x[ops[k].xi], changed: false }, right: { no: ops[k].yi + 1, text: y[ops[k].yi], changed: false }, changed: false }); k++; continue; }
+		const dels: Op[] = [], adds: Op[] = [];
+		while (k < ops.length && ops[k].t !== '=') { (ops[k].t === '-' ? dels : adds).push(ops[k]); k++; }
+		for (let r = 0; r < Math.max(dels.length, adds.length); r++) {
+			const d = dels[r], ad = adds[r];
+			rows.push({ left: d ? { no: d.xi + 1, text: x[d.xi], changed: true } : undefined, right: ad ? { no: ad.yi + 1, text: y[ad.yi], changed: true } : undefined, changed: true });
+		}
+	}
+	// keep the changed rows and `context` rows around them; fold the rest
+	const keep = new Array<boolean>(rows.length).fill(false);
+	rows.forEach((r, i) => { if (r.changed) for (let d = -context; d <= context; d++) if (rows[i + d]) keep[i + d] = true; });
+	const out: DiffRow[] = [];
+	for (let i = 0; i < rows.length;) {
+		if (keep[i]) { out.push({ left: rows[i].left, right: rows[i].right }); i++; continue; }
+		let j = i;
+		while (j < rows.length && !keep[j]) j++;
+		out.push({ gap: j - i });
+		i = j;
+	}
+	return out;
 }
