@@ -26,6 +26,8 @@ import './vaderSettingsPane.js'
 import './vaderAddonsPane.js'
 import './vaderShellService.js'
 import './vaderReviewService.js'
+import './taskCopyService.js'
+import './vaderUpdateCoordinator.js'
 import './vaderShellPane.js'
 import './trustMonitor.js'
 
