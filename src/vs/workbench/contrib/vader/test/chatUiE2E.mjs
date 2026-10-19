@@ -378,6 +378,39 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== files dropped on the box (board S03)
+{
+	const { page, errors } = await newPage();
+	const drag = (type, files) => page.evaluate(({ type, files }) => {
+		const dt = new DataTransfer();
+		for (const f of files) dt.items.add(new File([f.bytes ? new Uint8Array(f.bytes) : f.text], f.name, { type: f.type }));
+		document.querySelector('textarea').dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+	}, { type, files });
+	const files = [{ name: 'server.log', text: 'line one\nline two', type: 'text/plain' }, { name: 'error.png', bytes: [1, 2, 3], type: 'image/png' }];
+	check('no drop zone until files are dragged over the box', (await page.locator(TID('vader-drop-zone')).count()) === 0);
+	await drag('dragenter', files);
+	await page.waitForSelector(TID('vader-drop-zone'));
+	check('the whole box says what will happen, and the limits', flat(await page.locator(TID('vader-drop-zone')).innerText()) === 'Drop to attach Up to 10 files, 5 MB each');
+	await page.waitForTimeout(260);
+	await shot(page, '20-drop-zone');
+	await drag('drop', files);
+	await page.waitForSelector(TID('vader-paste-chip'));
+	check('a text file is kept beside the message with its name and its size', (await page.locator(TID('vader-paste-chip')).count()) === 1 && (await page.locator(TID('vader-paste-chip')).innerText()).includes('server.log') && (await page.locator(TID('vader-paste-label')).innerText()) === '17 B');
+	check('the zone goes away on the drop', (await page.locator(TID('vader-drop-zone')).count()) === 0);
+	await page.waitForSelector(TID('vader-slash-note'));
+	check('an image is not taken, and the note says why', (await page.locator(TID('vader-slash-note')).innerText()).includes('1 attached. Not attached') && (await page.locator(TID('vader-slash-note')).innerText()).includes('error.png: images are not sent yet, only text files.'));
+	await page.locator(INPUT).fill('why does it fail?');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:')));
+	const task = (await log(page)).find(x => x.startsWith('task:'));
+	check('the file goes with the message, under its name', task.includes('why does it fail?') && task.includes('server.log:' + String.fromCharCode(10) + '```'), task);
+	await drag('dragenter', files);
+	await drag('dragleave', files);
+	check('dragging away without dropping puts the zone away', (await page.locator(TID('vader-drop-zone')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== the @ menu (board R06)
 {
 	const { page, errors } = await newPage();

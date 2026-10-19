@@ -42,6 +42,7 @@ import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { ChoiceMenu } from './ComposerMenus.js';
+import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
@@ -425,6 +426,8 @@ interface VaderChatAreaProps {
 	// onSelectionsChange?: (selections: any[]) => void;
 
 	onClickAnywhere?: () => void;
+	/** files were dropped on the box (the main message box only) */
+	onDropFiles?: (files: File[]) => void;
 	/** the main message box: shows the footer line under it and an "Add context" button */
 	onAddContext?: () => void;
 	showFooter?: boolean;
@@ -471,6 +474,7 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	onClose,
 	onClickAnywhere,
 	onAddContext,
+	onDropFiles,
 	showFooter,
 	divRef,
 	isStreaming = false,
@@ -494,8 +498,17 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 		ro.observe(el)
 		return () => ro.disconnect()
 	}, [])
+	// files dragged over the box: the whole box says what will happen (board S03, "Dropping a file")
+	const [dragging, setDragging] = useState(false)
+	const dragDepth = useRef(0)
+	const hasFiles = (e: React.DragEvent) => !!onDropFiles && Array.from(e.dataTransfer?.types ?? []).includes('Files')
 	return (
-		<div className='flex flex-col gap-1.5'>
+		<div className='flex flex-col gap-1.5'
+			onDragEnter={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); dragDepth.current++; setDragging(true) }}
+			onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation() }}
+			onDragLeave={(e) => { if (!hasFiles(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false) }}
+			onDrop={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); dragDepth.current = 0; setDragging(false); onDropFiles?.(Array.from(e.dataTransfer.files)) }}
+		>
 			<div
 				ref={divRef}
 				className={`
@@ -512,6 +525,12 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 					onClickAnywhere?.()
 				}}
 			>
+				{dragging ? <div data-testid='vader-drop-zone' className='motion-safe:animate-card-in absolute inset-0 z-20 rounded-xl border border-dashed border-vader-border-1 bg-vader-bg-1 flex flex-col items-center justify-center gap-1 pointer-events-none'>
+					<svg width='16' height='16' viewBox='0 0 16 16' fill='none' aria-hidden='true' className='text-vader-fg-2'><path d='M8 2v8m0 0L5 7m3 3 3-3M3 13h10' stroke='currentColor' strokeWidth='1.3' strokeLinecap='round' strokeLinejoin='round' /></svg>
+					<div className='text-[13px] font-semibold text-vader-fg-1'>{DROP_TITLE}</div>
+					<div className='text-xs text-vader-fg-3'>{dropHint()}</div>
+				</div> : null}
+
 				{/* Selections section */}
 				{showSelections && selections && setSelections && (
 					<SelectedFiles
@@ -3434,6 +3453,25 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		void runSlash(c, '')
 	}, [runSlash, textAreaFnsRef, textAreaRef])
 
+	// files dropped on the box: text files are read and kept beside the message, like a long paste; what is not taken is said, with the reason
+	const onDropFiles = useCallback(async (files: File[]) => {
+		const verdict = checkDrop(files.map(f => ({ name: f.name, size: f.size, type: f.type })), pastes.length)
+		const refused = [...verdict.refused]
+		const taken: Paste[] = []
+		for (const info of verdict.accepted) {
+			const file = files.find(f => f.name === info.name && f.size === info.size)
+			if (!file) continue
+			try {
+				const text = await file.text()
+				if (looksBinary(text)) { refused.push({ name: info.name, why: 'it is not a text file' }); continue }
+				taken.push({ id: Math.random().toString(36).slice(2), text, title: info.name, label: sizeWords(info.size) })
+			} catch { refused.push({ name: info.name, why: 'it could not be read' }) }
+		}
+		if (taken.length > 0) setPastes(ps => [...ps, ...taken])
+		const note = dropNote({ accepted: taken.map(t => ({ name: t.title ?? '', size: 0 })), refused })
+		setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [pastes.length])
+
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
 		setTyped(newStr); setSlashIdx(0); setSlashHidden(false)
@@ -3475,6 +3513,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
 		showFooter
+		onDropFiles={(files) => { void onDropFiles(files) }}
 		onAddContext={() => { const t = textAreaRef.current; if (t) { t.focus(); try { document.execCommand('insertText', false, '@') } catch { /* the @ menu opens when typing it */ } } }}
 	>
 		<PastedChips pastes={pastes} onRemove={id => setPastes(ps => ps.filter(p => p.id !== id))} />

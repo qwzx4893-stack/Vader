@@ -187,7 +187,7 @@ export const NoModelCard = () => {
 // ---- a long paste
 
 /** a text kept beside the message: a long paste, or something chosen from the @ menu (terminal output, the open page, the git changes), which has a title */
-export type Paste = { id: string, text: string, title?: string }
+export type Paste = { id: string, text: string, title?: string, /** the words beside the title (a dropped file's size); a paste says its lines and characters */ label?: string }
 
 /** a pasted text that is long is one line in the message box: its size, Show and Remove; it is sent in full with the message */
 export const PastedChips = ({ pastes, onRemove }: { pastes: readonly Paste[], onRemove: (id: string) => void }) => {
@@ -199,7 +199,7 @@ export const PastedChips = ({ pastes, onRemove }: { pastes: readonly Paste[], on
 			return <div key={p.id} className='rounded-lg border border-vader-border-2 bg-vader-bg-2 px-2.5 py-1.5' data-testid='vader-paste-chip'>
 				<div className='flex items-center gap-2'>
 					<span className='text-vader-fg-1 font-medium'>{p.title ?? 'Pasted text'}</span>
-					<span className='text-vader-fg-3 text-xs flex-1 min-w-0 truncate' data-testid='vader-paste-label'>{d.label}</span>
+					<span className='text-vader-fg-3 text-xs flex-1 min-w-0 truncate' data-testid='vader-paste-label'>{p.label ?? d.label}</span>
 					<button className='text-vader-fg-2 hover:text-vader-fg-1 text-xs' data-testid='vader-paste-show' aria-expanded={shown === p.id} onClick={() => setShown(shown === p.id ? undefined : p.id)}>{shown === p.id ? 'Hide' : 'Show'}</button>
 					<button className='text-vader-fg-2 hover:text-vader-fg-1 text-xs' data-testid='vader-paste-remove' onClick={() => onRemove(p.id)}>Remove</button>
 				</div>
