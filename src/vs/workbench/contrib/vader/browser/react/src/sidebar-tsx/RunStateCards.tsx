@@ -2,7 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAccessor, useChatThreadsState, useSettingsState, useShellState } from '../util/services.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { getModelCapabilities } from '../../../../common/modelCapabilities.js'
@@ -190,5 +190,45 @@ export const PastedChips = ({ pastes, onRemove }: { pastes: readonly Paste[], on
 				{shown === p.id ? <pre className='mt-1.5 max-h-48 overflow-auto whitespace-pre-wrap break-words text-xs text-vader-fg-2 select-text' data-testid='vader-paste-text'>{p.text}</pre> : null}
 			</div>
 		})}
+	</div>
+}
+
+// ---- no connection
+
+/** the computer says it is offline: what still works, said plainly, and the way to a model on this computer */
+export const OfflineBanner = () => {
+	const accessor = useAccessor()
+	const commands = accessor.get('ICommandService')
+	const [online, setOnline] = useState(() => typeof navigator === 'undefined' ? true : navigator.onLine)
+	useEffect(() => {
+		const on = () => setOnline(true), off = () => setOnline(false)
+		window.addEventListener('online', on); window.addEventListener('offline', off)
+		return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
+	}, [])
+	if (online) return null
+	return <div className='rounded-xl border border-yellow-600/50 bg-yellow-500/10 px-4 py-3 flex flex-col gap-2' data-testid='vader-offline' role='status'>
+		<div className='flex items-center gap-2'><Triangle color='#e2a93f' /><span className='font-semibold text-vader-fg-1'>No connection</span></div>
+		<div className='text-vader-fg-2 leading-relaxed'>You can read chats and review changes. Sending to a hosted model and the Add-ons lists need a connection. Models on this computer still work.</div>
+		<div className='flex flex-wrap gap-2'>
+			<button data-testid='vader-offline-local' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID, 'models') }}>Use a local model</button>
+			<button data-testid='vader-offline-check' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={() => setOnline(navigator.onLine)}>Check again</button>
+		</div>
+	</div>
+}
+
+// ---- no project
+
+/** a chat with no folder open: the one way forward first, then the way to chat without a project */
+export const NoProjectCard = ({ onChatOnly }: { onChatOnly: () => void }) => {
+	const accessor = useAccessor()
+	const commands = accessor.get('ICommandService')
+	return <div className='flex flex-col gap-2.5' data-testid='vader-no-project'>
+		<div className='text-xl font-semibold text-vader-fg-1'>Open a project</div>
+		<div className='text-vader-fg-3 leading-relaxed'>Vader works inside a folder. Open one to start a task, or chat without a project.</div>
+		<div className='flex flex-wrap gap-2 items-center'>
+			<button data-testid='vader-open-folder' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { void commands.executeCommand('workbench.action.files.openFolder') }}>Open a folder</button>
+			<button data-testid='vader-clone' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => { void commands.executeCommand('git.clone') }}>Clone a repository</button>
+			<button data-testid='vader-chat-only' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={onChatOnly}>Chat only</button>
+		</div>
 	</div>
 }

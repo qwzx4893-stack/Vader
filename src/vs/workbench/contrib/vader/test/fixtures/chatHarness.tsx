@@ -46,7 +46,7 @@ const known: any = {
 	getThreadUsage: () => w.__chat.usage, getUsageToday: () => ({ costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }),
 	onDidChangeUsage: () => ({ dispose() { } }), onDidChangeProjectApprovals: () => ({ dispose() { } }),
 	getPause: () => w.__chat.paused, pauseRun() { log('pause'); w.__chat.paused = { reason: 'user' }; notify() }, resumeRun() { log('resume'); w.__chat.paused = undefined; notify() },
-	getCurrentProjectKey: () => 'C:\\work\\vader-app', listProjectGroups: () => [], getThreadStatus: () => 'idle', switchToThread() { }, canRememberForProject: () => true,
+	getCurrentProjectKey: () => w.__projectKey === undefined ? 'C:/work/vader-app' : w.__projectKey, listProjectGroups: () => [], getThreadStatus: () => 'idle', switchToThread(id: string) { log(`switch:${id}`) }, canRememberForProject: () => true,
 	approveLatestToolRequest() { log('approve') }, rejectLatestToolRequest() { log('reject') }, clearThreadPlan() { }, addNewStagingSelection() { }, popStagingSelections() { },
 	openNewThread() { log('new-thread') },
 	queueMessage(_t: string, text: string) { log(`queue:${text}`); const th = w.__chat.state.allThreads.t1; if ((th.queued ?? []).length >= 5) return false; setThread({ queued: [...(th.queued ?? []), { id: 'q' + (th.queued ?? []).length + text.length, text }] }); return true },

@@ -217,6 +217,9 @@ export type ThreadType = {
 	// both mean "no agent, use default Chat behavior".
 	agentId?: string | null;
 
+	// Vader addition: the name the person gave this conversation (Rename). Without one the conversation is named by the first thing said in it.
+	customTitle?: string;
+
 	// Vader addition: set when the person stopped a run, cleared by the next message. The chat says what it was doing when it stopped.
 	stopped?: StoppedRun;
 
@@ -457,6 +460,11 @@ export interface IChatThreadService {
 	// entry pts
 	abortRunning(threadId: string): Promise<void>;
 	dismissStreamError(threadId: string): void;
+
+	// looking back through a chat (Vader addition)
+	renameThread(threadId: string, title: string): void;
+	/** a new conversation that starts with the messages before `messageIdx`; its id (not switched to), or undefined when there is nothing to copy */
+	branchThread(threadId: string, messageIdx: number): string | undefined;
 
 	// messages that wait for the run to end, and a conversation that is getting full (Vader addition)
 	/** false when the message was empty or five already wait */
@@ -1159,6 +1167,26 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, ...patch } }
 		this._storeAllThreads(newThreads)
 		this._setState({ allThreads: newThreads }, true)
+	}
+
+	// ---------- looking back through a chat ----------
+
+	renameThread(threadId: string, title: string): void {
+		const t = title.replace(/\s+/g, ' ').trim().slice(0, 120)
+		this._patchThread(threadId, { customTitle: t || undefined })
+	}
+
+	branchThread(threadId: string, messageIdx: number): string | undefined {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return undefined
+		const copied = thread.messages.slice(0, Math.max(0, messageIdx))
+		if (copied.length === 0) return undefined
+		const fresh = newThreadObject(this._currentWorkspaceFolders())
+		const branch: ThreadType = { ...fresh, projectFolders: thread.projectFolders, messages: copied, customTitle: thread.customTitle ? `${thread.customTitle} (branch)` : undefined }
+		const newThreads = { ...this.state.allThreads, [branch.id]: branch }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads }, true)
+		return branch.id
 	}
 
 	// ---------- messages that wait ----------

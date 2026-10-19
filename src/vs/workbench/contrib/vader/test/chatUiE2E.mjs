@@ -277,6 +277,81 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== looking back: branch the chat, go back to a checkpoint
+{
+	const { page, errors } = await newPage();
+	const cp = { role: 'checkpoint', type: 'tool_edit', voxelSnapshot: {}, userModifications: { files: {} } };
+	await page.evaluate((a) => {
+		window.__chatMethods.jumpToCheckpointBeforeMessageIdx = (o) => { window.__log.push(`jump:${o.messageIdx}`); };
+		window.__chatMethods.branchThread = (t, idx) => { window.__log.push(`branch:${idx}`); return 'branch-1'; };
+		window.__chatMethods.switchToThread = (id) => { window.__log.push(`switch:${id}`); };
+		window.__setThread({ messages: [a.u1, a.a1, a.cp, a.u2, a.a2] });
+	}, { u1: userMsg('Add a rate limiter'), a1: asstMsg('Added it.'), cp, u2: userMsg('Also add a header'), a2: asstMsg('Added the header.') });
+	await page.waitForSelector(TID('vader-checkpoint'));
+	await page.locator(TID('vader-checkpoint-restore')).click();
+	check('going back to a checkpoint asks first, and says what happens to the files and the messages', (await page.locator(TID('vader-checkpoint-confirm')).innerText()).includes('Files return to how they were at this checkpoint') && (await page.locator(TID('vader-checkpoint-confirm')).innerText()).includes('greyed out') && !(await log(page)).some(x => x.startsWith('jump:')));
+	await shot(page, '08-checkpoint-ask');
+	await page.locator(TID('vader-checkpoint-cancel')).click();
+	check('Cancel goes nowhere', (await page.locator(TID('vader-checkpoint-confirm')).count()) === 0 && !(await log(page)).some(x => x.startsWith('jump:')));
+	await page.locator(TID('vader-checkpoint-restore')).click();
+	await page.locator(TID('vader-checkpoint-go')).click();
+	check('Go back asks the chat service to go back to it', (await log(page)).some(x => x.startsWith('jump:')));
+
+	const second = page.locator(TID('vader-branch'));
+	check('the first message has no Branch (there is nothing before it), the later ones have it', (await second.count()) === 1);
+	await page.locator(`${TID('vader-branch')}`).evaluate(e => e.click());
+	await page.waitForSelector(TID('vader-branched'));
+	check('Branch the chat copies the chat from before that message, in the chat service', (await log(page)).some(x => /^branch:\d+$/.test(x)));
+	check('and says that a new chat started and this one is unchanged', (await page.locator(TID('vader-branched')).innerText()).includes('This chat is unchanged.'));
+	await shot(page, '09-branched');
+	await page.locator(TID('vader-branched-open')).click();
+	check('Open the new chat goes to it', (await log(page)).includes('switch:branch-1') && (await page.locator(TID('vader-branched')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== a new chat: with a project, without one, offline
+{
+	const { page, errors } = await newPage();
+	check('a new chat in a project says there are no chats yet and what to do', (await page.locator(TID('vader-landing')).innerText()).includes('No chats in vader-app yet') && (await page.locator(TID('vader-landing')).innerText()).includes('Describe a task in the box below'));
+	const sug = (await page.locator(`${TID('vader-landing')} .vader-cursor-pointer`).allInnerTexts()).map(flat).filter(Boolean);
+	check('it offers three starts that are about the project', sug.join('|') === 'Add a rules file for this project|Explain how this project is laid out|Find and fix a failing test', sug.join('|'));
+	await page.getByText('Explain how this project is laid out').click();
+	check('a start sends that task', (await log(page)).includes('task:Explain how this project is laid out'));
+	check('with a project there is no "open a project" card', (await page.locator(TID('vader-no-project')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+{
+	const { page, errors } = await newPage(() => { window.__projectKey = null; });
+	check('with no folder open the first thing is to open one', (await page.locator(TID('vader-no-project')).innerText()).includes('Vader works inside a folder'));
+	await shot(page, '10-no-project');
+	await page.locator(TID('vader-open-folder')).click();
+	await page.locator(TID('vader-clone')).click();
+	check('Open a folder and Clone a repository run the editor’s own commands', (await log(page)).includes('command:workbench.action.files.openFolder') && (await log(page)).includes('command:git.clone'));
+	await page.locator(TID('vader-chat-only')).click();
+	check('Chat only puts the card away and leaves a plain conversation', (await page.locator(TID('vader-no-project')).count()) === 0 && (await page.locator(INPUT).count()) === 1);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+{
+	const { page, errors } = await newPage();
+	check('online there is no banner about the connection', (await page.locator(TID('vader-offline')).count()) === 0);
+	await page.context().setOffline(true);
+	await page.waitForSelector(TID('vader-offline'));
+	check('offline the chat says what still works and what needs a connection', (await page.locator(TID('vader-offline')).innerText()).includes('Models on this computer still work.') && (await page.locator(TID('vader-offline')).innerText()).includes('You can read chats and review changes.'));
+	await shot(page, '11-offline');
+	await page.locator(TID('vader-offline-local')).click();
+	check('Use a local model opens the Models page', (await log(page)).some(x => /openVaderSettings:models$/.test(x)));
+	await page.locator(TID('vader-offline-check')).click();
+	check('Check again does not claim a connection that is not there', (await page.locator(TID('vader-offline')).count()) === 1);
+	await page.context().setOffline(false);
+	await page.waitForFunction(() => !document.querySelector('[data-testid="vader-offline"]'));
+	check('when the connection is back the banner goes', true);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 await browser.close();
 server.close();
 fs.rmSync(tmp, { recursive: true, force: true });

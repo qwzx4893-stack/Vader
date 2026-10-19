@@ -296,6 +296,47 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== looking back through a chat: rename, export, delete
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-shell-more')).click();
+	check('the menu of a chat has Rename, Export as Markdown and Delete chat', (await page.locator('[role=menuitem]').allInnerTexts()).join('|') === 'Rename|Export as Markdown|Delete chat');
+	await page.locator(TID('vader-shell-rename')).click();
+	check('Rename turns the name into a box with the name in it', (await page.locator(TID('vader-shell-rename-input')).inputValue()) === 'Put summaries before the blind cut');
+	await page.locator(TID('vader-shell-rename-input')).fill('Summaries first');
+	await page.keyboard.press('Enter');
+	check('Enter saves the new name in the chat service', (await log(page)).includes('rename:t-wait:Summaries first'));
+	check('and the chat is called that, here and in the list', (await page.locator(TID('vader-shell-conversation-title')).innerText()) === 'Summaries first' && (await page.locator(`${TID('vader-shell-nav')} ${TID('vader-shell-thread')}`, { hasText: 'Summaries first' }).count()) >= 1);
+	await page.locator(TID('vader-shell-conversation-title')).dblclick();
+	await page.locator(TID('vader-shell-rename-input')).fill('Something else');
+	await page.keyboard.press('Escape');
+	check('Esc leaves the name as it was', (await page.locator(TID('vader-shell-conversation-title')).innerText()) === 'Summaries first' && !(await log(page)).includes('rename:t-wait:Something else'));
+	await page.locator(TID('vader-shell-more')).click();
+	await page.locator(TID('vader-shell-export')).click();
+	check('Export says what is in the file and what is not', (await page.locator(TID('vader-shell-export-ask')).innerText()).includes('API keys and settings are not part of a conversation'));
+	const dl = page.waitForEvent('download');
+	await page.locator(TID('vader-shell-export-ask-yes')).click();
+	const d = await dl;
+	const md = fs.readFileSync(await d.path(), 'utf8');
+	check('Save file gives a Markdown file named after the chat, with what was said', d.suggestedFilename() === 'Summaries-first.md' && md.startsWith('# Summaries first') && md.includes('## You') && md.includes('Put summaries before the blind cut'));
+	await page.locator(TID('vader-shell-more')).click();
+	await page.locator(TID('vader-shell-delete')).click();
+	check('Delete asks first and says what stays', (await page.locator(TID('vader-shell-delete-ask')).innerText()).includes('Files it changed are not touched') && !(await log(page)).some(x => x.startsWith('delete:')));
+	await page.locator(TID('vader-shell-delete-ask-no')).click();
+	check('Cancel keeps the chat', (await page.locator(TID('vader-shell-delete-ask')).count()) === 0 && !(await log(page)).some(x => x.startsWith('delete:')));
+	await page.locator(TID('vader-shell-more')).click();
+	await page.locator(TID('vader-shell-delete')).click();
+	await page.keyboard.press('Escape');
+	check('Esc also cancels', (await page.locator(TID('vader-shell-delete-ask')).count()) === 0);
+	await page.locator(TID('vader-shell-more')).click();
+	await page.locator(TID('vader-shell-delete')).click();
+	await page.locator(TID('vader-shell-delete-ask-yes')).click();
+	check('Delete chat deletes it', (await log(page)).includes('delete:t-wait'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+
 await browser.close();
 server.close();
 fs.rmSync(tmp, { recursive: true, force: true });

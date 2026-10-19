@@ -55,6 +55,8 @@ w.__chat = {
 	getPause(id: string) { return this._pause[id] },
 	pauseRun(id: string) { this._pause[id] = { reason: 'user' }; w.__log.push(`pause:${id}`); notify() },
 	resumeRun(id: string) { delete this._pause[id]; w.__log.push(`resume:${id}`); notify() },
+	renameThread(id: string, title: string) { w.__log.push(`rename:${id}:${title}`); const t = allThreads[id]; allThreads[id] = { ...t, customTitle: title.trim() || undefined }; this.state = { ...this.state, allThreads: { ...allThreads } }; notify() },
+	deleteThread(id: string) { w.__log.push(`delete:${id}`); delete allThreads[id]; this.state = { ...this.state, allThreads: { ...allThreads }, currentThreadId: Object.keys(allThreads)[0] }; notify() },
 }
 w.__log = [] as string[]
 w.__settings = { modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'Sonnet 4.5' } }, globalSettings: { chatMode: 'agent', dailySpendLimitUsd: 5 } }

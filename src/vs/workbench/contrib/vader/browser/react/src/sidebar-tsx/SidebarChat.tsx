@@ -40,7 +40,7 @@ import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAcc
 import { parseTaskList } from '../../../../common/taskList.js';
 import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextShare, messageChars, shouldFoldPaste } from '../../../../common/runStateModel.js';
-import { ContextBanner, FinishedCard, NoModelCard, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
+import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
 
 
 
@@ -1145,6 +1145,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isFocused, setIsFocused] = useState(false)
 	const [isHovered, setIsHovered] = useState(false)
 	const [isDisabled, setIsDisabled] = useState(false)
+	const [branchedTo, setBranchedTo] = useState<string | undefined>()
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 	// initialize on first render, and when edit was just enabled
@@ -1328,6 +1329,20 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		</div>
 
 
+
+		{/* looking back: a copy of the chat from before this message, to try another way; the original stays as it is */}
+		{mode === 'display' && messageIdx !== undefined && messageIdx > 0 && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
+			<button data-testid='vader-copy-message' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
+			<button data-testid='vader-branch' className='hover:text-vader-fg-1' title='A new chat that starts with everything before this message. This chat stays as it is.' onClick={() => { const id = chatThreadsService.branchThread(chatThreadsService.state.currentThreadId, messageIdx); if (id) setBranchedTo(id) }}>Branch the chat</button>
+		</div> : null}
+		{branchedTo ? <div className='mt-2 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2' data-testid='vader-branched'>
+			<div className='font-semibold text-vader-fg-1'>Branched here</div>
+			<div className='text-vader-fg-2 leading-relaxed'>A new chat started with everything before this message. This chat is unchanged.</div>
+			<div className='flex gap-2'>
+				<button data-testid='vader-branched-open' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { chatThreadsService.switchToThread(branchedTo); setBranchedTo(undefined) }}>Open the new chat</button>
+				<button data-testid='vader-branched-stay' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={() => setBranchedTo(undefined)}>Stay here</button>
+			</div>
+		</div> : null}
 	</div>
 
 }
@@ -2694,9 +2709,14 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 		for (let i = 0; i <= messageIdx && i < msgs.length; i++) if (msgs[i].role === 'checkpoint') n++
 		return n
 	}, [chatThreadService, threadId, messageIdx])
-	const onRestore = () => {
+	const [asking, setAsking] = useState(false)
+	const onAsk = () => {
 		if (threadIsRunning) return
 		if (isDisabled) return
+		setAsking(true)
+	}
+	const onRestore = () => {
+		setAsking(false)
 		chatThreadService.jumpToCheckpointBeforeMessageIdx({
 			threadId,
 			messageIdx,
@@ -2704,17 +2724,28 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 		})
 	}
 
-	return <div className={`flex items-center gap-2 px-1 text-xs text-vader-fg-3 select-none ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`} data-testid='vader-checkpoint'>
+	return <div className={`flex flex-col gap-2 px-1 text-xs text-vader-fg-3 select-none ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`} data-testid='vader-checkpoint'>
+		{asking ? <div className='rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2 text-[13px]' data-testid='vader-checkpoint-confirm' role='alertdialog'>
+			<div className='font-semibold text-vader-fg-1 text-sm'>Go back to checkpoint {num}?</div>
+			<div className='text-vader-fg-2 leading-relaxed'>Files return to how they were at this checkpoint. The messages after it stay visible but greyed out, and the next message continues from here.</div>
+			<div className='flex gap-2 justify-end'>
+				<button data-testid='vader-checkpoint-cancel' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => setAsking(false)}>Cancel</button>
+				<button data-testid='vader-checkpoint-go' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={onRestore}>Go back</button>
+			</div>
+		</div> : null}
+		<div className='flex items-center gap-2'>
 		<span>Checkpoint {num}</span>
 		<span
 			className={`underline ${isDisabled ? 'cursor-default opacity-60' : 'cursor-pointer hover:text-vader-fg-1'}`}
-			onClick={onRestore}
+			data-testid='vader-checkpoint-restore'
+			onClick={onAsk}
 			{...isDisabled ? {
 				'data-tooltip-id': 'vader-tooltip',
 				'data-tooltip-content': `Disabled ${isRunning ? 'when running' : 'because another thread is running'}`,
 				'data-tooltip-place': 'top',
 			} : {}}
 		>Restore</span>
+		</div>
 	</div>
 }
 
@@ -3391,12 +3422,19 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const isLandingPage = previousMessages.length === 0
 
 
+	// what to start from: with a project open these are about the project; without one, plain questions
+	const [chatOnly, setChatOnly] = useState(false)
+	const hasProject = !!chatThreadsService.getCurrentProjectKey()
 	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-vader-fg-3 select-none'>
-		{[
-			'Summarize my codebase',
-			'How do types work in Rust?',
-			'Create a .vaderrules file for me'
-		].map((text, index) => (
+		{(hasProject ? [
+			'Add a rules file for this project',
+			'Explain how this project is laid out',
+			'Find and fix a failing test',
+		] : [
+			'Explain the difference between a process and a thread',
+			'Write a regular expression for semantic version ranges',
+			'Compare two ways to index a SQL table',
+		]).map((text, index) => (
 			<div
 				key={index}
 				className='py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100'
@@ -3411,6 +3449,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 
 	const aboveComposer = <div className='flex flex-col gap-2'>
 		<ErrorBoundary><NoModelCard /></ErrorBoundary>
+		{!isLandingPage ? <ErrorBoundary><OfflineBanner /></ErrorBoundary> : null}
 		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
 		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
 		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>
@@ -3450,13 +3489,16 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		<div className='w-full flex flex-col gap-4 py-8' style={{ maxWidth: 560 }}>
 			<ErrorBoundary>
 				<div className='flex flex-col gap-1.5'>
-					<h2 className='text-xl font-semibold text-vader-fg-1'>{projectName ? `New chat in ${projectName}` : 'New chat'}</h2>
-					<p className='text-vader-fg-3 leading-relaxed'>{projectName ? 'Agent mode reads and edits the files of this project and shows every change for you to accept or reject.' : 'No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project.'}</p>
+					<h2 className='text-xl font-semibold text-vader-fg-1'>{projectName ? `No chats in ${projectName} yet` : 'New chat'}</h2>
+					<p className='text-vader-fg-3 leading-relaxed'>{projectName ? 'Describe a task in the box below, or start from one of these. Agent mode reads and edits the files of this project and shows every change for you to accept or reject.' : 'No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project.'}</p>
 				</div>
+				<OfflineBanner />
 				{aboveComposer}
 				{inputChatArea}
 				{hint}
 			</ErrorBoundary>
+
+			{!hasProject && !chatOnly ? <ErrorBoundary><NoProjectCard onChatOnly={() => setChatOnly(true)} /></ErrorBoundary> : null}
 
 			<ErrorBoundary>
 				{recent.length > 0 ? <div className='flex flex-col mt-2' data-testid='vader-landing-recent'>
@@ -3467,7 +3509,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 						<span className='text-vader-fg-3 text-xs shrink-0'>{r.status === 'review' ? 'Review it' : r.status === 'needs_you' ? 'Needs you' : ''}</span>
 					</button>)}
 				</div> : <div className='flex flex-col gap-2 mt-2'>
-					<div className='text-vader-fg-3 text-xs'>Suggestions</div>
+					<div className='text-vader-fg-3 text-xs'>{hasProject ? 'Start from one of these' : 'Suggestions'}</div>
 					{initiallySuggestedPromptsHTML}
 				</div>}
 			</ErrorBoundary>
