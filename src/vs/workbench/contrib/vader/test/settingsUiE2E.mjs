@@ -73,6 +73,8 @@ async function newPage(setup, page0) {
 	if (setup) await page.addInitScript(setup);
 	await page.goto(base);
 	await page.waitForFunction(() => window.__mounted === true);
+	await page.waitForTimeout(150);
+	if (errors.length) console.log(`PAGE ERRORS: ${errors.join(' | ').slice(0, 600)}`);
 	if (page0) await page.locator(TID(`vader-settings-nav-${page0}`)).click();
 	return { page, errors };
 }
@@ -394,6 +396,229 @@ async function layoutProblems(page) {
 	check('Show the welcome again clears the first-run flag', (await log(page)).includes('global:isOnboardingComplete=false'));
 	await shot(page, '06-data');
 	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+
+// ===================================================================== Models
+{
+	const { page, errors } = await newPage(undefined, 'models');
+	check('the chat model is the one that is set', (await page.locator(TID('vader-models-chat')).inputValue()) === 'anthropic/claude-sonnet-4-5');
+	check('suggestions are Off until a model is chosen for them', (await page.locator(TID('vader-models-autocomplete')).inputValue()) === '');
+	await page.locator(TID('vader-models-autocomplete')).selectOption('mistral/codestral-latest');
+	check('choosing a model for suggestions sets it and turns them on', (await log(page)).includes('select:Autocomplete=codestral-latest') && (await log(page)).includes('global:enableAutocomplete=true'));
+	check('applying edits follows the chat unless another model is chosen', (await page.locator(TID('vader-models-apply')).inputValue()) === '');
+	await page.locator(TID('vader-models-apply')).selectOption('openAI/gpt-5');
+	check('choosing a model for applying sets it and stops following the chat', (await log(page)).includes('select:Apply=gpt-5') && (await log(page)).includes('global:syncApplyToChat=false'));
+	await page.locator(TID('vader-models-apply')).selectOption('');
+	check('and Same as chat brings the switch back', (await log(page)).includes('global:syncApplyToChat=true'));
+
+	const local = page.locator(`${TID('vader-provider-row')}[data-provider=ollama]`);
+	check('Ollama is Running and says how many models and where', (await local.innerText()).includes('3 models, localhost:11434') && (await local.innerText()).includes('Running'));
+	const lm = page.locator(`${TID('vader-provider-row')}[data-provider=lmStudio]`);
+	check('a local server that is not found says where it looked and what to do', (await lm.innerText()).includes('Not found on localhost:1234') && (await lm.innerText()).includes('Not running'));
+	await lm.locator(TID('vader-provider-look')).click();
+	check('Look again asks the app to look again', (await log(page)).includes('look:lmStudio'));
+	check('vLLM with no address says it is not set up', (await page.locator(`${TID('vader-provider-row')}[data-provider=vLLM]`).innerText()).includes('Not set up'));
+	await page.locator(TID('vader-models-auto-local')).click();
+	check('the automatic look for local models is its own switch', (await log(page)).includes('global:autoRefreshModels=false'));
+
+	const rows = await page.locator(`${TID('vader-provider-row')}[data-has-key]`).evaluateAll(e => e.map(x => x.getAttribute('data-provider') + ':' + x.getAttribute('data-has-key')));
+	check('cloud providers with a key come first, then the usual ones to add a key to', rows.slice(0, 6).join('|') === 'openRouter:true|anthropic:true|openAI:false|gemini:false|groq:false|mistral:false', rows.join('|'));
+	check('a provider with a key says how many models and which key', (await page.locator(`${TID('vader-provider-row')}[data-provider=openRouter] ${TID('vader-provider-summary')}`).innerText()) === '4 models, key ending uter', await page.locator(`${TID('vader-provider-row')}[data-provider=openRouter] ${TID('vader-provider-summary')}`).innerText());
+	check('one without a key says so and offers to add one', (await page.locator(`${TID('vader-provider-row')}[data-provider=openAI] ${TID('vader-provider-summary')}`).innerText()) === 'No key yet' && (await page.locator(`${TID('vader-provider-row')}[data-provider=openAI] ${TID('vader-provider-add-key')}`).count()) === 1);
+	check('the rest are one line, and Show all opens the whole list', (await page.locator(TID('vader-models-show-all')).count()) === 1);
+
+	const or = page.locator(`${TID('vader-provider-row')}[data-provider=openRouter]`);
+	await or.locator(TID('vader-provider-toggle')).click();
+	check('opening a provider shows its key masked, with Replace', /^sk-te•+uter$/.test(await or.locator(TID('vader-provider-apiKey-masked')).innerText()) && (await or.locator(TID('vader-provider-apiKey-replace')).count()) === 1);
+	check('the picker count says how many models are shown', (await or.locator(TID('vader-provider-picker-count')).innerText()) === 'Shown in the picker: 3 of 4');
+	await or.locator(TID('vader-provider-test')).click();
+	await or.locator('[data-status=ok]').waitFor();
+	check('Test connection asks the provider and says how many models and how long', /^Works: 312 models, \d+ ms$/.test(flat(await or.locator(TID('vader-provider-status')).innerText()).replace(/^✓\s*/, '')), await or.locator(TID('vader-provider-status')).innerText());
+	check('every model has its own switch and its context size', (await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] .vader-mo`).count()) >= 1);
+	await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] ${TID('vader-provider-model-switch')}`).click();
+	check('a switch hides the model from the picker', (await log(page)).includes('togglemodel:openRouter:openai/gpt-5') && (await or.locator(TID('vader-provider-picker-count')).innerText()) === 'Shown in the picker: 2 of 4');
+	await or.locator(TID('vader-provider-add-open')).click();
+	await or.locator(TID('vader-provider-add-input')).fill('openai/gpt-5');
+	await or.locator(TID('vader-provider-add')).click();
+	check('adding a model that is already there is refused', (await or.locator(TID('vader-provider-add-problem')).innerText()).includes('already in the list'));
+	await or.locator(TID('vader-provider-add-input')).fill('mistralai/devstral');
+	await or.locator(TID('vader-provider-add')).click();
+	check('a new model is added by name and can be deleted', (await log(page)).includes('addmodel:openRouter:mistralai/devstral') && (await or.locator(`${TID('vader-provider-model')}[data-model="mistralai/devstral"] ${TID('vader-provider-model-delete')}`).count()) === 1);
+	await or.locator(`${TID('vader-provider-model')}[data-model="mistralai/devstral"] ${TID('vader-provider-model-delete')}`).click();
+	check('deleting a model written by hand removes it', (await log(page)).includes('deletemodel:openRouter:mistralai/devstral'));
+	await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] ${TID('vader-provider-model-defaults')}`).click();
+	check('Defaults opens what Vader assumes about the model', (await page.locator(TID('vader-overrides-dialog')).count()) === 1);
+	await page.locator(TID('vader-overrides-switch')).click();
+	await page.locator(TID('vader-overrides-text')).fill('{ not json');
+	await page.locator(TID('vader-overrides-save')).click();
+	check('JSON that does not parse is refused with a reason', (await page.locator(TID('vader-overrides-problem')).innerText()).includes('not valid JSON'));
+	await page.locator(TID('vader-overrides-text')).fill('{ "contextWindow": 8000, "bogus": 1 }');
+	await page.locator(TID('vader-overrides-save')).click();
+	check('a good override keeps only the keys Vader reads', (await log(page)).includes('overrides:openRouter:openai/gpt-5:{"contextWindow":8000}') && (await page.locator(TID('vader-overrides-dialog')).count()) === 0, (await log(page)).filter(x => x.startsWith('overrides')).join(','));
+
+	const oa = page.locator(`${TID('vader-provider-row')}[data-provider=openAI]`);
+	await oa.locator(TID('vader-provider-add-key')).click();
+	await oa.locator(TID('vader-provider-apiKey')).fill('sk-proj-abcdef');
+	check('typing a key writes it for that provider', (await log(page)).some(x => x.startsWith('provider:openAI.apiKey=sk-proj-abcdef')));
+	await oa.locator(TID('vader-provider-test')).click();
+	await oa.locator('[data-status=error]').waitFor();
+	check('a provider that cannot be reached says so, and nothing is made up', (await oa.locator(TID('vader-provider-status')).innerText()).includes('Could not reach the provider'));
+
+	await page.locator(TID('vader-models-search')).fill('groq');
+	check('searching keeps only the providers that match', (await page.locator(`${TID('vader-provider-row')}[data-has-key]`).count()) === 1);
+	await page.locator(TID('vader-models-search')).fill('zzzzq');
+	check('a search with no match says how to add any other service', (await page.locator(TID('vader-models-nomatch')).innerText()).includes('OpenAI-Compatible'));
+	await page.locator(TID('vader-models-search')).fill('');
+	await page.locator(TID('vader-models-show-all')).click();
+	check('Show all lists every cloud provider', (await page.locator(`${TID('vader-provider-row')}[data-has-key]`).count()) > 30);
+	await shot(page, '07-models');
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+
+// ===================================================================== Connected agents
+{
+	const { page, errors } = await newPage(undefined, 'agents');
+	const state = (id) => page.locator(`${TID(`vader-external-agent-${id}`)} ${TID(`vader-external-agent-${id}-state`)}`).innerText();
+	check('an agent that is signed in says so, with its version', (await state('codex')).includes('Signed in') && (await page.locator(TID('vader-external-agent-codex')).innerText()).includes('2.2.2'));
+	check('one that is found but not signed in says so', (await state('opencode')).includes('Not signed in'));
+	check('one that is not installed says so, and one that needs Node.js says that', (await state('cursor')) === 'Not installed' && (await state('copilot')) === 'Needs Node.js');
+	check('the agents are in two groups: in the chat, and in a terminal', (await page.locator(TID('vader-settings-external-agents')).innerText()).includes('In a terminal') && (await page.locator(TID('vader-external-agent-claude-code')).count()) === 1);
+	await page.locator(TID('vader-external-agent-cursor-install')).click();
+	check('Install asks the app to install it (which shows the exact steps first)', (await log(page)).includes('agent:install:cursor'));
+	await page.locator(TID('vader-external-agent-opencode-connect')).click();
+	check('Connect starts the vendor’s own sign-in', (await log(page)).includes('agent:connect:opencode'));
+	check('an agent that needs Node.js has no Install button to press in vain', (await page.locator(TID('vader-external-agent-copilot-install')).count()) === 0);
+	await page.locator(TID('vader-external-agent-codex-update')).click();
+	check('a newer version is offered by number', (await log(page)).includes('agent:install:codex'));
+	await page.locator(TID('vader-external-agent-codex-use')).click();
+	check('Use sets it as the agent of the chat', (await log(page)).includes('global:externalAgentId="codex"'));
+	await page.evaluate(() => { });
+	await page.locator(TID('vader-external-agent-codex-more')).click();
+	await page.locator(TID('vader-external-agent-codex-test')).click();
+	await page.waitForSelector(TID('vader-external-agent-codex-probe'));
+	check('Test connection says what answered and how long it took', (await page.locator(TID('vader-external-agent-codex-probe')).innerText()).includes('Works: Codex 2.2.2 answered in 0.8 s'));
+	check('an agent Vader installed can be removed, and one found here cannot', (await page.locator(TID('vader-external-agent-codex-remove')).count()) === 1);
+	await page.locator(TID('vader-external-agents-check')).click();
+	check('Check for newer versions asks the registry', (await log(page)).includes('agents:check'));
+	const custom = page.locator(TID('vader-external-agent-custom'));
+	check('adding an agent of your own needs a name and a program', await custom.locator(TID('vader-external-agent-custom-add')).isDisabled());
+	await custom.locator('input[placeholder="Name"]').fill('My agent');
+	await custom.locator('input[placeholder^="Program"]').fill('my-agent');
+	await custom.locator('input[placeholder^="Arguments"]').fill('--acp --quiet');
+	await custom.locator(TID('vader-external-agent-custom-add')).click();
+	check('it is handed to the app with its program and arguments split', (await log(page)).includes('agent:add:My agent:my-agent:--acp --quiet'));
+	check('the page says it runs with your rights, so add only programs you trust', (await custom.innerText()).includes('runs with your user'));
+	await shot(page, '08-connected-agents');
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+
+// ===================================================================== MCP servers
+{
+	const { page, errors } = await newPage(undefined, 'mcp');
+	const rows = (await page.locator(TID('vader-mcp-server')).evaluateAll(e => e.map(x => x.getAttribute('data-server') + ':' + x.getAttribute('data-status'))));
+	check('every server is listed with the state the service reports', rows.join('|') === 'GitHub:success|Linear:success|acme-internal:error', rows.join('|'));
+	check('a running server says how many tools it offers', (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub]`).innerText()).includes('2 tools') && (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub]`).innerText()).includes('Running'));
+	check('a server that failed shows the real error', (await page.locator(`${TID('vader-mcp-server')}[data-server=acme-internal] ${TID('vader-mcp-server-error')}`).innerText()).includes('spawn ENOENT'));
+	check('the switch follows what is on', (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub] ${TID('vader-mcp-switch')}[aria-checked=true]`).count()) === 1 && (await page.locator(`${TID('vader-mcp-server')}[data-server=Linear] ${TID('vader-mcp-switch')}[aria-checked=false]`).count()) === 1);
+	await page.locator(`${TID('vader-mcp-server')}[data-server=Linear] ${TID('vader-mcp-switch')}`).click();
+	check('a switch turns the server on in the service', (await log(page)).includes('mcp:toggle:Linear=true'));
+	await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub] ${TID('vader-mcp-expand')}`).click();
+	check('opening a server shows its tools by their own names', (await page.locator(TID('vader-mcp-tools')).innerText()).includes('create_issue') && (await page.locator(TID('vader-mcp-tools')).innerText()).includes('list_prs'));
+	await page.locator(TID('vader-mcp-add')).click();
+	check('Add by hand opens the config file', (await log(page)).includes('mcp:reveal'));
+	await page.locator(TID('vader-mcp-find')).click();
+	check('Find servers opens Add-ons', (await log(page)).some(x => /^command:.*Addons|^command:.*addons/i.test(x)), (await log(page)).join(','));
+	await shot(page, '09-mcp');
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__mcpOverride = { state: { mcpServerOfName: {} } }; }, 'mcp');
+	check('with no server it says so and where servers come from', (await page.locator(TID('vader-mcp-empty')).innerText()).includes('No server is set up') && (await page.locator(TID('vader-mcp-empty')).innerText()).includes('trust score'));
+	await page.close();
+}
+
+// ===================================================================== Memory and instructions
+{
+	const { page, errors } = await newPage(undefined, 'memory');
+	await page.waitForFunction(() => document.querySelectorAll('[data-testid="vader-memory-layer"]').length >= 3);
+	const layers = (await page.locator(TID('vader-memory-layer')).allInnerTexts()).map(flat);
+	check('the instructions are listed in order: yours first, then the rules files found in the project', layers[0].includes('Your instructions for every project') && layers[0].includes('Empty') && layers[1].includes('.vaderrules') && layers[1].includes('Found in vader-app, 480 B') && layers[2].includes('AGENTS.md') && layers[2].includes('1.2 KB'), layers.join(' | '));
+	check('a rules file that is not there is not listed', !layers.some(l => l.includes('CLAUDE.md')));
+	await page.locator(TID('vader-memory-text')).fill('Reply in the language I write in.');
+	await page.locator(TID('vader-memory-save')).click();
+	check('Save writes the instructions and says when they apply', (await log(page)).includes('global:aiInstructions="Reply in the language I write in."') && (await page.locator(TID('vader-memory-saved')).innerText()).includes('next message'));
+	await page.locator(TID('vader-memory-layer-action')).nth(1).click();
+	const l = await log(page);
+	check('Open on a rules file leaves Settings, goes to the editor and opens that file', l.some(x => /^command:.*Settings/i.test(x)) && l.includes('shell:editor') && l.some(x => x.startsWith('command:vscode.open')), l.join(','));
+	await page.locator(TID('vader-memory-disable-system')).click();
+	check('sending only your instructions is its own switch, with an honest note', (await log(page)).includes('global:disableSystemMessage=true') && (await page.locator(TID('vader-settings-memory')).innerText()).includes('safety rules that block dangerous actions still apply'));
+	check('the project memory is listed with counts on the tabs', (await page.locator(TID('vader-memory-record')).count()) === 2 && (await page.locator(TID('vader-memory-tab-project')).innerText()).includes('2') && (await page.locator(TID('vader-memory-tab-agent')).innerText()).includes('1'));
+	await page.locator(TID('vader-memory-remove')).first().click();
+	check('Remove deletes one record', (await log(page)).includes('memory:remove:m1') && (await page.locator(TID('vader-memory-record')).count()) === 1);
+	await page.locator(TID('vader-memory-tab-agent')).click();
+	check('a saved agent’s memory is under its own tab, with the agent named', (await page.locator(TID('vader-memory-record')).innerText()).includes('Reviewer prefers short reports') && (await page.locator(TID('vader-memory-record')).innerText()).includes('Reviewer'));
+	await page.locator(TID('vader-memory-tab-project')).click();
+	await page.locator(TID('vader-memory-clear')).click();
+	check('Clear project memory clears that scope, and the page then says it is empty', (await log(page)).includes('memory:clear:project') && (await page.locator(TID('vader-memory-empty')).count()) === 1);
+	await shot(page, '10-memory');
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__workspaceFolders = []; }, 'memory');
+	await page.waitForSelector(TID('vader-memory-layer'));
+	check('with no folder open it says to open one', (await page.locator(TID('vader-settings-memory')).innerText()).includes('Open a folder first.'));
+	await page.close();
+}
+
+// ===================================================================== Skills
+{
+	const { page, errors } = await newPage(undefined, 'skills');
+	const rows = await page.locator(TID('vader-skills-row')).evaluateAll(e => e.map(x => x.getAttribute('data-skill') + ':' + x.getAttribute('data-trust')));
+	check('the installed skills are listed with their trust decision', rows.join('|') === 'frontend-design:trusted|log-triage:review_required|old-deploy-helper:blocked', rows.join('|'));
+	const trust = (n) => page.locator(`${TID('vader-skills-row')}[data-skill="${n}"] ${TID('vader-skills-trust')}`).innerText();
+	check('trust says its word and a computed number, and a blocked skill has no number', /^Trusted \d+%$/.test(await trust('frontend-design')) && /^Needs review \d+%$/.test(await trust('log-triage')) && (await trust('old-deploy-helper')).trim() === 'Blocked', `${await trust('frontend-design')} | ${await trust('log-triage')} | ${await trust('old-deploy-helper')}`);
+	check('what a skill asks for is read from its text', (await page.locator(`${TID('vader-skills-row')}[data-skill="log-triage"]`).innerText()).includes('Files, Terminal, Network') && (await page.locator(`${TID('vader-skills-row')}[data-skill="frontend-design"]`).innerText()).includes('Nothing special'));
+	await page.locator(`${TID('vader-skills-row')}[data-skill="log-triage"] ${TID('vader-skills-switch')}`).click();
+	check('the switch turns a skill on', (await log(page)).includes('skill:enabled:s2=true'));
+	await page.locator(`${TID('vader-skills-row')}[data-skill="old-deploy-helper"] ${TID('vader-skills-switch')}`).click();
+	check('a blocked skill cannot be switched on', !(await log(page)).includes('skill:enabled:s3=true'));
+	await page.locator(`${TID('vader-skills-row')}[data-skill="log-triage"] ${TID('vader-skills-read')}`).click();
+	const detail = page.locator(TID('vader-skills-detail'));
+	check('Read shows the reasons for the number and the words the agent reads', (await detail.locator(TID('vader-skills-factor')).count()) >= 1 && (await detail.locator(TID('vader-skills-text')).innerText()).includes('tail -n 200'));
+	await detail.locator(TID('vader-skills-trust-it')).click();
+	check('Mark trusted is the person’s own decision, written to the skill', (await log(page)).includes('skill:trust:s2=trusted'));
+	await detail.locator(TID('vader-skills-block')).click();
+	check('Block blocks it, and Unblock puts it back to needing review', (await log(page)).includes('skill:trust:s2=blocked') && (await detail.locator(TID('vader-skills-unblock')).count()) === 1);
+	await detail.locator(TID('vader-skills-pin')).click();
+	check('Pin is its own button', (await log(page)).includes('skill:pin:s2=true'));
+	await detail.locator(TID('vader-skills-remove')).click();
+	check('Remove removes it', (await log(page)).includes('skill:remove:s2') && (await page.locator(TID('vader-skills-row')).count()) === 2);
+	await page.locator(TID('vader-skills-filter')).fill('zzzz');
+	check('a filter with no match says so', (await page.locator(TID('vader-skills-nomatch')).count()) === 1);
+	await page.locator(TID('vader-skills-filter')).fill('front');
+	check('and one that matches keeps that skill', (await page.locator(TID('vader-skills-row')).count()) === 1);
+	await page.locator(TID('vader-skills-tab-sources')).click();
+	check('Sources lists where Add-ons looks and the repositories of skills', (await page.locator(TID('vader-skills-source')).count()) >= 1 && (await page.locator(TID('vader-skills-repo')).count()) === 2);
+	await page.locator(TID('vader-skills-repo-input')).fill('not a repo');
+	await page.locator(TID('vader-skills-repo-add')).click();
+	check('something that is not a GitHub repository is refused and says how to write one', (await page.locator(TID('vader-skills-repo-problem')).innerText()).includes('owner/repo'));
+	await page.locator(TID('vader-skills-repo-input')).fill('acme/skills');
+	await page.locator(TID('vader-skills-repo-add')).click();
+	check('a repository is added', (await log(page)).includes('skill:source:add:acme/skills') && (await page.locator(TID('vader-skills-repo')).count()) === 3);
+	await page.locator(TID('vader-skills-repo-remove')).first().click();
+	check('and removed', (await log(page)).some(x => x.startsWith('skill:source:remove:')));
+	await shot(page, '11-skills');
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__skillsOverride = []; }, 'skills');
+	check('with no skill it says what a skill is and where to find some', (await page.locator(TID('vader-skills-empty')).innerText()).includes('No skill is installed') && (await page.locator(TID('vader-skills-empty')).innerText()).includes('Add-ons'));
 	await page.close();
 }
 

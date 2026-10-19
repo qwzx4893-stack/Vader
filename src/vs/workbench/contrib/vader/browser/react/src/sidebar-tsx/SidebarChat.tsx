@@ -32,7 +32,7 @@ import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
-import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/Settings.js';
+import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/ToolApprovalTypeSwitch.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';

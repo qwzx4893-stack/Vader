@@ -96,6 +96,7 @@ const setAgents = (l: any[]) => { agentList = l; w.__agentsSvc = { state: { agen
 const agentsSvc: any = {
 	createAgent(i: any, by: string) { const a = { id: 'n' + agentList.length, ...i, modelSelection: i.modelSelection ?? null, createdBy: by, createdAt: 3 }; w.__log.push(`agent:create:${i.name}`); setAgents([...agentList, a]); return a },
 	updateAgent(id: string, p: any) { w.__log.push(`agent:update:${id}:${JSON.stringify(p)}`); setAgents(agentList.map(a => a.id === id ? { ...a, ...p } : a)) },
+	getAgent: (id: string) => agentList.find(a => a.id === id),
 	deleteAgent(id: string) { w.__log.push(`agent:delete:${id}`); setAgents(agentList.filter(a => a.id !== id)) },
 }
 let threadAgent: string | null = null
@@ -103,7 +104,7 @@ chat.getCurrentThread = () => ({ id: 't1', agentId: threadAgent })
 chat.setThreadAgentId = (_t: string, id: string | null) => { w.__log.push(`useagent:${id}`); threadAgent = id; notify() }
 
 // ---- MCP
-w.__mcp = { state: { mcpServerOfName: { GitHub: { status: 'success', command: 'npx @github/mcp', tools: [{ name: 'GitHub_create_issue' }, { name: 'GitHub_list_prs' }] }, Linear: { status: 'success', tools: [] }, 'acme-internal': { status: 'error', error: 'spawn ENOENT', command: 'node C:\tools\acme-mcp\index.js' } } } }
+w.__mcp = w.__mcpOverride ?? { state: { mcpServerOfName: { GitHub: { status: 'success', command: 'npx @github/mcp', tools: [{ name: 'GitHub_create_issue' }, { name: 'GitHub_list_prs' }] }, Linear: { status: 'success', tools: [] }, 'acme-internal': { status: 'error', error: 'spawn ENOENT', command: 'node C:\tools\acme-mcp\index.js' } } } }
 
 // ---- the app's own services that the pages use
 chat.state = { allThreads: { t1: { id: 't1', messages: [] }, t2: { id: 't2', messages: [] }, t3: { id: 't3', messages: [] } }, currentThreadId: 't1' }
@@ -117,7 +118,74 @@ const notifications: any = { info: (m: string) => w.__log.push(`notify:${m}`), n
 const env: any = { logsHome: { fsPath: 'C:\\logs' } }
 const nativeHost: any = { async showItemInFolder(p: string) { w.__log.push(`folder:${p}`) } }
 const transfer: any = { async transferExtensions(_os: any, from: string) { w.__log.push(`transfer:${from}`); return from === 'Trae' ? 'Trae was not found at C:\\Users\\me\\AppData\\Roaming\\Trae.' : undefined } }
-w.__accessor = { get: (name: string) => ({ IProductService: product, IConfigurationService: config, INotificationService: notifications, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc } as any)[name] }
+// ---- the models and providers: what each provider answers when its models are asked for is set by the test (window.__answers)
+const P: any = w.__settings.settingsOfProvider
+const model = (modelName: string, type = 'default', isHidden = false) => ({ modelName, type, isHidden })
+P.openRouter.models = [model('anthropic/claude-sonnet-4.5'), model('openai/gpt-5'), model('google/gemini-2.5-pro'), model('meta-llama/llama-3.3-70b-instruct:free', 'default', true)]
+P.anthropic.models = [model('claude-sonnet-4-5'), model('claude-opus-4-1'), model('claude-haiku-4-5')]
+P.ollama.models = [model('qwen2.5-coder:7b', 'autodetected'), model('llama3.1:8b', 'autodetected'), model('mistral:7b', 'autodetected')]
+P.ollama._didFillInProviderSettings = true
+P.ollama.endpoint = 'http://localhost:11434'
+w.__cloud = {}
+w.__local = { ollama: { state: 'finished' }, lmStudio: { state: 'error' }, vLLM: { state: 'init' } }
+w.__answers = w.__answers ?? { openRouter: { status: 'ok', count: 312 }, anthropic: { status: 'ok', count: 3 } }
+const refreshSvc: any = {
+	async refreshCloudModels(p: string) {
+		w.__log.push(`refresh:${p}`)
+		w.__cloud = { ...w.__cloud, [p]: { status: 'loading' } }; notify()
+		await new Promise(r => setTimeout(r, 120))
+		w.__cloud = { ...w.__cloud, [p]: w.__answers[p] ?? { status: 'error', reason: 'network', message: 'Could not reach the provider.' } }; notify()
+	},
+	startRefreshingModels(p: string) { w.__log.push(`look:${p}`) },
+}
+const patchProvider = (p: string, f: (o: any) => any) => { w.__settings = { ...w.__settings, settingsOfProvider: { ...w.__settings.settingsOfProvider, [p]: f(w.__settings.settingsOfProvider[p]) } }; notify() }
+settingsSvc.addModel = (p: string, m: string) => { w.__log.push(`addmodel:${p}:${m}`); patchProvider(p, o => ({ ...o, models: [...o.models, model(m, 'custom')] })) }
+settingsSvc.toggleModelHidden = (p: string, m: string) => { w.__log.push(`togglemodel:${p}:${m}`); patchProvider(p, o => ({ ...o, models: o.models.map((x: any) => x.modelName === m ? { ...x, isHidden: !x.isHidden } : x) })) }
+settingsSvc.deleteModel = (p: string, m: string) => { w.__log.push(`deletemodel:${p}:${m}`); patchProvider(p, o => ({ ...o, models: o.models.filter((x: any) => x.modelName !== m) })); return true }
+settingsSvc.setOverridesOfModel = async (p: string, m: string, v: any) => { w.__log.push(`overrides:${p}:${m}:${JSON.stringify(v)}`); const cur = w.__settings.overridesOfModel ?? {}; w.__settings = { ...w.__settings, overridesOfModel: { ...cur, [p]: { ...(cur[p] ?? {}), [m]: v } } }; notify() }
+settingsSvc.setSettingOfProvider = async (p: string, k: string, v: any) => { w.__log.push(`provider:${p}.${k}=${v}`); patchProvider(p, o => ({ ...o, [k]: v, ...(k === 'apiKey' ? { _didFillInProviderSettings: !!v } : {}) })) }
+w.__settings.globalSettings.autoRefreshModels = true
+w.__settings.globalSettings.customAcpAgents = []
+w.__settings.globalSettings.externalAgentId = null
+w.__settings.globalSettings.aiInstructions = ''
+w.__settings.globalSettings.disableSystemMessage = false
+w.__settings.mcpUserStateOfName = { GitHub: { isOn: true }, Linear: { isOn: false } }
+
+// ---- connected agents
+w.__agents = { statuses: { codex: { id: 'codex', state: 'ready', source: 'vader', installedVersion: '2.2.2', latestVersion: '2.3.0' }, opencode: { id: 'opencode', state: 'ready', source: 'local', installedVersion: '1.19.0' }, cursor: { id: 'cursor', state: 'not-installed' }, copilot: { id: 'copilot', state: 'needs-node' } }, busy: {}, errors: {}, probes: {}, signIn: { codex: { state: 'in', canSignOut: true }, opencode: { state: 'out' } }, opened: {}, configOfThread: {} }
+const agentsExt: any = {
+	refresh() { }, async checkRegistry() { w.__log.push('agents:check'); return ['codex'] },
+	install(id: string) { w.__log.push(`agent:install:${id}`) }, connect(id: string) { w.__log.push(`agent:connect:${id}`) }, uninstall(id: string) { w.__log.push(`agent:uninstall:${id}`) }, signOut(id: string) { w.__log.push(`agent:signout:${id}`) },
+	openInTerminal(id: string) { w.__log.push(`agent:terminal:${id}`) },
+	async testConnection(id: string) { w.__log.push(`agent:test:${id}`); w.__agents = { ...w.__agents, probes: { ...w.__agents.probes, [id]: { ok: true, agentName: 'Codex', agentVersion: '2.2.2', ms: 840, authMethods: [{ name: 'ChatGPT' }], canResume: true } } }; notify() },
+	async addCustomAgent(a: any) { w.__log.push(`agent:add:${a.name}:${a.command}:${a.args.join(' ')}`); return true }, removeCustomAgent(id: string) { w.__log.push(`agent:removecustom:${id}`) },
+}
+
+// ---- MCP service, memory, skills, files
+const mcpSvc: any = { async revealMCPConfigFile() { w.__log.push('mcp:reveal') }, async toggleServerIsOn(n: string, on: boolean) { w.__log.push(`mcp:toggle:${n}=${on}`); w.__settings = { ...w.__settings, mcpUserStateOfName: { ...w.__settings.mcpUserStateOfName, [n]: { isOn: on } } }; notify() } }
+let memRecords: any = { project: [{ id: 'm1', scope: 'project', scopeKey: 'p', label: 'Tests run with node, not jest', content: 'Every test lives in contrib/vader/test as an .mjs file', source: 'agent_written' }, { id: 'm2', scope: 'project', scopeKey: 'p', label: 'Use Edit, not heredocs', content: 'Heredoc scripts halve backslashes', source: 'agent_written' }], agent: [{ id: 'm3', scope: 'agent', scopeKey: 'a1', label: 'Reviewer prefers short reports', content: 'One line per blocker', source: 'agent_written' }] }
+w.__memory = { state: memRecords }
+const setMem = (m: any) => { memRecords = m; w.__memory = { state: m }; notify() }
+const memorySvc: any = { remove(id: string) { w.__log.push(`memory:remove:${id}`); setMem({ project: memRecords.project.filter((x: any) => x.id !== id), agent: memRecords.agent.filter((x: any) => x.id !== id) }) }, clearScope(s: string) { w.__log.push(`memory:clear:${s}`); setMem({ ...memRecords, [s]: [] }) } }
+const fileSvc: any = { async resolve(uri: any) { const n = String(uri.path ?? uri).split('/').pop(); if (n === 'AGENTS.md' || n === '.vaderrules') return { isFile: true, size: n === 'AGENTS.md' ? 1229 : 480 }; throw new Error('not found') } }
+w.__workspaceFolders = w.__workspaceFolders ?? [{ name: 'vader-app', uri: { scheme: 'file', authority: '', path: '/work/vader-app', toString() { return 'file://' + this.path }, fsPath: 'C:\\work\\vader-app', with(c: any) { return { ...this, ...c } } } }]
+const workspaceSvc: any = { getWorkspace: () => ({ folders: w.__workspaceFolders }) }
+const shellSvc: any = { openEditor() { w.__log.push('shell:editor') } }
+w.__skills = w.__skillsOverride ?? [
+	{ id: 's1', name: 'frontend-design', description: 'Design guidance for building interfaces', category: 'development', source: { repositoryUrl: 'https://github.com/anthropics/skills' }, instructions: 'Make deliberate typographic choices.', requestedCapabilities: { fs: false, terminal: false, network: false, mcp: false }, trustState: 'trusted', pinned: false, enabled: true, installedAt: Date.now() - 3 * 86400000, updatedAt: 0 },
+	{ id: 's2', name: 'log-triage', description: 'Read logs and group the errors', category: 'devops', source: { repositoryUrl: 'https://github.com/someone/ops' }, instructions: 'Run the terminal command tail -n 200 and fetch with curl https://example.com. Use the filesystem to read files.', requestedCapabilities: { fs: true, terminal: true, network: true, mcp: false }, trustState: 'review_required', pinned: false, enabled: false, installedAt: Date.now() - 86400000, updatedAt: 0 },
+	{ id: 's3', name: 'old-deploy-helper', description: 'Deploys', category: 'devops', source: {}, instructions: 'rm -rf the build', requestedCapabilities: { fs: true, terminal: true, network: false, mcp: false }, trustState: 'blocked', pinned: false, enabled: false, installedAt: Date.now() - 40 * 86400000, updatedAt: 0 },
+]
+let repos = ['anthropics/skills', 'openai/skills']
+const patchSkill = (id: string, p: any) => { w.__skills = w.__skills.map((s: any) => s.id === id ? { ...s, ...p } : s); notify() }
+const skillSvc: any = {
+	setEnabled(id: string, v: boolean) { w.__log.push(`skill:enabled:${id}=${v}`); patchSkill(id, { enabled: v }) }, setTrustState(id: string, v: string) { w.__log.push(`skill:trust:${id}=${v}`); patchSkill(id, { trustState: v, ...(v === 'blocked' ? { enabled: false } : {}) }) },
+	setPinned(id: string, v: boolean) { w.__log.push(`skill:pin:${id}=${v}`); patchSkill(id, { pinned: v }) }, remove(id: string) { w.__log.push(`skill:remove:${id}`); w.__skills = w.__skills.filter((s: any) => s.id !== id); notify() },
+	listSources: () => repos, addSource(r: string) { if (!/^[\w.-]+\/[\w.-]+$/.test(r.trim()) && !r.startsWith('https://github.com/')) return false; w.__log.push(`skill:source:add:${r}`); repos = [...repos, r.trim()]; notify(); return true }, removeSource(r: string) { w.__log.push(`skill:source:remove:${r}`); repos = repos.filter(x => x !== r); notify() },
+}
+const storageSvc: any = { get: () => undefined }
+
+w.__accessor = { get: (name: string) => ({ IProductService: product, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
 
 createRoot(document.getElementById('root')!).render(<Settings />)
 w.__mounted = true

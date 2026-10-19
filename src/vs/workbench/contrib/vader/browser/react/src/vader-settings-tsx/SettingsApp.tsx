@@ -7,7 +7,6 @@ import { useAccessor } from '../util/services.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { VADER_TOGGLE_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { Icon } from '../vader-shell-tsx/icons.js'
-import { LegacySettings, Tab } from './Settings.js'
 import { PermissionsPage } from './PermissionsPage.js'
 import { UsagePage } from './UsagePage.js'
 import { RouterPage } from './RouterPage.js'
@@ -17,6 +16,11 @@ import { PrivacyPage } from './PrivacyPage.js'
 import { ExtensionsPage } from './ExtensionsPage.js'
 import { AboutPage } from './AboutPage.js'
 import { DataPage } from './DataPage.js'
+import { ModelsPage } from './ModelsPage.js'
+import { ConnectedAgentsPage } from './ConnectedAgentsPage.js'
+import { SkillsPage } from './SkillsPage.js'
+import { McpPage } from './McpPage.js'
+import { MemoryPage } from './MemoryPage.js'
 import '../vader-shell-tsx/shell.css'
 
 // Vader's Settings in the shape of the interface boards (R08 to R30): a column on the left with a way back to the app, a search, and the pages in three groups
@@ -46,11 +50,6 @@ const GROUPS: { title: string, items: { id: SettingsPage, label: string, words: 
 		{ id: 'about', label: 'About and updates', words: 'update version release licence credits onboarding' },
 	] },
 ]
-
-/** the pages that still show their earlier content, by the earlier tabs */
-const LEGACY: { [p in SettingsPage]?: Tab[] } = {
-	models: ['models', 'localProviders', 'providers'], router: ['agent'], agents: ['externalAgents'], saved: ['agent'], skills: ['skills'], mcp: ['mcp'], memory: ['context'], extensions: ['extensions'], editor: ['featureOptions'], privacy: ['privacy'], data: ['data'], about: ['about'],
-}
 
 export const OPEN_SETTINGS_PAGE_EVENT = 'vader-settings-goto'
 
@@ -82,7 +81,11 @@ export const Settings = () => {
 		if (page === 'extensions') return <ExtensionsPage />
 		if (page === 'about') return <AboutPage />
 		if (page === 'data') return <DataPage />
-		return <LegacySettings tabs={LEGACY[page] ?? []} />
+		if (page === 'models') return <ModelsPage />
+		if (page === 'agents') return <ConnectedAgentsPage />
+		if (page === 'skills') return <SkillsPage />
+		if (page === 'mcp') return <McpPage />
+		return <MemoryPage />
 	})()
 
 	return <div className='shell' data-testid='vader-settings-page' style={{ flexDirection: 'row' }}>
