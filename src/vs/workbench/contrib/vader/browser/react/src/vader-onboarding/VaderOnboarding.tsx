@@ -149,7 +149,8 @@ const Pages = () => {
 			<div className='r' style={{ height: 38, flex: 'none' }} />
 			<div className='r' style={{ height: 76, flex: 'none', alignItems: 'flex-end', paddingBottom: 14 }}><Stepper step={step} /></div>
 
-			{step === 1 ? <div className='c fl scroll' style={{ gap: 6, paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step1'>
+			{step === 1 ? <div className='c fl' style={{ paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step1'>
+				<div className='c fl scroll' style={{ gap: 6, minHeight: 0 }}>
 				<span className='ttl' style={{ fontSize: 28, marginTop: 20 }}>Welcome to Vader</span>
 				<span className='t2' style={{ lineHeight: 1.6, maxWidth: 440, marginTop: 6 }}>Vader works in your projects and asks before anything risky. First choose where its models come from. You can change this later in Settings.</span>
 
@@ -214,13 +215,14 @@ const Pages = () => {
 						</div>) : null}
 					</div>
 				</div>
-				<span className='fl' />
+				</div>
 				<div className='r' style={{ height: 70, flex: 'none', justifyContent: 'flex-end', paddingBottom: 6 }}>
 					<button className='tx' data-testid='vader-welcome-continue' onClick={() => setStep(2)}>Skip for now</button>
 				</div>
 			</div> : null}
 
-			{step === 2 ? <div className='c fl scroll' style={{ gap: 6, paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step2'>
+			{step === 2 ? <div className='c fl' style={{ paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step2'>
+				<div className='c fl scroll' style={{ gap: 6, minHeight: 0 }}>
 				<span className='ttl' style={{ fontSize: 28, marginTop: 20, lineHeight: 1.25 }}>Open a project, and choose how much Vader asks</span>
 				<span className='hint' style={{ marginTop: 22 }}>Project</span>
 				<div className='r' style={{ gap: 12, padding: '10px 0', borderTop: '1px solid var(--ln)', borderBottom: '1px solid var(--ln)' }} data-testid='vader-onboarding-project'>
@@ -240,7 +242,7 @@ const Pages = () => {
 				</div>
 				<span className='t3' style={{ lineHeight: 1.5, padding: '8px 0' }}>Some rules are locked in every mode: never touching your keys or system files, and always asking before installing anything. You can change all of this in Settings.</span>
 				{showImport ? <div className='c' style={{ gap: 10, padding: '6px 0' }} data-testid='vader-import-editors'><span className='t2'>Bring your theme, keybindings and extensions over. Nothing is changed in the original editor.</span><div className='r' style={{ gap: 8, flexWrap: 'wrap' }}>{transferEditorTypes.map(editor => <EditorSwitchButton key={editor} fromEditor={editor} />)}</div></div> : null}
-				<span className='fl' />
+				</div>
 				<div className='r' style={{ height: 70, flex: 'none', gap: 10, paddingBottom: 6 }}>
 					<button className='tx' data-testid='vader-import-toggle' style={{ padding: 0 }} onClick={() => setShowImport(v => !v)}>Import settings from VS Code or Cursor</button>
 					<span className='fl' />
@@ -249,7 +251,8 @@ const Pages = () => {
 				</div>
 			</div> : null}
 
-			{step === 3 ? <div className='c fl scroll' style={{ gap: 6, paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step3'>
+			{step === 3 ? <div className='c fl' style={{ paddingRight: 120, minHeight: 0 }} data-testid='vader-onboarding-step3'>
+				<div className='c fl scroll' style={{ gap: 6, minHeight: 0 }}>
 				<span className='ttl' style={{ fontSize: 28, marginTop: 20 }}>Try a first task</span>
 				<span className='t2' style={{ lineHeight: 1.6, maxWidth: 440, marginTop: 6 }}>Pick one, or write your own. You will see the plan, every step, and the changes before anything is kept.</span>
 				{noModel ? <div className='c' style={{ gap: 6, padding: '12px 14px', border: '1px solid var(--ln2)', borderRadius: 10, background: 'var(--g2)', marginTop: 12 }} role='alert' data-testid='vader-onboarding-no-model'>
@@ -265,7 +268,7 @@ const Pages = () => {
 					<textarea data-testid='vader-onboarding-own-task' className='t1' style={{ minHeight: 44, resize: 'none', lineHeight: 1.5 }} placeholder='Or describe your own task' value={task} onChange={e => setTask(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey && task.trim()) { e.preventDefault(); startTask(task.trim(), 'agent') } }} />
 					<span className='r' style={{ justifyContent: 'flex-end' }}><button className='pb' data-testid='vader-onboarding-own-send' disabled={!task.trim()} onClick={() => startTask(task.trim(), 'agent')}>Send</button></span>
 				</div>
-				<span className='fl' />
+				</div>
 				<div className='r' style={{ height: 70, flex: 'none', gap: 10, paddingBottom: 6 }}>
 					<button className='tx' data-testid='vader-import-done' style={{ padding: 0 }} onClick={finish}>Skip, open Vader</button>
 					<span className='fl' />

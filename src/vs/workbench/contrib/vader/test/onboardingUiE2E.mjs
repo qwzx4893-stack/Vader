@@ -34,7 +34,7 @@ const plugin = {
 			if (!args.path.startsWith('.')) return null;
 			const full = path.resolve(args.resolveDir, args.path).replace(/\\/g, '/');
 			if (/\/util\/services\.js$/.test(full)) return { path: path.join(here, 'fixtures/onboardingHarnessServices.ts') };
-			if (/\/sidebar-tsx\/ErrorBoundary\.js$/.test(full) || /\/vader-settings-tsx\/Settings\.js$/.test(full)) return { path: path.join(here, 'fixtures/onboardingStubs.tsx') };
+			if (/\/sidebar-tsx\/ErrorBoundary\.js$/.test(full)) return { path: path.join(here, 'fixtures/onboardingStubs.tsx') };
 			return null;
 		});
 	},

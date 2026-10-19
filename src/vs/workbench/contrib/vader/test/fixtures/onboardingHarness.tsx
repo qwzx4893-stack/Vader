@@ -47,7 +47,7 @@ const chat: any = { state: { currentThreadId: 'new-thread' }, openNewThread() { 
 const gateway: any = { async startTask(a: any) { w.__log.push(`task:${a.userMessage}`) } }
 const workspace: any = { getWorkspace: () => w.__workspace ?? { folders: [] } }
 w.__accessor = {
-	get: (name: string) => ({ IVaderSettingsService: settingsSvc, IPolicyService: policySvc, IStorageService: storage, ICommandService: commands, IOpenerService: opener, IChatThreadService: chat, IAgentGatewayService: gateway, IRefreshModelService: refreshSvc, IWorkspaceContextService: workspace, IMetricsService: { capture: () => { } } } as any)[name],
+	get: (name: string) => ({ IVaderSettingsService: settingsSvc, IPolicyService: policySvc, IStorageService: storage, ICommandService: commands, IOpenerService: opener, IChatThreadService: chat, IAgentGatewayService: gateway, IRefreshModelService: refreshSvc, IWorkspaceContextService: workspace, IExtensionTransferService: { async transferExtensions() { return undefined } }, IMetricsService: { capture: () => { } } } as any)[name],
 }
 
 createRoot(document.getElementById('root')!).render(<VaderOnboarding />)
