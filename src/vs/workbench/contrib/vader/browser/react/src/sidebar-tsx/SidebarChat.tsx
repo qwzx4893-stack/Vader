@@ -310,6 +310,14 @@ const detailOfChatMode = {
 	'agent': 'Reads, edits and runs commands until the task is done.',
 }
 
+/** what the empty box says, for the mode it is in (board R01) */
+const PLACEHOLDER_OF_MODE: Record<string, string> = {
+	'agent': 'Tell the agent what to change, or press / for commands',
+	'plan': 'Say what to plan, or press / for commands',
+	'gather': 'Ask about the project, or press / for commands',
+	'normal': 'Ask anything, or press / for commands',
+}
+
 
 // the order of the board: Agent, Plan, Gather, Chat, with Ctrl 1 to 4 (handled in the message box, see onKeyDown in SidebarChat)
 const CHAT_MODE_ORDER: ChatMode[] = ['agent', 'plan', 'gather', 'normal']
@@ -456,7 +464,7 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 	const pause = chatThreadsService.getPause(threadId)
 	const unpriced = (usage?.unpricedTurns ?? 0) > 0
 
-	return <div className='flex items-center gap-x-2 text-xs text-vader-fg-3 text-nowrap'>
+	return <div className='flex items-center justify-center flex-wrap gap-x-4 text-[12px] text-vader-fg-3'>
 		{pause ? <span className='text-yellow-600'>{pause.reason === 'budget' ? `Paused: today's estimate reached ${formatUsd(limit ?? 0)}` : 'Paused'}</span> : null}
 		{isStreaming ? (pause
 			? <button data-testid='vader-resume' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.resumeRun(threadId)}>{pause.reason === 'budget' ? 'Go on anyway' : 'Resume'}</button>
@@ -609,30 +617,30 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 	return <button
 		type='button'
 		data-testid='vader-send'
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+		aria-label='Send'
+		disabled={disabled}
+		className={`rounded-lg w-7 h-7 flex-shrink-0 flex-grow-0 flex items-center justify-center transition-colors duration-150
+			${disabled ? 'bg-vader-bg-2-hover text-vader-fg-4 cursor-default' : 'bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 cursor-pointer'}
 			${className}
 		`}
-		// data-tooltip-id='vader-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
 		{...props}
 	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<IconArrowUp size={16} className="stroke-[2]" />
 	</button>
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		data-testid='vader-stop'
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+		aria-label='Stop'
+		className={`rounded-lg w-7 h-7 flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
+			bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 transition-opacity duration-150
 			${className}
 		`}
 		type='button'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<IconSquare size={12} className="stroke-[3] fill-current" />
 	</button>
 }
 
@@ -3281,7 +3289,6 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		chatThreadsService.clearThreadPlan(currentThread.id)
 	}, [chatThreadsService, currentThread])
 
-	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VADER_CTRL_L_ACTION_ID)?.getLabel()
 
 	const threadId = currentThread.id
 	const currCheckpointIdx = chatThreadsState.allThreads[threadId]?.state?.currCheckpointIdx ?? undefined  // if not exist, treat like checkpoint is last message (infinity)
@@ -3520,7 +3527,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		<VaderInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5 bg-transparent`}
-			placeholder={isRunning ? 'Add a message for after this run' : `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+			testId='vader-input'
+			placeholder={isRunning ? 'Add a message for after this run' : PLACEHOLDER_OF_MODE[settingsState.globalSettings.chatMode] ?? PLACEHOLDER_OF_MODE.agent}
 			extraSources={() => peekContextSources(accessor)}
 			onPickExtra={(id: ContextSourceId) => { void readContextSource(accessor, id).then(r => { if (!r) { setSlashNote({ text: 'There is nothing to attach from there right now.', busy: false }); return } setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text: r.text, title: r.title }]); if (r.cut) setSlashNote({ text: `${r.title} was long, so only part of it is attached.`, busy: false }) }) }}
 			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
@@ -3574,7 +3582,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
 		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>
 	</div>
-	const hint = instructionsAreEmpty && pastes.length === 0 && !isRunning ? <div className='px-3 pt-1.5 text-xs text-vader-fg-3 select-none' data-testid='vader-composer-hint'>Enter sends, Shift Enter adds a line.</div> : null
+	const hint = isLandingPage && instructionsAreEmpty && pastes.length === 0 && !isRunning ?<div className='px-3 pt-1.5 text-xs text-vader-fg-3 select-none' data-testid='vader-composer-hint'>Enter sends, Shift Enter adds a line.</div> : null
 
 	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
 		<div className='px-4'>

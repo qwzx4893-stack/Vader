@@ -362,8 +362,9 @@ type InputBox2Props = {
 	extraSources?: () => Promise<ContextSourceInfo[]>;
 	/** one of those was chosen */
 	onPickExtra?: (id: ContextSourceId) => void;
+	testId?: string;
 }
-export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText, extraSources, onPickExtra }, ref) {
+export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText, extraSources, onPickExtra, testId }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -766,6 +767,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 			onPaste={onPasteText ? (e: React.ClipboardEvent<HTMLTextAreaElement>) => { if (onPasteText(e.clipboardData.getData('text/plain'))) e.preventDefault() } : undefined}
 
 			disabled={!isEnabled}
+			data-testid={testId}
 
 			className={`w-full resize-none max-h-[500px] overflow-y-auto text-vader-fg-1 placeholder:text-vader-fg-3 ${className}`}
 			style={{

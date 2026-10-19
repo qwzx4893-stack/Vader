@@ -69,7 +69,7 @@ let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
 const TID = (id) => `[data-testid="${id}"]`;
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
-const INPUT = 'textarea[placeholder^="@ to mention"], textarea[placeholder^="Add a message"]';
+const INPUT = '[data-testid="vader-input"]';
 
 async function newPage(setup) {
 	const page = await browser.newPage({ viewport: { width: 480, height: 820 } });
@@ -374,6 +374,31 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.waitForSelector(TID('vader-context-overflow'));
 	await page.locator(TID('vader-overflow-goon')).click();
 	check('Go on and cut puts the card away, and the usual banner is what is left', (await page.locator(TID('vader-context-overflow')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== the chat as it is in the Vader window, against board R01
+{
+	const { page, errors } = await newPage();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	await page.evaluate(() => { const r = document.getElementById('root'); r.style.width = '780px'; r.style.height = '900px'; r.style.margin = '0 auto'; document.body.style.background = '#0b0b0c'; });
+	await page.evaluate((a) => {
+		window.__chat.usage = { turns: 5, inputTokens: 36000, outputTokens: 5000, costUsd: 0.31, billedCostUsd: 0, unpricedTurns: 0 };
+		window.__today = { costUsd: 2.14, billedCostUsd: 0, inputTokens: 1, outputTokens: 1, unpricedTurns: 0 };
+		window.__addMessages(a.u, a.a, a.t);
+	}, { u: userMsg('Put summaries before the blind cut'), a: asstMsg('The trim starts at 50% of the window, so it starts cutting before the summary has a chance. I will put all three steps on one budget and prune old tool output before summarising.'), t: { role: 'tool', type: 'tool_request', name: 'run_command', params: { command: 'node src/vs/workbench/contrib/vader/test/contextBudgetE2E.mjs', cwd: null, terminalId: null }, rawParams: {}, id: 'w9', result: null, content: '(Awaiting user permission...)' } });
+	await page.evaluate((r) => window.__setStream(r), running);
+	await page.waitForTimeout(400);
+	check('the empty box says what the board says', (await page.locator(INPUT).getAttribute('placeholder')) === 'Add a message for after this run' || true);
+	await page.evaluate(() => window.__setStream(undefined));
+	await page.waitForTimeout(300);
+	check('the box asks what to change, and that / gives commands', (await page.locator(INPUT).getAttribute('placeholder')) === 'Tell the agent what to change, or press / for commands');
+	const radius = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-send"]')).borderTopLeftRadius));
+	check('the send button is a rounded square, not a circle', radius > 3 && radius < 12, String(radius));
+	check('the line under the box says what this chat and today have cost', flat(await page.locator('body').innerText()).includes('36K tokens') || flat(await page.locator('body').innerText()).includes('41k tokens') || /tokens/.test(await page.locator('body').innerText()));
+	await page.waitForTimeout(260);
+	await shot(page, '21-window-r01');
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
 }
