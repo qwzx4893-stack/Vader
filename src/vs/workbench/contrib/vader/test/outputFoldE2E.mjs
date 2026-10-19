@@ -30,6 +30,10 @@ check('trailing newlines and Windows line ends are not counted', F.foldOutput(li
 check('nothing at all is no lines', F.foldOutput('').total === 0 && F.foldOutput('  \n ').total === 0);
 check('the words', F.lineCount(412) === '412 lines' && F.lineCount(1) === '1 line' && F.moreLines(406) === '… 406 more lines' && F.moreLines(1) === '… 1 more line');
 
+check('a command that finished says its exit code and how long it took', JSON.stringify(F.commandEndWords({ type: 'done', exitCode: 0 }, 41200)) === '{"text":"exit 0, 41 s","tone":"ok"}' && JSON.stringify(F.commandEndWords({ type: 'done', exitCode: 1 }, 3000)) === '{"text":"exit 1, 3 s","tone":"bad"}');
+check('a command under a second says so, one that was left running says that', F.commandEndWords({ type: 'done', exitCode: 0 }, 200).text === 'exit 0, <1 s' && F.commandEndWords({ type: 'timeout' }, 30000).text === 'still running after 30 s' && F.commandEndWords({ type: 'timeout' }, undefined).text === 'still running');
+check('an old chat with no time still shows the exit code', F.commandEndWords({ type: 'done', exitCode: 2 }, undefined).text === 'exit 2' && F.commandEndWords(undefined, undefined).text === '');
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

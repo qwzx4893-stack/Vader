@@ -410,9 +410,10 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 {
 	const { page, errors } = await newPage();
 	const out = Array.from({ length: 412 }, (_, i) => `PASS tests/file-${i + 1}.test.ts`).join(String.fromCharCode(10));
-	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('run the tests'), t: { role: 'tool', type: 'success', name: 'run_command', params: { command: 'npm test', cwd: null, terminalId: 't1' }, rawParams: {}, id: 'r1', result: { result: out, resolveReason: { type: 'done', exitCode: 0 } }, content: out, mcpServerName: undefined } });
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('run the tests'), t: { role: 'tool', type: 'success', name: 'run_command', params: { command: 'npm test', cwd: null, terminalId: 't1' }, rawParams: {}, id: 'r1', result: { result: out, resolveReason: { type: 'done', exitCode: 0 } }, content: out, mcpServerName: undefined, durationMs: 41200 } });
 	await page.waitForSelector('text=Ran terminal');
 	check('a long result says how many lines it has beside the command', (await page.locator('body').innerText()).includes('412 lines'));
+	check('and how it ended, with its exit code and how long it took', (await page.locator(TID('vader-command-end')).first().innerText()).startsWith('exit 0, 41 s'));
 	await page.locator('text=Ran terminal').first().click();
 	await page.waitForSelector(TID('vader-command-output'));
 	check('only the head is shown, and it says how many lines are not', (await page.locator(TID('vader-command-output')).getAttribute('data-folded')) === 'yes' && (await page.locator('[data-testid="stub-code"]').innerText()).split(String.fromCharCode(10)).length === 6 && (await page.locator(TID('vader-command-more')).innerText()) === '… 406 more lines');
@@ -468,6 +469,40 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('the comparison says which files changed between them', (await page.locator(TID('vader-checkpoints-compare')).innerText()).includes('limiter.ts'));
 	await page.keyboard.press('Escape');
 	check('Escape puts the list away', (await page.locator(TID('vader-checkpoints')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== the agent's browser fails (board S14)
+{
+	const { page, errors } = await newPage();
+	const err = 'Browser page "p1" is closed (it may have crashed or been closed by the site itself) - open a new one with browser_new_page.';
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('open the app'), t: { role: 'tool', type: 'tool_error', name: 'browser_snapshot', params: { pageId: 'p1' }, rawParams: {}, result: err, content: err, id: 'b1', mcpServerName: undefined } });
+	await page.waitForSelector(TID('vader-browser-error'));
+	check('a page that stopped says so in words, and what the agent does next', (await page.locator(TID('vader-browser-error')).innerText()).includes('The page stopped responding') && (await page.locator(TID('vader-browser-error')).innerText()).includes('opens a new page and goes on'));
+	check('and the real message is under it', (await page.locator('body').innerText()).includes('is closed (it may have crashed'));
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.t] }); }, { u: userMsg('x'), t: { role: 'tool', type: 'tool_error', name: 'browser_navigate', params: { url: 'http://x', pageId: null }, rawParams: {}, result: 'net::ERR_CONNECTION_REFUSED', content: 'net::ERR_CONNECTION_REFUSED', id: 'b2', mcpServerName: undefined } });
+	await page.waitForTimeout(200);
+	check('an error that is not recognised gets no invented words', (await page.locator(TID('vader-browser-error')).count()) === 0 && (await page.locator('body').innerText()).includes('net::ERR_CONNECTION_REFUSED'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== a connected agent that needs its sign-in or stopped (board S07)
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(() => { window.__settings = { ...window.__settings, globalSettings: { ...window.__settings.globalSettings, externalAgentId: 'codex' } }; });
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.a] }); window.__setStream({ isRunning: undefined, error: { message: 'Codex needs you to sign in. A terminal opened for it: finish the sign-in there, then send your message again.', fullError: null } }); }, { u: userMsg('add the header'), a: asstMsg('Working on it.') });
+	await page.waitForSelector(TID('vader-error'));
+	check('a connected agent that needs its sign-in says so, and that Vader does not ask for the password', (await page.locator(TID('vader-error')).innerText()).includes('Codex is not signed in') && (await page.locator(TID('vader-error')).innerText()).includes('Vader does not ask for that password.'));
+	check('the button says what to do next, and sends the message again', (await page.locator(TID('vader-error-again')).innerText()) === 'I signed in');
+	await page.locator(TID('vader-error-again')).click();
+	check('I signed in sends the last message again', (await log(page)).some(x => /^revise:\d+:add the header$/.test(x)));
+	await page.evaluate(() => { window.__setStream({ isRunning: undefined, error: { message: 'The agent stopped by itself (exit code 1).' + String.fromCharCode(10) + 'Error: boom', fullError: null } }); });
+	await page.waitForFunction(() => /closed unexpectedly/.test(document.querySelector('[data-testid="vader-error"]')?.textContent ?? ''));
+	check('a program that stopped says how it ended, and that the chat is kept', (await page.locator(TID('vader-error')).innerText()).includes('Codex closed unexpectedly') && (await page.locator(TID('vader-error')).innerText()).includes('Its process exited with code 1. The chat so far is kept.'));
+	check('and its own output is shown under it, not hidden', (await page.locator(TID('vader-error-message')).innerText()).includes('Error: boom') && (await page.locator(TID('vader-error-again')).innerText()) === 'Start it again');
+	await shot(page, '24-agent-stopped');
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
 }

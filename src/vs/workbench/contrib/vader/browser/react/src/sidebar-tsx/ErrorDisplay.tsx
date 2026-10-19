@@ -12,6 +12,8 @@ import { classifyProviderError, ProviderErrorCategory } from '../../../../common
 import { displayInfoOfProviderName } from '../../../../common/vaderSettingsTypes.js';
 import { PROVIDER_USAGE_PAGES } from '../../../../common/usageAccounting.js';
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
+import { cardForAgentError } from '../../../../common/externalAgentWords.js';
+import { externalAgentById } from '../../../../common/externalAgents/externalAgentCatalog.js';
 
 // What goes wrong in a run and what the person can do about it (board S12 and R21): what happened, what was kept, and the next step as a button. The
 // provider's own words are always shown too, never hidden behind the explanation.
@@ -63,7 +65,10 @@ export const ErrorDisplay = ({
 	const sel = settingsState.modelSelectionOfFeature?.Chat
 	const who = sel ? displayInfoOfProviderName(sel.providerName).title : 'The provider'
 	const category = classifyProviderError(message, fullError).category
-	const card = cardForError(category, statusOf(fullError), who, sel?.modelName)
+	// a connected agent that needs its sign-in, or whose program stopped, has its own words; everything else is a provider's error
+	const agentId = settingsState.globalSettings.externalAgentId
+	const agentCard = agentId ? cardForAgentError(message, externalAgentById(agentId)?.name) : null
+	const card = agentCard ? { title: agentCard.title, text: agentCard.text, actions: ['again'] as Card['actions'] } : cardForError(category, statusOf(fullError), who, sel?.modelName)
 
 	const openSettings = () => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }
 	const sendAgain = () => {
@@ -78,7 +83,7 @@ export const ErrorDisplay = ({
 	const usagePage = sel ? PROVIDER_USAGE_PAGES[sel.providerName] : undefined
 	const buttons: Record<string, React.ReactNode> = {
 		settings: <button key='settings' data-testid='vader-error-settings' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 font-medium text-sm' onClick={openSettings}>Provider settings</button>,
-		again: <button key='again' data-testid='vader-error-again' className='px-3 py-1 rounded-md border border-vader-border-2 text-vader-fg-1 text-sm' onClick={sendAgain}>Send again</button>,
+		again: <button key='again' data-testid='vader-error-again' className='px-3 py-1 rounded-md border border-vader-border-2 text-vader-fg-1 text-sm' onClick={sendAgain}>{agentCard?.againLabel ?? 'Send again'}</button>,
 		another: <button key='another' data-testid='vader-error-another' className='px-3 py-1 rounded-md border border-vader-border-2 text-vader-fg-1 text-sm' onClick={openSettings}>Choose another model</button>,
 		provider: <button key='provider' className='px-2 py-1 text-vader-fg-2 text-sm hover:text-vader-fg-1' onClick={openSettings}>Open the provider&apos;s list</button>,
 		newChat: <button key='newChat' data-testid='vader-error-new-chat' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 font-medium text-sm' onClick={() => chat.openNewThread()}>Start a new chat</button>,

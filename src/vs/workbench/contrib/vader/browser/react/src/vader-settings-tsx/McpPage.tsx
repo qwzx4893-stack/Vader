@@ -7,6 +7,7 @@ import { useAccessor, useMCPServiceState, useSettingsState } from '../util/servi
 import { VADER_OPEN_ADDONS_ACTION_ID } from '../../../actionIDs.js'
 import { Icon, Spinner } from '../vader-shell-tsx/icons.js'
 import { Note, PageHead, Switch } from './ui.js'
+import { explainStart, startingHint, toolsLine } from '../../../../common/mcpStateWords.js'
 
 // MCP servers (board R16): the servers the agent can use. A server runs on this computer or talks to a service, and each tool it offers goes through the safety gate.
 // State is what the app's MCP service reports (running, starting, stopped, failed with the real error); the switch is the real on/off of that server.
@@ -51,10 +52,22 @@ export const McpPage = () => {
 								<span className='r' style={{ gap: 8 }}>{server.status === 'loading' ? <Spinner /> : <span className='dot' style={{ background: st.color }} />}<span className='t2'>{st.label}</span></span>
 								<span className='r' style={{ justifyContent: 'flex-end' }}><Switch on={on} label={`${name} on`} testId='vader-mcp-switch' onChange={() => { void mcp.toggleServerIsOn(name, !on) }} /></span>
 							</div>
-							{server.error ? <div style={{ padding: '0 2px 12px 52px' }}><Note kind='warn' testId='vader-mcp-server-error'>{server.error}</Note></div> : null}
+							{server.status === 'loading' && startingHint(server.command) ? <div style={{ padding: '0 2px 12px 52px' }}><span className='hint' data-testid='vader-mcp-starting'>{startingHint(server.command)}</span></div> : null}
+							{server.error ? (() => {
+								const w = explainStart(name, server.command, server.error)
+								return <div className='c' style={{ gap: 8, padding: '0 2px 14px 52px' }} data-testid='vader-mcp-failed'>
+									<span className='t1' style={{ fontWeight: 600 }} data-testid='vader-mcp-failed-title'>{w.title}</span>
+									<span className='t2' style={{ lineHeight: 1.55, maxWidth: 560 }} data-testid='vader-mcp-failed-text'>{w.text}</span>
+									<div style={{ maxWidth: 560 }}><Note kind='warn' testId='vader-mcp-server-error'>{server.error}</Note></div>
+									<span className='r' style={{ gap: 8 }}>
+										<button className='gb' data-testid='vader-mcp-edit' onClick={() => void reveal()}>Edit the command</button>
+										<button className='gb' data-testid='vader-mcp-retry' onClick={() => { void mcp.toggleServerIsOn(name, false).then(() => mcp.toggleServerIsOn(name, true)) }}>Try again</button>
+									</span>
+								</div>
+							})() : null}
 							{isOpen ? <div className='c' style={{ gap: 8, padding: '0 2px 14px 52px' }} data-testid='vader-mcp-tools'>
 								<span className='hint'>Tools it offers</span>
-								{tools.length === 0 ? <span className='t3'>{on ? 'None yet.' : 'Switch it on to see its tools.'}</span> : <div className='r' style={{ gap: 6, flexWrap: 'wrap' }}>{tools.map(t => <span key={t.name} title={t.description} className='mo t2' style={{ border: '1px solid var(--ln2)', borderRadius: 5, padding: '2px 7px' }}>{toolName(t.name)}</span>)}</div>}
+								{tools.length === 0 ? <span className='t3'>{on ? 'None yet.' : 'Switch it on to see its tools.'}</span> : <><div className='r' style={{ gap: 6, flexWrap: 'wrap' }}>{tools.map(t => <span key={t.name} title={t.description} className='mo t2' style={{ border: '1px solid var(--ln2)', borderRadius: 5, padding: '2px 7px' }}>{toolName(t.name)}</span>)}</div><span className='hint' data-testid='vader-mcp-tools-line'>{toolsLine(tools.length)}</span></>}
 							</div> : null}
 						</div>
 					})}

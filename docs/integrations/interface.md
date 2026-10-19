@@ -47,6 +47,15 @@ The gate keeps what it decided with each tool message (`ToolMessage.gate`: the r
 
 Under each message: Copy, **Redo from here** (the same message sent again from its place, what came after is replaced) and Branch the chat. A long command result is folded to its head with "… 406 more lines" and Show all (`common/outputFold.ts`; the agent always got all of it). **Checkpoints** (under the message box once a chat has two) lists every checkpoint newest first with what its step changed (`common/checkpointModel.ts`): pick one to Go back to it (after the question), pick two to see the files that changed between them.
 
+## What the agent can reach, and how it can fail (boards S07 and S14)
+
+The words are made from the messages the app really raises, the real error is always shown under them, and an error that is not recognised gets no invented words.
+
+- **MCP servers** (Settings, MCP servers; `common/mcpStateWords.ts`): "starting" says that the first start can take a moment only for programs that download (`npx`, `uvx`, `docker`); a server that did not start says what is wrong (a program that is not found is named, with what to install; a timeout; a refused key; no permission; an address that cannot be reached), with Edit the command (opens the config) and Try again (off and on); a running server says how many tools it has and that each use goes through the safety gate.
+- **Connected agents in the chat** (`common/externalAgentWords.ts`): a sign-in that is needed (I signed in sends the message again), and a program that stopped by itself (how it ended, that the chat is kept, Start it again).
+- **A command's header** says how it ended, "exit 0, 41 s" (green) or "exit 1, 3 s" (red), and a long result says its lines (`ToolMessage.durationMs` is kept with the result).
+- **The agent's browser** (`common/browserErrorWords.ts`): a page that stopped responding, a page that changed under the agent, a page that did not load in 30 seconds.
+
 ## Settings (boards R08 to R30)
 
 Models (features, local servers, 45 cloud providers with live lists and Test connection), Model router, Connected agents, Permissions (mode, commands allowed in this project, the locked rules and the rules that ask, your own rules), Usage and cost (per model, per day, "estimate" or "billed by provider" for every number; `common/usageAccounting.ts` keeps a per-model ledger for 62 days), Saved agents, Skills (trust computed from live facts, with the reasons), MCP servers, Memory and instructions, Editor extensions, Editor, Privacy and network, Data and backup, About and updates.

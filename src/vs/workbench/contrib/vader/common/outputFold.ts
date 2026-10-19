@@ -24,3 +24,11 @@ export const lineCount = (n: number): string => `${n} line${n === 1 ? '' : 's'}`
 
 /** "… 406 more lines" */
 export const moreLines = (hidden: number): string => `… ${hidden} more line${hidden === 1 ? '' : 's'}`;
+
+/** how a command ended, for its header (board S14): "exit 0, 41 s" in green, "exit 1, 3 s" in red, "still running" when it was left to run */
+export function commandEndWords(reason: { readonly type: string, readonly exitCode?: number } | undefined, durationMs: number | undefined): { text: string, tone: 'ok' | 'bad' | 'plain' } {
+	const secs = durationMs === undefined ? undefined : durationMs < 950 ? '<1 s' : `${Math.round(durationMs / 1000)} s`;
+	if (reason?.type === 'timeout') return { text: secs ? `still running after ${secs}` : 'still running', tone: 'plain' };
+	if (reason?.type === 'done' && typeof reason.exitCode === 'number') return { text: `exit ${reason.exitCode}${secs ? `, ${secs}` : ''}`, tone: reason.exitCode === 0 ? 'ok' : 'bad' };
+	return { text: secs ?? '', tone: 'plain' };
+}

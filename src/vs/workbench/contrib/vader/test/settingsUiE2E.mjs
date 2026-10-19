@@ -543,6 +543,13 @@ async function layoutProblems(page) {
 	check('every server is listed with the state the service reports', rows.join('|') === 'GitHub:success|Linear:success|acme-internal:error', rows.join('|'));
 	check('a running server says how many tools it offers', (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub]`).innerText()).includes('2 tools') && (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub]`).innerText()).includes('Running'));
 	check('a server that failed shows the real error', (await page.locator(`${TID('vader-mcp-server')}[data-server=acme-internal] ${TID('vader-mcp-server-error')}`).innerText()).includes('spawn ENOENT'));
+	check('and says in words what is wrong and what to do, as the board does', (await page.locator(TID('vader-mcp-failed-title')).innerText()) === 'acme-internal did not start' && (await page.locator(TID('vader-mcp-failed-text')).innerText()) === '`node` was not found. Install Node.js, or give the full path to it.');
+	await page.locator(TID('vader-mcp-edit')).click();
+	check('Edit the command opens the config file', (await log(page)).includes('mcp:reveal'));
+	await page.locator(TID('vader-mcp-retry')).click();
+	await page.waitForFunction(() => window.__log.includes('mcp:toggle:acme-internal=true'));
+	check('Try again switches the server off and on again', (await log(page)).indexOf('mcp:toggle:acme-internal=false') >= 0 && (await log(page)).indexOf('mcp:toggle:acme-internal=false') < (await log(page)).indexOf('mcp:toggle:acme-internal=true'));
+	await shot(page, 'mcp-failed');
 	check('the switch follows what is on', (await page.locator(`${TID('vader-mcp-server')}[data-server=GitHub] ${TID('vader-mcp-switch')}[aria-checked=true]`).count()) === 1 && (await page.locator(`${TID('vader-mcp-server')}[data-server=Linear] ${TID('vader-mcp-switch')}[aria-checked=false]`).count()) === 1);
 	await page.locator(`${TID('vader-mcp-server')}[data-server=Linear] ${TID('vader-mcp-switch')}`).click();
 	check('a switch turns the server on in the service', (await log(page)).includes('mcp:toggle:Linear=true'));

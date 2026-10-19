@@ -1431,6 +1431,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	): Promise<{ resultStr: string, isError: boolean } | { interrupted: true }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
+		const startedAt = Date.now() // how long the call took, kept with the result (a command says it in its header)
 		let toolResult: ToolResult<ToolName>
 		let toolResultStr: string
 
@@ -1494,7 +1495,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 
 		// 5. add to history and keep going
-		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, durationMs: Date.now() - startedAt })
 		return { resultStr: toolResultStr, isError: false }
 	}
 

@@ -43,8 +43,9 @@ import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../..
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { ChoiceMenu } from './ComposerMenus.js';
 import { CheckpointsButton } from './CheckpointsPanel.js';
-import { foldOutput, lineCount } from '../../../../common/outputFold.js';
+import { commandEndWords, foldOutput, lineCount } from '../../../../common/outputFold.js';
 import { FoldedOutput } from './FoldedOutput.js';
+import { explainBrowserError } from '../../../../common/browserErrorWords.js';
 import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
@@ -2027,7 +2028,13 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		}
 
 		const fold = foldOutput(msg.trim())
-		if (fold.folded) componentParams.desc2 = lineCount(fold.total)
+		// how it ended (exit code and seconds) and, when long, how many lines (board S14)
+		const end = type === 'run_command' ? commandEndWords((result as { resolveReason?: { type: string, exitCode?: number } }).resolveReason, toolMessage.durationMs) : { text: '', tone: 'plain' as const }
+		if (end.text || fold.folded) componentParams.desc2 = <span data-testid='vader-command-end'>
+			{end.text ? <span style={{ color: end.tone === 'ok' ? '#4cc38a' : end.tone === 'bad' ? '#f06a6e' : undefined }}>{end.text}</span> : null}
+			{end.text && fold.folded ? ' · ' : null}
+			{fold.folded ? lineCount(fold.total) : null}
+		</span>
 		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
 			<FoldedOutput full={msg.trim()} fold={fold} />
 		</ToolChildrenWrapper>
@@ -2153,8 +2160,15 @@ const GenericToolWrapper = ({ toolMessage }: WrapperProps<ToolName>) => {
 		if (toolMessage.content) { componentParams.children = asCode(String(toolMessage.content)) }
 	}
 	else if (toolMessage.type === 'tool_error') {
+		const errorText = String(toolMessage.content ?? toolMessage.result ?? '')
+		// what the agent's browser said, in words (board S14); the real message is always under them
+		const words = toolMessage.name.startsWith('browser_') ? explainBrowserError(errorText) : null
 		componentParams.bottomChildren = <BottomChildren title='Error'>
-			<CodeChildren>{String(toolMessage.content ?? toolMessage.result ?? '')}</CodeChildren>
+			{words ? <div className='flex flex-col gap-1 pb-2' data-testid='vader-browser-error'>
+				<span className='font-semibold text-vader-fg-1'>{words.title}</span>
+				<span className='text-vader-fg-2 leading-relaxed'>{words.text}</span>
+			</div> : null}
+			<CodeChildren>{errorText}</CodeChildren>
 		</BottomChildren>
 	}
 	return <ToolHeaderWrapper {...componentParams} />

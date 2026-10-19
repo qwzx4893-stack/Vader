@@ -15,6 +15,8 @@ export type ToolMessage<T extends ToolName> = {
 	id: string;
 	rawParams: RawToolParamsObj;
 	mcpServerName: string | undefined; // the server name at the time of the call
+	/** how long the call took, in milliseconds (optional so saved chats stay valid) */
+	durationMs?: number;
 	outputPruned?: boolean; // optional so saved chats stay valid: the model is sent a note instead of the result (common/contextBudget.ts); `content` keeps the full text
 	/** what the safety gate decided about this call (the rule, or the scope, or the read-only mode), so the chat can say it in words (common/gateModel.ts) */
 	gate?: GateInfo;
