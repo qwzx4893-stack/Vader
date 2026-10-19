@@ -41,6 +41,7 @@ import { parseTaskList } from '../../../../common/taskList.js';
 import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
+import { ChoiceMenu } from './ComposerMenus.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
 import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
 import { INIT_PROMPT, noteLabel, parseSlash, slashMatches, SlashCommand } from '../../../../common/slashCommands.js';
@@ -307,35 +308,15 @@ const detailOfChatMode = {
 }
 
 
+// the order of the board: Agent, Plan, Gather, Chat, with Ctrl 1 to 4 (handled in the message box, see onKeyDown in SidebarChat)
+const CHAT_MODE_ORDER: ChatMode[] = ['agent', 'plan', 'gather', 'normal']
 const ChatModeDropdown = ({ className }: { className: string }) => {
 	const accessor = useAccessor()
-
 	const vaderSettingsService = accessor.get('IVaderSettingsService')
 	const settingsState = useSettingsState()
-
-	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'plan', 'agent'], [])
-
-	const onChangeOption = useCallback((newVal: ChatMode) => {
-		vaderSettingsService.setGlobalSetting('chatMode', newVal)
-	}, [vaderSettingsService])
-
-	return <VaderCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={settingsState.globalSettings.chatMode}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(val) => nameOfChatMode[val]}
-		getOptionDropdownName={(val) => nameOfChatMode[val]}
-		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
-		getOptionsEqual={(a, b) => a === b}
-	/>
-
+	const rows = useMemo(() => CHAT_MODE_ORDER.map((m, i) => ({ value: m, name: nameOfChatMode[m], detail: detailOfChatMode[m], shortcut: `Ctrl ${i + 1}` })), [])
+	return <ChoiceMenu testId='vader-mode' label='Mode' className={className} rows={rows} value={settingsState.globalSettings.chatMode} onChange={(m) => vaderSettingsService.setGlobalSetting('chatMode', m)} />
 }
-
-
-
-
-
 
 // How much the agent asks before it acts (boards R06 and R08): Safe, Balanced or Autonomous. Some rules are locked in every mode.
 const PERMISSION_NAME = { safe: 'Safe', balanced: 'Balanced', autonomous: 'Autonomous' } as const
@@ -348,17 +329,9 @@ const PermissionDropdown = ({ className }: { className: string }) => {
 	const accessor = useAccessor()
 	const policyService = accessor.get('IPolicyService')
 	const policy = usePolicyServiceState()
-	const options = useMemo(() => ['safe', 'balanced', 'autonomous'] as ('safe' | 'balanced' | 'autonomous')[], [])
-	return <VaderCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={policy.mode}
-		onChangeOption={(m) => policyService.setMode(m)}
-		getOptionDisplayName={(v) => PERMISSION_NAME[v]}
-		getOptionDropdownName={(v) => PERMISSION_NAME[v]}
-		getOptionDropdownDetail={(v) => PERMISSION_DETAIL[v]}
-		getOptionsEqual={(a, b) => a === b}
-	/>
+	const rows = useMemo(() => (['safe', 'balanced', 'autonomous'] as const).map(m => ({ value: m, name: PERMISSION_NAME[m], detail: PERMISSION_DETAIL[m] })), [])
+	return <ChoiceMenu testId='vader-permissions' label='Permissions' className={className} rows={rows} value={policy.mode} onChange={(m) => policyService.setMode(m)}
+		footer='Locked rules apply in every mode: credentials, system files, and files that run code later.' />
 }
 
 /** how much of the model's window this conversation uses, as a ring and a percentage; a click opens what it is made of, and Compact now (board R06, "Context meter") */
@@ -3464,6 +3437,12 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		setTyped(newStr); setSlashIdx(0); setSlashHidden(false)
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		// Ctrl 1 to 4: Agent, Plan, Gather, Chat (what the Mode menu says)
+		if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-4]$/.test(e.key)) {
+			e.preventDefault(); e.stopPropagation()
+			vaderSettingsService.setGlobalSetting('chatMode', CHAT_MODE_ORDER[Number(e.key) - 1])
+			return
+		}
 		if (slashList && slashList.length > 0 && !e.nativeEvent.isComposing) {
 			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx(i => (i + (e.key === 'ArrowDown' ? 1 : slashList.length - 1)) % slashList.length); return }
 			if (e.key === 'Escape') { e.preventDefault(); setSlashHidden(true); return }
@@ -3480,7 +3459,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onAbort, isRunning, slashList, slashIdx, typed, runSlash, pickSlash])
+	}, [onSubmit, onAbort, isRunning, slashList, slashIdx, typed, runSlash, pickSlash, vaderSettingsService])
 
 	const inputChatArea = <VaderChatArea
 		featureName='Chat'

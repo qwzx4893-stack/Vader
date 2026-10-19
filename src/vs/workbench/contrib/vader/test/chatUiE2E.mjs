@@ -378,6 +378,41 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== the Mode and Permissions menus (board R06)
+{
+	const { page, errors } = await newPage();
+	check('the footer names the mode and the permission in force', (await page.locator(TID('vader-mode')).innerText()) === 'Agent' && (await page.locator(TID('vader-permissions')).innerText()) === 'Balanced');
+	await page.locator(TID('vader-mode')).click();
+	await page.waitForSelector(TID('vader-mode-menu'));
+	const rows = (await page.locator(TID('vader-mode-option')).allInnerTexts()).map(flat);
+	check('the Mode menu has the four modes, each with what it does and its shortcut', rows.join(' | ') === 'Agent Ctrl 1 Reads, edits and runs commands until the task is done. | Plan Ctrl 2 Writes a plan. Changes nothing until you approve it. | Gather Ctrl 3 Read-only. Explores the project and answers. | Chat Ctrl 4 Plain conversation, no tools.', rows.join(' | '));
+	await page.waitForTimeout(260);
+	await shot(page, '17-mode-menu');
+	await page.keyboard.press('ArrowDown');
+	await page.keyboard.press('Enter');
+	check('the arrows and Enter choose a mode', (await log(page)).includes('global:chatMode="plan"') && (await page.locator(TID('vader-mode-menu')).count()) === 0);
+	await page.locator(TID('vader-permissions')).click();
+	await page.waitForSelector(TID('vader-permissions-menu'));
+	const prow = (await page.locator(TID('vader-permissions-option')).allInnerTexts()).map(flat);
+	check('the Permissions menu has Safe, Balanced and Autonomous, with what each asks, and the chosen one checked', prow.length === 3 && prow[0].startsWith('Safe Asks before every change and command.') && prow[2].startsWith('Autonomous Runs without asking, except what is on the locked list.') && (await page.locator(`${TID('vader-permissions-option')}[aria-selected="true"]`).getAttribute('data-value')) === 'balanced');
+	check('it says what no choice here can change', (await page.locator(TID('vader-permissions-footer')).innerText()).includes('Locked rules apply in every mode'));
+	await page.waitForTimeout(260);
+	await shot(page, '18-permissions-menu');
+	await page.locator(`${TID('vader-permissions-option')}[data-value="safe"]`).click();
+	check('a click chooses a permission', (await log(page)).includes('mode:safe'));
+	await page.locator(TID('vader-permissions')).click();
+	await page.keyboard.press('Escape');
+	check('Escape puts a menu away', (await page.locator(TID('vader-permissions-menu')).count()) === 0);
+	await page.locator(INPUT).click();
+	await page.keyboard.press('Control+3');
+	await page.keyboard.press('Control+4');
+	await page.keyboard.press('Control+1');
+	const l = (await log(page)).filter(x => x.startsWith('global:chatMode'));
+	check('Ctrl 1 to 4 in the box choose the modes', l.slice(-3).join() === 'global:chatMode="gather",global:chatMode="normal",global:chatMode="agent"', l.join());
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== commands after / (board R06)
 {
 	const { page, errors } = await newPage();
