@@ -255,6 +255,42 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 
 
+/** the thinking budget as one quiet chip in the footer; the slider (or switch) is in the small panel it opens, so the footer keeps one row */
+const ThinkingChip = ({ featureName }: { featureName: FeatureName }) => {
+	const settingsState = useSettingsState()
+	const [open, setOpen] = useState(false)
+	const ref = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away)
+		document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
+	const sel = settingsState.modelSelectionOfFeature[featureName]
+	if (!sel) return null
+	const { reasoningCapabilities } = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
+	const { canTurnOffReasoning, reasoningSlider } = reasoningCapabilities || {}
+	if (!canTurnOffReasoning && !reasoningSlider) return null
+	const options = settingsState.optionsOfModelSelection[featureName][sel.providerName]?.[sel.modelName]
+	const on = getIsReasoningEnabledState(featureName, sel.providerName, sel.modelName, options, settingsState.overridesOfModel)
+	const label = !on ? 'Off'
+		: reasoningSlider?.type === 'budget_slider' ? `${options?.reasoningBudget ?? reasoningSlider.default}`
+			: reasoningSlider?.type === 'effort_slider' ? (() => { const e = options?.reasoningEffort ?? reasoningSlider.default; return e.charAt(0).toUpperCase() + e.slice(1) })()
+				: 'On'
+	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
+		<button type='button' data-testid='vader-thinking' aria-expanded={open} aria-haspopup='dialog' onClick={() => setOpen(o => !o)}
+			className='flex items-center gap-1 text-[13px] text-vader-fg-3 hover:text-vader-fg-1 rounded px-1 py-0.5 transition-colors duration-150' title='How much the model thinks before it answers'>
+			<span>Thinking</span><span className='text-vader-fg-2'>{label}</span>
+		</button>
+		{open ? <div role='dialog' aria-label='Thinking' data-testid='vader-thinking-panel' className='motion-safe:animate-card-in absolute bottom-full right-0 mb-2 z-50 rounded-lg border border-vader-border-2 bg-vader-bg-1 px-3 py-2.5 shadow-lg flex flex-col gap-1.5' style={{ minWidth: 220 }}>
+			<ReasoningOptionSlider featureName={featureName} />
+			<div className='text-vader-fg-3 text-xs leading-relaxed'>More thinking can give better answers, and costs more and takes longer.</div>
+		</div> : null}
+	</div>
+}
+
 const nameOfChatMode = {
 	'normal': 'Chat',
 	'gather': 'Gather',
@@ -430,6 +466,16 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 }) => {
+	// in a narrow panel the footer keeps one row: "Add context" is then just the @
+	const footerRef = useRef<HTMLDivElement>(null)
+	const [narrow, setNarrow] = useState(false)
+	useEffect(() => {
+		const el = footerRef.current
+		if (!el || typeof ResizeObserver === 'undefined') return
+		const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 470))
+		ro.observe(el)
+		return () => ro.disconnect()
+	}, [])
 	return (
 		<div className='flex flex-col gap-1.5'>
 			<div
@@ -475,22 +521,24 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 				</div>
 
 				{/* Bottom row */}
-				<div className='flex flex-row justify-between items-end gap-1'>
+				<div ref={footerRef} className='flex flex-row justify-between items-end gap-1'>
 					{showModelDropdown && (
 						<div className='flex flex-col gap-y-1'>
-							<ReasoningOptionSlider featureName={featureName} />
+							{/* the thinking budget lives in the chip */}
 
 							<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
 								{featureName === 'Chat' && <ChatModeDropdown className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded py-0.5 px-1' />}
 								{featureName === 'Chat' && <ExternalAgentChatPicker className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />}
 								<ModelDropdown featureName={featureName} className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />
 								{featureName === 'Chat' && showFooter ? <PermissionDropdown className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded py-0.5 px-1' /> : null}
-								{onAddContext ? <button type='button' data-testid='vader-add-context' className='text-[13px] text-vader-fg-2 hover:text-vader-fg-1 px-1' onClick={(e) => { e.stopPropagation(); onAddContext() }}>@ Add context</button> : null}
+									{onAddContext ? <button type='button' data-testid='vader-add-context' title='Add context: a file, the terminal output, a page, the git changes' aria-label='Add context' className='text-[13px] text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded px-1.5 py-0.5 transition-colors duration-150' onClick={(e) => { e.stopPropagation(); onAddContext() }}>{narrow ? '@' : '@ Add context'}</button> : null}
 							</div>
 						</div>
 					)}
 
 					<div className="flex items-center gap-2">
+
+						{featureName === 'Chat' ? <ThinkingChip featureName={featureName} /> : null}
 
 						{showFooter ? <ContextMeter /> : null}
 
@@ -1295,7 +1343,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			className={`
             text-left rounded-xl max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'px-3.5 py-2.5 flex flex-col bg-vader-bg-1 text-vader-fg-1 text-[13.5px] leading-relaxed overflow-x-auto cursor-pointer' : ''
+					: mode === 'display' ? 'px-3.5 py-2.5 flex flex-col bg-vader-bg-1 border border-vader-border-3 text-vader-fg-1 text-[13.5px] leading-relaxed overflow-x-auto cursor-pointer' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1414,6 +1462,7 @@ prose-table:text-[13px]
 const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
 	return <div className='
 text-vader-fg-2
+text-[13.5px]
 prose
 prose-sm
 break-words
@@ -2995,6 +3044,8 @@ const CommandBarInChat = () => {
 		</button>
 	)
 
+	if (numFilesChanged === 0) return null // nothing changed: no bar, so the message box is not crowded by an empty one
+
 	return (
 		<>
 			{/* file details */}
@@ -3345,7 +3396,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		<PastedChips pastes={pastes} onRemove={id => setPastes(ps => ps.filter(p => p.id !== id))} />
 		<VaderInputBox2
 			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
+			className={`min-h-[81px] px-0.5 py-0.5 bg-transparent`}
 			placeholder={isRunning ? 'Add a message for after this run' : `@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
 			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
 			onChangeText={onChangeText}
@@ -3365,7 +3416,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	// what to start from: with a project open these are about the project; without one, plain questions
 	const [chatOnly, setChatOnly] = useState(false)
 	const hasProject = !!chatThreadsService.getCurrentProjectKey()
-	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-vader-fg-3 select-none'>
+	const initiallySuggestedPromptsHTML = <div className='flex flex-col w-full text-nowrap select-none'>
 		{(hasProject ? [
 			'Add a rules file for this project',
 			'Explain how this project is laid out',
@@ -3377,7 +3428,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		]).map((text, index) => (
 			<div
 				key={index}
-				className='py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100'
+				data-testid='vader-suggestion'
+				className='flex items-center h-9 px-1 border-t border-vader-border-3 rounded-sm text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover cursor-pointer transition-colors duration-150'
 				onClick={() => onSubmit(text)}
 			>
 				{text}

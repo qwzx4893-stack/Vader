@@ -759,7 +759,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 			className={`w-full resize-none max-h-[500px] overflow-y-auto text-vader-fg-1 placeholder:text-vader-fg-3 ${className}`}
 			style={{
 				// defaultInputBoxStyles
-				background: asCssVariable(inputBackground),
+				background: className?.includes('bg-transparent') ? 'transparent' : asCssVariable(inputBackground), // inside the message box the text sits on the box itself
 				color: asCssVariable(inputForeground)
 				// inputBorder: asCssVariable(inputBorder),
 			}}

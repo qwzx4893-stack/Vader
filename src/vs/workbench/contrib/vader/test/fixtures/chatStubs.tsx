@@ -18,6 +18,6 @@ export const StatusIndicatorForApplyButton = () => null
 export const useApplyStreamState = () => ({ currStreamStateRef: { current: undefined }, setApplying: () => { } })
 export const useEditToolStreamState = () => ({ isStreaming: false })
 
-export const ModelDropdown = ({ featureName }: { featureName: string, className?: string }) => <span data-testid='stub-model-dropdown' data-feature={featureName}>model</span>
+export const ModelDropdown = ({ featureName }: { featureName: string, className?: string }) => <span data-testid='stub-model-dropdown' data-feature={featureName}>Sonnet 4.5</span>
 export const ExternalAgentChatPicker = () => null
 export const PastThreadsList = () => <div data-testid='stub-past-threads' />

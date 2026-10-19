@@ -353,6 +353,35 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 }
 
 
+// ===================================================================== reading size and the box
+{
+	const { page } = await newPage();
+	await page.evaluate(() => window.__addMessages({ role: 'user', content: 'hello', displayContent: 'hello', selections: [], state: { stagingSelections: [], isBeingEdited: false } }, { role: 'assistant', displayContent: 'Hi there, what shall we do?', reasoning: '', anthropicReasoning: null }));
+	await page.waitForTimeout(150);
+	const sizes = await page.evaluate(() => ({ user: parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-user-text"]')).fontSize), asst: parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-assistant-text"] [data-testid="md"]')).fontSize), ta: getComputedStyle(document.querySelector('textarea')).backgroundColor }));
+	check('what is read is at least 13 pixels, in the person’s message and in the answer', sizes.user >= 13 && sizes.asst >= 13, JSON.stringify(sizes));
+	check('the text sits on the message box itself, not on a darker patch', sizes.ta === 'rgba(0, 0, 0, 0)', sizes.ta);
+	await page.locator(TID('vader-thinking')).click();
+	check('Thinking is one chip, and opens a small panel with the control', (await page.locator(TID('vader-thinking-panel')).count()) === 1 && (await page.locator(TID('vader-thinking-panel')).innerText()).includes('Thinking'));
+	await shot(page, '12-thinking-panel');
+	await page.keyboard.press('Escape');
+	check('Escape puts the panel away', (await page.locator(TID('vader-thinking-panel')).count()) === 0);
+	check('with nothing changed there is no empty "No files with changes" bar', !(await page.locator('body').innerText()).includes('No files with changes'));
+	await page.close();
+}
+
+// ===================================================================== the same chat at the width it has in the Vader window
+{
+	const { page } = await newPage();
+	await page.setViewportSize({ width: 780, height: 820 });
+	await page.evaluate(() => { document.getElementById('root').style.width = '780px'; document.getElementById('root').style.margin = '0 auto'; });
+	await page.evaluate(() => window.__addMessages({ role: 'user', content: 'Put summaries before the blind cut', displayContent: 'Put summaries before the blind cut', selections: [], state: { stagingSelections: [], isBeingEdited: false } }, { role: 'assistant', displayContent: 'The trim starts at 50% of the window, so it starts cutting before the summary has a chance. I will put all three steps on one budget and prune old tool output before summarising.', reasoning: '', anthropicReasoning: null }, { role: 'tool', type: 'tool_request', name: 'run_command', params: { command: 'node src/vs/workbench/contrib/vader/test/contextBudgetE2E.mjs', cwd: null, terminalId: null }, rawParams: {}, id: 'w1', result: null, content: '(Awaiting user permission...)' }));
+	await page.waitForTimeout(300);
+	check('at the window width the footer keeps the whole label and one row', (await page.locator(TID('vader-add-context')).innerText()) === '@ Add context' && (await page.evaluate(() => { const a = document.querySelector('[data-testid="vader-add-context"]').getBoundingClientRect(), b = document.querySelector('[data-testid="vader-send"]').getBoundingClientRect(); return Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 14; })));
+	await shot(page, '13-window-width');
+	await page.close();
+}
+
 // ===================================================================== the safety gate (boards S02, R07)
 const toolMsg = (type, name, params, extra = {}) => ({ role: 'tool', type, name, params, rawParams: params, id: 'tc-' + Math.random().toString(36).slice(2, 7), result: null, content: '', ...extra });
 const gateOf = async (page, messages) => { await page.evaluate((m) => window.__addMessages(...m), messages); await page.waitForTimeout(200); };
