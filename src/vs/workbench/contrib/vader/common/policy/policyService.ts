@@ -66,8 +66,19 @@ const patternMatches = (builtIn: boolean, src: string, texts: string[]): boolean
 	return texts.some(t => compiled.regex.test(t.slice(0, MAX_POLICY_INPUT_CHARS)));
 };
 
+const normForInside = (p: string) => p.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+const isInsideAny = (p: string, roots: readonly string[]) => { const n = normForInside(p); return roots.some(r => { const m = normForInside(r); return n === m || n.startsWith(m + '/'); }); };
+
 export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	if (!rule.kinds.includes(req.kind)) return false;
+
+	if (rule.outsideWorkspace) {
+		const roots = req.workspaceRoots ?? [];
+		const paths = req.filePaths ?? [];
+		if (roots.length === 0 || paths.length === 0) return false;
+		if (paths.every(p => isInsideAny(p, roots))) return false;
+	}
+	if (rule.unknownHostOnly && req.knownHost !== false) return false;
 
 	if (rule.pathGlobs && rule.pathGlobs.length) {
 		// a terminal command has no filePaths: the paths found in its text stand in for them (see commandPaths.ts)
@@ -103,7 +114,7 @@ export const ruleMatches = (rule: PolicyRule, req: IPolicyRequest): boolean => {
 	// default") - previously this was actually impossible: every 'mcp-tool'/'network' rule
 	// was unreachable dead code, since the old version of this check unconditionally
 	// required pathGlobs or commandPatterns, which those two kinds can never have.
-	const hasDiscriminator = !!(rule.pathGlobs?.length || rule.commandPatterns?.length || rule.serverNamePatterns?.length);
+	const hasDiscriminator = !!(rule.pathGlobs?.length || rule.commandPatterns?.length || rule.serverNamePatterns?.length || rule.outsideWorkspace || rule.unknownHostOnly);
 	if (!hasDiscriminator && req.kind !== 'mcp-tool' && req.kind !== 'network' && req.kind !== 'capability-install') {
 		return false;
 	}

@@ -33,6 +33,12 @@ export interface IPolicyRequest {
 	readonly mcpServerName?: string;
 	/** the permanent agent (if any) making this request, for per-agent scoping */
 	readonly agentId?: string;
+	/** the folders open in the window, for rules about what is outside the project */
+	readonly workspaceRoots?: string[];
+	/** the address, for network */
+	readonly url?: string;
+	/** for network: false when the host is not on the project's list (and not this computer), so a new host is asked about once */
+	readonly knownHost?: boolean;
 }
 
 export type PolicyVerdict =
@@ -62,6 +68,10 @@ export interface PolicyRule {
 	/** for 'ask' rules only: still ask even in autonomous mode with auto-approve on */
 	readonly neverBypassAutonomous: boolean;
 	readonly enabled: boolean;
+	/** matches a file request only when a path it names is outside every open folder (nothing matches when no folder is open) */
+	readonly outsideWorkspace?: boolean;
+	/** matches a network request only when its host is new to the project */
+	readonly unknownHostOnly?: boolean;
 }
 
 export type UserPolicyRuleInput = {

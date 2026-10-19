@@ -57,17 +57,24 @@ import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
+import { GateInfo } from '../common/gateModel.js';
 import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 import { addToLedger, addTurnToThreadUsage, budgetState, priceTurn, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
 import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
 import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
 import { enqueue, QueuedMessage, queueIsFull, removeQueued, RunSnapshot, shouldSendQueued, StoppedRun, stoppedWhile, takeNext } from '../common/runStateModel.js';
-import { ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
+import { ApprovalKind, ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
 import { composeReviewComment, ReviewComment } from '../common/reviewComment.js';
 import { localProviderNames } from '../common/vaderSettingsTypes.js';
 
 const USAGE_LEDGER_STORAGE_KEY = 'vader.usageLedger'
+/** localhost and the private networks: the pages of a project being developed on this computer are never "new sites" */
+const isThisComputer = (host: string): boolean => {
+	const h = host.toLowerCase().replace(/^\[|\]$/g, '')
+	return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || h === '0.0.0.0' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+}
+
 const PROJECT_APPROVALS_STORAGE_KEY = 'vader.projectApprovals'
 
 
@@ -506,7 +513,7 @@ export interface IChatThreadService {
 
 	// "Allow in this project"
 	canRememberForProject(threadId: string): boolean;
-	listProjectApprovals(projectKey: string | null): { key: string; kind: 'command' | 'mcp'; label: string; addedAt: number }[];
+	listProjectApprovals(projectKey: string | null): { key: string; kind: ApprovalKind; label: string; addedAt: number }[];
 	revokeProjectApproval(projectKey: string, key: string): void;
 	readonly onDidChangeProjectApprovals: Event<void>;
 
@@ -860,7 +867,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (hard.kind !== 'ok') {
 			this._updateLatestTool(threadId, hard.kind === 'invalid_params'
 				? { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName }
-				: { role: 'tool', type: 'rejected', result: null, name: toolName, params: hard.toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
+				: { role: 'tool', type: 'rejected', result: null, name: toolName, params: hard.toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content, gate: hard.gate })
 			this._setStreamState(threadId, undefined)
 			this._addUserCheckpoint({ threadId })
 			return
@@ -1063,6 +1070,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			return typeof command === 'string' ? { kind: 'command', command } : null
 		}
 		if (!isABuiltinToolName(toolName)) return mcpServerName ? { kind: 'mcp', server: mcpServerName, tool: toolName } : null
+		if (toolName === 'browser_navigate') { // a site, not a page: the host is what the project's list holds
+			const url = (params as { url?: unknown } | null)?.url
+			try { return typeof url === 'string' ? { kind: 'host', host: new URL(url).hostname } : null } catch { return null }
+		}
 		return null
 	}
 
@@ -1074,7 +1085,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	canRememberForProject(threadId: string): boolean {
 		const last = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'tool' && m.type === 'tool_request')
 		if (!last || last.role !== 'tool' || last.type !== 'tool_request') return false
-		if (last.content.startsWith('(Vader policy requires approval')) return false // the Policy Engine asked: nothing may turn that off
+		// the Policy Engine asked: nothing may turn that off, except the question about a site that is new to the project, whose answer is the project's list of sites
+		if (last.content.startsWith('(Vader policy requires approval') && last.gate?.ruleId !== 'vader.ask.network-new-host') return false
 		return !!this._projectKeyOfThread(threadId) && !!this._subjectOfToolCall(last.name, last.params, last.mcpServerName)
 	}
 
@@ -1272,7 +1284,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		onValidated?: (toolParams: ToolCallParams<ToolName>) => void,
 	): Promise<
 		| { kind: 'invalid_params', content: string }
-		| { kind: 'rejected', toolParams: ToolCallParams<ToolName>, content: string }
+		| { kind: 'rejected', toolParams: ToolCallParams<ToolName>, content: string, gate: GateInfo }
 		| { kind: 'ok', toolParams: ToolCallParams<ToolName>, policyVerdict: ReturnType<IPolicyService['evaluate']> | { kind: 'allow' } }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
@@ -1305,7 +1317,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
 							: null
 			if (blockedReason) {
-				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${blockedReason}` }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${blockedReason}`, gate: { by: 'agent-scope', effect: 'deny', reason: blockedReason } }
 			}
 		}
 
@@ -1319,7 +1331,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
 			if (blockedInReadonlyMode) {
 				const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
-				return { kind: 'rejected', toolParams, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` }
+				const readOnlyContent = `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}`
+				return { kind: 'rejected', toolParams, content: readOnlyContent, gate: { by: 'read-only', effect: 'deny', reason: readOnlyContent } }
 			}
 		}
 
@@ -1327,7 +1340,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// model was told, and regardless of the user's auto-approve settings. A 'deny'
 		// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
 		// verdict forces an approval prompt even if this tool category is auto-approved.
-		let policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+		const projectKeyOfThisThread = this._projectKeyOfThread(threadId)
+		let policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined, {
+			workspaceRoots: this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath),
+			isKnownHost: (host) => isThisComputer(host) || isApproved(this._projectApprovals, projectKeyOfThisThread, { kind: 'host', host }),
+		})
 		// A path can reach a protected file through a symbolic link (`docs/credentials` where `docs` links to ~/.aws), so the rules and the
 		// agent scope see the path as written AND where it really points (realPaths.ts).
 		const realpathOf = (u: URI) => this._fileService.realpath(u)
@@ -1336,12 +1353,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const roots = this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths, await withResolvedPaths(realpathOf, roots))
 			if (scopeVerdict.kind === 'deny') {
-				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${scopeVerdict.reason}` }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${scopeVerdict.reason}`, gate: { by: 'agent-scope', effect: 'deny', reason: scopeVerdict.reason } }
 			}
 		}
 		const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
 		if (policyVerdict.kind === 'deny') {
-			return { kind: 'rejected', toolParams, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` }
+			return { kind: 'rejected', toolParams, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}`, gate: { by: 'policy', effect: 'deny', ruleId: policyVerdict.ruleId, reason: policyVerdict.reason } }
 		}
 		return { kind: 'ok', toolParams, policyVerdict }
 	}
@@ -1371,7 +1388,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		const toolParams = hard.toolParams
 		if (hard.kind === 'rejected') {
-			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
+			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content, gate: hard.gate })
 			return { kind: 'rejected', validatedParams: toolParams }
 		}
 		const policyVerdict = hard.policyVerdict
@@ -1389,7 +1406,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType] || this._isApprovedForProject(threadId, toolName, toolParams, mcpServerName)) : false
 			// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
 			const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
-			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+			const gate: GateInfo | undefined = policyVerdict.kind === 'ask' ? { by: 'policy', effect: 'ask', ruleId: policyVerdict.ruleId, reason: policyVerdict.reason } : undefined
+			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, ...(gate ? { gate } : {}) })
 			if (!autoApprove) {
 				return { kind: 'needs_approval', validatedParams: toolParams }
 			}

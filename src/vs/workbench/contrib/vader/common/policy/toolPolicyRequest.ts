@@ -28,6 +28,7 @@ export function policyRequestOfToolCall(
 	isBuiltInTool: boolean,
 	mcpServerName: string | undefined,
 	agentId: string | undefined,
+	ctx?: { readonly workspaceRoots?: string[], /** whether a host is already allowed for this project (or is this computer) */ readonly isKnownHost?: (host: string) => boolean },
 ): IPolicyRequest | null {
 	if (!isBuiltInTool) {
 		return { kind: 'mcp-tool', toolName, mcpServerName, agentId };
@@ -42,7 +43,21 @@ export function policyRequestOfToolCall(
 		case 'read_file':
 		case 'search_in_file':
 		case 'read_lint_errors':
-			return { kind: 'file-read', toolName, filePaths: pathOf((p as any).uri), agentId };
+		case 'ls_dir':
+		case 'get_dir_tree':
+			return { kind: 'file-read', toolName, filePaths: pathOf((p as any).uri), agentId, workspaceRoots: ctx?.workspaceRoots };
+
+		case 'search_for_files':
+			return (p as any).searchInFolder ? { kind: 'file-read', toolName, filePaths: pathOf((p as any).searchInFolder), agentId, workspaceRoots: ctx?.workspaceRoots } : null;
+
+		// a page the agent opens: the first time a host is seen in a project it is asked about, then it can be allowed for the project
+		case 'browser_navigate': {
+			const url = typeof (p as any).url === 'string' ? (p as any).url : '';
+			let host = '';
+			try { host = new URL(url).hostname; } catch { /* the tool refuses an address that is not valid */ }
+			if (!host) return null;
+			return { kind: 'network', toolName, url, knownHost: ctx?.isKnownHost ? ctx.isKnownHost(host) : true, agentId };
+		}
 
 		case 'rewrite_file':
 		case 'edit_file':
@@ -65,10 +80,7 @@ export function policyRequestOfToolCall(
 			return { kind: 'capability-install', toolName, agentId };
 
 		// directory/search listings and terminal lifecycle management (not execution) aren't gated
-		case 'ls_dir':
-		case 'get_dir_tree':
 		case 'search_pathnames_only':
-		case 'search_for_files':
 		case 'open_persistent_terminal':
 		case 'kill_persistent_terminal':
 			return null;

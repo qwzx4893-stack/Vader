@@ -352,6 +352,135 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+
+// ===================================================================== the safety gate (boards S02, R07)
+const toolMsg = (type, name, params, extra = {}) => ({ role: 'tool', type, name, params, rawParams: params, id: 'tc-' + Math.random().toString(36).slice(2, 7), result: null, content: '', ...extra });
+const gateOf = async (page, messages) => { await page.evaluate((m) => window.__addMessages(...m), messages); await page.waitForTimeout(200); };
+{
+	const { page, errors } = await newPage();
+	await gateOf(page, [userMsg('add the limiter'), asstMsg('I will run the tests.'), toolMsg('tool_request', 'run_command', { command: 'npm test -- limiter', cwd: null, terminalId: null }, { content: '(Awaiting user permission...)' })]);
+	const g = TID('vader-gate');
+	check('a command that waits for approval is one card named for what it is', (await page.locator(g).count()) === 1 && (await page.locator(TID('vader-gate-title')).innerText()) === 'Run a command?');
+	check('it says where and what it may do', flat(await page.locator(TID('vader-gate-text')).innerText()) === 'In vader-app. It can write files.');
+	check('the command is shown exactly, in a code block', (await page.locator(TID('vader-gate-code')).innerText()) === 'npm test -- limiter');
+	check('it names the mode it asks in', (await page.locator(TID('vader-gate-mode')).innerText()) === 'Asks in Balanced mode');
+	check('it offers Allow once, Allow in this project and Reject', (await page.locator(TID('vader-tool-approve')).innerText()) === 'Allow once' && (await page.locator(TID('vader-tool-approve-project')).count()) === 1 && (await page.locator(TID('vader-tool-reject')).count()) === 1);
+	await shot(page, '20-gate-command');
+	await page.locator(TID('vader-tool-approve-project')).click();
+	await page.locator(TID('vader-tool-approve')).click();
+	await page.locator(TID('vader-tool-reject')).click();
+	const l = await log(page);
+	check('the buttons do what they say (once, for the project, reject)', l.includes('approve:project') && l.includes('approve:once') && l.includes('reject-tool'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__canRemember = false; });
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'run_command', { command: 'rm -rf build', cwd: null, terminalId: null }, { content: '(Awaiting user permission...)' })]);
+	check('when it cannot be remembered the card does not offer Allow in this project', (await page.locator(TID('vader-tool-approve-project')).count()) === 0);
+	await page.close();
+}
+const policyAsk = (ruleId, reason) => ({ content: `(Vader policy requires approval: ${reason})`, gate: { by: 'policy', effect: 'ask', ruleId, reason } });
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'read_file', { uri: { fsPath: 'C:\\Users\\STS\\.ssh\\config' }, startLine: null, endLine: null, pageNumber: 1 }, policyAsk('vader.ask.outside-project-read', 'This reads a file that is outside the open project.'))]);
+	check('a read outside the project asks, and says which file and that it is only this once', (await page.locator(TID('vader-gate-title')).innerText()) === 'Read a file outside this project?' && flat(await page.locator(TID('vader-gate-text')).innerText()) === 'C:\\Users\\STS\\.ssh\\config is not inside vader-app. Only this once.');
+	check('it offers Allow once and Reject, and not a standing Allow', (await page.locator(TID('vader-tool-approve')).count()) === 1 && (await page.locator(TID('vader-tool-approve-project')).count()) === 0 && (await page.locator(TID('vader-tool-reject')).count()) === 1);
+	await shot(page, '21-gate-outside-read');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'browser_navigate', { url: 'https://api.stripe.com/v1/prices', pageId: null }, policyAsk('vader.ask.network-new-host', 'This opens an address on a site that is not on this project’s list.'))]);
+	check('a page on a new site names the address and the host', (await page.locator(TID('vader-gate-title')).innerText()) === 'Call a web address?' && (await page.locator(TID('vader-gate-code')).innerText()) === 'https://api.stripe.com/v1/prices' && (await page.locator(TID('vader-gate-note')).innerText()).includes('api.stripe.com is not on this project’s list of sites.'));
+	check('it offers to allow the host in this project', (await page.locator(TID('vader-tool-approve-host')).innerText()) === 'Allow this host here');
+	await shot(page, '22-gate-network');
+	await page.locator(TID('vader-tool-approve-host')).click();
+	check('and that remembers it for the project', (await log(page)).includes('approve:project'));
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'run_command', { command: 'npm install left-pad', cwd: null, terminalId: null }, policyAsk('vader.custom.installs', 'installs'))]);
+	check('a rule of the person’s own says so, with that it asks in every mode', (await page.locator(TID('vader-gate-title')).innerText()) === 'Install a package?' && (await page.locator(TID('vader-gate-text')).innerText()).includes('Your rule') && (await page.locator(TID('vader-gate-mode')).innerText()) === 'Asks in every mode' && (await page.locator(TID('vader-gate-code')).innerText()) === 'npm install left-pad');
+	check('it does not offer a standing allow, and offers to change the rule', (await page.locator(TID('vader-tool-approve-project')).count()) === 0 && (await page.locator(TID('vader-gate-change-rule')).count()) === 1);
+	await page.locator(TID('vader-gate-change-rule')).click();
+	check('Change the rule opens the Permissions page', (await log(page)).some(x => /command:.*:permissions$/.test(x)));
+	await shot(page, '23-gate-rule');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'install_skill', { name: 'mcp-builder', repositoryUrl: 'https://github.com/anthropics/skills', instructions: '# MCP builder\nBuild servers.' }, policyAsk('vader.ask.install-capability', 'Installing a skill changes every later prompt.'))]);
+	check('a skill is named with where it comes from, and installs switched off', (await page.locator(TID('vader-gate-title')).innerText()) === 'Install a skill' && (await page.locator(TID('vader-gate-skill')).innerText()).includes('mcp-builder') && (await page.locator(TID('vader-gate-skill')).innerText()).includes('github.com/anthropics/skills') && (await page.locator(TID('vader-tool-approve')).innerText()) === 'Install, switched off');
+	await page.locator(TID('vader-gate-read')).click();
+	check('Read it first shows the instructions that would be installed', (await page.locator(TID('vader-gate-instructions')).innerText()).includes('Build servers.'));
+	await shot(page, '24-gate-skill');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('tool_request', 'github_create_pull_request', { title: 't' }, { mcpServerName: 'GitHub', content: '(Awaiting user permission...)' })]);
+	check('a tool of an MCP server names the server', (await page.locator(TID('vader-gate-title')).innerText()) === 'Use a tool from GitHub?');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('rejected', 'read_file', { uri: { fsPath: 'C:\\Users\\STS\\.ssh\\id_rsa' }, startLine: null, endLine: null, pageNumber: 1 }, { content: 'Blocked by Vader policy (vader.deny.credential-files): Blocked: a private key', gate: { by: 'policy', effect: 'deny', ruleId: 'vader.deny.credential-files', reason: 'Blocked: a private key or a stored login.' } })]);
+	check('a locked rule says what was refused, that it cannot be switched off, and names the rule', (await page.locator(TID('vader-blocked-title')).innerText()) === 'Blocked: credential file' && (await page.locator(TID('vader-blocked')).innerText()).includes('is never allowed. This rule cannot be switched off in any mode.') && (await page.locator(TID('vader-blocked')).innerText()).includes('vader.deny.credential-files'));
+	check('it offers no Allow', (await page.locator(TID('vader-tool-approve')).count()) === 0);
+	await shot(page, '25-blocked-locked');
+	await page.locator(TID('vader-blocked-rule')).click();
+	check('Open the rule goes to the Permissions page', (await log(page)).some(x => /command:.*:permissions$/.test(x)));
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('rejected', 'edit_file', { uri: { fsPath: 'C:\\work\\vader-app\\package.json' }, searchReplaceBlocks: '' }, { content: 'Blocked by agent scope: Agent "Reviewer" may only touch src/**.', gate: { by: 'agent-scope', effect: 'deny', reason: 'Agent "Reviewer" may only touch src/**.' } })]);
+	check('an agent’s own scope is said as such, with the way to its settings', (await page.locator(TID('vader-blocked-title')).innerText()) === 'Blocked: outside this agent’s folders' && (await page.locator(TID('vader-blocked-agent')).count()) === 1);
+	await shot(page, '26-blocked-scope');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('rejected', 'run_command', { command: 'npm install', cwd: null, terminalId: null }, { content: 'Blocked: Gather is read-only - this tool could modify the project', gate: { by: 'read-only', effect: 'deny', reason: 'Blocked: Gather is read-only - this tool could modify the project. Switch to Agent mode to actually make this change.' } })]);
+	check('a read-only mode says what did not run and offers Switch to Agent', (await page.locator(TID('vader-blocked-title')).innerText()) === 'Gather is read-only' && (await page.locator(TID('vader-blocked')).innerText()).includes('npm install was not run.'));
+	await page.locator(TID('vader-blocked-switch')).click();
+	check('Switch to Agent changes the mode', (await log(page)).includes('global:chatMode="agent"'));
+	await shot(page, '27-blocked-readonly');
+	await page.close();
+}
+{
+	const { page } = await newPage();
+	await gateOf(page, [userMsg('x'), toolMsg('rejected', 'run_command', { command: 'git push --force origin main', cwd: null, terminalId: null }, { content: 'Blocked by Vader policy (vader.deny.destructive-fs): x', gate: { by: 'policy', effect: 'deny', ruleId: 'vader.deny.destructive-fs', reason: 'Blocked: a destructive command.' } })]);
+	check('any other locked refusal still says it is never allowed and shows the command', (await page.locator(TID('vader-blocked')).innerText()).includes('never allowed, even in Autonomous mode') && (await page.locator(TID('vader-blocked')).innerText()).includes('git push --force origin main'));
+	await page.locator(TID('vader-blocked-ok')).click();
+	check('OK puts the card away to one line', (await page.locator(TID('vader-blocked')).count()) === 0 && (await page.locator(TID('vader-gate-dismissed')).count()) === 1);
+	await page.close();
+}
+
+
+// ===================================================================== a key in the message (board S02)
+{
+	const { page, errors } = await newPage();
+	const key = 'sk-proj-' + 'a'.repeat(30) + 'Zq91';
+	await page.locator(INPUT).fill(`use this key ${key} for the tests`);
+	await page.keyboard.press('Enter');
+	await page.waitForSelector(TID('vader-secret'));
+	check('a message with a key in it is not sent', !(await log(page)).some(x => x.startsWith('task:') || x.startsWith('queue:')));
+	check('the card says which kind of key and which end of it, never the whole value', (await page.locator(TID('vader-secret-title')).innerText()) === 'Stopped: a key was about to be sent' && (await page.locator(TID('vader-secret-text')).innerText()).includes('an OpenAI key (sk-pr…Zq91)') && !(await page.locator(TID('vader-secret')).innerText()).includes('aaaaaaaaaaaa'));
+	check('the key was taken out of what is typed, the rest is kept', !(await page.locator(INPUT).inputValue()).includes('aaaaaaaa') && (await page.locator(INPUT).inputValue()).startsWith('use this key sk-pr…Zq91 for the tests'));
+	await shot(page, '28-secret-blocked');
+	await page.locator(TID('vader-secret-why-btn')).click();
+	check('Why was this blocked gives the reason', (await page.locator(TID('vader-secret-why')).innerText()).includes('checked before anything leaves this computer'));
+	await page.locator(TID('vader-secret-edit')).click();
+	check('Edit the message puts the person back in the box and puts the card away', (await page.locator(TID('vader-secret')).count()) === 0 && (await page.evaluate(() => document.activeElement?.tagName)) === 'TEXTAREA');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:')));
+	check('the message without the key is sent as it is', (await log(page)).some(x => x === 'task:use this key sk-pr…Zq91 for the tests'));
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
 await browser.close();
 server.close();
 fs.rmSync(tmp, { recursive: true, force: true });

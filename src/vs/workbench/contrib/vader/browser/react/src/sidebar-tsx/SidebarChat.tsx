@@ -40,6 +40,8 @@ import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAcc
 import { parseTaskList } from '../../../../common/taskList.js';
 import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextShare, messageChars, shouldFoldPaste } from '../../../../common/runStateModel.js';
+import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
+import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
 import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
 
 
@@ -1720,91 +1722,12 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 	}
 }
 
-const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) => {
-	const accessor = useAccessor()
-	const chatThreadsService = accessor.get('IChatThreadService')
-	const agentGatewayService = accessor.get('IAgentGatewayService')
-	const metricsService = accessor.get('IMetricsService')
-	const vaderSettingsService = accessor.get('IVaderSettingsService')
-	const vaderSettingsState = useSettingsState()
-
-	const onAccept = useCallback(() => {
-		try { // this doesn't need to be wrapped in try/catch anymore
-			const threadId = chatThreadsService.state.currentThreadId
-			agentGatewayService.approveToolRequest(threadId)
-			metricsService.capture('Tool Request Accepted', {})
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	// "Allow in this project": approves this call and stops asking about this exact command (or MCP tool) in this project. Not offered when the Policy Engine asked.
-	const canRemember = chatThreadsService.canRememberForProject(chatThreadsService.state.currentThreadId)
-	const onAcceptForProject = useCallback(() => {
-		try {
-			agentGatewayService.approveToolRequest(chatThreadsService.state.currentThreadId, { rememberForProject: true })
-			metricsService.capture('Tool Request Accepted For Project', {})
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	const onReject = useCallback(() => {
-		try {
-			const threadId = chatThreadsService.state.currentThreadId
-			agentGatewayService.rejectToolRequest(threadId)
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-		metricsService.capture('Tool Request Rejected', {})
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	const approveButton = (
-		<button
-			data-testid='vader-tool-approve'
-			onClick={onAccept}
-			className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium'
-		>
-			Allow once
-		</button>
-	)
-
-	const cancelButton = (
-		<button
-			data-testid='vader-tool-reject'
-			onClick={onReject}
-			className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm'
-		>
-			Reject
-		</button>
-	)
-
+/** the switch that makes a whole kind of action stop asking (Settings keeps the same one); not offered when the Policy Engine asked */
+const AutoApproveToggle = ({ toolName }: { toolName: ToolName }) => {
 	const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-	const approvalToggle = approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
+	return approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
-
-	return <div className="flex flex-wrap gap-2 items-center">
-		{approveButton}
-		{canRemember ? <button data-testid='vader-tool-approve-project' onClick={onAcceptForProject} className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' title='Allow this, and do not ask about this exact command in this project again'>Allow in this project</button> : null}
-		{cancelButton}
-		{approvalToggle}
-	</div>
-}
-
-const GATE_TITLE: Partial<Record<string, string>> = {
-	run_command: 'Run a command', run_persistent_command: 'Run a command in a terminal', open_persistent_terminal: 'Open a terminal',
-	edit_file: 'Apply an edit', rewrite_file: 'Rewrite a file', create_file_or_folder: 'Create a file', delete_file_or_folder: 'Delete a file',
-}
-const MODE_WORD: Record<string, string> = { safe: 'Safe', balanced: 'Balanced', autonomous: 'Autonomous' }
-
-/** a request for the person's say, as one card: its name, the mode it asks in, the thing itself, and Allow once / Allow in this project / Reject */
-const GateCard = ({ toolName, mcpServerName, isCheckpointGhost, children }: { toolName: ToolName, mcpServerName: string | undefined, isCheckpointGhost: boolean, children: React.ReactNode }) => {
-	const policy = usePolicyServiceState()
-	const title = GATE_TITLE[toolName] ?? (mcpServerName ? `Use a tool from ${mcpServerName}` : 'Allow this action')
-	return <div data-testid='vader-gate' className={`rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2.5 ${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-		<div className='flex items-center gap-2'>
-			<span className='font-semibold text-vader-fg-1'>{title}</span>
-			<span className='flex-1' />
-			<span className='text-vader-fg-3 text-xs'>Asks in {MODE_WORD[policy.mode] ?? policy.mode} mode</span>
-		</div>
-		{children}
-		<ToolRequestAcceptRejectButtons toolName={toolName} />
-	</div>
 }
 
 export const ToolChildrenWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
@@ -2805,13 +2728,18 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 		if (ToolResultWrapper)
 			// something the person is asked to allow is one card: what it is and in which mode it asks, what exactly it does, and the buttons (boards R07, S02)
 			if (chatMessage.type === 'tool_request') {
-				return <GateCard toolName={chatMessage.name} mcpServerName={chatMessage.mcpServerName} isCheckpointGhost={isCheckpointGhost}>
+				return <GateCard toolName={chatMessage.name} params={chatMessage.params} mcpServerName={chatMessage.mcpServerName} gate={chatMessage.gate} isCheckpointGhost={isCheckpointGhost}
+					extra={chatMessage.gate ? null : <AutoApproveToggle toolName={chatMessage.name} />}>
 					<ToolResultWrapper
 						toolMessage={chatMessage}
 						messageIdx={messageIdx}
 						threadId={threadId}
 					/>
 				</GateCard>
+			}
+			// something the gate refused is one card too: what did not run, and the rule, the scope or the mode that said so
+			if (chatMessage.type === 'rejected' && chatMessage.gate) {
+				return <BlockedCard toolName={chatMessage.name} params={chatMessage.params} mcpServerName={chatMessage.mcpServerName} gate={chatMessage.gate} isCheckpointGhost={isCheckpointGhost} />
 			}
 			return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
 				<ToolResultWrapper
@@ -3185,6 +3113,8 @@ export const SidebarChat = () => {
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 	// long pasted texts are folded to one line each above the message box, and sent in full with the message
 	const [pastes, setPastes] = useState<Paste[]>([])
+	// a key found in the message that was about to be sent: it is not sent (board S02)
+	const [secretHits, setSecretHits] = useState<SecretHit[] | null>(null)
 
 	// a coding agent chosen for the chat brings its own model, so no model has to be configured
 	const noModel = !settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState)
@@ -3201,6 +3131,16 @@ export const SidebarChat = () => {
 		// what is typed, then each long paste in a block, as one message
 		const typed = _forceSubmit || textAreaRef.current?.value || ''
 		const userMessage = _forceSubmit ? typed : [typed.trim() ? typed : '', ...pastes.map(p => '```\n' + p.text + '\n```')].filter(Boolean).join('\n\n')
+
+		// a key in the text never leaves this computer: it is taken out of the message, which is kept in the box so the person can go on from it
+		const hits = findSecrets(userMessage)
+		if (hits.length > 0) {
+			setSecretHits(hits)
+			if (!_forceSubmit) textAreaFnsRef.current?.setValue(redactSecrets(typed))
+			setPastes(ps => ps.map(p => ({ ...p, text: redactSecrets(p.text) })))
+			return
+		}
+		setSecretHits(null)
 
 		if (isRunning) {
 			// a run is going: the message waits for it to end (Send now stops the run and sends it at once)
@@ -3450,6 +3390,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const aboveComposer = <div className='flex flex-col gap-2'>
 		<ErrorBoundary><NoModelCard /></ErrorBoundary>
 		{!isLandingPage ? <ErrorBoundary><OfflineBanner /></ErrorBoundary> : null}
+		{secretHits ? <ErrorBoundary><SecretBlockedCard hits={secretHits} onEdit={() => { setSecretHits(null); textAreaRef.current?.focus() }} onDismiss={() => setSecretHits(null)} /></ErrorBoundary> : null}
 		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
 		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
 		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>

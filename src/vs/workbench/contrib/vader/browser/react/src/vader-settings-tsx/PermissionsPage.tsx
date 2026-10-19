@@ -93,8 +93,8 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 
 		<Group title='Allowed in this project' note={projectName ? undefined : undefined}>
 			{!projectKey ? <span className='t3' style={{ padding: '4px 2px' }}>Open a folder to keep approvals for it.</span>
-				: approvals.length === 0 ? <span className='t3' style={{ padding: '4px 2px', lineHeight: 1.55, maxWidth: 560 }}>Nothing yet. When the agent asks to run a command, &quot;Allow in this project&quot; remembers that exact command here. Rules that always ask (keys, installs, sudo) are never skipped.</span>
-					: approvals.map((a, i) => <Line key={a.key} first={i === 0} testId='vader-perm-approval' title={<span className='mo'>{a.label}</span>} detail={`${a.kind === 'mcp' ? 'MCP tool' : 'Command'}, allowed ${new Date(a.addedAt).toLocaleDateString()}`}
+				: approvals.length === 0 ? <span className='t3' style={{ padding: '4px 2px', lineHeight: 1.55, maxWidth: 560 }}>Nothing yet. When the agent asks to run a command, &quot;Allow in this project&quot; remembers that exact command here, and &quot;Allow this host here&quot; remembers a site. Rules that always ask (keys, installs, sudo) are never skipped.</span>
+					: approvals.map((a, i) => <Line key={a.key} first={i === 0} testId='vader-perm-approval' title={<span className='mo'>{a.label}</span>} detail={`${a.kind === 'mcp' ? 'MCP tool' : a.kind === 'host' ? 'Site' : 'Command'}, allowed ${new Date(a.addedAt).toLocaleDateString()}`}
 						right={<><span className='hint'>{projectName}</span><button className='tx' data-testid='vader-perm-revoke' onClick={() => chat.revokeProjectApproval(projectKey, a.key)}>Revoke</button></>} />)}
 		</Group>
 
