@@ -48,6 +48,8 @@ export type ParallelTaskState = {
 	 * pass or a fail in that case - the merge proceeds exactly as it did before this existed).
 	 */
 	preMergeChecks?: { name: string; command: string; passed: boolean }[];
+	/** what the checks that failed say about this task: which problems are new and which were already there (common/verification/diagnosticsDelta.ts) */
+	deltaNote?: string;
 };
 
 export type ParallelRunState = {

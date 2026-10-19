@@ -13,6 +13,7 @@ import { IGitWorktreeMainService } from '../common/worktree/gitWorktreeService.j
 import { IAgentsService } from '../common/agents/agentsService.js';
 import { IVerificationService } from '../common/verification/verificationTypes.js';
 import { resolveTaskConflict } from '../common/worktree/conflictResolution.js';
+import { deltaSummary, judgeCheck } from '../common/verification/diagnosticsDelta.js';
 
 export * from '../common/orchestration/orchestrationTypes.js';
 
@@ -237,18 +238,37 @@ This is an isolated git worktree - a separate checkout of this same repository, 
 		// check be integrated unreviewed by default. No checks detected for the project is
 		// never treated as a pass or a fail - the merge proceeds exactly as before this gate
 		// existed, since there's nothing here to judge it against.
-		const preMergeEvidence = await this._verificationService.gatherEvidence({ cwd: created.worktreePath });
+		const preMergeEvidence = await this._verificationService.gatherEvidence({ cwd: created.worktreePath, keepOutput: true });
+		// A check that fails in the copy is the task's doing only if it did not fail before: the failing checks are run again on the project as it was, and only a problem that is new
+		// (or a check that fails with output nothing can be read from) refuses the merge (common/verification/diagnosticsDelta.ts).
+		let deltaNote = '';
+		let nothingNew = false;
 		if (preMergeEvidence.checksDetected && preMergeEvidence.checks.some(c => !c.passed)) {
+			const failing = preMergeEvidence.checks.filter(c => !c.passed);
+			const baseEvidence = await this._verificationService.gatherEvidence({ cwd: repoPath, only: failing.map(c => c.name), keepOutput: true });
+			const verdicts = failing.map(c => {
+				const b = baseEvidence.checks.find(x => x.name === c.name);
+				return judgeCheck({ name: c.name, passed: false, exitCode: c.exitCode, output: c.output ?? c.outputTail }, b ? { name: b.name, passed: b.passed, exitCode: b.exitCode, output: b.output ?? b.outputTail } : undefined);
+			});
+			if (verdicts.every(v => !v.regression)) {
+				deltaNote = deltaSummary(verdicts); // nothing new: the merge goes on, and says what was already failing
+				nothingNew = true;
+			} else {
+				t.deltaNote = deltaSummary(verdicts);
+			}
+		}
+		if (preMergeEvidence.checksDetected && !nothingNew && preMergeEvidence.checks.some(c => !c.passed)) {
 			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
 			t.status = 'error';
 			t.mergeOutcome = 'verification_failed';
 			const failed = preMergeEvidence.checks.filter(c => !c.passed).map(c => c.name).join(', ');
-			t.errorMessage = `Pre-merge verification failed in the isolated worktree (${failed}). Not merged - branch "${created.branchName}" and its worktree are left in place for manual review.`;
+			t.errorMessage = `Pre-merge verification failed in the isolated worktree (${failed}). Not merged - branch "${created.branchName}" and its worktree are left in place for manual review.${t.deltaNote ? `\n${t.deltaNote}` : ''}`;
 			return; // never auto-remove a worktree whose verification failed
 		}
 		if (preMergeEvidence.checksDetected) {
 			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
 		}
+		if (deltaNote) t.conclusion = `${t.conclusion ? t.conclusion + '\n\n' : ''}${deltaNote}`;
 
 		const targetBranch = await this._gitWorktreeService.getCurrentBranch(repoPath);
 		const mergeResult = await this._gitWorktreeService.commitAndMergeWorktreeBranch({

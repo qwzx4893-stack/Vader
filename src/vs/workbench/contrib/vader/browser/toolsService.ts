@@ -181,7 +181,7 @@ export interface IToolsService {
 	 * section. `run_verification` itself calls this with the workspace root, so there is
 	 * exactly one implementation of the detection/execution logic, not two.
 	 */
-	runVerificationChecksAt(root: URI): Promise<{ checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean }>;
+	runVerificationChecksAt(root: URI, only?: readonly string[]): Promise<{ checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string, output: string }[], detected: boolean }>;
 }
 
 export const IToolsService = createDecorator<IToolsService>('ToolsService');
@@ -228,7 +228,7 @@ export class ToolsService implements IToolsService {
 			return validateURI(cwd).fsPath
 		}
 
-		this.runVerificationChecksAt = async (root: URI) => {
+		this.runVerificationChecksAt = async (root: URI, only?: readonly string[]) => {
 			let scripts: Record<string, string> = {}
 			try {
 				const pkgUri = URI.joinPath(root, 'package.json')
@@ -244,9 +244,9 @@ export class ToolsService implements IToolsService {
 
 			// order matters: typecheck/lint before test, since a build/type error is usually the cheaper, more useful signal
 			const candidateScriptNames = ['build', 'compile', 'typecheck', 'type-check', 'lint', 'test']
-			const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string').slice(0, 5)
+			const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string' && (!only || only.includes(name))).slice(0, 5)
 
-			const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[] = []
+			const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string, output: string }[] = []
 			for (const scriptName of scriptsToRun) {
 				const command = `${packageManager} ${scriptName}`
 				const { resPromise } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd: root.fsPath, terminalId: generateUuid() })
@@ -258,6 +258,7 @@ export class ToolsService implements IToolsService {
 					passed: exitCode === 0,
 					exitCode,
 					outputTail: result.slice(-4000),
+					output: result.slice(-60000),
 				})
 			}
 
@@ -802,7 +803,7 @@ export class ToolsService implements IToolsService {
 				const root = workspaceContextService.getWorkspace().folders[0]?.uri
 				if (!root) return { result: { checks: [], detected: false } }
 				const result = await this.runVerificationChecksAt(root)
-				return { result }
+				return { result: { ...result, checks: result.checks.map(({ output: _output, ...c }) => c) } }
 			},
 			run_verification_agent: async ({ objective, maxIterations }) => {
 				// Resolved at call time, not injected: IVerificationService depends on IToolsService, and an injected

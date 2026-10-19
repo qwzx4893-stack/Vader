@@ -10,6 +10,8 @@ export type VerificationCheck = {
 	passed: boolean;
 	exitCode: number | null;
 	outputTail: string;
+	/** the end of the whole output (up to 60,000 characters), for reading the problems in it; `outputTail` is what is shown */
+	output?: string;
 };
 
 // Real, gathered evidence - never invented, never a claim by the implementer about its own
@@ -61,7 +63,7 @@ export interface IVerificationService {
 	 * diagnostics to read - `checks` (real build/typecheck/lint/test commands actually run
 	 * in that directory) and `gitDiffStat` are the evidence that's genuinely cwd-scoped.
 	 */
-	gatherEvidence(opts?: { cwd?: string }): Promise<VerificationEvidence>;
+	gatherEvidence(opts?: { cwd?: string; /** only these checks, by name (to run again the ones that failed) */ only?: string[]; /** keep the whole output of each check (for reading its problems); by default only its tail is kept */ keepOutput?: boolean }): Promise<VerificationEvidence>;
 
 	/** one independent verification pass: gathers evidence, then asks a fresh, read-only, separate-context agent thread to judge it against the stated objective */
 	runIndependentVerification(opts: { objective: string, cwd?: string }): Promise<{ evidence: VerificationEvidence; verdict: VerificationVerdict }>;
