@@ -56,6 +56,10 @@ The words are made from the messages the app really raises, the real error is al
 - **A command's header** says how it ended, "exit 0, 41 s" (green) or "exit 1, 3 s" (red), and a long result says its lines (`ToolMessage.durationMs` is kept with the result).
 - **The agent's browser** (`common/browserErrorWords.ts`): a page that stopped responding, a page that changed under the agent, a page that did not load in 30 seconds.
 
+## Parallel runs (board R05)
+
+The tasks an agent splits a job into (`IAgentOrchestrationService`, one copy of the project and one branch for each task that edits files) are listed at the top of All agents (`vader-shell-tsx/ParallelRuns.tsx`, `common/parallelRunModel.ts`): the task and how long it took, its helper, its branch, where it stands (Merged cleanly, No changes, Conflict in N files, Working, Could not merge, Checks failed, Failed) and how many files. A conflict names the file and offers the three ways out the service really has: **Let an agent merge them** (in the task's own folder first), **Keep the current version**, **Keep this task's version**, and Open the file; when the service cannot do it, its reason is shown. Stop all cancels the run.
+
 ## Settings (boards R08 to R30)
 
 Models (features, local servers, 45 cloud providers with live lists and Test connection), Model router, Connected agents, Permissions (mode, commands allowed in this project, the locked rules and the rules that ask, your own rules), Usage and cost (per model, per day, "estimate" or "billed by provider" for every number; `common/usageAccounting.ts` keeps a per-model ledger for 62 days), Saved agents, Skills (trust computed from live facts, with the reasons), MCP servers, Memory and instructions, Editor extensions, Editor, Privacy and network, Data and backup, About and updates.
@@ -78,7 +82,7 @@ All of these run without opening a window. The packaged app itself can only be r
 
 ## Honest limits
 
-- A task edits the project in place. **A copy of the project per task (the branch names in boards R01 and S06) is only used for parallel tasks** (`orchestrationService`), not for the main agent.
+- A task edits the project in place. **A copy of the project per task (the branch names in boards R01 and S06) is only used for parallel tasks** (`orchestrationService`), not for the main agent. So the cards of board S06 that belong to that copy ("Merged into main, Undo the merge", "Discard this task", "Stash my changes and retry", uncommitted changes before a task starts, "This folder is not a git project") are not built; a parallel task that conflicts, fails to merge or fails its checks is shown as in board R05.
 - **Images cannot be attached to a message** (no provider path carries them yet), so the boards' image states (the model cannot read images, an image from the clipboard) are not built; a dropped image is refused with that reason. Text files can be dropped, and files and sources are mentioned with `@`.
 - The window screenshots of the test show the chat at 780 pixels (its width in the window) beside a stand-in model button; the packaged app itself has not been run on this machine.
 - The Browser tab shows a picture of the agent's page every second and a half; **taking over the page** is not possible because the agent's browser has no window of its own (Open in my browser opens the same address in yours).

@@ -138,6 +138,41 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== a parallel run (board R05)
+{
+	const { page } = await newPage();
+	await page.evaluate(() => {
+		const MIN = 60000, now = Date.parse('2026-10-14T12:30:00Z');
+		const t = (id, task, agent, branch, extra) => ({ id, task, agentName: agent, usesWorktree: true, status: 'success', branchName: branch, startedAt: now - 20 * MIN, finishedAt: now - 14 * MIN, repoPath: 'C:/work/vader-app', ...extra });
+		window.__runs = [{ id: 'run1', createdAt: now - 26 * MIN, cancelled: false, tasks: [
+			t('a', 'Check the cloud providers live model lists', 'Researcher', 'wt/probe-cloud', { mergeOutcome: 'merged', changedFilePaths: ['x', 'y', 'z'] }),
+			t('b', 'Check the local providers (Ollama, LM Studio)', 'Researcher', 'wt/probe-local', { mergeOutcome: 'merged', changedFilePaths: ['x'] }),
+			t('c', 'Check the coding-agent registry versions', 'Reviewer', 'wt/probe-acp', { mergeOutcome: 'conflict', conflictFiles: ['src/vs/workbench/contrib/vader/common/externalAgents/acpRegistrySnapshot.ts'], changedFilePaths: ['q'] }),
+			t('d', 'Write the summary table into the docs', 'Docs writer', 'wt/probe-docs', { status: 'running', finishedAt: undefined, startedAt: now - 3 * MIN }),
+		] }];
+	});
+	await page.locator(TID('vader-shell-all-agents')).click();
+	await page.waitForSelector(TID('vader-parallel-runs'));
+	check('a run says how many tasks are finished and how many are running', (await page.locator(TID('vader-parallel-summary')).innerText()) === '3 of 4 finished, 1 running');
+	const rows = (await page.locator(TID('vader-parallel-task')).allInnerTexts()).map(flat);
+	check('each task is a row with its helper, branch, result and files', rows.length === 4 && rows[0].includes('Researcher') && rows[0].includes('wt/probe-cloud') && rows[0].includes('Merged cleanly') && rows[0].includes('3 files') && rows[0].includes('finished in 6 min'), rows[0]);
+	check('a conflict is named in its row, and a task still working says how long', rows[2].includes('Conflict in 1 file') && rows[3].includes('Working') && rows[3].includes('running for 3 min'), rows[2] + ' / ' + rows[3]);
+	const c = await page.locator(TID('vader-parallel-conflict')).innerText();
+	check('the conflict says what both sides did, names the file, and offers the three ways out', c.includes('Conflict in wt/probe-acp') && c.includes('Both this task and the current branch changed the same lines of src/vs/workbench/contrib/vader/common/externalAgents/acpRegistrySnapshot.ts') && c.includes('Let an agent merge them') && c.includes('Keep the current version') && c.includes('Keep this task’s version') && c.includes('Open the file'), c);
+	await page.locator(TID('vader-parallel-target')).click();
+	check('Keep the current version asks the service to resolve it that way', (await log(page)).includes('resolve:c:target'));
+	await page.evaluate(() => { window.__resolveResult = { ok: false, reason: 'git said: your local changes would be overwritten' }; });
+	await page.locator(TID('vader-parallel-agent')).click();
+	await page.waitForSelector(TID('vader-parallel-problem'));
+	check('when it cannot be resolved the real reason is said', (await page.locator(TID('vader-parallel-problem')).innerText()).includes('your local changes would be overwritten') && (await log(page)).includes('resolve:c:agent'));
+	await page.locator(TID('vader-parallel-stop')).click();
+	check('Stop all stops the run', (await log(page)).includes('cancel-run:run1'));
+	await page.locator(TID('vader-parallel-open-file')).click();
+	check('Open the file opens it', (await log(page)).some(l => /vscode\.open/.test(l)));
+	await shot(page, '09-parallel-run');
+	await page.close();
+}
+
 // ===================================================================== all agents
 {
 	const { page } = await newPage();

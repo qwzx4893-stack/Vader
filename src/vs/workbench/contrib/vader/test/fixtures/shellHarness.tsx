@@ -148,10 +148,16 @@ const term: any = {
 	async runCommand(c: string, o: any) { w.__log.push(`term:${o.persistentTerminalId}:${c}`); term._out[o.persistentTerminalId] += NL + '$ ' + c },
 	async killPersistentTerminal(id: string) { w.__log.push(`kill:${id}`); term._alive[id] = false },
 }
+w.__runs = []
+const orchSvc: any = {
+	get runs() { return w.__runs },
+	cancelRun(id: string) { w.__log.push(`cancel-run:${id}`) },
+	async resolveConflict(runId: string, taskId: string, choice: string) { w.__log.push(`resolve:${taskId}:${choice}`); return w.__resolveResult ?? { ok: true } },
+}
 w.__opened = [] as string[]
 const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 w.__accessor = {
-	get: (name: string) => ({ IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
+	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
 }
 Date.now = () => NOW
 

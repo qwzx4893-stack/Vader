@@ -3,7 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useMemo, useState } from 'react'
-import { useAccessor, useChatThreadsState } from '../util/services.js'
+import { useAccessor, useChatThreadsState, useOrchestrationRunsState } from '../util/services.js'
+import { ParallelRuns } from './ParallelRuns.js'
 import { AGENT_GROUP_ORDER, AGENT_GROUP_TITLE, AgentGroupId, latestTaskList, recentActivity } from '../../../../common/shellModel.js'
 import { formatCost, formatUsd } from '../../../../common/usageAccounting.js'
 import { Icon, ReviewRing, Spinner, WaitDot } from './icons.js'
@@ -28,6 +29,7 @@ export const AgentsPage = () => {
 	const shellService = accessor.get('IVaderShellService')
 	const state = useChatThreadsState()
 	const data = useShellData()
+	const runs = useOrchestrationRunsState()
 	const [filter, setFilter] = useState<Filter>('all')
 	const [q, setQ] = useState('')
 	const [picked, setPicked] = useState<string | undefined>(undefined)
@@ -65,7 +67,9 @@ export const AgentsPage = () => {
 			<button className='pb' data-testid='vader-shell-agents-new' onClick={() => { chat.openNewThread(); shellService.show('conversation', 'conversation') }}><Icon k='plus' small />New agent</button>
 		</div>
 
-		{data.tasks.length === 0 ? <div className='c' style={{ margin: 'auto', width: 360, gap: 10 }} data-testid='vader-shell-agents-empty'>
+		{runs.length > 0 ? <div className='scroll' style={{ flex: 'none', maxHeight: '52%', borderBottom: '1px solid var(--ln)' }}><ParallelRuns /></div> : null}
+
+		{data.tasks.length === 0 && runs.length === 0 ? <div className='c' style={{ margin: 'auto', width: 360, gap: 10 }} data-testid='vader-shell-agents-empty'>
 			<span className='t1' style={{ fontSize: 17, fontWeight: 600 }}>No agents are running</span>
 			<span className='t2' style={{ lineHeight: 1.55 }}>Tasks you start, and the ones you finished this week, are listed here with their cost and changes.</span>
 			<span className='r' style={{ gap: 8, marginTop: 6 }}><button className='pb' onClick={() => { chat.openNewThread(); shellService.show('conversation', 'conversation') }}>Start a task</button></span>

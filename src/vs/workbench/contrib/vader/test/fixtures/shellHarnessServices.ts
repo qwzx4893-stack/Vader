@@ -21,3 +21,4 @@ export const useFullChatThreadsStreamState = () => { useTick(); return w.__chat.
 export const useChatThreadsStreamState = (id: string) => { useTick(); return w.__chat.streamState[id] }
 export const useUsageTick = () => { useTick(); return 0 }
 export const useCommandBarState = () => { useTick(); return { stateOfURI: w.__cb.stateOfURI, sortedURIs: w.__cb.sortedURIs } }
+export const useOrchestrationRunsState = () => { useTick(); return w.__runs ?? [] }
