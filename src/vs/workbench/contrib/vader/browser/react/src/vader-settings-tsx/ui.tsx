@@ -9,6 +9,20 @@ import { NumberInput } from '../../../../common/settingsInput.js'
 // case, rows between hairlines, a switch that is a button (so it is reached by the keyboard and read by a screen reader), a two-way choice. Class names are
 // written as literals; the build prefixes them and shell.css styles them.
 
+/** a question with two answers, over the page: what will happen, and what stays (boards S10 and S11). Escape or a click outside is Cancel. */
+export const Ask = ({ title, text, yes, onYes, onNo, testId, danger }: { title: string, text: string, yes: string, onYes: () => void, onNo: () => void, testId: string, danger?: boolean }) =>
+	<div role='alertdialog' aria-modal='true' aria-label={title} data-testid={testId} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onNo() } }} onMouseDown={e => { if (e.target === e.currentTarget) onNo() }}
+		style={{ position: 'fixed', inset: 0, zIndex: 900, background: 'rgba(0,0,0,.5)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+		<div className='c' style={{ width: 400, maxWidth: 'calc(100vw - 32px)', padding: '20px 22px', gap: 10, background: 'var(--g2)', border: '1px solid var(--ln2)', borderRadius: 14, boxShadow: '0 16px 40px rgba(0,0,0,.55)' }}>
+			<span className='t1' style={{ fontWeight: 600, fontSize: 16 }} data-testid={`${testId}-title`}>{title}</span>
+			<span className='t2' style={{ lineHeight: 1.55 }} data-testid={`${testId}-text`}>{text}</span>
+			<span className='r' style={{ gap: 8, justifyContent: 'flex-end', paddingTop: 6 }}>
+				<button className='gb' data-testid={`${testId}-no`} autoFocus onClick={onNo}>Cancel</button>
+				<button className='pb' data-testid={`${testId}-yes`} style={danger ? { background: '#f06a6e', color: '#000' } : undefined} onClick={onYes}>{yes}</button>
+			</span>
+		</div>
+	</div>
+
 export const PageHead = ({ title, desc, right }: { title: string, desc?: React.ReactNode, right?: React.ReactNode }) => <div className='c' style={{ gap: 6, marginBottom: 22 }}>
 	<div className='r' style={{ gap: 12 }}><h1 className='ttl fl' style={{ margin: 0 }}>{title}</h1>{right}</div>
 	{desc ? <p className='t2' style={{ margin: 0, maxWidth: 520, lineHeight: 1.55 }}>{desc}</p> : null}

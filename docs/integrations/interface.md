@@ -65,6 +65,8 @@ The tasks an agent splits a job into (`IAgentOrchestrationService`, one copy of 
 Models (features, local servers, 45 cloud providers with live lists and Test connection), Model router, Connected agents, Permissions (mode, commands allowed in this project, the locked rules and the rules that ask, your own rules), Usage and cost (per model, per day, "estimate" or "billed by provider" for every number; `common/usageAccounting.ts` keeps a per-model ledger for 62 days), Saved agents, Skills (trust computed from live facts, with the reasons), MCP servers, Memory and instructions, Editor extensions, Editor, Privacy and network, Data and backup, About and updates.
 A number that cannot be used (`five`, `250%`) is refused in words and the text stays (`common/settingsInput.ts`).
 
+**Data and backup** (`common/backupModel.ts`): one file (`vader-backup-<day>.json`) with the chats, the saved agents, the rules the person wrote and the settings, without API keys and without the contents of projects. Restoring only **adds**: chats and agents that are already here are kept as they are, nothing is overwritten, and the question says how many will be added before it does anything. Deleting all chats says how many, that it cannot be undone and what stays. (Vader does not update itself, so the update download and restart cards of board S11 are not built; About and updates tells when a newer release exists.)
+
 ## How it is tested
 
 | Test | What it drives | Checks |

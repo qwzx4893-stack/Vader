@@ -9,7 +9,8 @@ import { redactSettingsForExport, mergeImportedSettings } from '../../../../comm
 import { providerNames } from '../../../../common/vaderSettingsTypes.js'
 import { transferEditorTypes } from '../../../extensionTransferTypes.js'
 import { EditorSwitchButton } from './EditorSwitch.js'
-import { Group, Line, PageHead, Note } from './ui.js'
+import { Ask, Group, Line, PageHead, Note } from './ui.js'
+import { Backup, BACKUP_TEXT, BACKUP_TITLE, backupFileName, BackupRule, buildBackup, deleteChatsWords, parseBackup, planRestore, RestorePlan, restoreWords } from '../../../../common/backupModel.js'
 
 // Data and backup (board R30): everything is stored on this computer. Chats and settings can be exported to a file and imported from one (an export leaves out API
 // keys and custom headers, so the file is safe to share), the theme and extensions can be brought over from another editor, and chats or keys can be cleared.
@@ -67,6 +68,45 @@ export const DataPage = () => {
 		}
 		reader.readAsText(file)
 	}
+	// a backup of what is Vader's own, in one file; restoring only adds (common/backupModel.ts)
+	const agentsService = accessor.get('IAgentsService')
+	const policy = accessor.get('IPolicyService')
+	const [dialog, setDialog] = useState<{ kind: 'backup' } | { kind: 'restore', backup: Backup, plan: RestorePlan, fileName: string } | { kind: 'delete' } | undefined>()
+	const backupFile = useRef<HTMLInputElement>(null)
+	const savedAgents = () => (agentsService.state?.agents ?? []) as readonly { name: string }[]
+	const customRules = () => policy.getAllRules().filter((r: { builtIn: boolean }) => !r.builtIn) as unknown as BackupRule[]
+	const saveBackup = () => {
+		const now = new Date()
+		const backup = buildBackup({ chats: chats.state.allThreads as never, agents: savedAgents() as never, rules: customRules(), settings: redactSettingsForExport(settings.state as any) }, now)
+		const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }))
+		const a = document.createElement('a'); a.href = url; a.download = backupFileName(now); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10_000)
+		setDialog(undefined)
+		setMessage({ kind: 'ok', text: `Saved ${backupFileName(now)}: ${threadCount} chat${threadCount === 1 ? '' : 's'}, ${savedAgents().length} saved agent${savedAgents().length === 1 ? '' : 's'}, your rules and settings, without keys` })
+	}
+	const chooseBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const file = e.target.files?.[0]
+		e.target.value = ''
+		if (!file) return
+		const reader = new FileReader()
+		reader.onload = () => {
+			const parsed = parseBackup(String(reader.result))
+			if (!parsed.ok) { setMessage({ kind: 'warn', text: `${file.name} was not restored. ${parsed.reason}` }); return }
+			const plan = planRestore(parsed.backup, { chatIds: new Set(Object.keys(chats.state.allThreads)), agentNames: new Set(savedAgents().map(a => a.name)), ruleDescriptions: new Set(customRules().map(r => r.description)) })
+			const words = restoreWords(plan, file.name)
+			if (words.nothing) { setMessage({ kind: 'ok', text: `${file.name}: ${words.text}` }); return }
+			setDialog({ kind: 'restore', backup: parsed.backup, plan, fileName: file.name })
+		}
+		reader.readAsText(file)
+	}
+	const restore = (backup: Backup, plan: RestorePlan) => {
+		const added: Record<string, unknown> = {}
+		for (const id of plan.addChatIds) added[id] = backup.chats[id]
+		if (plan.addChatIds.length > 0) chats.dangerousSetState({ ...chats.state, allThreads: { ...chats.state.allThreads, ...added } } as any)
+		for (const a of plan.addAgents) agentsService.createAgent(a as never, 'user')
+		for (const r of plan.addRules) policy.addCustomRule(r as never)
+		setDialog(undefined)
+		setMessage({ kind: 'ok', text: `Restored ${plan.addChatIds.length} chat${plan.addChatIds.length === 1 ? '' : 's'}, ${plan.addAgents.length} saved agent${plan.addAgents.length === 1 ? '' : 's'} and ${plan.addRules.length} rule${plan.addRules.length === 1 ? '' : 's'}. Nothing that was here was changed.` })
+	}
 	const removeKeys = () => {
 		for (const p of providerNames) { if (settings.state.settingsOfProvider[p]?.apiKey) void settings.setSettingOfProvider(p, 'apiKey' as any, '') }
 		setMessage({ kind: 'ok', text: 'Every saved key was removed from this computer' })
@@ -78,8 +118,14 @@ export const DataPage = () => {
 		<input ref={settingsFile} type='file' accept='.json' hidden data-testid='vader-data-settings-file' onChange={upload('settings')} />
 		{message ? <div style={{ marginBottom: 14 }}><Note kind={message.kind} testId='vader-data-message'>{message.text}</Note></div> : null}
 
+		<input ref={backupFile} type='file' accept='.json' hidden data-testid='vader-data-backup-file' onChange={chooseBackup} />
+		{dialog?.kind === 'backup' ? <Ask testId='vader-data-backup-ask' title={BACKUP_TITLE} text={BACKUP_TEXT} yes='Save file' onYes={saveBackup} onNo={() => setDialog(undefined)} /> : null}
+		{dialog?.kind === 'restore' ? <Ask testId='vader-data-restore-ask' title={restoreWords(dialog.plan, dialog.fileName).title} text={restoreWords(dialog.plan, dialog.fileName).text} yes='Restore' onYes={() => restore(dialog.backup, dialog.plan)} onNo={() => setDialog(undefined)} /> : null}
+		{dialog?.kind === 'delete' ? <Ask testId='vader-data-delete-ask' danger title={deleteChatsWords(threadCount).title} text={deleteChatsWords(threadCount).text} yes={threadCount === 1 ? 'Delete chat' : 'Delete all chats'} onYes={() => { chats.resetState(); setDialog(undefined); setMessage({ kind: 'ok', text: 'All chats were deleted' }) }} onNo={() => setDialog(undefined)} /> : null}
+
 		<Group title='Back up and restore' first>
-			<Line first title='Chats and agent tasks' detail={`${threadCount} chat${threadCount === 1 ? '' : 's'}, ${sizeLabel(chatBytes)}. Export to a file, or import from one.`} right={<span className='r' style={{ gap: 8 }}><button className='gb' data-testid='vader-data-export-chats' onClick={() => download('chats')}>Export</button><button className='gb' data-testid='vader-data-import-chats' onClick={() => chatsFile.current?.click()}>Import</button></span>} />
+			<Line first title='Everything of yours in one file' detail='Chats, saved agents, your rules and settings. Restoring only adds what is not here yet.' right={<span className='r' style={{ gap: 8 }}><button className='pb' data-testid='vader-data-backup' onClick={() => setDialog({ kind: 'backup' })}>Back up...</button><button className='gb' data-testid='vader-data-restore' onClick={() => backupFile.current?.click()}>Restore...</button></span>} />
+			<Line title='Chats and agent tasks' detail={`${threadCount} chat${threadCount === 1 ? '' : 's'}, ${sizeLabel(chatBytes)}. Export to a file, or import from one.`} right={<span className='r' style={{ gap: 8 }}><button className='gb' data-testid='vader-data-export-chats' onClick={() => download('chats')}>Export</button><button className='gb' data-testid='vader-data-import-chats' onClick={() => chatsFile.current?.click()}>Import</button></span>} />
 			<Line title='Settings' detail='Without keys, safe to share in a bug report' right={<span className='r' style={{ gap: 8 }}><button className='gb' data-testid='vader-data-export-settings' onClick={() => download('settings')}>Export</button><button className='gb' data-testid='vader-data-import-settings' onClick={() => settingsFile.current?.click()}>Import</button></span>} />
 		</Group>
 
@@ -89,7 +135,7 @@ export const DataPage = () => {
 		</Group>
 
 		<Group title='Clear'>
-			<Line first title='Delete all chats' detail='Saved agents, rules and settings stay.' right={<Confirm label='Delete chats...' confirmLabel='Delete all chats' testId='vader-data-delete-chats' danger onConfirm={() => { chats.resetState(); setMessage({ kind: 'ok', text: 'All chats were deleted' }) }} />} />
+			<Line first title='Delete all chats' detail='Saved agents, rules and settings stay.' right={<button className='gb' style={{ color: 'var(--delt)' }} data-testid='vader-data-delete-chats' disabled={threadCount === 0} onClick={() => setDialog({ kind: 'delete' })}>Delete chats...</button>} />
 			<Line title='Remove every saved key' detail='Erases the keys from this computer. The providers keep their own copies.' right={<Confirm label='Remove keys...' confirmLabel='Remove every key' testId='vader-data-remove-keys' danger onConfirm={removeKeys} />} />
 			<Line title='Reset settings' detail='Back to what a new install has. Chats stay.' right={<Confirm label='Reset settings...' confirmLabel='Reset settings' testId='vader-data-reset-settings' onConfirm={() => { settings.resetState(); setMessage({ kind: 'ok', text: 'Settings were reset' }) }} />} />
 		</Group>
