@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { ChatImage } from '../imageRules.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
 import { Event } from '../../../../../base/common/event.js';
 import { VerificationVerdict } from '../verification/verificationTypes.js';
@@ -77,7 +78,7 @@ export interface IAgentGatewayService {
 	getExecutionMetadata(threadId: string): AgentExecutionMetadata;
 
 	/** Start a new turn on a task: send a user message and stream the response. */
-	startTask(opts: { threadId: string, userMessage: string }): Promise<void>;
+	startTask(opts: { threadId: string, userMessage: string, images?: ChatImage[] }): Promise<void>;
 
 	/** Revise an earlier turn (editing a past user message) and re-run execution from there. */
 	reviseTask(opts: { threadId: string, userMessage: string, fromMessageIdx: number }): Promise<void>;

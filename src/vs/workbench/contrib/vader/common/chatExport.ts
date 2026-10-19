@@ -12,6 +12,7 @@ export type ExportMessage = {
 	readonly name?: unknown;
 	readonly type?: unknown;
 	readonly params?: unknown;
+	readonly images?: readonly { readonly name: string }[];
 };
 
 const FILE_TOOLS = new Set(['edit_file', 'rewrite_file', 'create_file_or_folder', 'delete_file_or_folder']);
@@ -46,6 +47,8 @@ export function chatToMarkdown(thread: { readonly messages: readonly ExportMessa
 	for (const m of thread.messages) {
 		if (m.role === 'user') {
 			out.push('', '## You', '', String(m.displayContent ?? '').trim());
+			// the images are named, never put in the file
+			if (m.images && m.images.length > 0) out.push('', m.images.map(i => `[image: ${i.name}]`).join(' '));
 			lastRole = 'user';
 		} else if (m.role === 'assistant') {
 			const text = String(m.displayContent ?? '').trim();

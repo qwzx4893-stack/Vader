@@ -6,7 +6,8 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ChatMessage, CompactedSummaryEntry } from '../common/chatThreadServiceTypes.js';
-import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
+import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities, modelSupportsVision } from '../common/modelCapabilities.js';
+import { ChatImage, giveImagesToMessages, imagePlaceholder, sentWithImages as imagesKeptIn } from '../common/imageRules.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IVaderSettingsService } from '../common/vaderSettingsService.js';
@@ -54,6 +55,8 @@ type SimpleLLMMessage = {
 } | {
 	role: 'user';
 	content: string;
+	/** images sent with this message; turned into the provider's own image parts at the end (common/imageRules.ts) */
+	images?: ChatImage[];
 } | {
 	role: 'assistant';
 	content: string;
@@ -63,6 +66,9 @@ type SimpleLLMMessage = {
 
 
 const TRIM_TO_LEN = 120
+
+/** how many of the latest messages keep their images in every request; older ones are named only */
+const MAX_MESSAGES_WITH_IMAGES = 3
 
 
 
@@ -202,7 +208,7 @@ export const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], su
 		}
 
 		if (currMsg.role === 'user') {
-			out.push({ role: 'user', content: currMsg.content })
+			out.push({ role: 'user', content: currMsg.content, ...(currMsg.images?.length ? { images: currMsg.images } : {}) } as AnthropicLLMChatMessage)
 			assistantOfThisRun = undefined
 			resultsOfThisRun = undefined
 			continue
@@ -265,10 +271,16 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 			if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user')
 				llmChatMessages.push({
 					role: 'user',
-					content: c.content
-				})
-			else
+					content: c.content,
+					...(c.role === 'user' && c.images?.length ? { images: c.images } : {}),
+				} as AnthropicOrOpenAILLMMessage)
+			else {
 				llmChatMessages[llmChatMessages.length - 1].content += '\n\n' + c.content
+				if (c.role === 'user' && c.images?.length) {
+					const prev = llmChatMessages[llmChatMessages.length - 1] as { images?: ChatImage[] }
+					prev.images = [...(prev.images ?? []), ...c.images]
+				}
+			}
 		}
 	}
 	return llmChatMessages
@@ -286,7 +298,10 @@ const prepareOpenAIOrAnthropicMessages = ({
 	supportsAnthropicReasoning,
 	contextWindow,
 	reservedOutputTokenSpace,
+	imageStyle,
 }: {
+	/** how images are given to this provider (common/imageRules.ts) */
+	imageStyle: 'anthropic' | 'openai',
 	messages: SimpleLLMMessage[],
 	systemMessage: string,
 	aiInstructions: string,
@@ -464,6 +479,10 @@ const prepareOpenAIOrAnthropicMessages = ({
 		}
 	}
 
+	// ================ images ================
+	// a user message that carries images becomes the parts the provider takes: the images, then the text
+	giveImagesToMessages(llmMessages as unknown as { role: string, content: unknown, images?: ChatImage[] }[], imageStyle)
+
 	return {
 		messages: llmMessages,
 		separateSystemMessage: separateSystemMessageStr,
@@ -505,6 +524,9 @@ const prepareGeminiMessages = (messages: AnthropicLLMChatMessage[]) => {
 					if (c.type === 'text') {
 						return { text: c.text }
 					}
+					else if (c.type === 'image') {
+						return { inlineData: { mimeType: c.source.media_type, data: c.source.data } }
+					}
 					else if (c.type === 'tool_result') {
 						if (!latestToolName) return null
 						return { functionResponse: { id: c.tool_use_id, name: latestToolName, response: { output: c.content } } }
@@ -538,13 +560,13 @@ const prepareMessages = (params: {
 
 	// if need to convert to gemini style of messaes, do that (treat as anthropic style, then convert to gemini style)
 	if (params.providerName === 'gemini' || specialFormat === 'gemini-style') {
-		const res = prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat === 'gemini-style' ? 'anthropic-style' : undefined })
+		const res = prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat === 'gemini-style' ? 'anthropic-style' : undefined, imageStyle: 'anthropic' })
 		const messages = res.messages as AnthropicLLMChatMessage[]
 		const messages2 = prepareGeminiMessages(messages)
 		return { messages: messages2, separateSystemMessage: res.separateSystemMessage }
 	}
 
-	return prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat })
+	return prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat, imageStyle: params.providerName === 'anthropic' ? 'anthropic' : 'openai' })
 }
 
 
@@ -703,10 +725,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 	// --- LLM Chat messages ---
 
-	private _chatMessagesToSimpleMessages(chatMessages: ChatMessage[]): SimpleLLMMessage[] {
+	private _chatMessagesToSimpleMessages(chatMessages: ChatMessage[], modelSeesImages = false): SimpleLLMMessage[] {
 		const simpleLLMMessages: SimpleLLMMessage[] = []
+		// images go to a model that can read them, and only the latest few stay in every request (an older one is named, not repeated)
+		const imageCarriers = chatMessages.map((m, i) => m.role === 'user' && m.images && m.images.length > 0 ? i : -1).filter(i => i >= 0)
+		const sentWithImages = imagesKeptIn(imageCarriers, modelSeesImages, MAX_MESSAGES_WITH_IMAGES)
+		let msgIdx = -1
 
 		for (const m of chatMessages) {
+			msgIdx++
 			if (m.role === 'checkpoint') continue
 			if (m.role === 'interrupted_streaming_tool') continue
 			if (m.role === 'assistant') {
@@ -727,9 +754,11 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				})
 			}
 			else if (m.role === 'user') {
+				const named = m.images && m.images.length > 0 && !sentWithImages.has(msgIdx)
 				simpleLLMMessages.push({
 					role: m.role,
-					content: m.content,
+					content: named ? `${m.content}\n${m.images!.map(imagePlaceholder).join(' ')}` : m.content,
+					...(sentWithImages.has(msgIdx) ? { images: m.images } : {}),
 				})
 			}
 			else if (m.role === 'compacted_summary') {
@@ -805,7 +834,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		const aiInstructions = this._getCombinedAIInstructions(agentId ?? undefined);
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
-		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)
+		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages, modelSupportsVision(providerName, modelName))
 
 		const { messages, separateSystemMessage } = prepareMessages({
 			messages: llmMessages,

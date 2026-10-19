@@ -5,7 +5,7 @@
 // What the @ menu offers besides files (board R06, "Context, after typing @"): the output of the terminal, the page open in the browser, the changes in git. Each is
 // read when it is chosen and kept in the message box as one line with Show and Remove, and is sent in full with the message. Pure, so it is tested without the editor.
 
-export type ContextSourceId = 'terminal' | 'browser' | 'git';
+export type ContextSourceId = 'terminal' | 'browser' | 'git' | 'image';
 
 export type ContextSourceInfo = {
 	readonly id: ContextSourceId;
@@ -15,11 +15,13 @@ export type ContextSourceInfo = {
 };
 
 /** a source is offered only when it has something to give */
-export function offeredSources(a: { terminalLines: number, browserUrl: string | undefined, gitFiles: number }): ContextSourceInfo[] {
+export function offeredSources(a: { terminalLines: number, browserUrl: string | undefined, gitFiles: number, modelSeesImages?: boolean }): ContextSourceInfo[] {
 	const out: ContextSourceInfo[] = [];
 	if (a.terminalLines > 0) out.push({ id: 'terminal', name: 'Terminal output', detail: 'last command' });
 	if (a.browserUrl) out.push({ id: 'browser', name: 'Browser page', detail: hostAndPort(a.browserUrl) });
 	if (a.gitFiles > 0) out.push({ id: 'git', name: 'Git changes', detail: `${a.gitFiles} file${a.gitFiles === 1 ? '' : 's'}` });
+	// an image on the clipboard cannot be looked at without asking, so it is always offered; it says whether the chosen model reads images
+	if (a.modelSeesImages !== undefined) out.push({ id: 'image', name: 'Image from the clipboard', detail: a.modelSeesImages ? 'for models that see' : 'this model cannot read images' });
 	return out;
 }
 
@@ -52,7 +54,7 @@ export function clipContext(text: string, kind: ContextSourceId, max = MAX_CONTE
 
 /** the heading a chip and the message use for each source */
 export const sourceTitle = (kind: ContextSourceId, detail?: string): string =>
-	kind === 'terminal' ? 'Terminal output' : kind === 'browser' ? `Browser page${detail ? ` (${detail})` : ''}` : 'Git changes';
+	kind === 'terminal' ? 'Terminal output' : kind === 'browser' ? `Browser page${detail ? ` (${detail})` : ''}` : kind === 'image' ? 'Image from the clipboard' : 'Git changes';
 
 /** how an attachment goes into the message: its heading, then the text in a block */
 export const attachmentBlock = (title: string | undefined, text: string): string => `${title ? title + ':\n' : ''}\`\`\`\n${text}\n\`\`\``;

@@ -22,7 +22,7 @@ import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
 import { WarningBox } from '../vader-settings-tsx/WarningBox.js';
-import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
+import { getModelCapabilities, getIsReasoningEnabledState, modelSupportsVision } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
@@ -48,6 +48,9 @@ import { FoldedOutput } from './FoldedOutput.js';
 import { explainBrowserError } from '../../../../common/browserErrorWords.js';
 import { explainEditError, rewriteMessage, TRY_AGAIN_MESSAGE } from '../../../../common/editErrorWords.js';
 import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
+import { ChatImage, checkImages, dataUrlOf, looksLikeImage, MAX_IMAGES } from '../../../../common/imageRules.js';
+import { chatImageOfFile, imagesOnClipboard } from './imageFiles.js';
+import { ImageChips, ImagesBlockedCard } from './ImageChips.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
@@ -1308,6 +1311,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	if (mode === 'display') {
 		chatbubbleContents = <>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
+			{chatMessage.images && chatMessage.images.length > 0 ? <div className='flex flex-wrap gap-1.5 pb-1.5' data-testid='vader-user-images'>{chatMessage.images.map(i => <img key={i.id} src={dataUrlOf(i)} alt={i.name} title={i.name} className='h-16 max-w-[120px] rounded-md object-cover border border-vader-border-3' />)}</div> : null}
 			<span className='px-0.5' data-testid='vader-user-text'>{chatMessage.displayContent}</span>
 		</>
 	}
@@ -3245,18 +3249,26 @@ export const SidebarChat = () => {
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 	// long pasted texts are folded to one line each above the message box, and sent in full with the message
 	const [pastes, setPastes] = useState<Paste[]>([])
+	// images attached to the message: they go to the model that was chosen, and only to it (common/imageRules.ts)
+	const [images, setImages] = useState<ChatImage[]>([])
 	// a key found in the message that was about to be sent: it is not sent (board S02)
 	const [secretHits, setSecretHits] = useState<SecretHit[] | null>(null)
 
 	// a coding agent chosen for the chat brings its own model, so no model has to be configured
 	const noModel = !settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState)
-	const isDisabled = (instructionsAreEmpty && pastes.length === 0) || noModel
+	const isDisabled = (instructionsAreEmpty && pastes.length === 0 && images.length === 0) || noModel
+
+	// a message with images needs a model that reads them; a connected agent's own model is not known here, so it is not offered images
+	const chatModel = settingsState.modelSelectionOfFeature?.Chat
+	const modelSeesImages = !settingsState.globalSettings.externalAgentId && !!chatModel && modelSupportsVision(chatModel.providerName, chatModel.modelName)
+	const imagesBlocked = images.length > 0 && !modelSeesImages
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
+		if (imagesBlocked && !_forceSubmit) return // the card above the box says why, and what to do
 
 		const threadId = chatThreadsService.state.currentThreadId
 
@@ -3275,22 +3287,24 @@ export const SidebarChat = () => {
 		setSecretHits(null)
 
 		if (isRunning) {
-			// a run is going: the message waits for it to end (Send now stops the run and sends it at once)
+			// a run is going: the message waits for it to end (Send now stops the run and sends it at once); images do not wait in the queue
+			if (images.length > 0 && !_forceSubmit) { setSlashNote({ text: 'A message with images cannot wait for the run to end. Send it when the run is done, or stop the run first.', busy: false }); return }
 			if (!chatThreadsService.queueMessage(threadId, userMessage)) return
 		} else {
 			try {
-				await agentGatewayService.startTask({ userMessage, threadId })
+				await agentGatewayService.startTask({ userMessage, threadId, ...(images.length > 0 && !_forceSubmit ? { images } : {}) })
 			} catch (e) {
 				console.error('Error while sending message in chat:', e)
 			}
 		}
 
 		setPastes([])
+		setImages([])
 		setSelections([]) // clear staging
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, pastes, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, pastes, images, imagesBlocked, textAreaRef, textAreaFnsRef, setSelections, settingsState])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3497,9 +3511,31 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	}, [runSlash, textAreaFnsRef, textAreaRef])
 
 	// files dropped on the box: text files are read and kept beside the message, like a long paste; what is not taken is said, with the reason
-	const onDropFiles = useCallback(async (files: File[]) => {
-		const verdict = checkDrop(files.map(f => ({ name: f.name, size: f.size, type: f.type })), pastes.length)
+	// images dropped, pasted or taken from the clipboard: opened, made smaller when large, and kept beside the message
+	const collectImages = useCallback(async (files: File[]) => {
+		const verdict = checkImages(files.map(f => ({ name: f.name, size: f.size, type: f.type })), images.length)
 		const refused = [...verdict.refused]
+		const taken: ChatImage[] = []
+		for (const i of verdict.accepted) {
+			try { taken.push(await chatImageOfFile(files[i], Math.random().toString(36).slice(2))) }
+			catch (e) { refused.push({ name: files[i].name, why: e instanceof Error ? e.message : 'it could not be read' }) }
+		}
+		if (taken.length > 0) setImages(list => [...list, ...taken].slice(0, MAX_IMAGES))
+		return { taken, refused }
+	}, [images.length])
+	const addImageFiles = useCallback(async (files: File[]) => {
+		const { taken, refused } = await collectImages(files)
+		const note = dropNote({ accepted: taken.map(t => ({ name: t.name, size: t.bytes })), refused })
+		setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [collectImages])
+
+	// files dropped on the box: images are kept as images, text files are read and kept beside the message like a long paste; what is not taken is said, with the reason
+	const onDropFiles = useCallback(async (all: File[]) => {
+		const pictures = all.filter(f => looksLikeImage({ name: f.name, type: f.type }))
+		const files = all.filter(f => !pictures.includes(f))
+		const fromImages = pictures.length > 0 ? await collectImages(pictures) : { taken: [] as ChatImage[], refused: [] as { name: string, why: string }[] }
+		const verdict = checkDrop(files.map(f => ({ name: f.name, size: f.size, type: f.type })), pastes.length)
+		const refused = [...fromImages.refused, ...verdict.refused]
 		const taken: Paste[] = []
 		for (const info of verdict.accepted) {
 			const file = files.find(f => f.name === info.name && f.size === info.size)
@@ -3511,9 +3547,9 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 			} catch { refused.push({ name: info.name, why: 'it could not be read' }) }
 		}
 		if (taken.length > 0) setPastes(ps => [...ps, ...taken])
-		const note = dropNote({ accepted: taken.map(t => ({ name: t.title ?? '', size: 0 })), refused })
+		const note = dropNote({ accepted: [...fromImages.taken.map(t => ({ name: t.name, size: t.bytes })), ...taken.map(t => ({ name: t.title ?? '', size: 0 }))], refused })
 		setSlashNote(note ? { text: note, busy: false } : undefined)
-	}, [pastes.length])
+	}, [pastes.length, collectImages])
 
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
@@ -3559,14 +3595,16 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		onDropFiles={(files) => { void onDropFiles(files) }}
 		onAddContext={() => { const t = textAreaRef.current; if (t) { t.focus(); try { document.execCommand('insertText', false, '@') } catch { /* the @ menu opens when typing it */ } } }}
 	>
+		<ImageChips images={images} onRemove={id => setImages(list => list.filter(i => i.id !== id))} />
 		<PastedChips pastes={pastes} onRemove={id => setPastes(ps => ps.filter(p => p.id !== id))} />
 		<VaderInputBox2
 			enableAtToMention
 			className={`min-h-[81px] px-0.5 py-0.5 bg-transparent`}
 			testId='vader-input'
 			placeholder={isRunning ? 'Add a message for after this run' : PLACEHOLDER_OF_MODE[settingsState.globalSettings.chatMode] ?? PLACEHOLDER_OF_MODE.agent}
+			onPasteFiles={(files) => { const pics = files.filter(f => looksLikeImage({ name: f.name, type: f.type })); if (pics.length === 0) return false; void addImageFiles(pics); return true }}
 			extraSources={() => peekContextSources(accessor)}
-			onPickExtra={(id: ContextSourceId) => { void readContextSource(accessor, id).then(r => { if (!r) { setSlashNote({ text: 'There is nothing to attach from there right now.', busy: false }); return } setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text: r.text, title: r.title }]); if (r.cut) setSlashNote({ text: `${r.title} was long, so only part of it is attached.`, busy: false }) }) }}
+			onPickExtra={(id: ContextSourceId) => { if (id === 'image') { void imagesOnClipboard().then(files => { if (files.length === 0) { setSlashNote({ text: 'There is no image on the clipboard.', busy: false }); return } void addImageFiles(files) }); return } void readContextSource(accessor, id).then(r => { if (!r) { setSlashNote({ text: 'There is nothing to attach from there right now.', busy: false }); return } setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text: r.text, title: r.title }]); if (r.cut) setSlashNote({ text: `${r.title} was long, so only part of it is attached.`, busy: false }) }) }}
 			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
@@ -3610,6 +3648,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 
 	const aboveComposer = <div className='flex flex-col gap-2'>
 		<ErrorBoundary><NoModelCard /></ErrorBoundary>
+		{imagesBlocked ? <ErrorBoundary><ImagesBlockedCard modelName={settingsState.globalSettings.externalAgentId ? 'The connected agent' : (chatModel?.modelName ?? 'This model')} count={images.length} onChoose={() => { (document.querySelector('[data-testid="vader-picker-button"]') as HTMLElement | null)?.click() }} onRemove={() => setImages([])} /></ErrorBoundary> : null}
 		{!isLandingPage ? <ErrorBoundary><OfflineBanner /></ErrorBoundary> : null}
 		{slashNote ? <ErrorBoundary><SlashNote text={slashNote.text} busy={slashNote.busy} onDismiss={() => setSlashNote(undefined)} /></ErrorBoundary> : null}
 		{slashList && slashList.length > 0 ? <ErrorBoundary><SlashMenu commands={slashList} index={Math.min(slashIdx, slashList.length - 1)} onPick={pickSlash} onHover={setSlashIdx} /></ErrorBoundary> : null}

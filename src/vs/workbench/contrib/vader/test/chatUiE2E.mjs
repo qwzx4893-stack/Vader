@@ -527,6 +527,60 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== images with a message (boards S03 and R06)
+{
+	const { page, errors } = await newPage();
+	const makeImage = (name, w, h) => page.evaluate(({ name, w, h }) => new Promise((resolve) => { const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d'); x.fillStyle = '#c33'; x.fillRect(0, 0, w, h); x.fillStyle = '#fff'; x.fillRect(5, 5, 10, 10); c.toBlob(async (b) => { const buf = new Uint8Array(await b.arrayBuffer()); window.__imgs = window.__imgs || {}; window.__imgs[name] = Array.from(buf); resolve(buf.length); }, 'image/png'); }), { name, w, h });
+	const dropImage = (name, type = 'image/png', event = 'drop') => page.evaluate(({ name, type, event }) => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(window.__imgs[name])], name, { type })); document.querySelector('textarea').dispatchEvent(new DragEvent(event, { dataTransfer: dt, bubbles: true, cancelable: true })); }, { name, type, event });
+	await makeImage('error.png', 40, 30);
+	await dropImage('error.png');
+	await page.waitForSelector(TID('vader-image-chip'));
+	check('an image dropped on the box is kept beside the message as a small picture with its name and size', (await page.locator(TID('vader-image-chip')).innerText()).includes('error.png') && (await page.locator(TID('vader-image-thumb')).getAttribute('src')).startsWith('data:image/png;base64,'));
+	check('and the box can send with only an image in it', !(await page.locator(TID('vader-send')).isDisabled()));
+	await page.waitForTimeout(260);
+	await shot(page, '26-image-chip');
+	await page.locator(INPUT).fill('Why does this fail?');
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(() => window.__log.some(x => x.startsWith('images:')));
+	check('the image goes with the message, to the model that was chosen', (await log(page)).includes('images:1:image/png:error.png') && (await page.locator(TID('vader-image-chip')).count()) === 0);
+	await dropImage('error.png', 'image/png');
+	await page.waitForSelector(TID('vader-image-chip'));
+	await page.locator(TID('vader-image-remove')).click();
+	check('an image can be taken off before it is sent', (await page.locator(TID('vader-image-chip')).count()) === 0);
+	await page.locator(INPUT).click();
+	await page.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File([new Uint8Array(window.__imgs['error.png'])], 'clip.png', { type: 'image/png' })); document.querySelector('textarea').dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true })); });
+	await page.waitForSelector(TID('vader-image-chip'));
+	check('an image pasted into the box is taken the same way', (await page.locator(TID('vader-image-chip')).innerText()).includes('clip.png'));
+	await page.locator(TID('vader-image-remove')).click();
+	await page.evaluate(() => { const dt = new DataTransfer(); dt.items.add(new File(['<svg/>'], 'logo.svg', { type: 'image/svg+xml' })); document.querySelector('textarea').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); });
+	await page.waitForSelector(TID('vader-slash-note'));
+	check('an image of a kind that is not sent is refused with the reason', (await page.locator(TID('vader-slash-note')).innerText()).includes('logo.svg: only PNG, JPEG, WebP and GIF images can be sent') && (await page.locator(TID('vader-image-chip')).count()) === 0);
+	await page.locator(INPUT).click();
+	await page.keyboard.type('@');
+	await page.waitForSelector(TID('vader-mention-also'));
+	check('the @ menu offers an image from the clipboard, for models that see', (await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).allInnerTexts()).some(t => flat(t) === 'Image from the clipboard for models that see'));
+	await page.keyboard.press('Escape');
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(() => { window.__settings = { ...window.__settings, modelSelectionOfFeature: { ...window.__settings.modelSelectionOfFeature, Chat: { providerName: 'ollama', modelName: 'qwen3-coder' } } }; window.__setThread({}); });
+	await page.evaluate(() => new Promise((resolve) => { const c = document.createElement('canvas'); c.width = 20; c.height = 20; c.getContext('2d').fillRect(0, 0, 20, 20); c.toBlob(async (b) => { const buf = new Uint8Array(await b.arrayBuffer()); const dt = new DataTransfer(); dt.items.add(new File([buf], 'error.png', { type: 'image/png' })); document.querySelector('textarea').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); resolve(0); }, 'image/png'); }));
+	await page.waitForSelector(TID('vader-images-blocked'));
+	check('a model that cannot read images says so by name, before anything is sent', (await page.locator(TID('vader-images-blocked-title')).innerText()) === 'qwen3-coder cannot read images.');
+	await page.waitForTimeout(260);
+	await shot(page, '27-image-blocked');
+	await page.locator(INPUT).fill('Why does this fail?');
+	await page.keyboard.press('Enter');
+	await page.waitForTimeout(200);
+	check('and nothing is sent while it is so', !(await log(page)).some(x => x.startsWith('task:') || x.startsWith('images:')));
+	await page.locator(TID('vader-images-remove-all')).click();
+	check('Remove the image puts the card away', (await page.locator(TID('vader-images-blocked')).count()) === 0 && (await page.locator(TID('vader-image-chip')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== files dropped on the box (board S03)
 {
 	const { page, errors } = await newPage();
@@ -547,7 +601,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('a text file is kept beside the message with its name and its size', (await page.locator(TID('vader-paste-chip')).count()) === 1 && (await page.locator(TID('vader-paste-chip')).innerText()).includes('server.log') && (await page.locator(TID('vader-paste-label')).innerText()) === '17 B');
 	check('the zone goes away on the drop', (await page.locator(TID('vader-drop-zone')).count()) === 0);
 	await page.waitForSelector(TID('vader-slash-note'));
-	check('an image is not taken, and the note says why', (await page.locator(TID('vader-slash-note')).innerText()).includes('1 attached. Not attached') && (await page.locator(TID('vader-slash-note')).innerText()).includes('error.png: images are not sent yet, only text files.'));
+	check('an image that cannot be opened is not taken, and the note says why', (await page.locator(TID('vader-slash-note')).innerText()).includes('1 attached. Not attached') && (await page.locator(TID('vader-slash-note')).innerText()).includes('error.png: it could not be opened as an image.'));
 	await page.locator(INPUT).fill('why does it fail?');
 	await page.keyboard.press('Enter');
 	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:')));
@@ -569,9 +623,9 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.waitForSelector(TID('vader-mention-menu'));
 	await page.waitForSelector(TID('vader-mention-also'));
 	const kinds = await page.locator(TID('vader-mention-option')).evaluateAll(els => els.map(e => e.getAttribute('data-kind')));
-	check('after @ the menu offers files and folders to look into, and under Also the other sources', kinds.join() === 'category,category,Extra,Extra,Extra', kinds.join());
+	check('after @ the menu offers files and folders to look into, and under Also the other sources', kinds.join() === 'category,category,Extra,Extra,Extra,Extra', kinds.join());
 	const extra = (await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).allInnerTexts()).map(flat);
-	check('each other source says what is in it', extra.join(' | ') === 'Terminal output last command | Browser page localhost:5173 | Git changes 3 files', extra.join(' | '));
+	check('each other source says what is in it', extra.join(' | ') === 'Terminal output last command | Browser page localhost:5173 | Git changes 3 files | Image from the clipboard for models that see', extra.join(' | '));
 	await page.waitForTimeout(260);
 	await shot(page, '19-mention-menu');
 	await page.keyboard.type('app');
@@ -609,7 +663,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.keyboard.type('@');
 	await page.waitForSelector(TID('vader-mention-menu'));
 	await page.waitForTimeout(200);
-	check('a source with nothing in it is not offered', (await page.locator(TID('vader-mention-also')).count()) === 0);
+	check('a source with nothing in it is not offered (only the clipboard image, which is looked at when chosen)', (await page.locator(`${TID('vader-mention-option')}[data-kind="Extra"]`).count()) === 1);
 	await page.close();
 }
 

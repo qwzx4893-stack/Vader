@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { modelSupportsVision } from '../../../../common/modelCapabilities.js'
 import { useAccessor } from '../util/services.js'
 import { clipContext, ContextSourceId, ContextSourceInfo, hostAndPort, offeredSources, sourceTitle } from '../../../../common/contextSources.js'
 
@@ -32,11 +33,14 @@ export async function peekContextSources(accessor: Accessor): Promise<ContextSou
 		activePage(accessor),
 		accessor.get('IVaderReviewService').changesForContext().catch(() => ({ files: 0, text: '' })),
 	])
-	return offeredSources({ terminalLines: text ? text.split(/\r?\n/).filter(l => l.trim()).length : 0, browserUrl: page?.url, gitFiles: changes.files })
+	const sel = accessor.get('IVaderSettingsService').state.modelSelectionOfFeature?.Chat
+	const sees = !accessor.get('IVaderSettingsService').state.globalSettings.externalAgentId && !!sel && modelSupportsVision(sel.providerName, sel.modelName)
+	return offeredSources({ terminalLines: text ? text.split(/\r?\n/).filter(l => l.trim()).length : 0, browserUrl: page?.url, gitFiles: changes.files, modelSeesImages: sees })
 }
 
 /** what a source holds now, cut to a size the model can be given */
 export async function readContextSource(accessor: Accessor, id: ContextSourceId): Promise<{ title: string, text: string, cut: boolean } | undefined> {
+	if (id === 'image') return undefined // an image is not text: the message box takes it from the clipboard itself
 	if (id === 'terminal') {
 		const text = await terminalText(accessor)
 		if (!text) return undefined

@@ -363,8 +363,10 @@ type InputBox2Props = {
 	/** one of those was chosen */
 	onPickExtra?: (id: ContextSourceId) => void;
 	testId?: string;
+	/** files are being pasted (a copied image): return true to take them */
+	onPasteFiles?: (files: File[]) => boolean;
 }
-export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText, extraSources, onPickExtra, testId }, ref) {
+export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(function X({ initValue, placeholder, multiline, enableAtToMention, fnsRef, className, onKeyDown, onFocus, onBlur, onChangeText, onPasteText, extraSources, onPickExtra, testId, onPasteFiles }, ref) {
 
 
 	// mirrors whatever is in ref
@@ -764,7 +766,7 @@ export const VaderInputBox2 = forwardRef<HTMLTextAreaElement, InputBox2Props>(fu
 
 			onFocus={onFocus}
 			onBlur={onBlur}
-			onPaste={onPasteText ? (e: React.ClipboardEvent<HTMLTextAreaElement>) => { if (onPasteText(e.clipboardData.getData('text/plain'))) e.preventDefault() } : undefined}
+			onPaste={(onPasteText || onPasteFiles) ? (e: React.ClipboardEvent<HTMLTextAreaElement>) => { const files = Array.from(e.clipboardData.files ?? []); if (onPasteFiles && files.length > 0 && onPasteFiles(files)) { e.preventDefault(); return } if (onPasteText && onPasteText(e.clipboardData.getData('text/plain'))) e.preventDefault() } : undefined}
 
 			disabled={!isEnabled}
 			data-testid={testId}

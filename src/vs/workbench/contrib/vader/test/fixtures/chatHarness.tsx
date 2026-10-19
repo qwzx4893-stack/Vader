@@ -67,7 +67,7 @@ const chat: any = new Proxy({}, {
 })
 w.__chatMethods = {}
 const gateway: any = {
-	async startTask(a: any) { log(`task:${a.userMessage}`); if (w.__onTask) await w.__onTask(a) }, async cancelTask() { log('cancel'); if (w.__onCancel) await w.__onCancel() }, dismissError() { log('dismiss-error') },
+	async startTask(a: any) { log(`task:${a.userMessage}`); if (a.images?.length) log(`images:${a.images.length}:${a.images[0].mimeType}:${a.images[0].name}`); if (w.__onTask) await w.__onTask(a) }, async cancelTask() { log('cancel'); if (w.__onCancel) await w.__onCancel() }, dismissError() { log('dismiss-error') },
 	async reviseTask(a: any) { log(`revise:${a.fromMessageIdx}:${a.userMessage}`) },
 	approveToolRequest(_t: string, o?: any) { log(`approve:${o?.rememberForProject ? 'project' : 'once'}`) }, rejectToolRequest() { log('reject-tool') },
 }

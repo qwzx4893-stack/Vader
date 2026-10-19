@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { ChatImage } from '../common/imageRules.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { Event } from '../../../../base/common/event.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
@@ -54,7 +55,7 @@ class AgentGatewayService extends Disposable implements IAgentGatewayService {
 		};
 	}
 
-	async startTask(opts: { threadId: string, userMessage: string }): Promise<void> {
+	async startTask(opts: { threadId: string, userMessage: string, images?: ChatImage[] }): Promise<void> {
 		await this._chatThreadService.addUserMessageAndStreamResponse(opts);
 	}
 

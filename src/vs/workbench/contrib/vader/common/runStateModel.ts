@@ -5,6 +5,7 @@
 // What the chat says about a run, as rules without the editor (the interface boards S01 and S03): how the run ended and what it was doing when the person stopped it,
 // the messages that wait for their turn, how full the conversation is against the room the model has, and how long a pasted text may be before it is folded.
 
+import { imageChars } from './imageRules.js';
 import { CHARS_PER_TOKEN, inputBudgetChars, PRUNE_START_FRACTION, SUMMARISE_FRACTION, systemOverheadChars } from './contextBudget.js';
 
 // ---- how a run ended
@@ -108,9 +109,10 @@ export function contextOverflow(messageChars: number, contextWindow: number, res
 /** what fills the window, in tokens, by what it is made of (board R06, "Context meter"): the system prompt and tool list, what the tools returned, what was said, and any summary */
 export type ContextBreakdown = { readonly rows: readonly { readonly label: string, readonly tokens: number }[], readonly usedTokens: number, readonly windowTokens: number, readonly share: number };
 
-export function contextBreakdown(messages: readonly { readonly role: string, readonly displayContent?: unknown, readonly content?: unknown, readonly summary?: unknown, readonly outputPruned?: unknown }[], contextWindow: number, reservedOutputTokenSpace?: number | null): ContextBreakdown {
-	let tool = 0, said = 0, summary = 0;
+export function contextBreakdown(messages: readonly { readonly role: string, readonly displayContent?: unknown, readonly content?: unknown, readonly summary?: unknown, readonly outputPruned?: unknown, readonly images?: readonly { readonly width: number, readonly height: number }[] }[], contextWindow: number, reservedOutputTokenSpace?: number | null): ContextBreakdown {
+	let tool = 0, said = 0, summary = 0, pictures = 0;
 	for (const m of messages) {
+		if (m.role === 'user') pictures += (m.images ?? []).reduce((k, i) => k + imageChars(i.width, i.height), 0);
 		if (m.role === 'user' || m.role === 'assistant') said += typeof m.displayContent === 'string' ? m.displayContent.length : 0;
 		else if (m.role === 'tool') tool += m.outputPruned ? 0 : typeof m.content === 'string' ? m.content.length : 0;
 		else if (m.role === 'compacted_summary') summary += typeof m.summary === 'string' ? m.summary.length : 0;
@@ -120,18 +122,20 @@ export function contextBreakdown(messages: readonly { readonly role: string, rea
 		{ label: 'System and tools', tokens: toTokens(systemOverheadChars(contextWindow)) },
 		{ label: 'Files and tool output', tokens: toTokens(tool) },
 		{ label: 'Conversation', tokens: toTokens(said) },
+		...(pictures > 0 ? [{ label: 'Images', tokens: toTokens(pictures) }] : []),
 		...(summary > 0 ? [{ label: 'Summary of earlier steps', tokens: toTokens(summary) }] : []),
 	];
-	return { rows, usedTokens: rows.reduce((n, r) => n + r.tokens, 0), windowTokens: contextWindow, share: contextShare(tool + said + summary, contextWindow, reservedOutputTokenSpace) };
+	return { rows, usedTokens: rows.reduce((n, r) => n + r.tokens, 0), windowTokens: contextWindow, share: contextShare(tool + said + summary + pictures, contextWindow, reservedOutputTokenSpace) };
 }
 
 /** the line under the breakdown: what the app really does with the room */
 export const contextMeterNote = (): string => `Old tool output is dropped from ${Math.round(PRUNE_START_FRACTION * 100)}%. Earlier steps are summarised from ${Math.round(SUMMARISE_FRACTION * 100)}%.`;
 
 /** the characters of a conversation as the model will be asked about it: what was said, what the tools returned (a result that was dropped counts as nothing), and a summary */
-export function messageChars(messages: readonly { readonly role: string, readonly displayContent?: unknown, readonly content?: unknown, readonly summary?: unknown, readonly outputPruned?: unknown }[]): number {
+export function messageChars(messages: readonly { readonly role: string, readonly displayContent?: unknown, readonly content?: unknown, readonly summary?: unknown, readonly outputPruned?: unknown, readonly images?: readonly { readonly width: number, readonly height: number }[] }[]): number {
 	let n = 0;
 	for (const m of messages) {
+		if (m.role === 'user') n += (m.images ?? []).reduce((k, i) => k + imageChars(i.width, i.height), 0);
 		if (m.role === 'user' || m.role === 'assistant') n += typeof m.displayContent === 'string' ? m.displayContent.length : 0;
 		else if (m.role === 'tool') n += m.outputPruned ? 0 : typeof m.content === 'string' ? m.content.length : 0;
 		else if (m.role === 'compacted_summary') n += typeof m.summary === 'string' ? m.summary.length : 0;
