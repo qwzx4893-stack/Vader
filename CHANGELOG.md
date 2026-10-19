@@ -23,6 +23,7 @@
 - **Skills are used by task** (board S13): a skill is put in front of the model only when the message names it (`@pdf`) or fits what it says it is for; the others are listed by name and purpose. The message says "Used the skill pdf" and why, and that is exactly what was sent.
 - **Compare two checkpoints side by side** (board S13): a file of the comparison opens as the two versions in two columns, changed lines marked, unchanged stretches folded.
 - **A tool changed** (board S07): a tool an MCP server adds after you set it up is not given to the agent until you answer (Keep it off, Allow it, Remove the server), in the chat or in Settings, MCP servers; a call that names it is refused meanwhile.
+- **A command waiting for input** (board S14): a command that goes quiet on a password or a yes/no question is shown as that, with what it asked and that the agent will not type it; the agent is told not to guess. At most six background terminals.
 
 ## Unreleased - The interface of the design canvas, as the app: the Vader window, a first run in three steps, Settings in 14 pages, a chat that says what the run is doing
 

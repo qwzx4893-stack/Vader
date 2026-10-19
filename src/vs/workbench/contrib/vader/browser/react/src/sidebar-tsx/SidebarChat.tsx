@@ -54,6 +54,7 @@ import { ImageChips, ImagesBlockedCard } from './ImageChips.js';
 import { SKILLS_FOOTNOTE } from '../../../../common/skillMatch.js'
 import { TaskCopyArea } from './TaskCopyCards.js';
 import { McpToolChangedArea } from './McpToolChanged.js';
+import { TerminalWaitingCard } from './TerminalWaitingCard.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
@@ -2090,8 +2091,12 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		</ToolChildrenWrapper>
 	}
 
+	// a command that went quiet on a question: what it asked, and that the agent does not answer it (board S14)
+	const waitingFor = toolMessage.type === 'success' ? (toolMessage.result as { resolveReason?: { type: string, waitingFor?: { prompt: string, secret: boolean } } }).resolveReason?.waitingFor : undefined
+
 	return <>
 		<ToolHeaderWrapper {...componentParams} isOpen={(type === 'run_command' && toolMessage.type === 'running_now') || toolMessage.type === 'tool_request' ? true : undefined} />
+		{waitingFor ? <TerminalWaitingCard command={String((params as { command?: unknown } | undefined)?.command ?? '')} prompt={waitingFor} persistent={type === 'run_persistent_command'} onOpen={() => { void commandService.executeCommand('workbench.action.terminal.focus') }} /> : null}
 	</>
 }
 

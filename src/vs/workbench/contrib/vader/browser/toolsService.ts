@@ -17,6 +17,7 @@ import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVaderCommandBarService } from './vaderCommandBarServiceTypes.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
+import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
@@ -1133,6 +1134,9 @@ export class ToolsService implements IToolsService {
 					return `${result_}\n(exit code ${resolveReason.exitCode})`
 				}
 				// normal command
+				if (resolveReason.type === 'timeout' && resolveReason.waitingFor) {
+					return `${result_}\n${waitingForModel(resolveReason.waitingFor)}`
+				}
 				if (resolveReason.type === 'timeout') {
 					return `${result_}\nTerminal command ran, but was automatically killed by Vader after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
 				}
@@ -1147,6 +1151,9 @@ export class ToolsService implements IToolsService {
 					return `${result_}\n(exit code ${resolveReason.exitCode})`
 				}
 				// bg command
+				if (resolveReason.type === 'timeout' && resolveReason.waitingFor) {
+					return `${result_}\nTerminal command is still running in terminal ${persistentTerminalId}, and it is waiting for input. ${waitingForModel(resolveReason.waitingFor)}`
+				}
 				if (resolveReason.type === 'timeout') {
 					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
 				}

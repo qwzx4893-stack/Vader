@@ -751,6 +751,26 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== a command waiting for input (board S14)
+{
+	const { page, errors } = await newPage();
+	const cmd = (command, result, resolveReason) => ({ role: 'tool', type: 'success', name: 'run_command', params: { command, cwd: null, terminalId: 't9' }, rawParams: {}, id: 'w1', result: { result, resolveReason }, content: result, mcpServerName: undefined });
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.t] }), { u: userMsg('push it'), t: cmd('git push origin main', "$ git push origin main\nPassword for 'https://me@github.com':", { type: 'timeout', waitingFor: { prompt: "Password for 'https://me@github.com'", secret: true } }) });
+	await page.waitForSelector(TID('vader-terminal-waiting'));
+	check('a command that stopped on a question says so, with what it asked and that the agent will not type it', (await page.locator(TID('vader-terminal-waiting-title')).innerText()) === 'A command is waiting for input' && flat(await page.locator(TID('vader-terminal-waiting-body')).innerText()) === "git push is asking: Password for 'https://me@github.com'. The agent will not type it.");
+	check('and that Vader stopped it after it went quiet', (await page.locator(TID('vader-terminal-waiting')).innerText()).includes('Vader stopped the command after it went quiet.'));
+	await page.waitForTimeout(260);
+	await shot(page, '39-terminal-waiting');
+	await page.locator(TID('vader-terminal-waiting-open')).click();
+	check('Open the terminal opens it', (await log(page)).some(x => x.includes('terminal')), (await log(page)).join(','));
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.t] }), { u: userMsg('run'), t: cmd('npm run build', 'built', { type: 'done', exitCode: 0 }) });
+	check('a command that finished has no such card', (await page.locator(TID('vader-terminal-waiting')).count()) === 0);
+	await page.evaluate((a) => window.__setThread({ messages: [a.u, a.t] }), { u: userMsg('run'), t: cmd('sleep 100', '', { type: 'timeout' }) });
+	check('nor one that only went quiet without asking anything', (await page.locator(TID('vader-terminal-waiting')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== files dropped on the box (board S03)
 {
 	const { page, errors } = await newPage();

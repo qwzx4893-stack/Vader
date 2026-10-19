@@ -5,7 +5,8 @@ import { RawToolParamsObj } from './sendLLMMessageTypes.js';
 
 
 
-export type TerminalResolveReason = { type: 'timeout' } | { type: 'done', exitCode: number }
+/** `waitingFor`: the command had stopped on a question (a password, [y/N]) when Vader gave up on it (common/terminalInput.ts) */
+export type TerminalResolveReason = { type: 'timeout', waitingFor?: { prompt: string, secret: boolean } } | { type: 'done', exitCode: number }
 
 export type LintErrorItem = { code: string, message: string, startLineNumber: number, endLineNumber: number }
 
