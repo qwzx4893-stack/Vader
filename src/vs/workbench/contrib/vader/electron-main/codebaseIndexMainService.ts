@@ -3,14 +3,21 @@
  *--------------------------------------------------------------------------------------*/
 
 import * as path from 'path';
+import * as os from 'os';
+import { FileAccess } from '../../../../base/common/network.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
 import { CodebaseIndexer } from './codebaseIndexer.js';
+import { createLocalEmbedder } from './localEmbedder.js';
 import { ICodebaseIndexMainService, IndexState, SearchOutcome } from '../common/codebaseIndex/codebaseIndexTypes.js';
 
 // One index per open project, in the app's data folder. The index of a project is made when the project is opened (or the first time the agent searches it), kept current while it
 // is open, and saved to disk so that the next start is a look at what changed and not a read of everything.
+
+// whether the computer is on battery power, read from Electron by name so that this file does not depend on its types; until it is loaded the answer is "no"
+let onBattery: () => boolean = () => false;
+void (async () => { try { const name = 'electron'; const e = await import(name) as { powerMonitor?: { isOnBatteryPower(): boolean } }; if (e.powerMonitor) onBattery = () => { try { return e.powerMonitor!.isOnBatteryPower() } catch { return false } } } catch { /* not running in Electron */ } })();
 
 const MAX_OPEN_INDEXES = 6; // projects held in memory at once; the least recently used is closed
 
@@ -29,7 +36,10 @@ export class CodebaseIndexMainService extends Disposable implements ICodebaseInd
 		const key = this._key(root);
 		let ix = this._indexers.get(key);
 		if (ix) { this._indexers.delete(key); this._indexers.set(key, ix); return ix; } // most recently used last
-		ix = new CodebaseIndexer(key, path.join(this._environment.userDataPath, 'vader-index'));
+		ix = new CodebaseIndexer(key, path.join(this._environment.userDataPath, 'vader-index'),
+			// search by meaning: the small model that ships with the app, in a worker thread; none if it is not there (localEmbedder.ts), and not run while on battery power
+			() => createLocalEmbedder({ resourcesPath: (process as unknown as { resourcesPath?: string }).resourcesPath ?? '', workerPath: FileAccess.asFileUri('vs/workbench/contrib/vader/electron-main/embedWorker.js').fsPath, cores: os.cpus().length }),
+			{ hold: () => onBattery() });
 		ix.onDidChange = state => this._onDidChangeState.fire({ root: key, state });
 		this._indexers.set(key, ix);
 		while (this._indexers.size > MAX_OPEN_INDEXES) {

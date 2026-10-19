@@ -37,3 +37,28 @@ A rules file (`.vaderrules`, `AGENTS.md`, `CLAUDE.md`) at the project root is in
 (`packages/api/AGENTS.md`) is added to the result when the agent reads a file under that folder (`common/instructions/nestedRules.ts`):
 the nearest three, framed as text that may have been written by someone else, cut at 3000 characters each, and not repeated for ten minutes.
 The ten-minute rule approximates "once per task", because the tool does not know which chat is asking.
+
+## Search by meaning
+
+The word index finds code by its words. A small embedding model finds it by what it means ("where do we stop too many requests" finds the rate limiter even
+when no word matches). The two rankings are joined by reciprocal rank fusion (`common/codebaseIndex/semantic.ts`, `electron-main/semanticLayer.ts`).
+
+**Model:** Snowflake arctic-embed-xs (Apache 2.0), 22 million parameters, 384-number vectors, about 23 MB in 8-bit form, run with transformers.js in a worker
+thread (`electron-main/embedWorker.ts`, `localEmbedder.ts`). It is part of the app, never fetched from the network.
+
+**How it stays light** (all of it tested without a model, `test/semanticE2E.mjs`):
+- A piece of code is embedded once per content; the vector is kept under the hash of its text. Rebuilding the index, or the same code in two files, costs nothing.
+- The text sent to the model is cut to 1,200 characters, so no piece costs more than another.
+- Work is done in 400 ms slices with a duty cycle of 30%: after each batch the queue rests more than twice as long as the batch took. One or two threads, in a worker.
+- Files changed lately are embedded first. Nothing is embedded while the computer is on battery power.
+- At search time only the best word matches that have no vector yet (at most 24, 2.5 s) are embedded on the spot, so the first search is good before the background work is done.
+- Vectors are bytes (one per number), at most 60,000 of them (about 23 MB), saved next to the index.
+- A model that is missing, fails, or is slow (2.5 s) leaves the word results exactly as they were.
+
+**Honest limits:**
+- The model and transformers.js are not in the repository yet. `localEmbedder.ts` looks for `<app resources>/models/snowflake-arctic-embed-xs/` (`onnx/model_quantized.onnx`,
+  `tokenizer.json`, `config.json`); without them the Settings page says "Search by meaning is not available in this install" and search stays on words.
+  Shipping it needs the `@huggingface/transformers` dependency, the model files copied into the app resources, and `embedWorker.js` built next to `localEmbedder.js`.
+- The real model has not been run in a real app. What is tested: the rules (35 checks), the indexer with a stand-in model (17 checks), the worker protocol with a stand-in worker (15 checks).
+- arctic-embed-xs is an English text model, not a code model; for code it works because the file path and symbol name are in what it reads, and the word ranking is always part of the answer.
+- CPU use and indexing time on a real project are estimates from the design (30% duty cycle), not measurements.

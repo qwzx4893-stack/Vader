@@ -29,5 +29,9 @@ export function indexStatusWords(state: IndexState | undefined, opts: { on: bool
 		return { title: p ? `Indexing: ${num(p.done)} of ${num(p.total)} files changed since last time` : `Indexing: ${num(state.files)} files so far`, detail: 'Search works meanwhile with what is there.', tone: 'busy' };
 	}
 	const extra = state.truncated ? ' Only the first 20,000 files are indexed; list the rest in .vaderignore to choose which.' : '';
-	return { title: `${num(state.files)} file${state.files === 1 ? '' : 's'} in ${num(state.chunks)} pieces`, detail: `Updated ${agoWords(state.updatedAt, opts.now)}. Kept on this computer, never sent anywhere.${extra}`, tone: 'ok' };
+	const m = state.meaning;
+	const meaning = !m || m.on === undefined ? '' : m.on === false ? ' Search by meaning is not available in this install, so search matches words only.'
+		: m.waiting > 0 ? ` Search by meaning: ${num(m.ready)} of ${num(m.ready + m.waiting)} pieces are ready; the rest are prepared in the background, a little at a time, and not while on battery.`
+			: ` Search by meaning is ready for all ${num(m.ready)} pieces.`;
+	return { title: `${num(state.files)} file${state.files === 1 ? '' : 's'} in ${num(state.chunks)} pieces`, detail: `Updated ${agoWords(state.updatedAt, opts.now)}. Kept on this computer, never sent anywhere.${meaning}${extra}`, tone: 'ok' };
 }

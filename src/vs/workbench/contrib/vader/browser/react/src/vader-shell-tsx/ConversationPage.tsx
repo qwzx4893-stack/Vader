@@ -74,27 +74,27 @@ export const ConversationPage = () => {
 		const a = document.createElement('a'); a.href = url; a.download = exportFileName(cur.title); document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 10_000)
 		setAsking(undefined)
 	}
-	const title = (cls: string) => renaming
+	const title = () => renaming
 		? <input className='fld' autoFocus data-testid='vader-shell-rename-input' aria-label='Chat name' placeholder='Chat name' value={draft} style={{ width: 320, height: 28 }} onChange={e => setDraft(e.target.value)} onBlur={saveRename}
 			onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveRename() } if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setRenaming(false) } }} />
-		: <span className={cls} style={{ fontWeight: 600, maxWidth: 420 }} data-testid='vader-shell-conversation-title' title='Double-click to rename' onDoubleClick={cur ? startRename : undefined}>{cur?.title ?? 'New chat'}</span>
+		: <span className='t1 tr' style={{ fontWeight: 600, maxWidth: 420, minWidth: 40 }} data-testid='vader-shell-conversation-title' title='Double-click to rename' onDoubleClick={cur ? startRename : undefined}>{cur?.title ?? 'New chat'}</span>
 
 	return <div className='c fl' style={{ minHeight: 0 }} data-testid='vader-shell-conversation' data-tab={shell.tab}>
 		<div className='r' style={{ height: 44, padding: '0 20px', gap: 12, flex: 'none', borderBottom: '1px solid var(--ln)' }}>
 			{isTask || !cur ? <>
-				{title('t1 tr')}
-				{model ? <span className='t3 tr'>{model}</span> : null}
+				{title()}
+				{model ? <span className='t3 tr narrow-hide'>{model}</span> : null}
 			</> : <>
-				<span className='r t3' style={{ gap: 8 }}><Icon k='folder' /><span>{data.currentProjectName}</span></span>
-				<span className='t3'>/</span>
-				{title('t1 tr')}
+				<span className='r t3 narrow-hide' style={{ gap: 8 }}><Icon k='folder' /><span>{data.currentProjectName}</span></span>
+				<span className='t3 narrow-hide'>/</span>
+				{title()}
 			</>}
 			<span className='fl' />
 			{isTask ? <div className='r' style={{ gap: 2 }} role='tablist'>
 				{TABS.map(t => <button key={t.id} role='tab' aria-selected={shell.tab === t.id} data-testid={`vader-shell-tab-${t.id}`} className={shell.tab === t.id ? 'tx t1' : 'tx'} style={shell.tab === t.id ? { background: 'var(--g3)' } : undefined} onClick={() => shellService.setTab(t.id)}>{t.label}</button>)}
-			</div> : cur && cur.messageCount > 0 ? <span className='hint'>Chat, no changes to files</span> : null}
+			</div> : cur && cur.messageCount > 0 ? <span className='hint tr narrow-hide'>Chat, no changes to files</span> : null}
 			{!isTask && cur && cur.messageCount > 0 && mode !== 'agent' ? <button className='tx t1' data-testid='vader-shell-turn-into-task' onClick={() => settings.setGlobalSetting('chatMode', 'agent')}>Turn into agent task</button> : null}
-			<button className='tx' data-testid='vader-shell-open-editor' onClick={() => shellService.openEditor()}>Open in editor</button>
+			<button className='tx' data-testid='vader-shell-open-editor' onClick={() => shellService.openEditor()}><span className='narrow-hide'>Open in editor</span><span className='narrow-only'>Editor</span></button>
 			{cur && (cur.status === 'running' || cur.status === 'paused') ? <button className='tx' data-testid='vader-shell-pause' onClick={() => pause ? chat.resumeRun(cur.id) : chat.pauseRun(cur.id)}>{pause ? 'Resume' : 'Pause'}</button> : null}
 			{cur && cur.messageCount > 0 ? <span style={{ position: 'relative' }}>
 				<button className='ic' aria-label='More about this chat' aria-expanded={menu} data-testid='vader-shell-more' onClick={() => setMenu(m => !m)}><Icon k='more' /></button>

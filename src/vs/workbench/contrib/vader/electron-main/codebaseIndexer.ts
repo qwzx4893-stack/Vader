@@ -13,6 +13,7 @@ import { createIgnore, DEFAULT_IGNORE_LINES, IgnoreMatcher, isBinaryPath, isSecr
 import { queryTerms } from '../common/codebaseIndex/tokenize.js';
 import { clipSnippet, formatResults, selectResults } from '../common/codebaseIndex/searchResults.js';
 import type { IndexState, IndexStatus, SearchOutcome } from '../common/codebaseIndex/codebaseIndexTypes.js';
+import { EmbedderFactory, SemanticLayer, SemanticOptions } from './semanticLayer.js';
 
 // The index of one project, kept on this computer. It lists the project's files (git says which exist and are not ignored; without git, the folder is walked with the usual
 // exclusions), hashes each one (a file whose size and time are as they were is not read again), compares the tree of hashes with the one saved last time to find exactly the files
@@ -54,7 +55,21 @@ export class CodebaseIndexer {
 	/** told whenever the state changes */
 	onDidChange: ((s: IndexState) => void) | undefined
 
-	constructor(readonly root: string, private readonly storeDir: string) { }
+	private _semantic: SemanticLayer | undefined
+	private _meaningTimer: ReturnType<typeof setTimeout> | undefined
+	private _backfilling = false
+
+	/** `embedder`: the model for search by meaning, when there is one (semanticLayer.ts); without it the index is words only */
+	constructor(readonly root: string, private readonly storeDir: string, embedder?: EmbedderFactory, semanticOptions?: SemanticOptions) {
+		if (embedder) {
+			this._semantic = new SemanticLayer(path.join(storeDir, `vectors-${sha256(path.resolve(root).toLowerCase()).slice(0, 16)}.json`), embedder, semanticOptions)
+			this._semantic.onDidChange = () => {
+				if (this._meaningTimer || this._disposed) return
+				this._meaningTimer = setTimeout(() => { this._meaningTimer = undefined; if (!this._disposed && this._semantic) this._set({ meaning: this._semantic.state }) }, 1000)
+				;(this._meaningTimer as unknown as { unref?: () => void }).unref?.()
+			}
+		}
+	}
 
 	get state(): IndexState { return this._state }
 	private _set(patch: Partial<IndexState>): void { this._state = { ...this._state, ...patch }; this.onDidChange?.(this._state) }
@@ -66,6 +81,7 @@ export class CodebaseIndexer {
 	private async _load(): Promise<void> {
 		if (this._loaded) return
 		this._loaded = true
+		await this._semantic?.load()
 		try {
 			const snap = JSON.parse(await fs.promises.readFile(this._snapshotPath, 'utf8')) as Snapshot
 			if (snap.v !== 1 || path.resolve(snap.root).toLowerCase() !== path.resolve(this.root).toLowerCase()) return
@@ -96,6 +112,7 @@ export class CodebaseIndexer {
 	/** forgets the saved index and builds it again from nothing */
 	async rebuild(): Promise<void> {
 		this._index = new Bm25Index(); this._stats = new Map(); this._tree = undefined
+		this._semantic?.reset()
 		try { await fs.promises.rm(this._snapshotPath, { force: true }) } catch { /* not there */ }
 		await this.sync(true)
 	}
@@ -158,9 +175,11 @@ export class CodebaseIndexer {
 
 	private async _indexFile(rel: string, st: fs.Stats): Promise<void> {
 		const text = await this._readText(rel, st.size)
-		if (text === undefined) { this._index.removeFile(rel); this._stats.set(rel, { hash: sha256(`${st.size}:${st.mtimeMs}`), size: st.size, mtimeMs: st.mtimeMs }); return }
+		if (text === undefined) { this._index.removeFile(rel); this._semantic?.onFileRemoved(rel); this._stats.set(rel, { hash: sha256(`${st.size}:${st.mtimeMs}`), size: st.size, mtimeMs: st.mtimeMs }); return }
 		this._stats.set(rel, { hash: sha256(text), size: st.size, mtimeMs: st.mtimeMs })
-		this._index.setFile(rel, chunkFile(rel, text))
+		const chunks = chunkFile(rel, text)
+		this._index.setFile(rel, chunks)
+		this._semantic?.onFile(rel, text, chunks, st.mtimeMs, st.size)
 	}
 
 	// ---- keeping it up to date
@@ -193,7 +212,7 @@ export class CodebaseIndexer {
 			}
 			const gone = [...this._stats.keys()].filter(p => !seen.has(p))
 			let done = 0
-			for (const g of gone) { this._index.removeFile(g); this._stats.delete(g) }
+			for (const g of gone) { this._index.removeFile(g); this._semantic?.onFileRemoved(g); this._stats.delete(g) }
 			for (const { rel, st } of toRead) {
 				if (this._disposed) return
 				await this._indexFile(rel, st)
@@ -205,10 +224,27 @@ export class CodebaseIndexer {
 			const delta = diffMerkle(before, this._tree)
 			this._lastSync = Date.now()
 			this._set({ status: 'ready', files: this._index.fileCount, chunks: this._index.chunkCount, rootHash: this._tree.hash, updatedAt: Date.now(), truncated, progress: undefined })
-			if (delta.added.length + delta.modified.length + delta.deleted.length > 0 || force) this._schedulePersist()
+				if (delta.added.length + delta.modified.length + delta.deleted.length > 0 || force) this._schedulePersist()
+				void this._backfillSemantic()
 		} catch (e) {
 			this._set({ status: 'error', message: e instanceof Error ? e.message : String(e), progress: undefined })
 		}
+	}
+
+	/** files that are in the index but whose pieces the meaning layer has not noted (an index read from disk): read them again, one at a time, without hurrying */
+	private async _backfillSemantic(): Promise<void> {
+		const sem = this._semantic
+		if (!sem || this._backfilling) return
+		this._backfilling = true
+		try {
+			for (const [rel, st] of [...this._stats]) {
+				if (this._disposed) return
+				if (sem.knows(rel) || !this._index.hasFile(rel)) continue
+				const text = await this._readText(rel, st.size)
+				if (text !== undefined) sem.onFile(rel, text, chunkFile(rel, text), st.mtimeMs, st.size)
+				await new Promise<void>(r => setImmediate(r)) // let the editor have the process between files
+			}
+		} finally { this._backfilling = false }
 	}
 
 	/** a few files changed (what the watcher saw): only those are looked at */
@@ -222,7 +258,7 @@ export class CodebaseIndexer {
 			if (!r || matcher.ignores(r) || isBinaryPath(r) || isSecretLikePath(r)) continue
 			let st: fs.Stats | undefined
 			try { st = await fs.promises.stat(path.join(this.root, r)) } catch { st = undefined }
-			if (!st) { if (this._stats.has(r)) { this._index.removeFile(r); this._stats.delete(r); changed = true } continue }
+			if (!st) { if (this._stats.has(r)) { this._index.removeFile(r); this._semantic?.onFileRemoved(r); this._stats.delete(r); changed = true } continue }
 			if (st.isDirectory()) { changed = true; this._lastSync = 0; continue } // a folder appeared or moved: the next search looks at the whole project
 			if (!st.isFile()) continue
 			const old = this._stats.get(r)
@@ -270,7 +306,8 @@ export class CodebaseIndexer {
 		const { terms, whole } = queryTerms(query)
 		const dirs = (opts.directories ?? []).map(d => posix(path.isAbsolute(d) ? path.relative(this.root, d) : d).replace(/^\.\/?|\/+$/g, '')).filter(d => d !== '' && !d.startsWith('..'))
 		const inFile = dirs.length ? (f: string) => dirs.some(d => f === d || f.startsWith(d + '/')) : undefined
-		const hits = this._index.search(terms, { boost: whole, inFile, limit: 80 })
+		let hits = this._index.search(terms, { boost: whole, inFile, limit: 80 })
+		if (this._semantic) { const ranked = await this._semantic.rerank(query, hits); hits = inFile ? ranked.filter(h => inFile(h.chunk.file)) : ranked }
 		const found = selectResults(hits, { limit: opts.limit ?? 8, perFile: 2 })
 		const withText = []
 		const cache = new Map<string, string[]>()
@@ -299,5 +336,7 @@ export class CodebaseIndexer {
 		if (this._persistTimer) { clearTimeout(this._persistTimer); this._disposed = false; await this._persist(); this._disposed = true }
 		try { this._watcher?.close() } catch { /* closed */ }
 		this._watcher = undefined
+		if (this._meaningTimer) clearTimeout(this._meaningTimer)
+		await this._semantic?.dispose()
 	}
 }

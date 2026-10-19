@@ -32,7 +32,7 @@ await esbuild.build({
 fs.writeFileSync(path.join(tmp, 'index.html'), `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>
 :root{--vscode-input-background:#1c1d1f;--vscode-badge-background:#4d4d4d;--vscode-sideBar-background:#18191a;--vscode-editor-background:#141516;--vscode-editor-foreground:#cccccc;--vscode-input-foreground:#cccccc;--vscode-input-placeholderForeground:#8b8d90}
 html,body{margin:0;background:#0b0b0c;color:#e6e6e6;font:13px 'Segoe UI',system-ui,sans-serif}
-.vader-scope{--vader-bg-1:#19191c;--vader-bg-1-alt:#202024;--vader-bg-2:#121214;--vader-bg-2-alt:#121214;--vader-bg-2-hover:#202024;--vader-bg-3:#0b0b0c;--vader-fg-0:#ffffff;--vader-fg-1:#ededee;--vader-fg-2:#b0b0b5;--vader-fg-3:#8a8a91;--vader-fg-4:#6f6f76;--vader-border-1:rgba(255,255,255,.22);--vader-border-2:rgba(255,255,255,.14);--vader-border-3:rgba(255,255,255,.075);--vader-border-4:rgba(255,255,255,.075)}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>`);
+.vader-scope{--vader-bg-1:#19191c;--vader-bg-1-alt:#202024;--vader-bg-2:#121214;--vader-bg-2-alt:#121214;--vader-bg-2-hover:#202024;--vader-bg-3:#0b0b0c;--vader-fg-0:#ffffff;--vader-fg-1:#ededee;--vader-fg-2:#b0b0b5;--vader-fg-3:#9a9aa1;--vader-fg-4:#878791;--vader-border-1:rgba(255,255,255,.22);--vader-border-2:rgba(255,255,255,.14);--vader-border-3:rgba(255,255,255,.075);--vader-border-4:rgba(255,255,255,.075)}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>`);
 
 const chromePath = (() => {
 	if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
