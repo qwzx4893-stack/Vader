@@ -378,6 +378,29 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.close();
 }
 
+// ===================================================================== the context meter (board R06)
+{
+	const { page, errors } = await newPage();
+	await page.evaluate((a) => { window.__setThread({ messages: [a.u, a.a, a.t] }); }, { u: userMsg('Read the server'), a: asstMsg('Reading.'), t: { role: 'tool', type: 'success', name: 'read_file', params: { uri: { fsPath: 'C:/work/big.ts', path: '/work/big.ts', scheme: 'file' }, startLine: null, endLine: null, pageNumber: 1 }, result: { fileContents: 'x', totalFileLen: 60000, hasNextPage: false }, content: 'x'.repeat(60000), id: 'm1', rawParams: {}, mcpServerName: undefined } });
+	await page.waitForSelector(TID('vader-context-meter'));
+	check('a click on the ring opens what the window is made of', (await page.locator(TID('vader-context-panel')).count()) === 0);
+	await page.locator(TID('vader-context-meter')).click();
+	await page.waitForSelector(TID('vader-context-panel'));
+	check('it says how much of the window is used', /^\d+% of 100k$/i.test(flat(await page.locator(TID('vader-context-panel-title')).innerText())), flat(await page.locator(TID('vader-context-panel-title')).innerText()));
+	const rows = flat(await page.locator(TID('vader-context-rows')).innerText());
+	check('with the parts that fill it, each with its size', rows.includes('System and tools') && rows.includes('Files and tool output') && rows.includes('Conversation'), rows);
+	check('and the real thresholds under them', (await page.locator(TID('vader-context-panel')).innerText()).includes('Old tool output is dropped from 50%. Earlier steps are summarised from 70%.'));
+	await page.waitForTimeout(260);
+	await shot(page, '15-context-panel');
+	await page.locator(TID('vader-context-compact')).click();
+	await page.waitForSelector(TID('vader-context-panel-result'));
+	check('Compact now asks the chat to summarise, and says so', (await log(page)).includes('compact') && (await page.locator(TID('vader-context-panel-result')).innerText()).includes('summarised'));
+	await page.keyboard.press('Escape');
+	check('Escape puts the panel away', (await page.locator(TID('vader-context-panel')).count()) === 0);
+	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== reading size and the box
 {
 	const { page } = await newPage();
@@ -388,6 +411,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('the text sits on the message box itself, not on a darker patch', sizes.ta === 'rgba(0, 0, 0, 0)', sizes.ta);
 	await page.locator(TID('vader-thinking')).click();
 	check('Thinking is one chip, and opens a small panel with the control', (await page.locator(TID('vader-thinking-panel')).count()) === 1 && (await page.locator(TID('vader-thinking-panel')).innerText()).includes('Thinking'));
+	await page.waitForTimeout(260);
 	await shot(page, '12-thinking-panel');
 	await page.keyboard.press('Escape');
 	check('Escape puts the panel away', (await page.locator(TID('vader-thinking-panel')).count()) === 0);

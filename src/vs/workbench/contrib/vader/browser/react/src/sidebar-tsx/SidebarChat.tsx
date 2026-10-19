@@ -39,7 +39,7 @@ import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAccounting.js';
 import { parseTaskList } from '../../../../common/taskList.js';
 import { projectNameOf } from '../../../../common/threadProjects.js';
-import { contextShare, messageChars, shouldFoldPaste } from '../../../../common/runStateModel.js';
+import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
 import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, StoppedCard } from './RunStateCards.js';
@@ -360,10 +360,24 @@ const PermissionDropdown = ({ className }: { className: string }) => {
 	/>
 }
 
-/** how much of the model's window this conversation uses, as a ring and a percentage (board R06, "Context meter") */
+/** how much of the model's window this conversation uses, as a ring and a percentage; a click opens what it is made of, and Compact now (board R06, "Context meter") */
 const ContextMeter = () => {
+	const accessor = useAccessor()
+	const chat = accessor.get('IChatThreadService')
 	const settingsState = useSettingsState()
 	const threadsState = useChatThreadsState()
+	const [open, setOpen] = useState(false)
+	const [busy, setBusy] = useState(false)
+	const [result, setResult] = useState<string | undefined>()
+	const ref = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away)
+		document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
 	const sel = settingsState.modelSelectionOfFeature?.Chat
 	if (!sel) return null
 	const thread = threadsState.allThreads[threadsState.currentThreadId]
@@ -372,15 +386,43 @@ const ContextMeter = () => {
 	const windowTokens = caps.contextWindow
 	if (!windowTokens) return null
 	// the share of the room a request may use (the window less what is kept for the answer), as the banner and the real thresholds measure it
-	const share = contextShare(messageChars(thread.messages as never), windowTokens, caps.reservedOutputTokenSpace)
-	const tokens = Math.round(share * windowTokens)
-	const pct = Math.min(100, Math.round(100 * share))
+	const bd = contextBreakdown(thread.messages as never, windowTokens, caps.reservedOutputTokenSpace)
+	const tokens = Math.round(bd.share * windowTokens)
+	const pct = Math.min(100, Math.round(100 * bd.share))
 	const r = 6.5, c = 2 * Math.PI * r
 	const color = pct >= 90 ? '#f06a6e' : pct >= 70 ? '#e2a93f' : '#8a8a91'
-	return <span className='flex items-center gap-1.5 text-xs text-vader-fg-3' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter'>
-		<svg width='16' height='16' viewBox='0 0 16 16' aria-hidden='true'><circle cx='8' cy='8' r={r} fill='none' stroke='rgba(255,255,255,.14)' strokeWidth='1.8' /><circle cx='8' cy='8' r={r} fill='none' stroke={color} strokeWidth='1.8' strokeLinecap='round' strokeDasharray={`${c * pct / 100} ${c}`} transform='rotate(-90 8 8)' /></svg>
-		{pct}%
-	</span>
+	const compact = async () => {
+		setBusy(true); setResult(undefined)
+		try {
+			const res = await chat.compactThreadNow(thread.id)
+			setResult(res === 'done' ? 'The older messages are summarised.' : res === 'nothing' ? 'There is too little to summarise yet.' : 'The model did not answer, so nothing was summarised.')
+		} finally { setBusy(false) }
+	}
+	const widest = Math.max(1, ...bd.rows.map(x => x.tokens))
+	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
+		<button type='button' aria-expanded={open} aria-haspopup='dialog' className='flex items-center gap-1.5 text-xs text-vader-fg-3 hover:text-vader-fg-1 transition-colors duration-150' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter' onClick={() => setOpen(o => !o)}>
+			<svg width='16' height='16' viewBox='0 0 16 16' aria-hidden='true'><circle cx='8' cy='8' r={r} fill='none' stroke='rgba(255,255,255,.14)' strokeWidth='1.8' /><circle cx='8' cy='8' r={r} fill='none' stroke={color} strokeWidth='1.8' strokeLinecap='round' strokeDasharray={`${c * pct / 100} ${c}`} transform='rotate(-90 8 8)' /></svg>
+			{pct}%
+		</button>
+		{open ? <div role='dialog' aria-label='Context' data-testid='vader-context-panel' className='motion-safe:animate-card-in absolute bottom-full right-0 mb-2 z-50 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 shadow-lg flex flex-col gap-2' style={{ width: 300 }}>
+			<div className='flex items-baseline gap-2'>
+				<span className='font-semibold text-vader-fg-1 text-[13px]' data-testid='vader-context-panel-title'>{pct}% of {formatTokens(windowTokens)}</span>
+				<span className='flex-1' />
+				<button type='button' data-testid='vader-context-compact' disabled={busy} className='text-vader-fg-2 hover:text-vader-fg-1 text-[13px] disabled:opacity-50' onClick={() => { void compact() }}>{busy ? 'Summarising...' : 'Compact now'}</button>
+			</div>
+			<div className='h-1 rounded-full bg-vader-border-3 overflow-hidden flex'>
+				{bd.rows.map((row, k) => <div key={row.label} title={row.label} style={{ width: `${Math.min(100, 100 * row.tokens / windowTokens)}%`, background: ['#8a8a91', '#5b8def', '#b0b0b5', '#e2a93f'][k % 4] }} />)}
+			</div>
+			<div className='flex flex-col gap-1 pt-1' data-testid='vader-context-rows'>
+				{bd.rows.map(row => <div key={row.label} className='flex items-center gap-2 text-[13px] text-vader-fg-1'>
+					<span className='truncate'>{row.label}</span><span className='flex-1' />
+					<span className='text-vader-fg-2 tabular-nums' style={{ opacity: 0.6 + 0.4 * row.tokens / widest }}>{formatTokens(row.tokens)}</span>
+				</div>)}
+			</div>
+			<div className='text-vader-fg-3 text-xs leading-relaxed'>{contextMeterNote()}</div>
+			{result ? <div className='text-vader-fg-2 text-xs' role='status' data-testid='vader-context-panel-result'>{result}</div> : null}
+		</div> : null}
+	</div>
 }
 
 interface VaderChatAreaProps {
@@ -487,7 +529,7 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
                 bg-vader-bg-1
 				transition-all duration-200
 				border border-vader-border-2 focus-within:border-vader-border-1 hover:border-vader-border-1
-				max-h-[80vh] overflow-y-auto
+				max-h-[80vh]
                 ${className}
             `}
 				onClick={(e) => {

@@ -57,6 +57,14 @@ check('a chat inside the window has no overflow to say', M.contextOverflow(Math.
 	check('a chat bigger than the window says so with the figures of the model', o && o.title === 'This chat is bigger than the model’s window' && o.windowTokens === W && o.cutTokens > 0 && o.body === `The chat is about ${M.kTokens(o.usedTokens)} tokens. llama3.1 8B reads ${M.kTokens(W)}. Vader would have to cut the oldest ${M.kTokens(o.cutTokens)}.`, JSON.stringify(o));
 	check('tokens are said in thousands', M.kTokens(62000) === '62K' && M.kTokens(900) === '900' && M.kTokens(32768) === '33K');
 }
+{
+	const msgs = [{ role: 'user', displayContent: 'x'.repeat(4000) }, { role: 'assistant', displayContent: 'y'.repeat(2000) }, { role: 'tool', content: 'z'.repeat(40000) }, { role: 'tool', content: 'q'.repeat(9999), outputPruned: true }];
+	const bd = M.contextBreakdown(msgs, W, null);
+	check('the breakdown names what fills the window, and a dropped tool result counts as nothing', bd.rows.map(r => r.label).join() === 'System and tools,Files and tool output,Conversation' && bd.rows[1].tokens === Math.round(40000 / B.CHARS_PER_TOKEN) && bd.rows[2].tokens === Math.round(6000 / B.CHARS_PER_TOKEN));
+	check('its rows add up to what is used, and the share is the one the banner uses', bd.usedTokens === bd.rows.reduce((n, r) => n + r.tokens, 0) && bd.share === M.contextShare(46000, W, null));
+	check('a summary gets its own row, only when there is one', M.contextBreakdown([{ role: 'compacted_summary', summary: 'abc'.repeat(500) }], W, null).rows.some(r => r.label === 'Summary of earlier steps') && !bd.rows.some(r => r.label.startsWith('Summary')));
+	check('the note under it gives the real thresholds', M.contextMeterNote() === 'Old tool output is dropped from 50%. Earlier steps are summarised from 70%.', M.contextMeterNote());
+}
 check('the banner names the real figures: 70% to summarise, half of the room for tool output', /From 70% Vader summarises/.test(M.contextBanner(0.62).body) && /from 50% of the room/.test(M.contextBanner(0.62).body) && /^62% of the room/.test(M.contextBanner(0.62).title));
 check('above the summary threshold it says the next request summarises', /summarises the older messages before the next request/.test(M.contextBanner(0.8).body));
 check('a model with no known window has no share', M.contextShare(10_000, 0) === 0 && M.contextShare(10_000, NaN) === 0);
