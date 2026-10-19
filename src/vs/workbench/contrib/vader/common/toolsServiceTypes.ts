@@ -141,6 +141,7 @@ export type BuiltinToolCallParams = {
 	'open_persistent_terminal': { cwd: string | null },
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
+	'await_terminal': { persistentTerminalId: string, untilRegex: string | null, timeoutSeconds: number },
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
 	'delegate_subagent_task': { task: string, agentName: string | null },
@@ -218,6 +219,7 @@ export type BuiltinToolResultType = {
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
+	'await_terminal': { text: string, reason: 'matched' | 'quiet' | 'timeout', waitedMs: number },
 	// ---
 	'create_persistent_agent': { agentId: string },
 	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },

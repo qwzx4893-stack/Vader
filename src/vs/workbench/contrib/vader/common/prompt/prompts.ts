@@ -477,6 +477,16 @@ export const builtinTools: {
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
 	},
 
+	await_terminal: {
+		name: 'await_terminal',
+		description: `Waits for a persistent terminal (a dev server, a watcher, a long build you started with run_persistent_command) to print something, then returns what it printed since this call. Give a pattern to wait for (for example "ready|listening on"), or leave it empty to wait until the output has been quiet for 5 seconds. It returns when the pattern appears or the time is up (default 30 seconds, at most 120), so you do not have to ask the terminal again and again. It does not run anything.`,
+		params: {
+			persistent_terminal_id: { description: `The ID of the persistent terminal.` },
+			until_regex: { description: `Optional. A pattern (a regular expression) in the output that ends the wait.` },
+			timeout_seconds: { description: `Optional. How long to wait at most (default 30, at most 120).` },
+		}
+	},
+
 	create_persistent_agent: {
 		name: 'create_persistent_agent',
 		description: `Creates a new permanent, named agent that persists across sessions with its own instructions, so future tasks needing this same expertise or scope can be handed to it directly instead of you re-explaining context each time. Use this when you notice a task needs a specialized, repeatable role (e.g. "the person keeps asking Vulkan questions, a Vulkan Specialist agent would help"), not for one-off tasks.`,

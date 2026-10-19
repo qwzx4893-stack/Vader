@@ -17,6 +17,7 @@ import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVaderCommandBarService } from './vaderCommandBarServiceTypes.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
+import { awaitOutput, awaitWords, DEFAULT_AWAIT_SECONDS, MAX_AWAIT_SECONDS, parsePattern } from '../common/awaitOutput.js'
 import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
@@ -482,6 +483,13 @@ export class ToolsService implements IToolsService {
 				return { persistentTerminalId };
 			},
 
+			await_terminal: (params: RawToolParamsObj) => {
+				const persistentTerminalId = validateProposedTerminalId(params.persistent_terminal_id)
+				const untilRegex = validateOptionalStr('until_regex', params.until_regex)
+				if (untilRegex !== null && untilRegex.trim() !== '') { const p = parsePattern(untilRegex); if (!p.ok) throw new Error(p.reason) }
+				const seconds = validateNumber(params.timeout_seconds, { default: DEFAULT_AWAIT_SECONDS })
+				return { persistentTerminalId, untilRegex: untilRegex !== null && untilRegex.trim() !== '' ? untilRegex : null, timeoutSeconds: Math.max(1, Math.min(MAX_AWAIT_SECONDS, seconds ?? DEFAULT_AWAIT_SECONDS)) }
+			},
 			delegate_subagent_task: (params: RawToolParamsObj) => {
 				const { task: taskUnknown, agent_name: agentNameUnknown } = params
 				const task = validateStr('task', taskUnknown)
@@ -876,6 +884,12 @@ export class ToolsService implements IToolsService {
 				const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
 				return { result: { persistentTerminalId } }
 			},
+			await_terminal: async ({ persistentTerminalId, untilRegex, timeoutSeconds }) => {
+				if (!this.terminalToolService.persistentTerminalExists(persistentTerminalId)) throw new Error(`Terminal ${persistentTerminalId} does not exist. Open one with open_persistent_terminal, or look at the ids you have.`)
+				const parsed = untilRegex ? parsePattern(untilRegex) : undefined
+				const r = await awaitOutput({ read: () => this.terminalToolService.readTerminal(persistentTerminalId), sleep: ms => timeout(ms), now: () => Date.now() }, { re: parsed && parsed.ok ? parsed.re : undefined, timeoutMs: timeoutSeconds * 1000 })
+				return { result: { text: awaitWords(r, persistentTerminalId, untilRegex), reason: r.reason, waitedMs: r.waitedMs } }
+			},
 			kill_persistent_terminal: async ({ persistentTerminalId }) => {
 				// Close the background terminal by sending exit
 				await this.terminalToolService.killPersistentTerminal(persistentTerminalId)
@@ -1179,6 +1193,7 @@ export class ToolsService implements IToolsService {
 				const { persistentTerminalId } = result;
 				return `Successfully created persistent terminal. persistentTerminalId="${persistentTerminalId}"`;
 			},
+			await_terminal: (_params, result) => result.text,
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
 			},

@@ -28,6 +28,7 @@
 - **Find code by what it does** (`codebase_search`): an index of the open project, made and kept on this computer (git-aware, Merkle tree of hashes so only what changed is read again, BM25 ranking over names and their parts, saved between starts, never reading files that hold secrets). Settings, Privacy and network shows its state and can turn it off. See docs/integrations/codebase-index.md.
 - **Going back undoes files the agent made or deleted**, not only edits: a made file is removed (to the trash), a deleted one is written back with its text, and going forward does it again.
 - **A task is blamed only for what it broke**: when a parallel task's checks fail, they are run again on the project as it was and the problems compared; a project that already fails its type check no longer refuses every task's merge.
+- **`await_terminal`**: the agent waits for a dev server or a long build to print what it is waiting for (or to go quiet) in one step, instead of reading the terminal again and again.
 
 ## Unreleased - The interface of the design canvas, as the app: the Vader window, a first run in three steps, Settings in 14 pages, a chat that says what the run is doing
 

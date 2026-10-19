@@ -1696,6 +1696,7 @@ const titleOfBuiltinToolName = {
 	'remember': { done: 'Saved to memory', proposed: 'Save to memory', running: loadingTitleWrapper('Saving to memory') },
 	'repo_map': { done: 'Mapped the project', proposed: 'Map the project', running: loadingTitleWrapper('Mapping the project') },
 	'codebase_search': { done: 'Searched the project', proposed: 'Search the project', running: loadingTitleWrapper('Searching the project') },
+	'await_terminal': { done: 'Waited for a terminal', proposed: 'Wait for a terminal', running: loadingTitleWrapper('Waiting for a terminal') },
 	'update_task_list': { done: 'Updated the task list', proposed: 'Update the task list', running: loadingTitleWrapper('Updating the task list') },
 	'delegate_parallel_tasks': { done: 'Ran parallel tasks', proposed: 'Run parallel tasks', running: loadingTitleWrapper('Running parallel tasks') },
 	'delegate_subagent_task': { done: 'Delegated to subagent', proposed: 'Delegate to subagent', running: loadingTitleWrapper('Delegating to subagent') },
