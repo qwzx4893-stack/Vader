@@ -202,7 +202,8 @@ class TaskCopyService extends Disposable implements ITaskCopyService {
 			this._set(threadId, undefined);
 			return;
 		}
-		if (files !== s.files) this._set(threadId, { files });
+		const lines = files > 0 ? await this._git.diffNumstatVsBase({ worktreePath: s.worktreePath, baseBranch: s.baseBranch }) : { added: 0, removed: 0 };
+		if (files !== s.files || lines.added !== s.added || lines.removed !== s.removed) this._set(threadId, { files, added: lines.added, removed: lines.removed });
 	}
 
 	// ---- accepting

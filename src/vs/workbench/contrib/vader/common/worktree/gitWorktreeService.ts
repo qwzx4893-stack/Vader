@@ -34,6 +34,7 @@ class GitWorktreeService implements IGitWorktreeMainService {
 	commitAllChanges: IGitWorktreeMainService['commitAllChanges'] = (opts) => this._mainService.commitAllChanges(opts);
 	headOf: IGitWorktreeMainService['headOf'] = (path) => this._mainService.headOf(path);
 	changedFilesVsBase: IGitWorktreeMainService['changedFilesVsBase'] = (opts) => this._mainService.changedFilesVsBase(opts);
+	diffNumstatVsBase: IGitWorktreeMainService['diffNumstatVsBase'] = (opts) => this._mainService.diffNumstatVsBase(opts);
 	conflictMarkersIn: IGitWorktreeMainService['conflictMarkersIn'] = (path) => this._mainService.conflictMarkersIn(path);
 	stashChanges: IGitWorktreeMainService['stashChanges'] = (opts) => this._mainService.stashChanges(opts);
 	popStash: IGitWorktreeMainService['popStash'] = (path) => this._mainService.popStash(path);

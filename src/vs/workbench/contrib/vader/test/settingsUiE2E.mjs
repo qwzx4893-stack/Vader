@@ -365,14 +365,74 @@ async function layoutProblems(page) {
 	const { page, errors } = await newPage(undefined, 'about');
 	check('the version of Vader and of VS Code it is built on are shown', (await page.locator(TID('vader-settings-version')).innerText()) === 'Version 0.1.0 \u00B7 built on VS Code 1.136.2');
 	check('the commit is cut to ten characters', (await page.locator(TID('vader-settings-about')).innerText()).includes('0123456789') && !(await page.locator(TID('vader-settings-about')).innerText()).includes('0123456789a'));
+	check('before any check it says so, and that nothing is installed without a click', (await page.locator(TID('vader-about-result')).innerText()).includes('Not checked yet in this session') && (await page.locator(TID('vader-about-result')).innerText()).includes('Nothing is installed without your click'));
 	await page.locator(TID('vader-about-check')).click();
-	check('Check for updates runs the app\u2019s own command', (await log(page)).includes('command:vader.vaderCheckUpdate'));
-	check('and says where the answer will appear, not a made-up result', (await page.locator(TID('vader-settings-about')).innerText()).includes('Its result is the message in the corner'));
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-about-result"]')?.textContent?.includes('Checked just now'));
+	check('Check for updates asks the update service and says its answer here', (await log(page)).includes('update:check:true') && (await page.locator(TID('vader-about-result')).innerText()).includes('Vader 0.1.0 is up to date.'));
+	check('no card is shown when there is no update', (await page.locator('[data-testid^="vader-update-"]').count()) === 0);
 	await page.locator(TID('vader-settings-about-autocheck')).click();
 	check('the automatic check is the real setting', (await log(page)).includes('global:autoCheckUpdates=true'));
 	await page.locator(TID('vader-about-releases')).click();
 	check('All releases opens the releases page', (await page.evaluate(() => window.__opened)).some(u => u.endsWith('/releases')));
-	check('it says Vader does not update itself', (await page.locator(TID('vader-settings-about')).innerText()).includes('does not update itself'));
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+
+// ===================================================================== updating Vader (board S11)
+{
+	const { page, errors } = await newPage(undefined, 'about');
+	const offer = { version: '1.4.0', tag: 'v1.4.0', releaseUrl: 'https://github.com/qwzx4893-stack/Vader/releases/tag/v1.4.0', summary: 'Adds Add-ons, a cost line that says where its number comes from, and a new welcome. 18 fixes.', asset: { name: 'Vader-Setup-x64-1.4.0.exe', size: 119 * 1024 * 1024, url: 'https://github.com/x' } };
+	const set = async (st) => { await page.evaluate((x) => window.__setUpdate(x), st); await page.waitForTimeout(60); };
+	const words = async (id) => (await page.locator(TID(id)).first().innerText()).replace(/\s+/g, ' ').trim();
+
+	await set({ kind: 'available', offer });
+	check('a newer release is offered with what changed, and three choices', (await words('vader-update-title')) === 'Vader 1.4.0 is ready' && (await words('vader-update-body')).startsWith('Adds Add-ons, a cost line') && (await page.locator(`${TID('vader-update-available')} button`).allInnerTexts()).join('|') === 'Download|Read what changed|Later');
+	await page.waitForTimeout(200);
+	await shot(page, 'update-available');
+	await page.locator(TID('vader-update-download')).click();
+	check('Download asks the main process to download it', (await log(page)).includes('update:download'));
+	await page.locator(TID('vader-update-changed')).click();
+	check('Read what changed opens the release page', (await page.evaluate(() => window.__opened)).includes('https://github.com/qwzx4893-stack/Vader/releases/tag/v1.4.0'));
+	await page.locator(TID('vader-update-later')).click();
+	check('Later puts the offer away', (await log(page)).includes('update:dismiss') && (await page.locator('[data-testid^="vader-update-"]').count()) === 0);
+	await set({ kind: 'available', offer: { ...offer, asset: undefined } });
+	check('a release with no installer for this computer offers its page', (await words('vader-update-download')) === 'Open the release page');
+	await page.locator(TID('vader-update-download')).click();
+	check('...and opens it, without downloading anything', (await page.evaluate(() => window.__opened)).filter(u => u.endsWith('/tag/v1.4.0')).length === 2 && (await log(page)).filter(x => x === 'update:download').length === 1);
+
+	await set({ kind: 'downloading', offer, done: 74 * 1024 * 1024, total: 119 * 1024 * 1024 });
+	check('a download says how much of how much, with a bar', (await words('vader-update-title')) === 'Downloading Vader 1.4.0' && (await words('vader-update-progress')) === '74 MB of 119 MB' && (await page.locator(`${TID('vader-update-bar')}`).evaluate(e => e.style.width)) === '62%');
+	await page.waitForTimeout(250);
+	await shot(page, 'update-downloading');
+	await page.locator(TID('vader-update-cancel')).click();
+	check('Cancel stops it', (await log(page)).includes('update:cancel'));
+
+	await page.evaluate(() => { window.__running = 2; });
+	await set({ kind: 'ready', offer, file: 'C:\\tmp\\Vader-Setup.exe' });
+	check('the restart question says how many tasks it would stop, and offers to wait', (await words('vader-update-title')) === 'Restart to finish the update' && (await words('vader-update-body')) === '2 tasks are running. Restart when they are done, or now: they stop and can be continued after.' && (await page.locator(`${TID('vader-update-ready')} button`).allInnerTexts()).join('|') === 'Restart when tasks finish|Restart now');
+	await page.waitForTimeout(200);
+	await shot(page, 'update-ready');
+	await page.locator(TID('vader-update-when-done')).click();
+	check('Restart when tasks finish waits, says so, and can be called off', (await log(page)).includes('update:when-idle') && (await words('vader-update-body')) === 'Waiting for the tasks to finish. Vader restarts then.' && (await page.locator(TID('vader-update-stop-waiting')).count()) === 1);
+	await page.locator(TID('vader-update-stop-waiting')).click();
+	check('...and not waiting any more', (await log(page)).includes('update:stop-waiting') && (await page.locator(TID('vader-update-when-done')).count()) === 1);
+	await page.locator(TID('vader-update-now')).click();
+	check('Restart now installs at once', (await log(page)).includes('update:now'));
+	await page.evaluate(() => { window.__running = 0; window.__installResult = { ok: false, reason: 'The downloaded file is gone. Download it again.' }; });
+	await set({ kind: 'ready', offer, file: 'C:\\tmp\\Vader-Setup.exe' });
+	check('with nothing running there is nothing to wait for', (await words('vader-update-body')).startsWith('Nothing is running.') && (await page.locator(TID('vader-update-when-done')).count()) === 0);
+	await page.locator(TID('vader-update-now')).click();
+	await page.waitForSelector(TID('vader-update-problem'));
+	check('an install that cannot start says why and stays', (await words('vader-update-problem')) === 'The downloaded file is gone. Download it again.');
+
+	await set({ kind: 'failed', offer, done: 74 * 1024 * 1024, reason: '', current: '0.1.0' });
+	check('a failed download says where it stopped and that the running version is fine', (await words('vader-update-title')) === 'Could not download the update' && (await words('vader-update-body')) === 'The download stopped at 74 MB. You are still on 0.1.0, which works as before.' && (await page.locator(`${TID('vader-update-failed')} button`).allInnerTexts()).join('|') === 'Try again|Download it from the website');
+	await page.waitForTimeout(200);
+	await shot(page, 'update-failed');
+	await page.locator(TID('vader-update-retry')).click();
+	check('Try again downloads again', (await log(page)).filter(x => x === 'update:download').length >= 2);
+	await page.locator(TID('vader-update-website')).click();
+	check('Download it from the website opens the release page', (await page.evaluate(() => window.__opened)).filter(u => u.endsWith('/tag/v1.4.0')).length >= 3);
 	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
 	await page.close();
 }
@@ -692,6 +752,18 @@ async function layoutProblems(page) {
 {
 	const { page } = await newPage(() => { window.__skillsOverride = []; }, 'skills');
 	check('with no skill it says what a skill is and where to find some', (await page.locator(TID('vader-skills-empty')).innerText()).includes('No skill is installed') && (await page.locator(TID('vader-skills-empty')).innerText()).includes('Add-ons'));
+	await page.close();
+}
+
+// every page, once, at the size of the boards (1440 by 900), for the side-by-side look against them (named qa-<page>)
+{
+	const { page } = await newPage();
+	await page.setViewportSize({ width: 1440, height: 900 });
+	for (const id of ['models', 'router', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
+		await page.locator(TID(`vader-settings-nav-${id}`)).click();
+		await page.waitForTimeout(320);
+		await shot(page, `qa-${id}`);
+	}
 	await page.close();
 }
 

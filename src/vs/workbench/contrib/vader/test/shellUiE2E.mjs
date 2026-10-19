@@ -69,7 +69,7 @@ const flat = (s) => s.replace(/\s+/g, ' ').trim();
 async function newPage() {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 862 } });
 	const errors = [];
-	page.on('pageerror', (e) => errors.push(String(e)));
+	page.on('pageerror', (e) => { errors.push(String(e)); if (process.env.QA_DEBUG) console.log('PAGEERROR', String(e).slice(0, 400)); });
 	page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 	await page.goto(base);
 	await page.waitForFunction(() => window.__mounted === true);
@@ -198,9 +198,12 @@ async function layoutProblems(page) {
 	const groups = (await page.locator('[data-testid^="vader-shell-agents-group-"]').allInnerTexts()).map(flat);
 	check('tasks are grouped by where they stand', groups.join('|') === 'Needs you 1|Running 2|Ready to review 1', groups.join('|'));
 	const rowsText = (await page.locator(TID('vader-shell-agent-row')).allInnerTexts()).map(flat);
-	check('each task is a row with its steps, changes and cost', rowsText.length === 4 && /2 of 4/.test(rowsText[0]) && /1 file/.test(rowsText[0]) && /≈ \$0\.31/.test(rowsText[0]), rowsText[0]);
+	check('each task is a row with its steps, branch, changes and cost', rowsText.length === 4 && /2 of 4/.test(rowsText[0]) && /agent\/context-budget/.test(rowsText[0]) && /\+112 .6/.test(rowsText[0]) && /≈ \$0\.31/.test(rowsText[0]), rowsText[0]);
+	check('a task without its own copy says it works in place, with its files counted', /in place/.test(rowsText[3]) && /1 file/.test(rowsText[3]), rowsText[3]);
+	check('the lines added are green and the lines removed red', (await page.locator(`${TID('vader-shell-agent-changes')} span span`).first().evaluate(e => getComputedStyle(e).color, null, { timeout: 3000 }).catch(() => 'none')) === 'rgb(76, 195, 138)');
 	const detail = await page.locator(TID('vader-shell-agent-detail')).innerText();
 	check('the waiting task is chosen and its detail is on the right', detail.includes('Waiting for you') && detail.includes('contextBudget.ts'), detail);
+	check('the detail says where the task works and how it differs from the branch it came from', detail.includes('Worktree') && detail.includes('C:\\vader-work\\wt\\context-budget') && detail.includes('3 files changed, branched from main'), detail);
 	check('the detail shows the plan and the money spent today against the limit', detail.includes('Plan 2 of 4') && detail.includes('≈ $2.14 of $5.00'), detail);
 	await page.locator(TID('vader-shell-agents-tab-running')).click();
 	check('a tab shows only that group', (await page.locator(TID('vader-shell-agent-row')).count()) === 2);

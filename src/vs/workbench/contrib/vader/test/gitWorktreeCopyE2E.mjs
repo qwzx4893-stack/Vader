@@ -66,6 +66,8 @@ write(path.join(wt, 'server', 'limiter.ts'), 'export const limit = 100;\n');
 write(path.join(wt, 'server', 'rate.ts'), 'export const rate = 1;\n');
 const changed = await svc.changedFilesVsBase({ worktreePath: wt, baseBranch: base });
 check('the files the task changed are named, new ones too', changed.length === 2 && changed.includes('server/limiter.ts') && changed.includes('server/rate.ts'), JSON.stringify(changed));
+const lines = await svc.diffNumstatVsBase({ worktreePath: wt, baseBranch: base });
+check('the lines added and removed are counted for the table of All agents', lines.added === 2 && lines.removed === 1, JSON.stringify(lines));
 check('the folder itself did not change while the task worked', rd(path.join(d, 'server', 'limiter.ts')) === 'export const limit = 10;\n' && !fs.existsSync(path.join(d, 'server', 'rate.ts')));
 
 const before = await svc.headOf(d);

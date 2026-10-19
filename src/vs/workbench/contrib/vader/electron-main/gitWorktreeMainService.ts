@@ -247,6 +247,23 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 		}
 	}
 
+	async diffNumstatVsBase({ worktreePath, baseBranch }: { worktreePath: string; baseBranch: string }): Promise<{ added: number; removed: number }> {
+		if (!isSafeRef(baseBranch)) return { added: 0, removed: 0 };
+		try {
+			await git(['add', '-A'], worktreePath);
+			const base = await git(['merge-base', baseBranch, 'HEAD'], worktreePath);
+			const out = await git(['diff', ...SAFE_DIFF_FLAGS, '--cached', '--numstat', base], worktreePath);
+			let added = 0, removed = 0;
+			for (const l of out.split('\n')) {
+				const m = /^(\d+)\t(\d+)\t(.+)$/.exec(l.trim());
+				if (m && !m[3].startsWith('.vader/')) { added += Number(m[1]); removed += Number(m[2]); }
+			}
+			return { added, removed };
+		} catch {
+			return { added: 0, removed: 0 };
+		}
+	}
+
 	async conflictMarkersIn(worktreePath: string): Promise<string[]> {
 		return (await git(['grep', '-l', '-E', '^(<<<<<<< |=======$|>>>>>>> )', '--', '.'], worktreePath).catch(() => '')).split('\n').map(s => s.trim()).filter(Boolean);
 	}

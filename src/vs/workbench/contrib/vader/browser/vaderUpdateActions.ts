@@ -19,11 +19,13 @@ import { IAction } from '../../../../base/common/actions.js';
 import { URI } from '../../../../base/common/uri.js';
 import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IVaderSettingsService } from '../common/vaderSettingsService.js';
+import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { VADER_OPEN_SETTINGS_ACTION_ID } from './actionIDs.js';
 
 
 
 
-const notifyUpdate = (res: VaderCheckUpdateRespose & { message: string }, notifService: INotificationService, updateService: IUpdateService, openerService: IOpenerService): INotificationHandle => {
+const notifyUpdate = (res: VaderCheckUpdateRespose & { message: string }, notifService: INotificationService, updateService: IUpdateService, openerService: IOpenerService, vaderUpdateService: IVaderUpdateService, commandService: ICommandService, canDownload: boolean): INotificationHandle => {
 	const message = res?.message || 'A newer version may be available. Check the releases page of this project on GitHub.'
 
 	let actions: INotificationActions | undefined
@@ -47,14 +49,34 @@ const notifyUpdate = (res: VaderCheckUpdateRespose & { message: string }, notifS
 
 		if (res.action === 'release') {
 			const url = res.url ?? 'https://github.com/qwzx4893-stack/Vader/releases/latest'
-			primary.push({
-				label: `Download`,
-				id: 'vader.updater.release',
-				enabled: true,
-				tooltip: '',
-				class: undefined,
-				run: () => { openerService.open(URI.parse(url)) }
-			})
+			if (canDownload) {
+				// Vader downloads the installer itself, with the progress shown in Settings, About and updates, and restarts into it when the person says so
+				primary.push({
+					label: `Download`,
+					id: 'vader.updater.download.release',
+					enabled: true,
+					tooltip: '',
+					class: undefined,
+					run: () => { void vaderUpdateService.downloadUpdate(); void commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID, 'about') }
+				})
+				primary.push({
+					label: `Read what changed`,
+					id: 'vader.updater.notes',
+					enabled: true,
+					tooltip: '',
+					class: undefined,
+					run: () => { openerService.open(URI.parse(url)) }
+				})
+			} else {
+				primary.push({
+					label: `Open the release page`,
+					id: 'vader.updater.release',
+					enabled: true,
+					tooltip: '',
+					class: undefined,
+					run: () => { openerService.open(URI.parse(url)) }
+				})
+			}
 		}
 
 		if (res.action === 'download') {
@@ -114,7 +136,7 @@ const notifyUpdate = (res: VaderCheckUpdateRespose & { message: string }, notifS
 			secondary: [{
 				id: 'vader.updater.close',
 				enabled: true,
-				label: `Keep current version`,
+				label: `Later`,
 				tooltip: '',
 				class: undefined,
 				run: () => {
@@ -159,6 +181,7 @@ const performVaderCheck = async (
 	metricsService: IMetricsService,
 	updateService: IUpdateService,
 	openerService: IOpenerService,
+	commandService: ICommandService,
 ): Promise<INotificationHandle | null> => {
 
 	const metricsTag = explicit ? 'Manual' : 'Auto'
@@ -172,7 +195,8 @@ const performVaderCheck = async (
 	}
 	else {
 		if (res.message) {
-			const notifController = notifyUpdate(res, notifService, updateService, openerService)
+			const offerState = await vaderUpdateService.getUpdateState()
+			const notifController = notifyUpdate(res, notifService, updateService, openerService, vaderUpdateService, commandService, offerState.kind === 'available' && !!offerState.offer.asset)
 			metricsService.capture(`Vader Update ${metricsTag}: Yes`, { res })
 			return notifController
 		}
@@ -204,7 +228,7 @@ registerAction2(class extends Action2 {
 
 		const currNotifController = lastNotifController
 
-		const newController = await performVaderCheck(true, notifService, vaderUpdateService, metricsService, updateService, accessor.get(IOpenerService))
+		const newController = await performVaderCheck(true, notifService, vaderUpdateService, metricsService, updateService, accessor.get(IOpenerService), accessor.get(ICommandService))
 
 		if (newController) {
 			currNotifController?.close()
@@ -223,13 +247,14 @@ class VaderUpdateWorkbenchContribution extends Disposable implements IWorkbenchC
 		@IUpdateService updateService: IUpdateService,
 		@IOpenerService openerService: IOpenerService,
 		@IVaderSettingsService vaderSettingsService: IVaderSettingsService,
+		@ICommandService commandService: ICommandService,
 	) {
 		super()
 
 		// Off unless the user turned it on (Settings > Extensions & Updates): nothing contacts GitHub on its own by default.
 		const autoCheck = () => {
 			if (!vaderSettingsService.state.globalSettings.autoCheckUpdates) return
-			performVaderCheck(false, notifService, vaderUpdateService, metricsService, updateService, openerService)
+			performVaderCheck(false, notifService, vaderUpdateService, metricsService, updateService, openerService, commandService)
 		}
 
 		// check once 5 seconds after mount

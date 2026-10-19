@@ -22,6 +22,9 @@ export type TaskCopyState = {
 	readonly phase: TaskCopyPhase;
 	/** files the task has changed so far */
 	readonly files: number;
+	/** lines added and removed so far, for the table of All agents */
+	readonly added?: number;
+	readonly removed?: number;
 	readonly conflictFiles?: readonly string[];
 	readonly failure?: { readonly kind: MergeFailureKind; readonly reason: string; readonly files: readonly string[] };
 	/** the commit on the base branch before the merge, and the merge commit; kept so that the merge can be undone */

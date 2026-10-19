@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useAccessor, useChatThreadsState, useFullChatThreadsStreamState, useUsageTick } from '../util/services.js'
 import { projectDisplayNames } from '../../../../common/threadProjects.js'
+import { branchLabel, hasCopyOnDisk } from '../../../../common/taskCopyModel.js'
 import { agentGroupOf, AgentGroupId, ageLabel, changedFilePaths, isAgentTask, isListed, threadTitle } from '../../../../common/shellModel.js'
 import type { ThreadStatus } from '../../../../common/threadStatus.js'
 import type { ThreadUsage } from '../../../../common/usageAccounting.js'
@@ -25,6 +26,8 @@ export type ShellThread = {
 	lastModified: string
 	/** how many messages the thread has that are shown to the person */
 	messageCount: number
+	/** its own copy of the project, while it has one or once merged (common/taskCopyModel.ts) */
+	copy?: { branch: string, base: string, files: number, added?: number, removed?: number, worktreePath: string, merged: boolean }
 }
 
 export type ShellGroup = { key: string | null, name: string, threads: ShellThread[] }
@@ -56,6 +59,9 @@ export const useShellData = (): ShellData => {
 	const stream = useFullChatThreadsStreamState()
 	const usageTick = useUsageTick()
 	const tick = useMinuteTick()
+	const copies = accessor.get('ITaskCopyService')
+	const [copyTick, setCopyTick] = useState(0)
+	useEffect(() => { const d = copies?.onDidChange(() => setCopyTick(n => n + 1)); return () => d?.dispose() }, [copies])
 
 	return useMemo(() => {
 		const now = Date.now()
@@ -74,6 +80,8 @@ export const useShellData = (): ShellData => {
 					changedFiles: changedFilePaths(t.messages), usage: chat.getThreadUsage(id), projectKey: g.key, lastModified: t.lastModified,
 					messageCount: t.messages.filter(m => m.role === 'user' || m.role === 'assistant').length,
 				}
+				const c = copies?.getState(id)
+				if (c && (hasCopyOnDisk(c) || c.phase === 'merged')) th.copy = { branch: branchLabel(c.branchName), base: c.baseBranch, files: c.files, added: c.added, removed: c.removed, worktreePath: c.worktreePath, merged: c.phase === 'merged' }
 				threads.push(th)
 				all.push(th)
 			}
@@ -91,5 +99,5 @@ export const useShellData = (): ShellData => {
 			currentProjectName: current?.name ?? (currentProjectKey ? currentProjectKey.split('/').filter(Boolean).pop() ?? 'Chats' : 'Chats'),
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [chat, state, stream, usageTick, tick])
+	}, [chat, state, stream, usageTick, tick, copies, copyTick])
 }

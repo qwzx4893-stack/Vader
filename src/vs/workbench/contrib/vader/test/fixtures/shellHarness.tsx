@@ -36,6 +36,12 @@ for (const [id, mins, proj, messages, running] of T) {
 	allThreads[id] = { id, createdAt: iso(mins + 5), lastModified: iso(mins), messages, state: {}, filesWithUserChanges: new Set(), projectFolders: proj ? [proj] : undefined }
 	if (running) stream[id] = { isRunning: running }
 }
+const copyListeners = new Set<() => void>()
+const copySvc: any = {
+	onDidChange: (fn: () => void) => { copyListeners.add(fn); return { dispose: () => { copyListeners.delete(fn) } } },
+	copyOf: () => undefined,
+	getState: (id: string) => id === 't-wait' ? { threadId: id, phase: 'working', branchName: 'agent/context-budget-ab12', baseBranch: 'main', files: 3, added: 112, removed: 6, worktreePath: 'C:\\vader-work\\wt\\context-budget' } : undefined,
+}
 w.__chat = {
 	state: { allThreads, currentThreadId: 't-wait' },
 	streamState: stream,
@@ -157,7 +163,7 @@ const orchSvc: any = {
 w.__opened = [] as string[]
 const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 w.__accessor = {
-	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
+	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, ITaskCopyService: copySvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
 }
 Date.now = () => NOW
 

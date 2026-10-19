@@ -15,7 +15,7 @@ import { ShellThread, useShellData } from './useShellData.js'
 
 type Filter = 'all' | AgentGroupId
 
-const COLS = '16px minmax(0,1fr) 124px 58px 88px 70px 36px'
+const COLS = '16px minmax(0,1fr) 156px 112px 58px 96px 70px 36px'
 
 const Glyph = ({ t }: { t: ShellThread }) =>
 	t.status === 'running' ? <Spinner /> : t.status === 'needs_you' ? <WaitDot /> : t.status === 'review' ? <ReviewRing />
@@ -75,7 +75,7 @@ export const AgentsPage = () => {
 			<span className='r' style={{ gap: 8, marginTop: 6 }}><button className='pb' onClick={() => { chat.openNewThread(); shellService.show('conversation', 'conversation') }}>Start a task</button></span>
 		</div> : <div className='r fl' style={{ minHeight: 0, alignItems: 'stretch' }}>
 			<div className='c fl scroll' style={{ minWidth: 0 }}>
-				<div className='th' style={{ gridTemplateColumns: COLS }}><span></span><span>Task</span><span>Model</span><span>Steps</span><span>Changes</span><span>Cost</span><span style={{ textAlign: 'right' }}>Age</span></div>
+				<div className='th' style={{ gridTemplateColumns: COLS }}><span></span><span>Task</span><span>Branch</span><span>Model</span><span>Steps</span><span>Changes</span><span>Cost</span><span style={{ textAlign: 'right' }}>Age</span></div>
 				{data.needsYou.length === 0 && filter === 'all' ? <div className='r t3' style={{ height: 36, padding: '0 14px', gap: 8 }} data-testid='vader-shell-agents-calm'><span className='dot' style={{ background: '#4cc38a' }} />Nothing is waiting for you.</div> : null}
 				{groups.map(g => <React.Fragment key={g.id}>
 					<button className='r t3' style={{ height: 30, padding: '0 14px', gap: 8, fontSize: 12, fontWeight: 500, marginTop: 6, width: '100%' }} data-testid={`vader-shell-agents-group-${g.id}`} onClick={() => setClosed(c => ({ ...c, [g.id]: !c[g.id] }))}>
@@ -88,9 +88,10 @@ export const AgentsPage = () => {
 						return <button key={t.id} className={t.id === selected?.id ? 'td on' : 'td'} style={{ gridTemplateColumns: COLS, width: '100%' }} data-testid='vader-shell-agent-row' data-thread-id={t.id} data-status={t.status} onClick={() => setPicked(t.id)} onDoubleClick={() => open(t.id)}>
 							<Glyph t={t} />
 							<span className={g.id === 'merged' ? 't2 tr' : 't1 tr'}>{t.title}</span>
+							<span className='tr t3 mo' data-testid='vader-shell-agent-branch'>{t.copy ? (t.copy.merged ? t.copy.base : t.copy.branch) : t.changedFiles.length > 0 ? 'in place' : ''}</span>
 							<span className='tr t3'>{accessor.get('IVaderSettingsService').state.modelSelectionOfFeature?.Chat?.modelName ?? ''}</span>
 							<span>{plan ? (plan.done >= plan.total ? 'done' : `${plan.done} of ${plan.total}`) : g.id === 'merged' || g.id === 'review' ? 'done' : ''}</span>
-							<span>{t.changedFiles.length > 0 ? <span className='t2'>{t.changedFiles.length} file{t.changedFiles.length === 1 ? '' : 's'}</span> : <span className='t3'>no changes</span>}</span>
+							<span data-testid='vader-shell-agent-changes'>{t.copy && (t.copy.added !== undefined || t.copy.removed !== undefined) && t.copy.files > 0 ? <span className='mo'><span style={{ color: '#4cc38a' }}>+{t.copy.added ?? 0}</span> <span style={{ color: '#f06a6e' }}>{'\u2212'}{t.copy.removed ?? 0}</span></span> : t.changedFiles.length > 0 || (t.copy && t.copy.files > 0) ? <span className='t2'>{t.copy && t.copy.files > 0 ? t.copy.files : t.changedFiles.length} file{(t.copy && t.copy.files > 0 ? t.copy.files : t.changedFiles.length) === 1 ? '' : 's'}</span> : <span className='t3'>no changes</span>}</span>
 							<span className='t2'>{cost}</span>
 							<span className='t3' style={{ textAlign: 'right' }}>{t.age}</span>
 						</button>
@@ -112,7 +113,11 @@ export const AgentsPage = () => {
 					<span className='hint'>Plan {detail.plan.done} of {detail.plan.total}</span>
 					{detail.plan.tasks.slice(0, 6).map((t, i) => <span key={i} className={t.status === 'done' ? 't3 tr' : 't1 tr'}>{t.status === 'done' ? '✓ ' : t.status === 'in_progress' ? '○ ' : '  '}{t.text}</span>)}
 				</div> : null}
-				{selected.changedFiles.length > 0 ? <span className='t2'>{selected.changedFiles.length} file{selected.changedFiles.length === 1 ? '' : 's'} changed</span> : null}
+				{selected.copy && !selected.copy.merged ? <div className='c' style={{ gap: 4 }} data-testid='vader-shell-agent-worktree'>
+<span className='hint'>Worktree</span>
+<span className='mo t1' style={{ wordBreak: 'break-all' }}>{selected.copy.worktreePath}</span>
+<span className='t3'>{selected.copy.files} file{selected.copy.files === 1 ? '' : 's'} changed, branched from {selected.copy.base}</span>
+</div> : selected.changedFiles.length > 0 ? <span className='t2'>{selected.changedFiles.length} file{selected.changedFiles.length === 1 ? '' : 's'} changed</span> : null}
 				<span className='fl' />
 				<div className='c' style={{ gap: 6 }}>
 					<div className='r t3' style={{ justifyContent: 'space-between' }}><span>Spent today</span><span>{today.costUsd > 0 ? `≈ ${formatUsd(today.costUsd)}${limit ? ` of ${formatUsd(limit)}` : ''}` : 'nothing yet'}</span></div>

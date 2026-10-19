@@ -70,6 +70,8 @@ import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marke
 import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
 import { IVaderReviewService } from '../../../vaderReviewService.js'
 import { ITaskCopyService } from '../../../taskCopyService.js'
+import { IVaderUpdateService } from '../../../../common/vaderUpdateService.js'
+import { IVaderUpdateCoordinator } from '../../../vaderUpdateCoordinator.js'
 import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
 import { IBrowserToolMainService } from '../../../../common/browser/browserToolService.js'
 
@@ -376,6 +378,8 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IVaderShellService: accessor.get(IVaderShellService),
 		IVaderReviewService: accessor.get(IVaderReviewService),
 		ITaskCopyService: accessor.get(ITaskCopyService),
+		IVaderUpdateService: accessor.get(IVaderUpdateService),
+		IVaderUpdateCoordinator: accessor.get(IVaderUpdateCoordinator),
 		IVerificationService: accessor.get(IVerificationService),
 		IBrowserToolMainService: accessor.get(IBrowserToolMainService),
 

@@ -70,6 +70,9 @@ export interface IGitWorktreeMainService {
 	/** the files the copy changed compared with the branch it was made from, committed or not (names only) */
 	changedFilesVsBase(opts: { worktreePath: string; baseBranch: string }): Promise<string[]>;
 
+	/** lines added and removed in the copy compared with the branch it was made from (binary files are not counted) */
+	diffNumstatVsBase(opts: { worktreePath: string; baseBranch: string }): Promise<{ added: number; removed: number }>;
+
 	/** files in the worktree that still hold git's conflict markers */
 	conflictMarkersIn(worktreePath: string): Promise<string[]>;
 

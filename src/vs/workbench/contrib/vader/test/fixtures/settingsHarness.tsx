@@ -187,8 +187,27 @@ const skillSvc: any = {
 	listSources: () => repos, addSource(r: string) { if (!/^[\w.-]+\/[\w.-]+$/.test(r.trim()) && !r.startsWith('https://github.com/')) return false; w.__log.push(`skill:source:add:${r}`); repos = [...repos, r.trim()]; notify(); return true }, removeSource(r: string) { w.__log.push(`skill:source:remove:${r}`); repos = repos.filter(x => x !== r); notify() },
 }
 const storageSvc: any = { get: () => undefined }
+const updListeners = new Set<(s: any) => void>()
+w.__update = { kind: 'idle' }
+w.__setUpdate = (st: any) => { w.__update = st; updListeners.forEach(f => f(st)) }
+const updateSvc: any = {
+	onDidChangeUpdateState: (fn: (s: any) => void) => { updListeners.add(fn); return { dispose: () => { updListeners.delete(fn) } } },
+	async getUpdateState() { return w.__update },
+	async check(explicit: boolean) { w.__log.push(`update:check:${explicit}`); return w.__checkResult ?? { message: 'Vader 0.1.0 is up to date.' } },
+	async downloadUpdate() { w.__log.push('update:download') }, async cancelUpdateDownload() { w.__log.push('update:cancel') },
+	async dismissUpdate() { w.__log.push('update:dismiss'); w.__setUpdate({ kind: 'idle' }) },
+	async installUpdate() { w.__log.push('update:install'); return w.__installResult ?? { ok: true } },
+}
+const coordListeners = new Set<() => void>()
+const coordSvc: any = {
+	onDidChange: (fn: () => void) => { coordListeners.add(fn); return { dispose: () => { coordListeners.delete(fn) } } }, waiting: false,
+	runningTasks: () => w.__running ?? 0,
+	installWhenIdle() { w.__log.push('update:when-idle'); coordSvc.waiting = true; coordListeners.forEach(f => f()) },
+	stopWaiting() { w.__log.push('update:stop-waiting'); coordSvc.waiting = false; coordListeners.forEach(f => f()) },
+	async installNow() { w.__log.push('update:now'); return w.__installResult ?? { ok: true } },
+}
 
-w.__accessor = { get: (name: string) => ({ IProductService: product, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
+w.__accessor = { get: (name: string) => ({ IProductService: product, IVaderUpdateService: updateSvc, IVaderUpdateCoordinator: coordSvc, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
 
 createRoot(document.getElementById('root')!).render(<Settings />)
 w.__mounted = true
