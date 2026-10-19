@@ -188,6 +188,14 @@ const skillSvc: any = {
 	listSources: () => repos, addSource(r: string) { if (!/^[\w.-]+\/[\w.-]+$/.test(r.trim()) && !r.startsWith('https://github.com/')) return false; w.__log.push(`skill:source:add:${r}`); repos = [...repos, r.trim()]; notify(); return true }, removeSource(r: string) { w.__log.push(`skill:source:remove:${r}`); repos = repos.filter(x => x !== r); notify() },
 }
 const storageSvc: any = { get: () => undefined }
+const indexListeners = new Set<(e: any) => void>()
+w.__indexState = undefined
+w.__setIndexState = (st: any) => { w.__indexState = st; indexListeners.forEach(f => f({ root: 'c:/work/vader-app', state: st })); notify() }
+const indexSvc: any = {
+	onDidChangeState: (fn: (e: any) => void) => { indexListeners.add(fn); return { dispose: () => { indexListeners.delete(fn) } } },
+	async getState() { return w.__indexState }, async open() { return w.__indexState }, async close() { }, async search() { return { text: '', results: [], files: 0, stale: false } },
+	async rebuild() { w.__log.push('index:rebuild'); return w.__indexState },
+}
 const updListeners = new Set<(s: any) => void>()
 w.__update = { kind: 'idle' }
 w.__setUpdate = (st: any) => { w.__update = st; updListeners.forEach(f => f(st)) }
@@ -208,7 +216,7 @@ const coordSvc: any = {
 	async installNow() { w.__log.push('update:now'); return w.__installResult ?? { ok: true } },
 }
 
-w.__accessor = { get: (name: string) => ({ IProductService: product, IVaderUpdateService: updateSvc, IVaderUpdateCoordinator: coordSvc, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
+w.__accessor = { get: (name: string) => ({ IProductService: product, ICodebaseIndexMainService: indexSvc, IVaderUpdateService: updateSvc, IVaderUpdateCoordinator: coordSvc, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
 
 createRoot(document.getElementById('root')!).render(<Settings />)
 w.__mounted = true

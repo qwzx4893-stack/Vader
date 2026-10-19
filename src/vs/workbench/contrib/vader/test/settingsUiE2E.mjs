@@ -378,6 +378,35 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// ===================================================================== the project index (common/codebaseIndex/)
+{
+	const { page, errors } = await newPage(() => { window.__workspaceFolders = [{ uri: { fsPath: 'c:/work/vader-app' } }]; }, 'privacy');
+	const words = async (id) => (await page.locator(TID(id)).innerText()).replace(/\s+/g, ' ').trim();
+	check('the page has a switch for the index, which says it stays on this computer and never reads secrets', (await page.locator(TID('vader-privacy-index')).count()) === 1 && (await page.locator(TID('vader-settings-privacy')).innerText()).includes('no word of it is sent anywhere') && (await page.locator(TID('vader-settings-privacy')).innerText()).includes('never read'));
+	check('before the index has said anything it says it is starting', (await words('vader-privacy-index-title')) === 'Starting');
+	await page.evaluate(() => window.__setIndexState({ status: 'ready', files: 1234, chunks: 8900, rootHash: 'x', updatedAt: Date.now() - 120000, truncated: false }));
+	await page.waitForTimeout(80);
+	check('a ready index says what it holds and how old it is', (await words('vader-privacy-index-title')) === '1,234 files in 8,900 pieces' && (await words('vader-privacy-index-detail')).startsWith('Updated 2 min ago. Kept on this computer'));
+	await page.waitForTimeout(200);
+	await shot(page, 'privacy-index');
+	await page.locator(TID('vader-privacy-index-rebuild')).click();
+	check('Rebuild asks the main process to build it again', (await log(page)).includes('index:rebuild'));
+	await page.evaluate(() => window.__setIndexState({ status: 'indexing', files: 100, chunks: 500, rootHash: 'x', updatedAt: Date.now(), truncated: false, progress: { done: 200, total: 1200 } }));
+	await page.waitForTimeout(80);
+	check('while it builds the page says how far, and Rebuild waits', (await words('vader-privacy-index-title')).startsWith('Indexing: 200 of 1,200') && await page.locator(TID('vader-privacy-index-rebuild')).isDisabled());
+	await page.locator(TID('vader-privacy-index')).click();
+	check('the switch is the real setting', (await log(page)).includes('global:codebaseIndex=false'));
+	await page.waitForTimeout(80);
+	check('and turned off, the page says nothing is stored and there is no Rebuild', (await words('vader-privacy-index-title')) === 'The project index is off' && (await page.locator(TID('vader-privacy-index-rebuild')).count()) === 0);
+	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
+	await page.close();
+}
+{
+	const { page } = await newPage(() => { window.__workspaceFolders = []; }, 'privacy');
+	check('with no folder open it says so', (await page.locator(TID('vader-privacy-index-title')).innerText()) === 'No folder is open');
+	await page.close();
+}
+
 // ===================================================================== MCP: a tool changed (board S07)
 {
 	const { page, errors } = await newPage(() => { window.__pending = { GitHub: ['delete_repository'] }; window.__mcpOverride = { state: { mcpServerOfName: { GitHub: { status: 'success', command: 'npx @github/mcp', tools: [{ name: 'GitHub_create_issue' }, { name: 'GitHub_delete_repository' }] } } } }; }, 'mcp');

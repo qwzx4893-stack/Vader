@@ -518,6 +518,15 @@ export const builtinTools: {
 		}
 	},
 
+	codebase_search: {
+		name: 'codebase_search',
+		description: `Finds the places in the project that best match a description or a few names, ranked, each with its lines. Use it to answer "where is X done" or "what handles Y" without knowing the file: describe what the code does, or give the names you expect (a function, a type, a word from a file name). It reads an index of the project on this computer that is kept current, so it also finds code you have not opened. For an exact text or a regex use search_for_files; for the layout of a project use repo_map. Read the files it points to before you change them.`,
+		params: {
+			query: { description: `What you are looking for, in words and names, e.g. "retry a request with backoff" or "RateLimiter tokens".` },
+			search_in_folder: { description: 'Optional. Only look inside this folder.' },
+		}
+	},
+
 	update_task_list: {
 		name: 'update_task_list',
 		description: `Your task list for a job with several steps (not for a small task). Write the whole list on every call, one task per line: [ ] not started, [~] in progress, [x] done. Keep one task in progress; mark it done as soon as it is finished and checked. Make tasks concrete, and end with checking the result.`,

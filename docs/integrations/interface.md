@@ -105,6 +105,7 @@ A number that cannot be used (`five`, `250%`) is refused in words and the text s
 | `gateModelE2E`, `policyGateRulesE2E`, `slashCommandsE2E`, `contextSourcesE2E`, `attachmentRulesE2E`, `modelPickerE2E` | the words and rules of the gate, the commands, the sources and the drop | 21, 16, 12, 11, 14, 32 |
 | `mcpToolReviewE2E` | which tools of an MCP server the agent is given, which wait, the words | 11 |
 | `skillMatchE2E` | which skills a task uses, why, and what the model is told about them | 18 |
+| `codebaseIndexE2E`, `codebaseIndexerE2E` | the project index: the parts (what is left out, words, pieces, ranking, the tree of hashes, what the agent is shown, what Settings says), and over real folders and a real git project (saved index, a changed file, the watcher, secrets) | 65, 21 |
 | `managedSettingsE2E` | the organisation's file: where it is, what is accepted and ignored, the words | 9 |
 | `updateE2E` | the update words and rules, and the download run for real against a local web server: whole file, progress, redirect, a host that is not GitHub, a 404, a dropped connection, a wrong size or checksum, Cancel | 23 |
 | `taskCopyModelE2E`, `gitWorktreeCopyE2E` | the branch names, path moves and words of a task's own copy; the git work behind it (copy, merge, undo, conflict, stash) **run for real** against throw-away repositories | 29, 25 |

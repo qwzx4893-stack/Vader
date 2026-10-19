@@ -71,6 +71,7 @@ import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
 import { IVaderReviewService } from '../../../vaderReviewService.js'
 import { ITaskCopyService } from '../../../taskCopyService.js'
 import { IVaderUpdateService } from '../../../../common/vaderUpdateService.js'
+import { ICodebaseIndexMainService, IndexState } from '../../../../common/codebaseIndex/codebaseIndexService.js'
 import { IVaderUpdateCoordinator } from '../../../vaderUpdateCoordinator.js'
 import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
 import { IBrowserToolMainService } from '../../../../common/browser/browserToolService.js'
@@ -379,6 +380,7 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IVaderReviewService: accessor.get(IVaderReviewService),
 		ITaskCopyService: accessor.get(ITaskCopyService),
 		IVaderUpdateService: accessor.get(IVaderUpdateService),
+		ICodebaseIndexMainService: accessor.get(ICodebaseIndexMainService),
 		IVaderUpdateCoordinator: accessor.get(IVaderUpdateCoordinator),
 		IVerificationService: accessor.get(IVerificationService),
 		IBrowserToolMainService: accessor.get(IBrowserToolMainService),
@@ -679,6 +681,21 @@ export const useOrchestrationRunsState = () => {
 }
 
 
+
+/** the state of the index of the open project, following the main process */
+export const useCodebaseIndexState = (root: string | undefined) => {
+	const accessor = useAccessor()
+	const service = accessor.get('ICodebaseIndexMainService')
+	const [state, setState] = useState<IndexState | undefined>()
+	useEffect(() => {
+		if (!root) { setState(undefined); return }
+		let live = true
+		void service.getState(root).then(st => { if (live) setState(st) }).catch(() => { })
+		const d = service.onDidChangeState(e => { if (e.root.toLowerCase() === root.toLowerCase()) setState(e.state) })
+		return () => { live = false; d.dispose() }
+	}, [service, root])
+	return { service, state }
+}
 
 /** the thread's own copy of the project and the question it waits on; the window follows the service as it changes */
 export const useTaskCopyState = (threadId: string) => {

@@ -133,7 +133,7 @@ const VERB_OF: Record<string, string> = {
 	read_file: 'Read', ls_dir: 'Listed', get_dir_tree: 'Listed', search_pathnames_only: 'Searched', search_for_files: 'Searched', search_in_file: 'Searched',
 	edit_file: 'Edited', rewrite_file: 'Rewrote', create_file_or_folder: 'Created', delete_file_or_folder: 'Deleted',
 	run_command: 'Ran', run_persistent_command: 'Ran', open_persistent_terminal: 'Opened terminal', kill_persistent_terminal: 'Closed terminal',
-	repo_map: 'Mapped the project',
+	repo_map: 'Mapped the project', codebase_search: 'Searched the project',
 };
 
 const baseName = (p: string) => p.replace(/\\/g, '/').split('/').filter(Boolean).pop() ?? p;

@@ -546,6 +546,8 @@ export type GlobalSettings = {
 	addonSourcesOff: string[];
 	/** Agent mode works in a copy of the project (a git worktree on its own branch) that the person merges when they accept; off: it edits the folder directly (common/taskCopyModel.ts) */
 	taskCopies: boolean;
+	/** keep an index of the open project on this computer, so that the agent can find code by what it does (common/codebaseIndex/); nothing leaves the computer */
+	codebaseIndex: boolean;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -570,6 +572,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	modelPriceOverrides: {},
 	addonSourcesOff: [],
 	taskCopies: true,
+	codebaseIndex: true,
 }
 
 export type GlobalSettingName = keyof GlobalSettings

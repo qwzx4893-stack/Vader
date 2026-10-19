@@ -25,6 +25,7 @@
 - **A tool changed** (board S07): a tool an MCP server adds after you set it up is not given to the agent until you answer (Keep it off, Allow it, Remove the server), in the chat or in Settings, MCP servers; a call that names it is refused meanwhile.
 - **A command waiting for input** (board S14): a command that goes quiet on a password or a yes/no question is shown as that, with what it asked and that the agent will not type it; the agent is told not to guess. At most six background terminals.
 - **A sign-in page** (board S14): the agent's browser never types into a password, one-time code or card field; the chat says the page asks you to sign in.
+- **Find code by what it does** (`codebase_search`): an index of the open project, made and kept on this computer (git-aware, Merkle tree of hashes so only what changed is read again, BM25 ranking over names and their parts, saved between starts, never reading files that hold secrets). Settings, Privacy and network shows its state and can turn it off. See docs/integrations/codebase-index.md.
 
 ## Unreleased - The interface of the design canvas, as the app: the Vader window, a first run in three steps, Settings in 14 pages, a chat that says what the run is doing
 

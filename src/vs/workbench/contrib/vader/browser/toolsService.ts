@@ -21,6 +21,7 @@ import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
+import { ICodebaseIndexMainService } from '../common/codebaseIndex/codebaseIndexService.js'
 import { IVaderSettingsService } from '../common/vaderSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { IAgentsService } from '../common/agents/agentsService.js'
@@ -212,6 +213,7 @@ export class ToolsService implements IToolsService {
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@ISkillService private readonly skillService: ISkillService,
+		@ICodebaseIndexMainService codebaseIndexService: ICodebaseIndexMainService,
 		@IPathService pathService: IPathService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
@@ -533,6 +535,11 @@ export class ToolsService implements IToolsService {
 				return { providerId, itemName }
 			},
 
+			codebase_search: (params: RawToolParamsObj) => {
+				const query = validateStr('query', params.query)
+				const searchInFolder = validateOptionalURI(params.search_in_folder)
+				return { query, searchInFolder }
+			},
 			repo_map: (params: RawToolParamsObj) => {
 				const focus = validateOptionalStr('focus', params.focus)
 				const maxTokens = Math.min(8000, Math.max(500, validateNumber(params.max_tokens, { default: 2500 }) ?? 2500))
@@ -934,6 +941,13 @@ export class ToolsService implements IToolsService {
 				return { result: { itemName: item.name, providerId: item.providerId, actionTaken: item.installMethod } }
 			},
 
+			codebase_search: async ({ query, searchInFolder }) => {
+				if (!vaderSettingsService.state.globalSettings.codebaseIndex) throw new Error('The project index is turned off (Settings, Privacy and network). Use search_for_files or repo_map.')
+				const root = workspaceContextService.getWorkspace().folders[0]?.uri.fsPath
+				if (!root) throw new Error('codebase_search needs an open folder. Open a folder first (File > Open Folder).')
+				const out = await codebaseIndexService.search(root, query, { directories: searchInFolder ? [searchInFolder.fsPath] : undefined })
+				return { result: { text: out.text, found: out.results.length, files: out.files } }
+			},
 			repo_map: async ({ focus, maxTokens }) => {
 				const folders = workspaceContextService.getWorkspace().folders
 				if (folders.length === 0) throw new Error('repo_map needs an open folder. Open a folder first (File > Open Folder).')
@@ -1184,6 +1198,7 @@ export class ToolsService implements IToolsService {
 			install_marketplace_capability: (params, result) => {
 				return `${result.actionTaken} succeeded for "${result.itemName}" (${result.providerId}).`;
 			},
+			codebase_search: (params, result) => result.text,
 			repo_map: (params, result) => {
 				if (!result.text) return 'No source files in a language the map covers (TypeScript, JavaScript, Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP, C, C++) were found in this project.'
 				const head = `Project map: ${result.shownFiles} of ${result.mappedFiles} source files shown, most depended-on first. Each line is "line number: definition".${result.timedOut ? ' Reading was cut short by a time limit, so some files are missing.' : ''}`

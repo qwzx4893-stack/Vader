@@ -4,7 +4,8 @@
 
 import React from 'react'
 import { URI } from '../../../../../../../base/common/uri.js'
-import { useAccessor, useSettingsState } from '../util/services.js'
+import { useAccessor, useCodebaseIndexState, useSettingsState } from '../util/services.js'
+import { indexStatusWords } from '../../../../common/codebaseIndex/indexWords.js'
 import { Group, Line, PageHead, Switch } from './ui.js'
 
 // Privacy and network (board R20): what Vader sends over the network, and to whom. The list of who it can contact is the whole list; nothing else is contacted at
@@ -17,6 +18,10 @@ export const PrivacyPage = () => {
 	const settings = accessor.get('IVaderSettingsService')
 	const opener = accessor.get('IOpenerService')
 	const auto = useSettingsState().globalSettings.autoCheckUpdates
+	const indexOn = useSettingsState().globalSettings.codebaseIndex !== false
+	const root = accessor.get('IWorkspaceContextService').getWorkspace().folders[0]?.uri.fsPath
+	const { service: indexService, state: indexState } = useCodebaseIndexState(indexOn ? root : undefined)
+	const indexWords = indexStatusWords(indexState, { on: indexOn, hasFolder: !!root, now: Date.now() })
 
 	const contacts: { who: string, when: string, host: string }[] = [
 		{ who: 'Your model provider', when: 'Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else.', host: 'the provider you configure, or localhost' },
@@ -41,6 +46,10 @@ export const PrivacyPage = () => {
 
 		<Group title='Updates'>
 			<Line first title='Check for new releases automatically' lockKey='autoCheckUpdates' detail='Looks at the public list of Vader releases and sends nothing about you. Off by default.' right={<Switch on={auto} label='Check for new releases automatically' testId='vader-settings-privacy-autocheck' onChange={v => settings.setGlobalSetting('autoCheckUpdates', v)} />} />
+		</Group>
+		<Group title='Search in the project'>
+			<Line first lockKey='codebaseIndex' title='Keep an index of the project for search' detail='Lets the agent find code by what it does, not only by exact text. The index is made and kept on this computer; no file, no word of it is sent anywhere. Files that hold secrets (.env, keys) are never read.' right={<Switch on={indexOn} label='Keep an index of the project for search' testId='vader-privacy-index' onChange={v => settings.setGlobalSetting('codebaseIndex', v)} />} />
+			<Line testId='vader-privacy-index-status' title={<span data-testid='vader-privacy-index-title'>{indexWords.title}</span>} detail={<span data-testid='vader-privacy-index-detail'>{indexWords.detail}</span>} right={indexOn && root ? <button className='gb' data-testid='vader-privacy-index-rebuild' disabled={indexWords.tone === 'busy'} onClick={() => { void indexService.rebuild(root) }}>Rebuild</button> : undefined} />
 		</Group>
 		<div style={{ paddingTop: 14 }}><button className='gb' data-testid='vader-privacy-verified' onClick={() => { void opener.open(URI.parse(`${REPO_URL}/blob/main/docs/integrations/privacy.md`)) }}>How this is verified</button></div>
 	</div>

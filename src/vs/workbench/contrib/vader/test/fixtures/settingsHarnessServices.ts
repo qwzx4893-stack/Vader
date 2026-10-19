@@ -21,5 +21,6 @@ export const useModelRouterServiceState = () => { useTick(); return w.__router.s
 export const useAgentsServiceState = () => { useTick(); return w.__agentsSvc.state }
 export const useSkillsState = () => { useTick(); return w.__skills ?? [] }
 export const useMCPServiceState = () => { useTick(); return w.__mcp.state }
+export const useCodebaseIndexState = (root: string | undefined) => { useTick(); return { service: w.__accessor.get('ICodebaseIndexMainService'), state: root ? w.__indexState : undefined } }
 export const useMemoryState = () => { useTick(); return w.__memory.state }
 export const useRefreshModelListener = () => { }
