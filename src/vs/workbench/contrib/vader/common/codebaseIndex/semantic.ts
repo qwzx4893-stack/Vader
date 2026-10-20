@@ -14,7 +14,7 @@
 //  - the word ranking and the meaning ranking are joined by reciprocal rank fusion, so neither needs the other's score scale.
 
 export const EMBED_DIMS = 384
-export const MAX_EMBED_CHARS = 1200
+export const MAX_EMBED_CHARS = 800
 export const MAX_VECTORS = 60_000
 
 export type Vec = Float32Array
@@ -121,7 +121,7 @@ export type QueueIO = {
 	hold?: () => boolean
 }
 export type QueueOptions = { batch?: number; duty?: number; maxBatchMs?: number }
-export type SliceStats = { embedded: number; busyMs: number; restedMs: number; stopped: 'empty' | 'held' | 'full' | 'budget' | 'failed' }
+export type SliceStats = { embedded: number; busyMs: number; restedMs: number; stopped: 'empty' | 'held' | 'full' | 'budget' | 'failed'; error?: string }
 
 export class EmbedQueue {
 	private readonly _todo = new Map<string, Todo>()
@@ -154,7 +154,7 @@ export class EmbedQueue {
 			const next = [...this._todo.values()].sort((a, b) => b.priority - a.priority).slice(0, batch)
 			const t0 = io.now()
 			let vecs: Vec[]
-			try { vecs = await io.embed(next.map(n => n.text)) } catch { stats.stopped = 'failed'; return stats }
+			try { vecs = await io.embed(next.map(n => n.text)) } catch (e) { stats.stopped = 'failed'; stats.error = e instanceof Error ? e.message : String(e); return stats }
 			const took = io.now() - t0
 			stats.busyMs += took
 			for (let i = 0; i < next.length; i++) {

@@ -1,0 +1,9 @@
+{
+	"name": "vader-embedding-runtime",
+	"private": true,
+	"version": "1.0.0",
+	"description": "The runtime for search by meaning (transformers.js + onnxruntime-node), installed on its own and trimmed by prepare.mjs; it is not a dependency of the editor itself.",
+	"dependencies": {
+		"@huggingface/transformers": "4.3.1"
+	}
+}

@@ -26,17 +26,20 @@ let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
 const resources = (name) => {
 	const dir = path.join(tmp, 'res-' + name);
-	for (const f of ['onnx/model_quantized.onnx', 'tokenizer.json', 'config.json']) { const p = path.join(dir, 'models', E.EMBED_MODEL_NAME, f); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'x'); }
+	for (const f of ['onnx/model_quantized.onnx', 'tokenizer.json', 'tokenizer_config.json', 'config.json']) { const p = path.join(dir, 'models', E.EMBED_MODEL_NAME, f); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, 'x'); }
+	fs.mkdirSync(path.join(dir, 'node_modules', '@huggingface', 'transformers'), { recursive: true }); fs.writeFileSync(path.join(dir, 'node_modules', '@huggingface', 'transformers', 'package.json'), '{}');
 	return dir;
 };
 
+const slashes = (p) => p.split(path.sep).join('/');
+check('the folder is <resources>/embedding unless VADER_EMBEDDING_DIR says otherwise', slashes(E.embeddingDirOf('/r')) === '/r/embedding' && slashes(E.modelRootOf('/e')) === '/e/models');
 check('the model is the one the app ships, and the question prefix is the one it was trained with', E.EMBED_MODEL_NAME === 'snowflake-arctic-embed-xs' && E.QUERY_PREFIX.startsWith('Represent this sentence for searching relevant passages'));
 check('one thread on a small machine, two on a bigger one, never more', E.threadsFor(2) === 1 && E.threadsFor(4) === 1 && E.threadsFor(8) === 2 && E.threadsFor(64) === 2);
-check('without the model files in the app there is no embedder, and nothing is started', E.modelIsInstalled(path.join(tmp, 'empty')) === false && (await E.createLocalEmbedder({ resourcesPath: path.join(tmp, 'empty'), workerPath: worker, cores: 4 })) === undefined);
+check('without the model files in the app there is no embedder, and nothing is started', E.modelIsInstalled(path.join(tmp, 'empty')) === false && (await E.createLocalEmbedder({ embeddingDir: path.join(tmp, 'empty'), workerPath: worker, cores: 4 })) === undefined);
 check('with the files, the model is found', E.modelIsInstalled(resources('a')) === true);
 
 {
-	const e = await E.createLocalEmbedder({ resourcesPath: resources('a'), workerPath: worker, cores: 8 });
+	const e = await E.createLocalEmbedder({ embeddingDir: resources('a'), workerPath: worker, cores: 8 });
 	check('with the files and a worker that is ready there is an embedder', !!e);
 	const docs = await e.embedDocs(['abc', 'hello world']);
 	check('texts are embedded in order, one vector each, as floats', docs.length === 2 && docs[0] instanceof Float32Array && docs[0].length === 4 && docs[0][0] === 3 && docs[1][0] === 11 && docs[1][2] === 1, JSON.stringify(docs.map(d => [...d])));
@@ -53,17 +56,17 @@ check('with the files, the model is found', E.modelIsInstalled(resources('a')) =
 	e.dispose();
 }
 {
-	const e = await E.createLocalEmbedder({ resourcesPath: resources('b'), workerPath: worker, cores: 4 });
+	const e = await E.createLocalEmbedder({ embeddingDir: resources('b'), workerPath: worker, cores: 4 });
 	e.dispose();
 	check('after dispose nothing can be asked', await e.embedDocs(['x']).then(() => false, () => true));
 }
 {
 	const r1 = resources('nr'); fs.writeFileSync(path.join(r1, 'models', E.EMBED_MODEL_NAME, 'NOT_READY'), '');
-	check('a worker that reports it could not load the model gives no embedder', (await E.createLocalEmbedder({ resourcesPath: r1, workerPath: worker, cores: 4 })) === undefined);
+	check('a worker that reports it could not load the model gives no embedder', (await E.createLocalEmbedder({ embeddingDir: r1, workerPath: worker, cores: 4 })) === undefined);
 	const r2 = resources('ds'); fs.writeFileSync(path.join(r2, 'models', E.EMBED_MODEL_NAME, 'DIES_AT_START'), '');
-	check('a worker that dies while starting gives no embedder', (await E.createLocalEmbedder({ resourcesPath: r2, workerPath: worker, cores: 4 })) === undefined);
+	check('a worker that dies while starting gives no embedder', (await E.createLocalEmbedder({ embeddingDir: r2, workerPath: worker, cores: 4 })) === undefined);
 }
-check('a worker file that does not exist gives no embedder instead of an error', (await E.createLocalEmbedder({ resourcesPath: resources('c'), workerPath: path.join(tmp, 'nope.mjs'), cores: 4 })) === undefined);
+check('a worker file that does not exist gives no embedder instead of an error', (await E.createLocalEmbedder({ embeddingDir: resources('c'), workerPath: path.join(tmp, 'nope.mjs'), cores: 4 })) === undefined);
 
 console.log(`\n${passed} passed, ${failed} failed`);
 clearInterval(keepAlive);

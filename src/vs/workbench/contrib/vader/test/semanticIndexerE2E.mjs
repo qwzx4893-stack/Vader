@@ -140,6 +140,32 @@ check('the vectors were saved with the index', fs.readdirSync(store).some(f => f
 	await ix.dispose();
 }
 
+// ---- a model that is slow to start, with a search made while it starts (the work must not be lost)
+{
+	const m = model();
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-race'), async () => { await wait(300); return m; }, opts);
+	await ix.sync();
+	await ix.search('stop too many hits'); // asks for the model while the background work is asking for it too
+	check('a search made while the model is starting does not stop the background work', await until(() => m.docTexts >= 5 && ix.state.meaning && ix.state.meaning.waiting === 0, 8000), JSON.stringify(ix.state.meaning));
+	await ix.dispose();
+}
+
+// ---- a model that stumbles at first is tried again
+{
+	const m = model(); let fails = 2;
+	const flaky = { ...m, async embedDocs(t) { if (fails-- > 0) throw new Error('out of memory'); return m.embedDocs(t); }, embedQuery: m.embedQuery, dispose() { } };
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-flaky'), async () => flaky, { ...opts, failRetryMs: 50 });
+	await ix.sync();
+	check('a model that fails twice and then works still gets the project embedded', await until(() => m.docTexts >= 5, 10_000), String(m.docTexts));
+	await ix.dispose();
+	const dead = { async embedDocs() { throw new Error('never'); }, async embedQuery() { return embedText('x'); }, dispose() { } };
+	let n = 0; const counting = { ...dead, async embedDocs() { n++; throw new Error('never'); } };
+	const ix2 = new CodebaseIndexer(project, path.join(tmp, 'store-dead'), async () => counting, { ...opts, failRetryMs: 10 });
+	await ix2.sync(); await wait(1500);
+	check('a model that always fails is given up on after five tries, not hammered forever', n >= 3 && n <= 6, String(n));
+	await ix2.dispose();
+}
+
 // ---- on battery nothing is embedded
 {
 	const m = model(); let held = true;

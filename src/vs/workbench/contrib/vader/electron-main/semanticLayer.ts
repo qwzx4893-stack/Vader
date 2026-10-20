@@ -40,11 +40,15 @@ export type SemanticOptions = {
 	floor?: number
 	/** how long to wait before looking again when the work was held back */
 	holdRetryMs?: number
+	/** how long to wait before trying again after the model failed (doubles each time) */
+	failRetryMs?: number
 }
 
 export class SemanticLayer {
 	private _embedder: Embedder | undefined
 	private _tried = false
+	private _failures = 0
+	private _modelStart: Promise<Embedder | undefined> | undefined
 	private readonly _store = new VectorStore()
 	private readonly _queue: EmbedQueue
 	/** the pieces of each file, in order */
@@ -58,9 +62,12 @@ export class SemanticLayer {
 	private _disposed = false
 	private _persistTimer: ReturnType<typeof setTimeout> | undefined
 	onDidChange: ((s: MeaningState) => void) | undefined
+	/** what the model last failed with (for diagnosing) */
+	lastError: string | undefined
+	lastSlice: { embedded: number; stopped: string } | undefined
 
 	constructor(private readonly _file: string, private readonly _factory: EmbedderFactory, private readonly _o: SemanticOptions = {}) {
-		this._queue = new EmbedQueue(this._store, { batch: 8, duty: _o.duty ?? 0.3 })
+		this._queue = new EmbedQueue(this._store, { batch: 8, duty: _o.duty ?? 0.4 })
 	}
 
 	get state(): MeaningState { return { ready: this._store.size, waiting: this._queue.pending, on: this._tried ? !!this._embedder : undefined } }
@@ -68,12 +75,16 @@ export class SemanticLayer {
 	/** has this file's pieces been noted (a file in an index read from disk is not, until it is looked at again) */
 	knows(rel: string): boolean { return this._piecesOfFile.has(rel) }
 
-	private async _model(): Promise<Embedder | undefined> {
-		if (!this._tried) {
-			this._tried = true
-			try { this._embedder = await this._factory() } catch { this._embedder = undefined }
+	/** the model, started once: everyone who asks while it is starting gets the same answer when it is ready */
+	private _model(): Promise<Embedder | undefined> {
+		if (!this._modelStart) {
+			this._modelStart = (async () => {
+				try { this._embedder = await this._factory() } catch { this._embedder = undefined }
+				this._tried = true
+				return this._embedder
+			})()
 		}
-		return this._embedder
+		return this._modelStart
 	}
 
 	// ---- keeping track of what is in the project
@@ -125,7 +136,7 @@ export class SemanticLayer {
 
 	private _wake(delay?: number): void {
 		if (this._loop || this._running || this._disposed) return
-		this._loop = setTimeout(() => { this._loop = undefined; void this._work() }, delay ?? this._o.restMs ?? 1500)
+		this._loop = setTimeout(() => { this._loop = undefined; void this._work() }, delay ?? this._o.restMs ?? 500)
 		;(this._loop as unknown as { unref?: () => void }).unref?.()
 	}
 
@@ -140,12 +151,16 @@ export class SemanticLayer {
 				embed: t => model.embedDocs(t), now: () => Date.now(),
 				sleep: ms => new Promise(r => { const h = setTimeout(r, ms); (h as unknown as { unref?: () => void }).unref?.() }),
 				hold: this._o.hold,
-			}, this._o.sliceMs ?? 400)
+			}, this._o.sliceMs ?? 3000)
 			for (const h of [...this._textOfHash.keys()]) if (this._store.has(h)) this._textOfHash.delete(h)
 			this._changed()
 			if (stats.embedded > 0) this._schedulePersist()
+			this.lastSlice = { embedded: stats.embedded, stopped: stats.stopped }
+			if (stats.stopped === 'failed') this.lastError = stats.error
+			if (stats.stopped === 'failed') this._failures++; else if (stats.embedded > 0) this._failures = 0
 			if (stats.stopped === 'held') again = this._o.holdRetryMs ?? 30_000 // the computer may be plugged in later
-			else if (this._queue.pending > 0 && stats.stopped !== 'full' && stats.stopped !== 'failed') again = this._o.restMs ?? 1500
+			else if (stats.stopped === 'failed') { if (this._failures < 5) again = Math.min(60_000, (this._o.failRetryMs ?? 2000) * 2 ** (this._failures - 1)) } // a model that stumbles is tried again, later each time, and given up on after five in a row
+			else if (this._queue.pending > 0 && stats.stopped !== 'full') again = this._o.restMs ?? 500
 		} finally {
 			this._running = false
 			if (again !== undefined) this._wake(again)

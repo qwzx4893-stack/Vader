@@ -55,10 +55,21 @@ thread (`electron-main/embedWorker.ts`, `localEmbedder.ts`). It is part of the a
 - Vectors are bytes (one per number), at most 60,000 of them (about 23 MB), saved next to the index.
 - A model that is missing, fails, or is slow (2.5 s) leaves the word results exactly as they were.
 
+**What ships and how:** `build/embedding/prepare.mjs` makes the folder `resources/embedding` (runtime 33.7 MB + model 22.6 MB = about 56 MB added to the install and to
+each update): transformers.js 4.3.1 and onnxruntime-node for one platform (installed on its own from `build/embedding/package-lock.json`, scripts off, so the editor's own install
+is unchanged), a stand-in for `sharp` (image handling, never used here), and the model files checked byte for byte against `build/embedding/model.lock.json` (Hugging Face revision
+`d8c86521...`, licence Apache-2.0 as stated in the model card). The Windows workflow runs it between packaging and the installer. The app looks for the folder in
+`<resources>/embedding` (or `VADER_EMBEDDING_DIR`); without it Settings says "Search by meaning is not available in this install" and search stays on words.
+
+**Measured on a Core i7-12700H (20 threads), with the real model in a worker thread, over this repository's `common/` folder (141 files, 1,223 pieces):**
+- starting the model: about 0.4 s; embedding a question: 3 to 4 ms;
+- embedding a piece of code: about 50 to 110 ms depending on the threads and memory setting (the memory arena is off: about 150 to 200 MB instead of 430 MB, at 1.5 times the time);
+- the whole project is ready after about 4 minutes of background work (duty cycle 40%), searches in between are answered with the pieces ready so far plus the best word matches embedded on the spot (0.5 to 2 s the first time, 6 to 30 ms after);
+- on 8 questions written in other words than the code uses, the model put the right file first 8 times out of 8 (a toy set of 8 files, not a benchmark).
+A project of 20,000 pieces would take roughly an hour of background time at this speed; that is an extrapolation, not a measurement.
+
 **Honest limits:**
-- The model and transformers.js are not in the repository yet. `localEmbedder.ts` looks for `<app resources>/models/snowflake-arctic-embed-xs/` (`onnx/model_quantized.onnx`,
-  `tokenizer.json`, `config.json`); without them the Settings page says "Search by meaning is not available in this install" and search stays on words.
-  Shipping it needs the `@huggingface/transformers` dependency, the model files copied into the app resources, and `embedWorker.js` built next to `localEmbedder.js`.
-- The real model has not been run in a real app. What is tested: the rules (35 checks), the indexer with a stand-in model (17 checks), the worker protocol with a stand-in worker (15 checks).
+- Never run inside a packaged, installed Vader: the workflow step, the asar layout and the worker start from the installed app are untested until a Windows build is made.
 - arctic-embed-xs is an English text model, not a code model; for code it works because the file path and symbol name are in what it reads, and the word ranking is always part of the answer.
-- CPU use and indexing time on a real project are estimates from the design (30% duty cycle), not measurements.
+- Only Windows x64 has been prepared on this machine (`--platform`/`--arch` for the others are untested).
+- The tests of the rules (35 checks), the indexer with a stand-in model (20), and the worker protocol with a stand-in worker (16) do not use the real model; the real model was exercised by hand.
