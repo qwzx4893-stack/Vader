@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -64,7 +65,7 @@ async function show(props, size = { width: 520, height: 700 }) {
 	await page.waitForTimeout(150);
 	return { page, errors };
 }
-const shot = (page, name) => page.screenshot({ path: path.join(shots, name + '.png') });
+const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png') }); };
 const log = (page) => page.evaluate(() => window.__log.slice());
 const open = async (page) => { await page.locator(TID('vader-picker-button')).click(); await page.waitForSelector(TID('vader-picker')); await page.waitForTimeout(250); };
 

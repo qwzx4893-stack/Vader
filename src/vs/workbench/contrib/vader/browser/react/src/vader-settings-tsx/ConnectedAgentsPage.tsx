@@ -60,12 +60,12 @@ const AgentRow = ({ def }: Row) => {
 	const version = status?.installedVersion
 
 	return <div data-testid={`vader-external-agent-${def.id}`} data-state={status?.state ?? 'checking'} data-signed-in={sign?.state ?? ''} data-in-use={inUse ? 'true' : 'false'} style={{ borderBottom: '1px solid var(--ln)' }}>
-		<div className='r' style={{ gap: 14, minHeight: 56, padding: '8px 2px' }}>
-			<span className='logo sm t2'><AgentLogo logo={def.logo} size={16} /></span>
-			<div className='c fl' style={{ minWidth: 0, gap: 1 }}><span className='t1' style={{ fontWeight: 600 }}>{def.name}</span><span className='hint' style={{ lineHeight: 1.4 }}>{def.tagline}</span></div>
-			<span className='t2' data-testid={`vader-external-agent-${def.id}-state`} style={{ color: word.tone === 'ok' ? '#4cc38a' : word.tone === 'warn' ? 'var(--wa)' : undefined, whiteSpace: 'nowrap' }}>{word.tone === 'ok' ? '✓ ' : ''}{word.text}</span>
-			{version ? <span className='mo t3' style={{ width: 64, textAlign: 'right' }}>{version}</span> : null}
-			<span className='r' style={{ gap: 8, minWidth: 96, justifyContent: 'flex-end' }}>
+		<div className='r' style={{ gap: 14, minHeight: 48, padding: '4px 2px' }}>
+			<span className='r t2' style={{ gap: 10, width: 150, flex: 'none' }}><AgentLogo logo={def.logo} size={16} /><span className='t1 tr' style={{ fontWeight: 500 }}>{def.name}</span></span>
+			<span className='t3 tr fl' title={def.tagline} style={{ fontSize: 12.5 }}>{def.tagline}</span>
+			<span className='t2' data-testid={`vader-external-agent-${def.id}-state`} style={{ color: word.tone === 'ok' ? 'var(--t2)' : word.tone === 'warn' ? 'var(--wa)' : 'var(--t3)', whiteSpace: 'nowrap', fontSize: 12.5 }}>{word.tone === 'ok' ? <span style={{ color: '#4cc38a' }}>{'✓ '}</span> : ''}{word.text}</span>
+			{version ? <span className='mo t3' style={{ width: 56, textAlign: 'right' }}>{version}</span> : null}
+			<span className='r' style={{ gap: 8, minWidth: 96, justifyContent: 'flex-end', flex: 'none' }}>
 				{working ? <span className='t3' data-testid={`vader-external-agent-${def.id}-busy`} role='status'>{working}</span> : <>
 					{installable ? <button className='pb' data-testid={`vader-external-agent-${def.id}-install`} onClick={() => service.install(def.id)}>Install</button> : null}
 					{mustConnect ? <button className='pb' data-testid={`vader-external-agent-${def.id}-connect`} onClick={() => service.connect(def.id)}>Connect</button> : null}
@@ -159,7 +159,7 @@ export const ConnectedAgentsPage = () => {
 
 	return <div data-testid='vader-settings-external-agents'>
 		<PageHead title='Connected agents' desc='Programs from other companies that you already pay for, used inside Vader’s chat. You sign in with your own account in the vendor’s program. Vader never sees the token. The agent keeps its own tools and permission rules, and its usage is counted on your account.' />
-		<div className='r' style={{ paddingBottom: 8 }}><span className='hint fl'>In the chat</span><button className='tx' data-testid='vader-external-agents-check' disabled={checking} onClick={() => void check()}>{checking ? 'Checking...' : 'Check for newer versions'}</button></div>
+		<div className='r' style={{ paddingBottom: 8 }}><span className='hint fl'>In the chat</span><span className='hint narrow-hide' style={{ marginRight: 8 }}>Versions from the public agent registry</span><button className='tx' data-testid='vader-external-agents-check' disabled={checking} onClick={() => void check()}>{checking ? 'Checking...' : 'Check for newer versions'}</button></div>
 		<div style={{ borderTop: '1px solid var(--ln)' }}>{chat.map(def => <AgentRow key={def.id} def={def} />)}</div>
 		<div className='hint' style={{ padding: '26px 2px 8px' }}>In a terminal</div>
 		<div style={{ borderTop: '1px solid var(--ln)' }}>{terminal.map(def => <AgentRow key={def.id} def={def} />)}</div>

@@ -15,6 +15,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -78,7 +79,7 @@ async function newPage(setup, page0) {
 	if (page0) await page.locator(TID(`vader-settings-nav-${page0}`)).click();
 	return { page, errors };
 }
-const shot = async (page, name) => { await page.screenshot({ path: path.join(shots, name + '.png') }); };
+const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png') }); };
 const log = (page) => page.evaluate(() => window.__log.slice());
 /** anything cut off or spilling out of the page */
 async function layoutProblems(page) {

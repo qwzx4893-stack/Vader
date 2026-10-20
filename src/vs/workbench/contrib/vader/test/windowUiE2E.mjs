@@ -13,6 +13,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -81,7 +82,7 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
-const shot = async (page, name) => { await page.screenshot({ path: path.join(shots, name + '.png') }); };
+const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png') }); };
 
 {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -103,7 +104,15 @@ const shot = async (page, name) => { await page.screenshot({ path: path.join(sho
 	await view('04-addons', () => window.__shell.show('addons'));
 	await page.locator('[data-testid=vader-addon-row] [data-testid=vader-addon-name]').first().click();
 	await page.waitForTimeout(500); await shot(page, '04b-addon-page');
-	await page.locator('[data-testid=vader-addon-row] [data-testid=vader-addon-name]').count().catch(() => 0);
+	await page.locator('[data-testid=vader-item-back]').click(); await page.waitForTimeout(300);
+	for (const [tab, name] of [['skills', '04c-addons-skills'], ['mcp', '04d-addons-mcp'], ['extensions', '04e-addons-extensions'], ['agents', '04f-addons-agents']]) {
+		await page.locator(`[data-testid=vader-addons-tab-${tab}]`).click(); await page.waitForTimeout(500); await shot(page, name);
+		await page.locator('[data-testid=vader-addon-row] [data-testid=vader-addon-name]').first().click(); await page.waitForTimeout(500); await shot(page, name + '-page');
+		await page.locator('[data-testid=vader-item-back]').click(); await page.waitForTimeout(300);
+	}
+	await page.locator('[data-testid=vader-addons-tab-all]').click();
+	await page.locator('[data-testid=vader-addons-installed]').click(); await page.waitForTimeout(500); await shot(page, '04g-addons-installed');
+	await page.locator('[data-testid=vader-installed-back]').click(); await page.locator('[data-testid=vader-addons-installed]').waitFor()
 	await view('05-review', () => { window.__chat.switchToThread('t-wait'); window.__shell.show('conversation', 'review'); });
 	await view('06-browser', () => { window.__chat.switchToThread('t-run1'); window.__shell.show('conversation', 'browser'); });
 	await view('07-terminal', () => window.__shell.show('conversation', 'terminal'));

@@ -12,6 +12,8 @@ import { ADDON_SOURCES, AddonSourceKind, isSourceOn } from '../../../../common/m
 import { parseTrustHistory, TRUST_HISTORY_STORAGE_KEY } from '../../../../common/marketplace/trustHistory.js'
 import { SkillRecord } from '../../../../common/skills/skillServiceTypes.js'
 import { Icon } from '../vader-shell-tsx/icons.js'
+import { ProviderLogo } from '../util/ProviderLogo.js'
+import { PUBLISHER_MARK } from '../vader-marketplace-tsx/ItemPage.js'
 import { Note, PageHead, Switch } from './ui.js'
 
 // Skills (board R15): the skills this computer has. Switch them on and off, read them, mark them trusted or block them, remove them. Every skill starts off and
@@ -94,7 +96,7 @@ export const SkillsPage = () => {
 				const asks = skillAsks(s.instructions)
 				return <div key={s.id} data-testid='vader-skills-row' data-skill={s.name} data-trust={s.trustState} style={{ borderBottom: '1px solid var(--ln)' }}>
 					<div className='td' style={{ gridTemplateColumns: '44px minmax(0,1fr) 190px 130px 58px 78px', height: 64, padding: '0 2px', borderBottom: 0 }}>
-						<span className='logo sm'><Icon k='file' /></span>
+						<span className='logo sm'>{PUBLISHER_MARK[(ownerOf(s.source.repositoryUrl) ?? '').toLowerCase()] ? <ProviderLogo providerName={PUBLISHER_MARK[(ownerOf(s.source.repositoryUrl) ?? '').toLowerCase()]} size={16} /> : <Icon k='file' />}</span>
 						<button className='c' style={{ minWidth: 0, gap: 1 }} aria-expanded={isOpen} data-testid='vader-skills-expand' onClick={() => setOpen(isOpen ? undefined : s.id)}>
 							<span className='t1' style={{ fontWeight: 600 }}>{s.name}</span>
 							<span className='hint tr'>{repoOf(s.source.repositoryUrl) ?? 'written by the agent'}{s.source.version ? ` · ${s.source.version}` : ''}, installed {ago(s.installedAt)}</span>
@@ -102,7 +104,10 @@ export const SkillsPage = () => {
 						<span className='r' style={{ gap: 8 }}><span className='dot' style={{ background: blocked ? '#f06a6e' : s.trustState === 'trusted' ? '#4cc38a' : '#e2a93f' }} /><span className='t2' data-testid='vader-skills-trust'>{s.trustState === 'trusted' ? 'Trusted' : blocked ? 'Blocked' : 'Needs review'} {blocked ? '' : `${trust.score}%`}</span></span>
 						<span className='t2 tr'>{asksOf(s)}</span>
 						<span><Switch on={s.enabled && !blocked} label={`${s.name} on`} testId='vader-skills-switch' onChange={v => { if (!blocked) service.setEnabled(s.id, v) }} /></span>
-						<span className='r' style={{ justifyContent: 'flex-end' }}><button className={s.trustState === 'review_required' ? 'gb' : 'tx'} data-testid='vader-skills-read' onClick={() => setOpen(isOpen ? undefined : s.id)}>{isOpen ? 'Close' : s.trustState === 'review_required' ? 'Read' : 'Details'}</button></span>
+						<span className='r' style={{ justifyContent: 'flex-end' }}>{s.trustState === 'review_required'
+							? <button className='gb' data-testid='vader-skills-read' onClick={() => setOpen(isOpen ? undefined : s.id)}>{isOpen ? 'Close' : 'Read'}</button>
+							: blocked ? <button className='tx' data-testid='vader-skills-remove-row' onClick={() => { service.remove(s.id); setOpen(undefined) }}>Remove</button>
+								: <button className='tx' data-testid='vader-skills-pin-row' title='A pinned skill is always given to the agent when it is on' aria-pressed={!!s.pinned} onClick={() => service.setPinned(s.id, !s.pinned)}>{s.pinned ? 'Unpin' : 'Pin'}</button>}</span>
 					</div>
 					{isOpen ? <div className='c' data-testid='vader-skills-detail' style={{ gap: 12, padding: '4px 2px 16px 58px' }}>
 						<span className='t2' style={{ lineHeight: 1.5 }}>{s.description}</span>

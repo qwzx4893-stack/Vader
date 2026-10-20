@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -100,7 +101,7 @@ const rows = (page) => page.locator('[data-testid=vader-addon-row]');
 const waitRows = async (page, min = 1, timeout = 20000) => { await page.waitForFunction((m) => document.querySelectorAll('[data-testid=vader-addon-row]').length >= m, min, { timeout }); };
 const tab = (page, id) => page.locator(`[data-testid=vader-addons-tab-${id}]`);
 let shotN = 0;
-const shot = async (page, name) => { const f = path.join(shots, `${String(++shotN).padStart(2, '0')}-${name}.png`); await page.screenshot({ path: f }); };
+const shot = async (page, name) => { await auditShot(page, name); const f = path.join(shots, `${String(++shotN).padStart(2, '0')}-${name}.png`); await page.screenshot({ path: f }); };
 
 /** nothing cut off or spilling, in the part of the page that is on screen */
 const layoutProblems = (page) => page.evaluate(() => {
@@ -206,10 +207,23 @@ try {
 		await page.waitForFunction((n) => { const rs = [...document.querySelectorAll('[data-testid=vader-addon-row]')]; const r = rs.find((x) => x.querySelector('[data-testid=vader-addon-name]')?.textContent.trim() === n); return r && /Installed/.test(r.innerText); }, tname, { timeout: 15000 });
 		check('the row then says Installed', true);
 		await page.getByRole('button', { name: 'Installed', exact: true }).click();
-		await page.waitForTimeout(400);
-		const only = await rows(page).count();
-		check('the Installed switch lists only what is installed', only === 1 && /Installed/.test(await rows(page).first().innerText()), String(only));
-		await page.getByRole('button', { name: 'Installed', exact: true }).click();
+		await page.waitForSelector('[data-testid=vader-installed-page]', { timeout: 10000 });
+		await page.waitForSelector('[data-testid=vader-installed-row]', { timeout: 10000 });
+		const names = await page.locator('[data-testid=vader-installed-name]').allInnerTexts();
+		check('the Installed page lists what is installed, the skill just added among it', names.includes(tname), names.join(', '));
+		check('the Installed page groups by kind with a title each', (await page.locator('[data-testid=vader-installed-group]').count()) >= 1);
+		await page.locator('[data-testid=vader-installed-filter]').fill('zzzz-nothing');
+		check('the filter on the Installed page says nothing matches', /Nothing installed matches/.test(await page.locator('[data-testid=vader-installed-page]').innerText()));
+		await page.locator('[data-testid=vader-installed-filter]').fill('');
+		const mine = page.locator('[data-testid=vader-installed-row]').filter({ hasText: tname }).first();
+		check('a skill not yet read has Read and a switch that cannot be used before reading', (await mine.locator('[data-testid=vader-installed-read]').count()) === 1 && await mine.locator('[data-testid=vader-installed-switch]').isDisabled());
+		check('the banner then says a skill waits to be read', /switched off until you read/.test(await page.locator('[data-testid=vader-installed-banner]').innerText()));
+		await page.locator('[data-testid=vader-installed-review]').click();
+		check('Review updates shows only what waits', (await page.locator('[data-testid=vader-installed-row]').count()) >= 1);
+		await page.locator('[data-testid=vader-installed-review]').click();
+		await page.locator('[data-testid=vader-installed-back]').click();
+		await page.waitForSelector('[data-testid=vader-addons-installed]', { timeout: 10000 });
+		check('the arrow goes back to Add-ons', (await page.locator('[data-testid=vader-installed-page]').count()) === 0);
 		await tab(page, 'skills').click();
 		await waitRows(page, 6);
 		// install from the page, with the second button that also switches the skill on

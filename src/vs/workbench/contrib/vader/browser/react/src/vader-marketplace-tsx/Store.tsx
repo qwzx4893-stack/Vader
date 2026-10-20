@@ -99,7 +99,9 @@ const AddonRow = ({ item, selected, busy, onSelect, onAction }: { item: Marketpl
 	</div>
 }
 
-export const StoreView = ({ types, query, includeExtensions, installedOnly, grouped, onSeeAll, category, onPageChange }: {
+export type StoreSort = 'trusted' | 'name' | 'installs'
+
+export const StoreView = ({ types, query, includeExtensions, installedOnly, grouped, onSeeAll, category, onPageChange, accept, sort = 'trusted', onLoaded, before, after }: {
 	types: MarketplaceItemType[], query?: string,
 	/** also list extensions */
 	includeExtensions?: boolean, installedOnly?: boolean,
@@ -109,6 +111,13 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 	category?: string,
 	/** called with true when an item's own page opens and false when it closes */
 	onPageChange?: (open: boolean) => void,
+	/** a filter of the page (a source, how a server runs); the items are the ones it accepts */
+	accept?: (item: MarketplaceItem) => boolean,
+	sort?: StoreSort,
+	/** the items found, before the page's filters, so the page can offer the sources and kinds that really occur */
+	onLoaded?: (items: MarketplaceItem[]) => void,
+	/** a note above the list and one under it, inside the part that scrolls */
+	before?: React.ReactNode, after?: React.ReactNode,
 }) => {
 	const accessor = useAccessor()
 	const marketplace = accessor.get('IUnifiedMarketplaceService')
@@ -120,10 +129,15 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 
 	const keyOf = (i: MarketplaceItem) => `${i.providerId}:${i.id}`
 	const shown = useMemo(() => {
-		const list = items.slice().filter(i => !installedOnly || i.installed).filter(i => !category || ((i.metadata.categories as string[] | undefined) ?? []).includes(category))
-		list.sort((a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)))
+		const list = items.slice().filter(i => !installedOnly || i.installed).filter(i => !category || ((i.metadata.categories as string[] | undefined) ?? []).includes(category)).filter(i => !accept || accept(i))
+		const byTrust = (a: MarketplaceItem, b: MarketplaceItem) => (b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)
+		const installs = (i: MarketplaceItem) => (typeof i.metadata.installCount === 'number' ? i.metadata.installCount : -1)
+		list.sort(sort === 'name' ? (a, b) => a.name.localeCompare(b.name)
+			: sort === 'installs' ? (a, b) => (installs(b) - installs(a)) || byTrust(a, b)
+				: (a, b) => (Number(b.installed) - Number(a.installed)) || byTrust(a, b))
 		return list
-	}, [items, installedOnly, category])
+	}, [items, installedOnly, category, accept, sort])
+	useEffect(() => { onLoaded?.(items) }, [items, onLoaded])
 	const [refined, setRefined] = useState<Record<string, MarketplaceItem>>({})
 	const [refining, setRefining] = useState<string | null>(null)
 	// a page opened from "More in this section" may be an item the current filters hide from the list, so it is looked up among everything loaded
@@ -194,6 +208,7 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 	}
 	return <div className='flex min-w-0 min-h-0 flex-1 text-root'>
 		<div className='flex flex-col min-w-0 flex-1 overflow-y-auto scroll' style={{ gap: 18, paddingBottom: 24 }}>
+			{before}
 			{failed.length > 0 ? <div className='text-yellow-600'>{failed.length === 1 ? 'One source' : `${failed.length} sources`} could not be read just now: {failed.join(' ')}</div> : null}
 			{Object.entries(errorOf).map(([k, msg]) => <div key={k} data-testid='vader-addon-error' role='alert' className='flex items-start gap-3 text-red-500'><span className='flex-1'>Could not add {items.find(i => keyOf(i) === k)?.name ?? 'it'}: {msg}</span><button className='text-vader-fg-2 hover:text-vader-fg-1 shrink-0' onClick={() => setErrorOf(e => { const { [k]: _drop, ...rest } = e; return rest })}>Dismiss</button></div>)}
 			{loading && items.length === 0 ? <div className='text-vader-fg-3 py-6'>Loading...</div> : null}
@@ -202,6 +217,7 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 				<div className='r' style={{ height: 34, gap: 12 }}><span className='t1' data-testid='vader-addons-group-title' style={{ fontWeight: 600, fontSize: 14 }}>{GROUP_TITLE[g.type]}</span><span className='hint tr narrow-hide'>{GROUP_HINT[g.type]}</span><span className='fl' />{onSeeAll ? <button className='tx' style={{ color: 'var(--t2)' }} data-testid='vader-addons-see-all' onClick={() => onSeeAll(g.type === 'TOOLING' ? 'EXTENSION' : g.type)}>{SEE_ALL[g.type] ?? 'See all'}<Icon k='right' small /></button> : null}</div>
 				<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', columnGap: 40 }}>{g.list.slice(0, 4).map(rowOf)}</div>
 			</div>) : <div className='grid gap-x-10' style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>{shown.map(rowOf)}</div>}
+			{after}
 		</div>
 	</div>
 }

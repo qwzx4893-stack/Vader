@@ -14,6 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -83,7 +84,7 @@ async function newPage(setup) {
 	if (errors.length) console.log(`PAGE ERRORS: ${errors.join(' | ').slice(0, 800)}`);
 	return { page, errors };
 }
-const shot = async (page, name) => { await page.screenshot({ path: path.join(shots, name + '.png') }); };
+const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png') }); };
 const log = (page) => page.evaluate(() => window.__log.slice());
 
 // ===================================================================== the chat renders

@@ -25,13 +25,13 @@ export const Ask = ({ title, text, yes, onYes, onNo, testId, danger }: { title: 
 		</div>
 	</div>
 
-export const PageHead = ({ title, desc, right }: { title: string, desc?: React.ReactNode, right?: React.ReactNode }) => <div className='c' style={{ gap: 6, marginBottom: 22 }}>
+export const PageHead = ({ title, desc, right }: { title: string, desc?: React.ReactNode, right?: React.ReactNode }) => <div className='c' style={{ gap: 5, marginBottom: 14 }}>
 	<div className='r' style={{ gap: 12 }}><h1 className='ttl fl' style={{ margin: 0 }}>{title}</h1>{right}</div>
-	{desc ? <p className='t2' style={{ margin: 0, maxWidth: 520, lineHeight: 1.55 }}>{desc}</p> : null}
+	{desc ? <p className='t3' style={{ margin: 0, maxWidth: '68ch', lineHeight: 1.55 }}>{desc}</p> : null}
 </div>
 
-export const Group = ({ title, note, right, children, first }: { title: string, note?: React.ReactNode, right?: React.ReactNode, children?: React.ReactNode, first?: boolean }) => <section className='c' style={{ marginTop: first ? 0 : 28 }}>
-	<div className='r' style={{ gap: 8, padding: '0 2px 8px' }}><span className='hint'>{title}{note ? <span className='t4'> {note}</span> : null}</span><span className='fl' />{right}</div>
+export const Group = ({ title, note, right, children, first }: { title: string, note?: React.ReactNode, right?: React.ReactNode, children?: React.ReactNode, first?: boolean }) => <section className='c' style={{ marginTop: first ? 0 : 18 }}>
+	<div className='r' style={{ gap: 8, padding: '0 2px 6px' }}><span className='hint'>{title}{note ? <span className='t4'> {note}</span> : null}</span><span className='fl' />{right}</div>
 	{children}
 </section>
 
@@ -43,7 +43,7 @@ export const Line = ({ title, detail, right, testId, first, lockKey }: { title: 
 	const managed = lockKey ? (useAccessor().get('IVaderSettingsService').managed as { [k: string]: unknown } | undefined) : undefined
 	const locked = !!managed && !!lockKey && lockKey in managed
 	const value = locked ? managed![lockKey!] : undefined
-	const row = <div className='r' data-testid={testId} data-locked={locked ? 'true' : undefined} style={{ gap: 14, minHeight: 44, padding: '8px 0', borderTop: first === false ? undefined : '1px solid var(--ln)' }}>
+	const row = <div className='r' data-testid={testId} data-locked={locked ? 'true' : undefined} style={{ gap: 12, minHeight: detail || locked ? 44 : 34, padding: detail || locked ? '8px 0' : '3px 0', borderTop: first === false ? undefined : '1px solid var(--ln)' }}>
 		<div className='c fl' style={{ gap: 1, minWidth: 0 }}><span className='t1'>{title}</span>{locked || detail ? <span className='hint' style={{ lineHeight: 1.45 }} data-testid={locked ? 'vader-locked-detail' : undefined}>{locked ? lockedDetail(value) : detail}</span> : null}</div>
 		{locked ? <span className='r' style={{ gap: 10 }} data-testid='vader-locked-control'><LockMark />{typeof value === 'boolean' ? <button role='switch' aria-checked={value} aria-disabled='true' disabled aria-label={`Locked: ${typeof title === 'string' ? title : lockKey}`} className={value ? 'sw' : 'sw off'} style={{ opacity: .6, cursor: 'not-allowed' }}><i /></button> : <span className='t2'>{value === null ? 'none' : String(value)}</span>}</span> : right}
 	</div>

@@ -75,7 +75,7 @@ export const McpPage = () => {
 							</div> : null}
 						</div>
 					})}
-					<p className='hint' style={{ margin: '16px 0 0', maxWidth: 560, lineHeight: 1.55 }}>Ask before an MCP tool runs, or allow it, on the Permissions page.</p>
+					<p className='hint' style={{ margin: '16px 0 0', maxWidth: 560, lineHeight: 1.55 }}>A tool a server adds after you set it up is not given to the agent until you look at it and allow it. Ask before an MCP tool runs, or allow it, on the Permissions page.</p>
 				</>}
 	</div>
 }

@@ -54,6 +54,11 @@ const GROUPS: { title: string, items: { id: SettingsPage, label: string, words: 
 	] },
 ]
 
+// the width of the column of each page, as the boards draw it (R08 to R30): most are 820; Models 780, Connected agents 800, Usage and MCP 860; the pages that are two columns
+// (Saved agents, Skills, Memory) use the whole width, left-aligned, with 40 at each side
+const PAGE_WIDTH: Partial<Record<SettingsPage, number>> = { models: 780, agents: 800, usage: 860, mcp: 860 }
+const WIDE_PAGES = new Set<SettingsPage>(['saved', 'skills', 'memory'])
+
 export const OPEN_SETTINGS_PAGE_EVENT = 'vader-settings-goto'
 
 export const Settings = () => {
@@ -98,9 +103,9 @@ export const Settings = () => {
 	return <div className='shell' data-testid='vader-settings-page'>
 		<WindowStrip title={<>{projectKey ? <><span>{projectNameOf(projectKey)}</span><span className='t3' style={{ padding: '0 8px' }}>/</span></> : null}<span className='t1'>Settings</span></>} />
 		<div className='r fl' style={{ alignItems: 'stretch', minHeight: 0 }}>
-		<aside className='c' style={{ width: 248, flex: 'none', padding: '12px 8px', gap: 2, minHeight: 0 }}>
-			<button className='nv' data-testid='vader-settings-close' onClick={() => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID) }} style={{ marginBottom: 6 }}><Icon k='left' small />Back to the app</button>
-			<label className='srch' style={{ margin: '0 2px 6px' }}><Icon k='search' small /><input data-testid='vader-settings-search' className='fl' placeholder='Search settings' aria-label='Search settings' value={query} onChange={e => setQuery(e.target.value)} /></label>
+		<aside className='c' style={{ width: 248, flex: 'none', padding: '6px 8px', minHeight: 0 }}>
+			<button className='nv' data-testid='vader-settings-close' onClick={() => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID) }} ><Icon k='left' small />Back to the app</button>
+			<label className='srch' style={{ margin: '6px 2px 4px', height: 30 }}><Icon k='search' small /><input data-testid='vader-settings-search' className='fl' placeholder='Search settings' aria-label='Search settings' value={query} onChange={e => setQuery(e.target.value)} /></label>
 			<nav className='c fl scroll' aria-label='Settings pages'>
 				{needle && groups.length === 0 ? <span className='t3' style={{ padding: '8px 10px', lineHeight: 1.5 }} data-testid='vader-settings-nomatch'>No setting called &ldquo;{query.trim()}&rdquo;.</span> : null}
 				{nearest.length > 0 ? <div className='c' data-testid='vader-settings-nearest' style={{ gap: 2 }}>
@@ -114,7 +119,7 @@ export const Settings = () => {
 			</nav>
 		</aside>
 		<main className='main-sheet fl scroll' data-testid={`vader-settings-main-${page}`} style={{ minHeight: 0, overflowY: 'auto' }}>
-			<div style={{ maxWidth: page === 'skills' || page === 'mcp' ? 980 : 820, margin: '0 auto', padding: '40px 40px 96px', width: '100%' }}>
+			<div style={WIDE_PAGES.has(page) ? { padding: '26px 40px 96px', width: '100%' } : { maxWidth: (PAGE_WIDTH[page] ?? 820) + 48, margin: '0 auto', padding: '30px 24px 96px', width: '100%' }}>
 				<div key={page} className='pg'><ErrorBoundary>{body}</ErrorBoundary></div>
 			</div>
 		</main>

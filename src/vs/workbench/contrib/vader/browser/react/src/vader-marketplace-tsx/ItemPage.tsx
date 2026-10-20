@@ -46,7 +46,7 @@ const KIND_NOUN: Record<string, string> = { SKILL: 'Skill', MCP_SERVER: 'MCP ser
 const hueOf = (s: string): number => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h }
 
 /** the mark of the publisher when it is one Vader has the logo of (read from the address the add-on comes from), else nothing: a letter is better than a wrong mark */
-const PUBLISHER_MARK: { [owner: string]: ProviderName } = { anthropics: 'anthropic', anthropic: 'anthropic', openai: 'openAI', google: 'gemini', googleapis: 'gemini', 'google-gemini': 'gemini', mistralai: 'mistral', 'xai-org': 'xAI', 'deepseek-ai': 'deepseek' }
+export const PUBLISHER_MARK: { [owner: string]: ProviderName } = { anthropics: 'anthropic', anthropic: 'anthropic', openai: 'openAI', google: 'gemini', googleapis: 'gemini', 'google-gemini': 'gemini', mistralai: 'mistral', 'xai-org': 'xAI', 'deepseek-ai': 'deepseek' }
 const publisherMarkOf = (item: MarketplaceItem): ProviderName | undefined => {
 	const where = String(item.metadata.repositoryUrl ?? item.source ?? '')
 	const owner = /(?:github\.com\/|^)([A-Za-z0-9_.-]+)\//.exec(where)?.[1]?.toLowerCase()
