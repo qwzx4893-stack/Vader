@@ -2,6 +2,7 @@
 // did to them. Used by test/settingsUiE2E.mjs.
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { installLanguage } from './i18nHarness'
 import { Settings } from '../../browser/react/src2/vader-settings-tsx/SettingsApp'
 import { notify } from './settingsHarnessServices'
 import { providerNames } from '../../common/vaderSettingsTypes'
@@ -16,11 +17,11 @@ w.__opened = [] as string[]
 
 const settingsOfProvider: any = {}
 for (const p of providerNames) settingsOfProvider[p] = { models: [], _didFillInProviderSettings: false, apiKey: '' }
-for (const p of ['anthropic', 'openRouter']) { settingsOfProvider[p]._didFillInProviderSettings = true; settingsOfProvider[p].apiKey = 'sk-test-' + p }
+if (!process.env.VADER_PREVIEW) { for (const p of ['anthropic', 'openRouter']) { settingsOfProvider[p]._didFillInProviderSettings = true; settingsOfProvider[p].apiKey = 'sk-test-' + p } }
 const mo = (providerName: string, modelName: string) => ({ name: modelName, selection: { providerName, modelName } })
-w.__settings = { settingsOfProvider, modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' }, Autocomplete: null, Apply: null, SCM: null },
-	_modelOptions: [mo('anthropic', 'claude-sonnet-4-5'), mo('openAI', 'gpt-5'), mo('mistral', 'codestral-latest'), mo('ollama', 'qwen2.5-coder:7b')],
-	globalSettings: { autoApprove: { edits: true }, autoAcceptLLMChanges: false, includeToolLintErrors: true, dailySpendLimitUsd: 5, priceDiscountPercent: 0, modelPriceOverrides: {}, enableAutocomplete: false, nextEdit: false, showInlineSuggestions: true, syncApplyToChat: true, syncSCMToChat: true, enableFastApply: true, autoCheckUpdates: false, chatMode: 'agent', isOnboardingComplete: true }, overridesOfModel: {} }
+w.__settings = { settingsOfProvider, modelSelectionOfFeature: { Chat: process.env.VADER_PREVIEW ? null : { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' }, Autocomplete: null, Apply: null, SCM: null },
+	_modelOptions: process.env.VADER_PREVIEW ? [] : [mo('anthropic', 'claude-sonnet-4-5'), mo('openAI', 'gpt-5'), mo('mistral', 'codestral-latest'), mo('ollama', 'qwen2.5-coder:7b')],
+	globalSettings: { autoApprove: { edits: true }, autoAcceptLLMChanges: false, includeToolLintErrors: true, dailySpendLimitUsd: process.env.VADER_PREVIEW ? null : 5, priceDiscountPercent: 0, modelPriceOverrides: {}, enableAutocomplete: false, nextEdit: false, showInlineSuggestions: true, syncApplyToChat: true, syncSCMToChat: true, enableFastApply: true, autoCheckUpdates: false, chatMode: 'agent', isOnboardingComplete: true }, overridesOfModel: {} }
 
 // ---- the policy
 let customRules: any[] = []
@@ -42,7 +43,7 @@ const settingsSvc: any = {
 	async setSettingOfProvider(p: string, k: string, v: any) { w.__log.push(`provider:${p}.${k}=${v}`); w.__settings = { ...w.__settings, settingsOfProvider: { ...w.__settings.settingsOfProvider, [p]: { ...w.__settings.settingsOfProvider[p], [k]: v } } }; notify() },
 	resetState() { w.__log.push('settings:reset') },
 	dangerousSetState(v: any) { w.__log.push(`settings:import:${Object.keys(v).length}`) },
-	setGlobalSetting(k: string, v: any) { w.__log.push(`global:${k}=${JSON.stringify(v)}`); w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
+	setGlobalSetting(k: string, v: any) { w.__log.push(`global:${k}=${JSON.stringify(v)}`); w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; if (k === 'uiLanguage') { w.__setLang?.(v) } notify() },
 }
 
 // ---- usage: fourteen days of use by three models, so the page has something to say
@@ -57,17 +58,18 @@ for (let i = 0; i < 12; i++) ledger = addToLedger(ledger, dayAgo(i), { inputToke
 ledger = addToLedger(ledger, dayAgo(0), { inputTokens: 640_000, outputTokens: 71_000 }, 3.12, 'billed', ds)
 ledger = addToLedger(ledger, dayAgo(1), { inputTokens: 212_000, outputTokens: 40_000 }, 0, 'free', qw)
 ledger = addToLedger(ledger, dayAgo(2), { inputTokens: 88_000, outputTokens: 9_000 }, undefined, 'unpriced', acme)
+if (process.env.VADER_PREVIEW) ledger = {}
 w.__ledger = w.__ledger ?? ledger
-let approvals: any[] = [{ key: 'k1', label: 'npm test -- --runInBand', kind: 'command', addedAt: Date.parse('2026-10-12T10:00:00Z') }]
+let approvals: any[] = process.env.VADER_PREVIEW ? [] : [{ key: 'k1', label: 'npm test -- --runInBand', kind: 'command', addedAt: Date.parse('2026-10-12T10:00:00Z') }]
 const chat: any = {
 	onDidChangeUsage: () => ({ dispose() { } }), onDidChangeProjectApprovals: () => ({ dispose() { } }),
-	getCurrentProjectKey: () => w.__projectKey === undefined ? 'C:\\work\\vader-app' : w.__projectKey,
+	getCurrentProjectKey: () => w.__projectKey === undefined ? (process.env.VADER_PREVIEW ? null : 'C:\\work\\vader-app') : w.__projectKey,
 	listProjectApprovals: () => approvals,
 	revokeProjectApproval(_k: string, key: string) { w.__log.push(`revoke:${key}`); approvals = approvals.filter(a => a.key !== key); notify() },
 	getUsageLedger: () => w.__ledger,
 	getUsageToday: () => w.__ledger[dayKey(new Date())] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 },
 }
-const commands: any = { async executeCommand(id: string, ...a: any[]) { w.__log.push(`command:${id}${a.length ? ':' + a.join(',') : ''}`) } }
+const commands: any = { async executeCommand(id: string, ...a: any[]) { w.__log.push(`command:${id}${a.length ? ':' + a.join(',') : ''}`); if (process.env.VADER_PREVIEW && /toggleVaderSettings/.test(id)) { location.href = 'index.html' } } }
 const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 
 // ---- the model router: three models are set up; Automatic answers from a fixed table the way the real router scores them
@@ -225,5 +227,7 @@ const coordSvc: any = {
 
 w.__accessor = { get: (name: string) => ({ IProductService: product, ICodebaseIndexMainService: indexSvc, IVaderUpdateService: updateSvc, IVaderUpdateCoordinator: coordSvc, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
 
+installLanguage(document.getElementById('root')!)
+w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, uiLanguage: w.__lang } }
 createRoot(document.getElementById('root')!).render(<Settings />)
 w.__mounted = true

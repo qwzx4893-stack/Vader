@@ -21,6 +21,7 @@ import { ConnectedAgentsPage } from './ConnectedAgentsPage.js'
 import { SkillsPage } from './SkillsPage.js'
 import { McpPage } from './McpPage.js'
 import { MemoryPage } from './MemoryPage.js'
+import { LanguagePage } from './LanguagePage.js'
 import { matchPages, nearestPages } from '../../../../common/settingsSearch.js'
 import '../vader-shell-tsx/shell.css'
 import { WindowStrip } from '../vader-shell-tsx/WindowStrip.js'
@@ -29,7 +30,7 @@ import { projectNameOf } from '../../../../common/threadProjects.js'
 // Vader's Settings in the shape of the interface boards (R08 to R30): a column on the left with a way back to the app, a search, and the pages in three groups
 // (Models, Agent, Workspace); the page on the right. Opening Settings from elsewhere can name the page (the event below), and the search filters the pages.
 
-export type SettingsPage = 'models' | 'router' | 'agents' | 'permissions' | 'usage' | 'saved' | 'skills' | 'mcp' | 'memory' | 'extensions' | 'editor' | 'privacy' | 'data' | 'about'
+export type SettingsPage = 'models' | 'router' | 'agents' | 'permissions' | 'usage' | 'saved' | 'skills' | 'mcp' | 'memory' | 'extensions' | 'editor' | 'privacy' | 'language' | 'data' | 'about'
 
 const GROUPS: { title: string, items: { id: SettingsPage, label: string, words: string }[] }[] = [
 	{ title: 'Models', items: [
@@ -49,6 +50,7 @@ const GROUPS: { title: string, items: { id: SettingsPage, label: string, words: 
 		{ id: 'extensions', label: 'Editor extensions', words: 'extension marketplace open vsx vsix' },
 		{ id: 'editor', label: 'Editor', words: 'autocomplete editor quick edit apply fast suggestions commit message' },
 		{ id: 'privacy', label: 'Privacy and network', words: 'privacy network telemetry contact proxy' },
+		{ id: 'language', label: 'Language', words: 'language arabic english chinese translate right to left rtl العربية 中文' },
 		{ id: 'data', label: 'Data and backup', words: 'export import backup chats switch editor reset logs' },
 		{ id: 'about', label: 'About and updates', words: 'update version release licence credits onboarding' },
 	] },
@@ -92,6 +94,7 @@ export const Settings = () => {
 		if (page === 'extensions') return <ExtensionsPage />
 		if (page === 'about') return <AboutPage />
 		if (page === 'data') return <DataPage />
+		if (page === 'language') return <LanguagePage />
 		if (page === 'models') return <ModelsPage />
 		if (page === 'agents') return <ConnectedAgentsPage />
 		if (page === 'skills') return <SkillsPage />

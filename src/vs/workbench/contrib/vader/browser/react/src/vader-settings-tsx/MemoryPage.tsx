@@ -71,7 +71,7 @@ export const MemoryPage = () => {
 				</div>
 
 				<span className='t1' style={{ fontWeight: 600, margin: '26px 0 8px' }}>Your instructions for every project</span>
-				<textarea className='ta' data-testid='vader-memory-text' rows={5} aria-label='Your instructions for every project' style={{ resize: 'vertical', userSelect: 'text' }} placeholder="Reply in the language I write in. Keep answers short. Run the project's tests before saying a task is done." value={text} onChange={e => { setText(e.target.value); setSavedAt(undefined) }} />
+				<textarea className='ta' data-testid='vader-memory-text' rows={5} aria-label='Your instructions for every project' style={{ resize: 'vertical', userSelect: 'text' }} placeholder="What the agent should always do or know, in your own words" value={text} onChange={e => { setText(e.target.value); setSavedAt(undefined) }} />
 				<div className='r' style={{ gap: 10, paddingTop: 10 }}>
 					<button className='pb' data-testid='vader-memory-save' disabled={!dirty} onClick={() => { settings.setGlobalSetting('aiInstructions', text); setSavedAt(Date.now()) }}>Save</button>
 					{dirty ? <button className='tx' onClick={() => setText(g.aiInstructions ?? '')}>Discard changes</button> : savedAt ? <span className='hint' data-testid='vader-memory-saved'>Saved. It applies to the next message.</span> : null}

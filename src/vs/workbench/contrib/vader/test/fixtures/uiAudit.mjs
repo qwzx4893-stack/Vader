@@ -69,7 +69,24 @@ function inPage() {
 	return out;
 }
 
+/** with VADER_I18N_MISSING=file: the texts of the page that have no entry in Chinese (one JSON line each) */
+async function i18nMissing(page, name) {
+	const file = process.env.VADER_I18N_MISSING;
+	if (!file) return;
+	let list;
+	// the page is turned to Chinese for a moment (what is still English is what the table lacks), then back, so the test goes on in English
+	try {
+		list = await page.evaluate(async () => {
+			const s = window.__i18nMissing; if (!s || !window.__setLang) return [];
+			s.clear(); window.__setLang('zh'); await new Promise(r => setTimeout(r, 80));
+			const a = [...s]; s.clear(); window.__setLang('en'); await new Promise(r => setTimeout(r, 30)); return a;
+		});
+	} catch { return; }
+	if (list.length) fs.appendFileSync(file, list.map(text => JSON.stringify({ shot: name, text })).join('\n') + '\n');
+}
+
 export async function auditShot(page, name) {
+	await i18nMissing(page, name);
 	const file = process.env.VADER_AUDIT;
 	if (!file) return;
 	let found;

@@ -19,12 +19,13 @@ import { ProviderLogo } from '../util/ProviderLogo.js'
 import { AgentLogo } from '../util/AgentLogo.js'
 import { transferEditorTypes } from '../../../extensionTransferTypes.js'
 import { cloudListedProviderNames, CloudListedProviderName } from '../../../../common/cloudModelListTypes.js'
-import { displayInfoOfProviderName, isFeatureNameDisabled, localProviderNames, providerNames } from '../../../../common/vaderSettingsTypes.js'
+import { displayInfoOfProviderName, isFeatureNameDisabled, keyPageOfProvider, localProviderNames, providerNames, uiLanguages, UiLanguage } from '../../../../common/vaderSettingsTypes.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import '../styles.css'
 import '../vader-shell-tsx/shell.css'
 import { WindowStrip } from '../vader-shell-tsx/WindowStrip.js'
 import { Icon } from '../vader-shell-tsx/icons.js'
+import { LANGUAGE_NAMES } from '../util/i18n/translator.js'
 
 const STEP_KEY = 'vader.onboardingStep'
 type Step = 1 | 2 | 3
@@ -202,8 +203,10 @@ const Pages = () => {
 										<select data-testid='vader-onboarding-provider' className='fl' style={{ background: 'transparent', color: 'var(--t1)', border: 0, outline: 0 }} value={provider} onChange={e => { setProvider(e.target.value as CloudListedProviderName); setAsked(false) }}>
 											{providersInOrder().map(p => <option key={p} value={p} style={{ background: '#19191c' }}>{displayInfoOfProviderName(p).title}</option>)}
 										</select></span></label>
-								<label className='c fl' style={{ gap: 5 }}><span className='hint'>API key</span>
-									<input data-testid='vader-onboarding-key' className='fld mo' style={failed ? { borderColor: '#f06a6e' } : undefined} placeholder='sk-or-...' value={key} onChange={e => { setKey(e.target.value); setAsked(false) }} onKeyDown={e => { if (e.key === 'Enter') test() }} autoComplete='off' spellCheck={false} /></label>
+								<div className='c fl' style={{ gap: 5 }}><label className='c' style={{ gap: 5 }}><span className='hint'>API key</span>
+									<input data-testid='vader-onboarding-key' className='fld mo' style={failed ? { borderColor: '#f06a6e' } : undefined} placeholder='Paste your key' value={key} onChange={e => { setKey(e.target.value); setAsked(false) }} onKeyDown={e => { if (e.key === 'Enter') test() }} autoComplete='off' spellCheck={false} /></label>
+									{keyPageOfProvider(provider) ? <button className='tx' data-testid='vader-onboarding-get-key' style={{ alignSelf: 'flex-start', height: 'auto', padding: 0, fontSize: 12, color: 'var(--t2)', textDecoration: 'underline' }} onClick={() => { void opener.open(URI.parse(keyPageOfProvider(provider)!)) }}>Get your key</button> : null}
+								</div>
 							</div>
 							{!asked ? <div className='r' style={{ gap: 12 }}><button className='pb' data-testid='vader-onboarding-test' disabled={!key.trim()} onClick={test}>Test and continue</button><span className='hint'>The key is only sent to {who}, to ask for its list of models.</span></div> : null}
 							{testing ? <div className='c' style={{ gap: 8 }} data-testid='vader-onboarding-testing'><span className='r' style={{ gap: 8 }}><span className='spin' style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid var(--ln2)', borderTopColor: '#6ea0ff', borderRadius: '50%' }} /><span className='t2'>Asking {who} for its models</span></span><span><button className='pb' disabled>Testing...</button></span></div> : null}
@@ -252,7 +255,13 @@ const Pages = () => {
 					</div>
 				</div>
 				</div>
-				<div className='r' style={{ height: 70, flex: 'none', justifyContent: 'flex-end', paddingBottom: 6 }}>
+				<div className='r' style={{ height: 70, flex: 'none', paddingBottom: 6, gap: 10 }}>
+					<label className='r t2' style={{ gap: 7 }}><Icon k='globe' small />
+						<select data-testid='vader-onboarding-language' data-i18n-skip aria-label='Language' value={settingsState.globalSettings.uiLanguage ?? 'en'} onChange={e => { void settings.setGlobalSetting('uiLanguage', e.target.value as UiLanguage) }} style={{ background: 'transparent', color: 'var(--t2)', border: 0, outline: 0, cursor: 'pointer' }}>
+							{uiLanguages.map(l => <option key={l} value={l} style={{ background: '#19191c' }}>{LANGUAGE_NAMES[l]}</option>)}
+						</select>
+					</label>
+					<span className='fl' />
 					<button className='tx' data-testid='vader-welcome-continue' onClick={() => setStep(2)}>Skip for now</button>
 				</div>
 			</div> : null}

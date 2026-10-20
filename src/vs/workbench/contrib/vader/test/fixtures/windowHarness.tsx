@@ -23,7 +23,7 @@ w.__settings = settings
 w.__policy = { state: { mode: 'balanced' } }
 const settingsSvc: any = {
 	get state() { return w.__settings },
-	setGlobalSetting(k: string, v: any) { log(`global:${k}=${JSON.stringify(v)}`); w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
+	setGlobalSetting(k: string, v: any) { log(`global:${k}=${JSON.stringify(v)}`); if (k === 'uiLanguage') { w.__setLang?.(v) } w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
 	setModelSelectionOfFeature(f: string, v: any) { log(`select:${f}=${v?.modelName}`) },
 }
 
@@ -59,7 +59,7 @@ const mcpSvc: any = { pendingToolsOf: () => [], async allowTools() { }, async ke
 w.__files = {} as Record<string, string>
 // ---- the open task as board R01 shows it: the question with the files it names, what the agent read, what it said, its plan, an edit, a checkpoint, a command waiting
 // for a yes. What the agent did in its browser and terminals (for the other tabs) moves to the second task.
-{
+if (!process.env.VADER_PREVIEW) {
 	const t = chat.state.allThreads['t-wait']
 	const run1 = chat.state.allThreads['t-run1']
 	const NL = String.fromCharCode(10)

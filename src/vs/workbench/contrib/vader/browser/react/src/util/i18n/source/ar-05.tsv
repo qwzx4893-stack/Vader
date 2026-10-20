@@ -1,0 +1,111 @@
+The model you pick, and nowhere else. No analytics, no account. ::: النموذج الذي تختاره ولا جهة أخرى. بلا تحليلات ولا حساب.
+You decide what it may do ::: أنت من يقرر ما يجوز له فعله
+The next step sets how much it asks first. Some actions are never allowed. ::: تحدد الخطوة التالية مقدار ما يسأل عنه أولاً. وبعض الإجراءات لا يُسمح بها أبداً.
+And choose how much Vader asks before it acts. ::: واختر مقدار ما يسأل عنه Vader قبل أن يتصرف.
+Try a first task ::: جرّب مهمة أولى
+A small one, so you see what it asks and shows. You can skip it. ::: مهمة صغيرة، لترى ما يسأل عنه وما يعرضه. ويمكنك تخطيها.
+The key may have a space at the end, or may have been revoked. Paste it again. ::: ربما في آخر المفتاح مسافة، أو ربما أُلغي. الصقه مجدداً.
+No local model found ::: لم يُعثر على نموذج محلي
+Open Ollama's site ::: افتح موقع Ollama
+Open a project, and choose how much Vader asks ::: افتح مشروعاً، واختر مقدار ما يسأل عنه Vader
+How much should Vader ask before it acts? ::: ما مقدار ما يجب أن يسأل عنه Vader قبل أن يتصرف؟
+Some rules are locked in every mode: never touching your keys or system files, and always asking before installing anything. You can change all of this in Settings. ::: بعض القواعد مقفلة في كل الأوضاع: عدم لمس مفاتيحك أو ملفات النظام أبداً، والسؤال دائماً قبل تثبيت أي شيء. ويمكنك تغيير كل هذا من الإعدادات.
+Bring your theme, keybindings and extensions over. Nothing is changed in the original editor. ::: انقل سمتك واختصارات المفاتيح والامتدادات. ولا يتغيّر شيء في المحرر الأصلي.
+Import settings from VS Code or Cursor ::: استيراد الإعدادات من VS Code أو Cursor
+What {0} looks like ::: كيف يبدو الوضع {0}
+Change a file ::: تغيير ملف
+The change, shown in full ::: التغيير، معروضاً كاملاً
+The command, shown in full ::: الأمر، معروضاً كاملاً
+Allow once ::: السماح مرة واحدة
+Reject ::: رفض
+Blocked: credential file ::: محظور: ملف بيانات اعتماد
+Reading a key or credential file is never allowed, in any mode. ::: قراءة ملف مفتاح أو بيانات اعتماد غير مسموحة أبداً، في أي وضع.
+Edits ::: التعديلات
+Commands ::: الأوامر
+Edits go through, and you review them afterwards. ::: التعديلات تُنفَّذ مباشرة، وتراجعها لاحقاً.
+Edits go through without asking, and you can still review them afterwards. ::: التعديلات تُنفَّذ دون سؤال، ويمكنك مراجعتها لاحقاً.
+Commands run without asking. A command that is locked still waits for you. ::: الأوامر تعمل دون سؤال. والأمر المقفل يظل ينتظرك.
+Pick one, or write your own. You will see the plan, every step, and the changes before anything is kept. ::: اختر مهمة، أو اكتب مهمتك. سترى الخطة وكل خطوة والتغييرات قبل أن يُحفظ أي شيء.
+Choose a model first ::: اختر نموذجاً أولاً
+No provider has a key yet, so there is no model to ask. ::: لا يوجد مزوّد له مفتاح بعد، فلا نموذج يمكن سؤاله.
+Use a local model ::: استخدام نموذج محلي
+Explain this project ::: شرح هذا المشروع
+Reads it and tells you how it fits together. Changes nothing. ::: يقرؤه ويخبرك كيف يترابط. ولا يغيّر شيئاً.
+Read only ::: للقراءة فقط
+Find out why a test fails ::: معرفة سبب فشل اختبار
+Runs the tests, reads the failure, proposes a fix. ::: يشغّل الاختبارات ويقرأ الفشل ويقترح إصلاحاً.
+Runs commands ::: يشغّل أوامر
+Write tests for a file ::: كتابة اختبارات لملف
+Choose the file; it writes tests and runs them. ::: اختر الملف؛ فيكتب الاختبارات ويشغّلها.
+Edits files ::: يعدّل ملفات
+Add a rules file for this project ::: إضافة ملف قواعد لهذا المشروع
+Writes AGENTS.md so every later task starts with what matters here. ::: يكتب AGENTS.md لتبدأ كل مهمة لاحقة بما يهمّ هنا.
+Or describe your own task ::: أو صف مهمتك الخاصة
+Skip, open Vader ::: تخطَّ وافتح Vader
+What happens after you send it ::: ماذا يحدث بعد الإرسال
+It works, and you can watch ::: يعمل، ويمكنك المشاهدة
+Each step shows as a quiet line: what it read, searched, edited, ran. ::: تظهر كل خطوة كسطر هادئ: ما قرأه وبحث عنه وعدّله وشغّله.
+It asks when it needs you ::: يسأل حين يحتاجك
+The chat is marked "Needs you" in the list, even when you are in another one. ::: تُوسَم المحادثة بـ«تحتاجك» في القائمة، حتى لو كنت في محادثة أخرى.
+You review the changes ::: أنت تراجع التغييرات
+Accept a file, a part of a file, or all of it. Undo goes back to a checkpoint. ::: اقبل ملفاً أو جزءاً منه أو كله. والتراجع يعود إلى نقطة استعادة.
+Search chats, files and commands ::: بحث في المحادثات والملفات والأوامر
+No changes to commit ::: لا توجد تغييرات للإيداع
+Scored just now from what the sources say today. Found in: {0}. It is computed again whenever it is listed, and again for what is installed. It is a guide to what to read first, not a safety check: Vader still asks before the agent runs anything. ::: قُيِّمت الآن بحسب ما تقوله المصادر اليوم. وُجدت في: {0}. تُحسب مجدداً كلما عُرضت، ومجدداً للمثبّت منها. هي دليل لما يُقرأ أولاً، وليست فحص أمان: فما زال Vader يسأل قبل أن يشغّل الوكيل أي شيء.
+Found in {0} ::: وُجد في {0}
+Hosted by Smithery: nothing is installed here. It asks for your own Smithery key, which is sent only to server.smithery.ai. ::: مُستضاف لدى Smithery: لا يُثبَّت شيء هنا. ويطلب مفتاح Smithery الخاص بك، ويُرسل إلى server.smithery.ai فقط.
+What is written into your mcp.json ::: ما يُكتب في mcp.json الخاص بك
+Adds the entry to your mcp.json and starts it once to check it works. ::: يضيف المدخل إلى mcp.json الخاص بك ويشغّله مرة للتأكد من أنه يعمل.
+Read it before you switch it on. ::: اقرأه قبل أن تشغّله.
+Publisher is unknown ::: الناشر غير معروف
+verified, {0} uses ::: موثّق، {0} استخدام
+You sign in with your Cursor account; Cursor counts the usage on your plan. ::: تسجّل الدخول بحساب Cursor؛ وتحتسب Cursor الاستخدام على اشتراكك.
+A program Vader downloads from {0}, the vendor’s own release location. ::: برنامج ينزّله Vader من {0}، موقع الإصدارات الخاص بالشركة نفسها.
+Last {0} days ::: آخر {0} يوماً
+{0} tokens ::: {0} رمز
+Spending per day for the last {0} days ::: الإنفاق اليومي في آخر {0} يوماً
+By model, last {0} days ::: حسب النموذج، آخر {0} يوماً
+Downloading Vader {0} ::: جارٍ تنزيل Vader {0}
+{0} tasks are running. Restart when they are done, or now: they stop and can be continued after. ::: {0} مهام قيد التشغيل. أعد التشغيل عند انتهائها، أو الآن: فتتوقف ويمكن متابعتها بعد ذلك.
+{0} task is running. Restart when it is done, or now: it stops and can be continued after. ::: مهمة واحدة قيد التشغيل. أعد التشغيل عند انتهائها، أو الآن: فتتوقف ويمكن متابعتها بعد ذلك.
+The download stopped at {0}. You are still on {1}, which works as before. ::: توقف التنزيل عند {0}. ما زلت على {1}، وهو يعمل كما كان.
+Only when you press "Check for updates", or if you turn the automatic check on. ::: فقط عندما تضغط «التحقق من التحديثات»، أو إذا فعّلت التحقق التلقائي.
+With the same access the editor has. Vader installs it through the editor's own extension manager, which also keeps it updated. ::: بنفس الصلاحيات التي لدى المحرر. يثبّته Vader عبر مدير الامتدادات الخاص بالمحرر، وهو الذي يُبقيه محدّثاً.
+Not found on {0}. Start its local server, then look again. ::: لم يُعثر عليه على {0}. شغّل خادمه المحلي ثم ابحث مجدداً.
+{0} tools. Each use goes through the safety gate. ::: {0} أدوات. كل استخدام يمر عبر بوابة الأمان.
+{0} tool. Each use goes through the safety gate. ::: أداة واحدة. كل استخدام يمر عبر بوابة الأمان.
+{0} characters ::: {0} حرفاً
+Found in {0}, {1} ::: موجود في {0}، {1}
+{0} files ::: {0} ملفات
+{0} file ::: ملف واحد
+Explored {0} files ::: استُكشف {0} ملفات
+Explored {0} file ::: استُكشف ملف واحد
+{0} files with changes ::: {0} ملفات بها تغييرات
+{0} file with changes ::: ملف واحد به تغييرات
+About {0} of {1} tokens of this model's window ::: نحو {0} من {1} رمز من نافذة هذا النموذج
+Why {0}% ::: لماذا {0}%
+Changed {0} ago ::: تغيّر قبل {0}
+Installed {0} times ::: ثُبّت {0} مرة
+{0} ratings ::: {0} تقييماً
+{0} changed files, +{1} −{2} ::: {0} ملفات متغيّرة، +{1} −{2}
+{0} changed file, +{1} −{2} ::: ملف متغيّر واحد، +{1} −{2}
+{0} of {1} finished, {2} running ::: انتهى {0} من {1}، و{2} قيد التشغيل
+{0} of {1} finished ::: انتهى {0} من {1}
+exit {0} ::: الخروج {0}
+finished in {0} ::: انتهى خلال {0}
+running for {0} ::: يعمل منذ {0}
+{0} answered 401 ::: {0} ردّ بالخطأ 401
+Listed by {0} different sources ::: مدرجة في {0} مصادر مختلفة
+{0} stars ::: {0} نجمة
+{0} min ::: {0} د
+{0} h ::: {0} س
+{0} d ::: {0} ي
+{0} days ago ::: قبل {0} أيام
+{0} days ::: {0} أيام
+yesterday ::: أمس
+just now ::: الآن
+{0} min ago ::: قبل {0} د
+{0} h ago ::: قبل {0} س
+Needs review ::: تحتاج مراجعة
+Blocked ::: محظورة
+Trusted ::: موثوقة

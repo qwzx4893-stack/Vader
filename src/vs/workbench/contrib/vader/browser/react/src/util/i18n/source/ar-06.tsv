@@ -1,0 +1,116 @@
+Nothing yet. When the agent asks to run a command, "Allow in this project" remembers that exact command here, and "Allow this host here" remembers a site. Rules that always ask (keys, installs, sudo) are never skipped. ::: لا شيء بعد. حين يطلب الوكيل تشغيل أمر، فإن «السماح في هذا المشروع» يتذكّر ذلك الأمر بعينه هنا، و«السماح بهذا المضيف هنا» يتذكّر موقعاً. والقواعد التي تسأل دائماً (المفاتيح والتثبيتات وsudo) لا تُتجاوز أبداً.
+{0} has no price Vader knows. Its cost is not in the totals above, and never counted as free. ::: {0} ليس له سعر يعرفه Vader. وتكلفته غير داخلة في الإجماليات أعلاه، ولا تُحتسب مجانية أبداً.
+{0}: Enter the price per million tokens, like 3 or 0.25. ::: {0}: أدخل السعر لكل مليون رمز، مثل 3 أو 0.25.
+{0} files in {1} pieces ::: {0} ملف في {1} قطعة
+Updated {0} ago. Kept on this computer, never sent anywhere. ::: حُدّث قبل {0}. يُحفظ على هذا الجهاز ولا يُرسل إلى أي مكان.
+{0} chat{1}, {2}. Export to a file, or import from one. ::: {0} محادثة، {2}. صدّر إلى ملف أو استورد من ملف.
+{0} models, {1} ::: {0} نموذج، {1}
+Shown in the picker: {0} of {1} ::: المعروض في المحدّد: {0} من {1}
+Shown in the picker: ::: المعروض في المحدّد:
+Your GitHub Copilot plan (a free plan exists; Pro and Pro+ for more), through GitHub's own Copilot CLI. ::: اشتراكك في GitHub Copilot (توجد خطة مجانية؛ Pro وPro+ للمزيد)، عبر Copilot CLI من GitHub نفسه.
+Files ::: الملفات
+Terminal ::: الطرفية
+Network ::: الشبكة
+Plan ::: الخطة
+Plan ready ::: الخطة جاهزة
+read {0}, searched {1} ::: قُرئ {0}، وبُحث {1}
+{0} files changed, branched from {1} ::: {0} ملفات متغيّرة، تفرّع من {1}
+{0} file changed, branched from {1} ::: ملف واحد متغيّر، تفرّع من {1}
+Worked out from the skill's own text. The agent still asks before it does any of these. ::: مستخلص من نص المهارة نفسه. ولا يزال الوكيل يسأل قبل أن يفعل أياً من هذا.
+An npm package, started with npx (needs Node.js): {0}. ::: حزمة npm تُشغَّل بـ npx (تحتاج Node.js): {0}.
+{0} in all: {1}. ::: {0} في المجموع: {1}.
+{0} ran, {1} you rejected ::: {0} شُغّلت، و{1} رفضتها
+The provider answered 429: too many requests too fast. Wait a little and send again, or choose another model. Everything the agent did is saved. ::: أجاب المزوّد 429: طلبات كثيرة بسرعة كبيرة. انتظر قليلاً ثم أرسل مجدداً، أو اختر نموذجاً آخر. وكل ما فعله الوكيل محفوظ.
+{0} providers. Paste a key and the live list of models appears. ::: {0} مزوّداً. الصق مفتاحاً لتظهر القائمة الحيّة للنماذج.
+Works. {0} models found ::: يعمل. عُثر على {0} نموذج
+Works. {0} model found ::: يعمل. عُثر على نموذج واحد
+Codex, Copilot, Cursor and others, inside Vader's chat. ::: Codex وCopilot وCursor وغيرها، داخل محادثة Vader.
+Looked for Ollama on {0} and LM Studio on {1}. Start one of them, then look again. Nothing leaves your machine either way. ::: بُحث عن Ollama على {0} وعن LM Studio على {1}. شغّل أحدهما ثم ابحث مجدداً. ولا شيء يغادر جهازك في الحالتين.
+{0} files accepted, {1} rejected. ::: قُبل {0} ملفات، ورُفض {1}.
+Test connection ::: اختبار الاتصال
+Works: ::: يعمل:
+Refresh models ::: تحديث النماذج
+Checking ::: جارٍ التحقق
+Looking ::: جارٍ البحث
+Key refused ::: رُفض المفتاح
+Asking the provider for its models ::: جارٍ سؤال المزوّد عن نماذجه
+Defaults ::: الإعدادات الافتراضية
+Defaults changed ::: تغيّرت الإعدادات الافتراضية
+Override the defaults ::: تجاوز الإعدادات الافتراضية
+Overrides as JSON ::: التجاوزات بصيغة JSON
+That is not valid JSON. Check the commas and the quotes. ::: هذا ليس JSON صالحاً. تحقق من الفواصل وعلامات الاقتباس.
+It should be an object, like { "contextWindow": 128000 }. ::: يجب أن يكون كائناً، مثل { "contextWindow": 128000 }.
+Vader does not recognise this model, so it assumes safe defaults. Set what you know about it here. ::: لا يتعرّف Vader على هذا النموذج، لذا يفترض إعدادات افتراضية آمنة. اضبط هنا ما تعرفه عنه.
+Vader recognises it as {0}. ::: يتعرّف عليه Vader على أنه {0}.
+{0} comes with Vader, so you should not need to change these. ::: {0} يأتي مع Vader، فلا ينبغي أن تحتاج إلى تغيير هذه.
+Defaults for {0} ::: الإعدادات الافتراضية لـ {0}
+Defaults for ::: الإعدادات الافتراضية لـ
+Enable a model ::: تفعيل نموذج
+No models available ::: لا توجد نماذج متاحة
+Provider required ::: المزوّد مطلوب
+Model name ::: اسم النموذج
+Model Name ::: اسم النموذج
+Filter models ::: تصفية النماذج
+Delete {0} ::: حذف {0}
+Show {0} in the picker ::: إظهار {0} في المحدّد
+Add the key first, and its models appear here. ::: أضف المفتاح أولاً وستظهر نماذجه هنا.
+Add the model you use by name. ::: أضف النموذج الذي تستخدمه بالاسم.
+No models are listed until the provider answers. You can still add one by name. ::: لا تُعرض نماذج حتى يستجيب المزوّد. ويمكنك مع ذلك إضافة نموذج بالاسم.
+A connected agent answers the chat ::: وكيل مرتبط يجيب في المحادثة
+Not found{0}. Start its local server, then look again. ::: لم يُعثر عليه{0}. شغّل خادمه المحلي ثم ابحث مجدداً.
+Use my own prices ::: استخدام أسعاري الخاصة
+Model ::: النموذج
+Provider ::: المزوّد
+API key ::: مفتاح API
+Paste your key ::: الصق مفتاحك
+Test and continue ::: اختبار ومتابعة
+Continue ::: متابعة
+Back ::: رجوع
+Skip for now ::: تخطَّ الآن
+Change ::: تغيير
+Project ::: المشروع
+Done ::: تم
+Send ::: إرسال
+Stop ::: إيقاف
+Pause ::: إيقاف مؤقت
+Resume ::: استئناف
+Retry ::: إعادة المحاولة
+Copy ::: نسخ
+Copied ::: تم النسخ
+Dismiss ::: تجاهل
+Accept ::: قبول
+Accept all ::: قبول الكل
+Reject all ::: رفض الكل
+Undo ::: تراجع
+Review ::: مراجعة
+Browser ::: المتصفح
+Terminal ::: الطرفية
+Conversation ::: المحادثة
+New chat ::: محادثة جديدة
+Search ::: بحث
+All agents ::: كل الوكلاء
+Add-ons ::: الإضافات
+Settings ::: الإعدادات
+Projects ::: المشاريع
+Chats ::: المحادثات
+Installed ::: مثبّتة
+All ::: الكل
+Extensions ::: الامتدادات
+Agents ::: الوكلاء
+Skills, MCP servers, extensions and agents ::: المهارات وخوادم MCP والامتدادات والوكلاء
+Sort ::: الترتيب
+Source ::: المصدر
+Runs ::: التشغيل
+Needs ::: المتطلبات
+Category ::: الفئة
+Sort: ::: الترتيب:
+all ::: الكل
+anywhere ::: في أي مكان
+on this computer ::: على هذا الجهاز
+hosted ::: مستضاف
+any ::: أي
+a vendor sign-in ::: تسجيل دخول من الشركة
+a terminal ::: طرفية
+most trusted ::: الأكثر موثوقية
+name, A to Z ::: الاسم، من أ إلى ي
+most installed ::: الأكثر تثبيتاً

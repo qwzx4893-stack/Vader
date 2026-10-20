@@ -173,3 +173,8 @@ width:100%;height:100%;box-sizing:border-box;background:var(--g0);color:var(--t1
 /* a switch is 26 by 14 to look light, but the part that answers a click reaches 7px beyond it on every side, so it is not hard to hit */
 .vader-shell .vader-sw{position:relative}
 .vader-shell .vader-sw::after{content:"";position:absolute;inset:-8px -6px}
+
+/* Arabic (dir=rtl on the root of a screen): code, paths and commands stay left to right, and the strip with the window controls does not turn around */
+[dir=rtl] .vader-mo, [dir=rtl] pre, [dir=rtl] code, [dir=rtl] [data-i18n-skip=ltr], [dir=rtl] [class*="font-mono"] { direction: ltr; unicode-bidi: isolate; text-align: left }
+[dir=rtl] [data-testid=vader-diff], [dir=rtl] [data-testid=vader-gate-code] { direction: ltr; unicode-bidi: isolate; text-align: left }
+[dir=rtl] .vader-md { unicode-bidi: plaintext }

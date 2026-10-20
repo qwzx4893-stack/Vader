@@ -6,6 +6,8 @@
 import React, { useEffect, useState } from 'react';
 import * as ReactDOM from 'react-dom/client'
 import { _registerServices } from './services.js';
+import { startPageTranslator } from './i18n/translator.js';
+import { IVaderSettingsService } from '../../../../common/vaderSettingsService.js';
 
 
 import { ServicesAccessor } from '../../../../../../../editor/browser/editorExtensions.js';
@@ -17,6 +19,10 @@ export const mountFnGenerator = (Component: (params: any) => React.ReactNode) =>
 	}
 
 	const disposables = _registerServices(accessor)
+
+	// the language chosen in Settings, Language: the screen of this root is kept in it (util/i18n)
+	const settings = accessor.get(IVaderSettingsService)
+	disposables.push(startPageTranslator(rootElement, { language: () => settings.state.globalSettings.uiLanguage ?? 'en', onDidChange: l => settings.onDidChangeState(l) }))
 
 	const root = ReactDOM.createRoot(rootElement)
 

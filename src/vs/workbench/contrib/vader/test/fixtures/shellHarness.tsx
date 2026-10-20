@@ -2,6 +2,7 @@
 // are objects of this page; the chat and Add-ons are stand-ins (they have their own tests). Used by test/shellUiE2E.mjs.
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { installLanguage } from './i18nHarness'
 import { Shell } from '../../browser/react/src2/vader-shell-tsx/Shell'
 import { notify } from './shellHarnessServices'
 import { deriveThreadStatus, endsWithToolRequest, changedFilesSinceLastUserMessage } from '../../common/threadStatus'
@@ -34,6 +35,8 @@ const T: any[] = [
 
 const allThreads: any = {}
 const stream: any = {}
+// the preview (test/uiPreview.mjs) is a clean install: no chats, no tasks, no project
+if (process.env.VADER_PREVIEW) { T.length = 0; T.push(['t-new', 0, null, []]) }
 for (const [id, mins, proj, messages, running] of T) {
 	allThreads[id] = { id, createdAt: iso(mins + 5), lastModified: iso(mins), messages, state: {}, filesWithUserChanges: new Set(), projectFolders: proj ? [proj] : undefined }
 	if (running) stream[id] = { isRunning: running }
@@ -45,19 +48,19 @@ const copySvc: any = {
 	getState: (id: string) => id === 't-wait' ? { threadId: id, phase: 'working', branchName: 'agent/context-budget-ab12', baseBranch: 'main', files: 3, added: 112, removed: 6, worktreePath: 'C:\\vader-work\\wt\\context-budget' } : undefined,
 }
 w.__chat = {
-	state: { allThreads, currentThreadId: 't-wait' },
+	state: { allThreads, currentThreadId: process.env.VADER_PREVIEW ? 't-new' : 't-wait' },
 	streamState: stream,
 	_pause: {} as any,
 	listProjectGroups() {
 		return groupThreadsByProject(Object.values(allThreads).map((t: any) => ({ id: t.id, lastModified: t.lastModified, messageCount: t.messages.length, projectFolders: t.projectFolders })), 'c:/work/vader-app')
 	},
-	getCurrentProjectKey: () => 'c:/work/vader-app',
+	getCurrentProjectKey: () => process.env.VADER_PREVIEW ? null : 'c:/work/vader-app',
 	getThreadStatus(id: string) {
 		const t = allThreads[id]
 		return deriveThreadStatus({ isRunning: stream[id]?.isRunning, isPaused: !!this._pause[id], hasError: false, endsWithToolRequest: endsWithToolRequest(t.messages), changedFilesSinceLastUserMessage: changedFilesSinceLastUserMessage(t.messages) })
 	},
 	getThreadUsage: (id: string) => id === 't-wait' ? { turns: 3, inputTokens: 41000, outputTokens: 2000, cachedInputTokens: 0, costUsd: 0.31, billedCostUsd: 0, unpricedTurns: 0, turnsWithUsage: 3 } : undefined,
-	getUsageToday: () => ({ costUsd: 2.14, billedCostUsd: 0, inputTokens: 150420, outputTokens: 21880, unpricedTurns: 0 }),
+	getUsageToday: () => process.env.VADER_PREVIEW ? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 } : ({ costUsd: 2.14, billedCostUsd: 0, inputTokens: 150420, outputTokens: 21880, unpricedTurns: 0 }),
 	switchToThread(id: string) { this.state = { ...this.state, currentThreadId: id }; w.__log.push(`switch:${id}`); notify() },
 	openNewThread() { w.__log.push('new'); notify() },
 	getPause(id: string) { return this._pause[id] },
@@ -76,7 +79,7 @@ const shell: any = {
 	setSearchOpen(open: boolean) { this.state = { ...this.state, searchOpen: open }; notify() },
 }
 w.__shell = shell
-const commands: any = { async executeCommand(id: string) { w.__log.push(`cmd:${id}`) } }
+const commands: any = { async executeCommand(id: string) { w.__log.push(`cmd:${id}`); if (process.env.VADER_PREVIEW && /openVaderSettings|toggleVaderSettings/.test(id)) { location.href = 'settings.html' } } }
 const tools: any = { callTool: { async search_pathnames_only({ query }: any) { return { result: Promise.resolve({ uris: ['src/limiter.ts', 'src/app.ts'].filter(p => p.includes(query)).map(p => ({ fsPath: 'c:/work/vader-app/' + p })) }) } } } }
 const settingsSvc: any = { state: w.__settings, setGlobalSetting(k: string, v: any) { w.__settings.globalSettings[k] = v; w.__log.push(`setting:${k}=${v}`); notify() } }
 // ---- the editor's pending edits, as the review page reads them
@@ -128,7 +131,7 @@ const reviewSvc: any = {
 }
 const workspaceSvc: any = { getWorkspace: () => ({ folders: [{ uri: { fsPath: ROOT } }] }) }
 // ---- what the agent did in its browser and its terminals
-allThreads['t-wait'].messages.splice(2, 0,
+if (!process.env.VADER_PREVIEW) allThreads['t-wait'].messages.splice(2, 0,
 	tool('browser_navigate', 'success', { url: 'http://localhost:5173/', pageId: null }),
 	tool('browser_click', 'success', { ref: 'button Send 70 requests', pageId: null }),
 	tool('browser_screenshot', 'success', { pageId: null }),
@@ -140,6 +143,7 @@ allThreads['t-wait'].messages.splice(2, 0,
 const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 w.__pages = [{ pageId: 'p1', url: 'http://localhost:5173/', title: 'Rate limiter demo', isActive: true, isClosed: false }, { pageId: 'p2', url: 'http://localhost:5173/docs', title: 'API docs', isActive: false, isClosed: false }]
 w.__browserDown = ''
+if (process.env.VADER_PREVIEW) { w.__pages = [] }
 const browserSvc: any = {
 	async listPages() { if (w.__browserDown) throw new Error(w.__browserDown); return w.__pages },
 	async screenshot() { return PNG },
@@ -156,6 +160,7 @@ const term: any = {
 	async runCommand(c: string, o: any) { w.__log.push(`term:${o.persistentTerminalId}:${c}`); term._out[o.persistentTerminalId] += NL + '$ ' + c },
 	async killPersistentTerminal(id: string) { w.__log.push(`kill:${id}`); term._alive[id] = false },
 }
+if (process.env.VADER_PREVIEW) { term._out = {}; term._alive = {} }
 w.__runs = []
 const orchSvc: any = {
 	get runs() { return w.__runs },
@@ -169,5 +174,6 @@ w.__accessor = {
 }
 Date.now = () => NOW
 
+installLanguage(document.getElementById('root')!)
 createRoot(document.getElementById('root')!).render(<Shell />)
 w.__mounted = true

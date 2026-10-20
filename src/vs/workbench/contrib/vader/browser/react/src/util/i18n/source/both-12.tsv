@@ -1,0 +1,106 @@
+In use in this chat ::: قيد الاستخدام في هذه المحادثة ::: 在此对话中使用中
+Made by the main agent ::: أنشأه الوكيل الرئيسي ::: 由主智能体创建
+No saved agents yet. Make one for something you ask for again and again, such as reviewing a change or writing release notes. ::: لا وكلاء محفوظون بعد. أنشئ وكيلاً لشيء تطلبه مراراً، مثل مراجعة تغيير أو كتابة ملاحظات الإصدار. ::: 还没有已保存的智能体。为你经常提出的需求创建一个，例如审查更改或撰写发布说明。
+No server is set up. ::: لم يُعدّ أي خادم. ::: 尚未设置任何服务器。
+Write what it should always do. An agent without instructions is the main agent. ::: اكتب ما يجب أن يفعله دائماً. والوكيل بلا تعليمات هو الوكيل الرئيسي. ::: 写下它应当始终做的事。没有指令的智能体就是主智能体。
+only {0} ::: {0} فقط ::: 仅 {0}
+read only ::: للقراءة فقط ::: 只读
+some files only ::: بعض الملفات فقط ::: 仅部分文件
+tool name ::: اسم الأداة ::: 工具名称
+{0} copy ::: نسخة من {0} ::: {0} 副本
+Nearest places ::: أقرب الأماكن ::: 最接近的页面
+No setting called “{0}” ::: لا يوجد إعداد باسم «{0}» ::: 没有名为“{0}”的设置
+. The words of the skill, as the agent reads them: ::: . كلمات المهارة كما يقرؤها الوكيل: ::: 。技能的文字，即智能体所读到的内容：
+. Why: ::: . السبب: ::: 。原因：
+A skill is written instructions the agent follows when a task matches. Find some in Add-ons. Each one starts switched off, and you read it before you trust it. ::: المهارة تعليمات مكتوبة يتبعها الوكيل عندما تطابق مهمة ما. ابحث عن بعضها في الإضافات. تبدأ كل مهارة متوقفة، وتقرأها قبل أن تثق بها. ::: 技能是智能体在任务匹配时遵循的书面指令。可以在“附加组件”中查找。每个技能一开始都是关闭的，你需要先阅读再决定是否信任。
+Against it: ::: ضدها: ::: 不利因素：
+Always on ::: مفعّلة دائماً ::: 始终开启
+Ask {0} ::: اسأل {0} ::: 询问{0}
+Asks for: ::: تطلب: ::: 请求：
+Mark trusted ::: وسم كموثوقة ::: 标记为可信
+No installed skill matches that. ::: لا توجد مهارة مثبّتة تطابق ذلك. ::: 没有已安装的技能与之匹配。
+No repositories yet. Add one below. ::: لا مستودعات بعد. أضف واحداً أدناه. ::: 还没有仓库。请在下方添加。
+No skill is installed ::: لا توجد مهارة مثبّتة ::: 尚未安装任何技能
+Open Add-ons ::: فتح الإضافات ::: 打开附加组件
+Revoke trust ::: سحب الثقة ::: 撤销信任
+Scored again from live data on {0}: {1}%. ::: أُعيد تقييمها من بيانات حيّة في {0}: {1}%. ::: 于 {0} 根据实时数据重新评分：{1}%。
+Scored {0}% on {1} from live data; it was {2}% the first time.{3} ::: حصلت على {0}% في {1} من بيانات حيّة؛ وكانت {2}% في المرة الأولى.{3} ::: 于 {1} 根据实时数据评分为 {0}%；首次评分为 {2}%。{3}
+That is not a GitHub repository. Use owner/repo or an address that starts with https://github.com/. ::: هذا ليس مستودع GitHub. استخدم owner/repo أو عنواناً يبدأ بـ https://github.com/. ::: 这不是 GitHub 仓库。请使用 owner/repo 或以 https://github.com/ 开头的地址。
+high trust ::: ثقة عالية ::: 高度可信
+nothing special ::: لا شيء خاص ::: 没有特殊要求
+read it first ::: اقرأها أولاً ::: 请先阅读
+the network ::: الشبكة ::: 网络
+the terminal ::: الطرفية ::: 终端
+written by the agent ::: كتبها الوكيل ::: 由智能体编写
+/ out ::: / مُخرج ::: / 输出
+Estimates are {0}% lower ::: التقديرات أقل بنسبة {0}% ::: 估算值低 {0}%
+Name the model the price is for. ::: سمِّ النموذج الذي يخصّه السعر. ::: 请填写这个价格对应的模型名称。
+No discount ::: بلا خصم ::: 无折扣
+Nothing used yet ::: لا استخدام بعد ::: 尚无用量
+When a model answers, its tokens and cost appear here, by model. ::: عندما يجيب نموذج تظهر رموزه وتكلفته هنا، حسب النموذج. ::: 当模型回答后，它的 Token 数和费用会按模型显示在这里。
+Vader counts the tokens each provider reports. The money is worked out from list prices, so it is an estimate unless the provider billed it. Your provider’s own page is the bill. ::: يحتسب Vader الرموز التي يُبلغ عنها كل مزوّد. ويُحسب المال من الأسعار المعلنة، فهو تقدير ما لم يحاسب به المزوّد. وصفحة مزوّدك نفسها هي الفاتورة. ::: Vader 统计各提供商上报的 Token 数。金额按标价推算，因此除非提供商实际计费，否则只是估算。你的提供商自己的页面才是账单。
+cost is not in the totals above, and never counted as free. ::: التكلفة غير داخلة في الإجماليات أعلاه، ولا تُحتسب مجانية أبداً. ::: 的费用不在上面的合计中，也绝不会被当作免费。
+no price Vader knows. ::: لا سعر يعرفه Vader. ::: Vader 不知道价格。
+tokens in, ::: رمز مُدخل، ::: 个 Token 输入，
+A hosted registry of MCP servers with use counts and verified publishers. ::: سجل مستضاف لخوادم MCP مع أعداد الاستخدام والناشرين الموثّقين. ::: 托管的 MCP 服务器注册表，包含使用次数和已验证的发布者。
+Agent Client Protocol registry ::: سجل Agent Client Protocol ::: Agent Client Protocol 注册表
+Any public repository that tags itself as an MCP server, most starred first. ::: أي مستودع عام يصف نفسه بأنه خادم MCP، الأكثر نجوماً أولاً. ::: 任何自称是 MCP 服务器的公开仓库，按星标数从高到低排列。
+Docker MCP images ::: صور Docker لـ MCP ::: Docker MCP 镜像
+GitHub, repositories tagged mcp-server ::: GitHub، المستودعات الموسومة mcp-server ::: GitHub 中带 mcp-server 标签的仓库
+Gives weekly downloads and whether it was published from a CI workflow. ::: يعطي التنزيلات الأسبوعية وما إذا نُشر من سير عمل CI. ::: 提供每周下载量，以及是否通过 CI 工作流发布。
+Official MCP Registry ::: سجل MCP الرسمي ::: 官方 MCP 注册表
+npm, packages that call themselves MCP servers ::: npm، حزم تصف نفسها بأنها خوادم MCP ::: npm 中自称是 MCP 服务器的软件包
+The MCP server images Docker curates, with how many times each was pulled. Needs Docker to run. ::: صور خوادم MCP التي ينتقيها Docker، مع عدد مرات سحب كل منها. يحتاج Docker للتشغيل. ::: Docker 精选的 MCP 服务器镜像，附每个镜像的拉取次数。运行需要 Docker。
+The editor’s extension gallery. Gives installs, ratings and whether the publisher is verified. ::: معرض امتدادات المحرر. يعطي عمليات التثبيت والتقييمات وما إذا كان الناشر موثّقاً. ::: 编辑器的扩展库。提供安装量、评分以及发布者是否已验证。
+The list of agents that speak ACP, with how each is installed. ::: قائمة الوكلاء الذين يتحدثون ACP، مع كيفية تثبيت كل منهم. ::: 支持 ACP 的智能体列表，以及每个智能体的安装方式。
+The registry of the Model Context Protocol project. Says if an entry is deprecated. ::: سجل مشروع Model Context Protocol. ويبيّن إن كان مدخل ما متقادماً. ::: Model Context Protocol 项目的注册表。会说明某个条目是否已弃用。
+Open VSX ::: Open VSX ::: Open VSX
+Smithery skills ::: مهارات Smithery ::: Smithery 技能
+Asks for elevated privileges ::: يطلب صلاحيات مرتفعة ::: 请求提升权限
+Asks for files only ::: يطلب الملفات فقط ::: 仅请求文件权限
+Asks for the network ::: يطلب الشبكة ::: 请求网络权限
+Asks for the terminal ::: يطلب الطرفية ::: 请求终端权限
+Asks you for {0} secret{1} ::: يطلب منك {0} من الأسرار ::: 向你索取 {0} 项机密
+Changed since you last read it ::: تغيّرت منذ آخر قراءة لك ::: 自你上次阅读后发生了变化
+Contains a command that deletes broadly ::: يحتوي على أمر يحذف على نطاق واسع ::: 包含大范围删除的命令
+Contains invisible characters ::: يحتوي على أحرف غير مرئية ::: 包含不可见字符
+Declares no licence ::: لا يصرّح بترخيص ::: 未声明许可证
+Decodes hidden text ::: يفك ترميز نص مخفي ::: 会解码隐藏文本
+Installed only {0} times ::: ثُبّت {0} مرة فقط ::: 仅被安装过 {0} 次
+Its name is a letter or two away from "{0}" ::: اسمه يبعد حرفاً أو حرفين عن "{0}" ::: 它的名称与“{0}”只差一两个字母
+Licence: {0} ::: الترخيص: {0} ::: 许可证：{0}
+Mentions MCP tools ::: يذكر أدوات MCP ::: 提到了 MCP 工具
+Mentions keys or credentials next to a transfer ::: يذكر مفاتيح أو بيانات اعتماد بجانب عملية نقل ::: 在传输操作旁提到了密钥或凭据
+Not changed for {0} ::: لم يتغيّر منذ {0} ::: {0} 未更新
+Only {0} downloads a week ::: {0} تنزيلات فقط في الأسبوع ::: 每周仅 {0} 次下载
+Only {0} stars ::: {0} نجوم فقط ::: 仅 {0} 颗星
+Owned by an organisation, not a single account ::: تملكه مؤسسة وليس حساباً واحداً ::: 由组织而非个人账号拥有
+Pipes a download straight into a shell ::: يمرّر تنزيلاً مباشرة إلى الصدفة ::: 把下载内容直接交给 shell 执行
+Plain instructions, nothing unusual ::: تعليمات عادية، لا شيء غير معتاد ::: 普通指令，没有异常
+Published from a CI workflow with provenance ::: نُشر من سير عمل CI مع إثبات المصدر ::: 通过带有来源证明的 CI 工作流发布
+Rated only {0} by {1} people ::: قيّمه {1} أشخاص بـ {0} فقط ::: 仅 {1} 人评分，评分为 {0}
+Rated {0} by {1} people ::: قيّمه {1} أشخاص بـ {0} ::: {1} 人评分，评分为 {0}
+Remote server, nothing runs here ::: خادم بعيد، لا شيء يعمل هنا ::: 远程服务器，这里不运行任何内容
+Runs a program on this computer ::: يشغّل برنامجاً على هذا الجهاز ::: 在这台电脑上运行程序
+Runs a script when it is installed ::: يشغّل سكربتاً عند تثبيته ::: 安装时会运行脚本
+Signature was verified ::: تم التحقق من التوقيع ::: 签名已验证
+Starting point ::: نقطة البداية ::: 起始分
+The gallery flags it as malicious ::: يصنّفه المعرض على أنه ضار ::: 扩展库将其标记为恶意
+The repository is archived: no one is maintaining it ::: المستودع مؤرشف: لا أحد يصونه ::: 该仓库已归档：无人维护
+The repository is only {0} old ::: عمر المستودع {0} فقط ::: 该仓库才创建 {0}
+The source says it is no longer maintained ::: يذكر المصدر أنه لم يعد مصاناً ::: 来源称它已不再维护
+Tries to override earlier instructions or hide things from you ::: يحاول تجاوز التعليمات السابقة أو إخفاء أشياء عنك ::: 试图覆盖之前的指令或对你隐瞒内容
+Uses the name "{0}" but is not published by its owner ::: يستخدم الاسم "{0}" لكن ناشره ليس مالكه ::: 使用了“{0}”这个名称，但并非由其所有者发布
+Very long instructions are hard to read in full ::: التعليمات الطويلة جداً يصعب قراءتها كاملة ::: 指令过长，难以完整阅读
+You blocked it ::: حظرتَه ::: 你已屏蔽它
+You marked it as trusted ::: وسمتَه كموثوق ::: 你已将它标记为可信
+{0} downloads a week ::: {0} تنزيل في الأسبوع ::: 每周 {0} 次下载
+{0} months ::: {0} أشهر ::: {0} 个月
+{0} years ::: {0} سنوات ::: {0} 年
+API Version ::: إصدار API ::: API 版本
+Commit Message Generator ::: مولّد رسائل الإيداع ::: 提交信息生成器
+Custom Headers ::: ترويسات مخصصة ::: 自定义请求头
+Endpoint (optional proxy) ::: نقطة النهاية (وكيل اختياري) ::: 端点（可选代理）
+Endpoint ::: نقطة النهاية ::: 端点
+Quick Edit ::: تعديل سريع ::: 快速编辑
+Region ::: المنطقة ::: 区域

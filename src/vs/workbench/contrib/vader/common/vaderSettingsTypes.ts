@@ -157,6 +157,12 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
 
+/** the page where a person gets a key for a provider (the link of its help text); undefined for one that has no key page, such as a model on this computer */
+export const keyPageOfProvider = (providerName: ProviderName): string | undefined => {
+	const m = /\[(?:API Key here|Bedrock API key)\]\((https:\/\/[^)\s]+)\)/.exec(subTextMdOfProviderName(providerName))
+	return m?.[1]
+}
+
 type DisplayInfo = {
 	title: string;
 	placeholder: string;
@@ -517,6 +523,10 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 export type ChatMode = 'agent' | 'gather' | 'normal' | 'plan'
 
 
+/** the language of Vader's own screens (Settings, Language): English, Arabic (the screens are laid out right to left) or Chinese */
+export type UiLanguage = 'en' | 'ar' | 'zh'
+export const uiLanguages: readonly UiLanguage[] = ['en', 'ar', 'zh']
+
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -550,6 +560,7 @@ export type GlobalSettings = {
 	codebaseIndex: boolean;
 	/** suggest the next edit, not only the next characters: a change somewhere near the cursor, drawn in the editor, that Tab accepts (common/nextEdit/); asks a model after a pause, so it costs requests */
 	nextEdit: boolean;
+	uiLanguage: UiLanguage;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -576,6 +587,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	taskCopies: true,
 	codebaseIndex: true,
 	nextEdit: false,
+	uiLanguage: 'en',
 }
 
 export type GlobalSettingName = keyof GlobalSettings

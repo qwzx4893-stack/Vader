@@ -2,6 +2,7 @@
 // (test/onboardingUiE2E.mjs) sets what the provider answers and what is found on the computer, and reads back what the first run did.
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { installLanguage } from './i18nHarness'
 import { VaderOnboarding } from '../../browser/react/src2/vader-onboarding/VaderOnboarding'
 import { notify } from './onboardingHarnessServices'
 import { providerNames, localProviderNames } from '../../common/vaderSettingsTypes'
@@ -24,7 +25,7 @@ w.__agents = w.__agents ?? { statuses: {} }
 w.__policy = { state: { mode: 'balanced' } }
 
 const settingsSvc: any = {
-	setGlobalSetting(k: string, v: any) { w.__log.push(`global:${k}=${v}`); w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
+	setGlobalSetting(k: string, v: any) { w.__log.push(`global:${k}=${v}`); if (k === 'uiLanguage') { w.__setLang?.(v) } w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, [k]: v } }; notify() },
 	async setSettingOfProvider(p: string, k: string, v: any) { w.__log.push(`provider:${p}.${k}=${v}`); w.__settings.settingsOfProvider[p] = { ...w.__settings.settingsOfProvider[p], [k]: v, _didFillInProviderSettings: !!v }; notify() },
 	setModelSelectionOfFeature(f: string, s: any) { w.__log.push(`select:${f}=${s.providerName}/${s.modelName}`); w.__settings = { ...w.__settings, modelSelectionOfFeature: { ...w.__settings.modelSelectionOfFeature, [f]: s } }; notify() },
 }
@@ -52,5 +53,7 @@ w.__accessor = {
 	get: (name: string) => ({ IVaderSettingsService: settingsSvc, IPolicyService: policySvc, IStorageService: storage, ICommandService: commands, IOpenerService: opener, IChatThreadService: chat, IAgentGatewayService: gateway, IRefreshModelService: refreshSvc, IWorkspaceContextService: workspace, IExtensionTransferService: { async transferExtensions() { return undefined }, async inspectEditor() { return { found: true, theme: true, extensions: 3, snippets: false } } }, IMetricsService: { capture: () => { } } } as any)[name],
 }
 
+installLanguage(document.getElementById('root')!)
+w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, uiLanguage: w.__lang } }
 createRoot(document.getElementById('root')!).render(<VaderOnboarding />)
 w.__mounted = true

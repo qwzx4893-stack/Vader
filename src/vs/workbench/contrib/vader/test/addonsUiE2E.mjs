@@ -58,7 +58,7 @@ const plugin = {
 };
 await esbuild.build({
 	entryPoints: [path.join(here, 'fixtures/addonsHarness.tsx')], bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'page.js'), logLevel: 'error',
-	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
+	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"', 'process.env.VADER_LANG': JSON.stringify(process.env.VADER_LANG ?? 'en'), 'process.env.VADER_PREVIEW': '""' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
 const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>

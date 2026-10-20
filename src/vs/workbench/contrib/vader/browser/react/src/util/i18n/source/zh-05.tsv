@@ -1,0 +1,111 @@
+The model you pick, and nowhere else. No analytics, no account. ::: 只发往你选择的模型，不会发往其他地方。无数据分析，无需账号。
+You decide what it may do ::: 由你决定它可以做什么
+The next step sets how much it asks first. Some actions are never allowed. ::: 下一步设置它先询问的程度。有些操作永远不被允许。
+And choose how much Vader asks before it acts. ::: 并选择 Vader 在行动前询问的程度。
+Try a first task ::: 试一个任务
+A small one, so you see what it asks and shows. You can skip it. ::: 一个小任务，让你看到它会询问什么、展示什么。你可以跳过。
+The key may have a space at the end, or may have been revoked. Paste it again. ::: 密钥末尾可能多了空格，或者已被撤销。请重新粘贴。
+No local model found ::: 未找到本地模型
+Open Ollama's site ::: 打开 Ollama 网站
+Open a project, and choose how much Vader asks ::: 打开项目，并选择 Vader 询问的程度
+How much should Vader ask before it acts? ::: Vader 在行动前应当询问到什么程度？
+Some rules are locked in every mode: never touching your keys or system files, and always asking before installing anything. You can change all of this in Settings. ::: 有些规则在所有模式下都已锁定：绝不触碰你的密钥或系统文件，安装任何东西之前一定询问。你可以在“设置”中更改其余全部内容。
+Bring your theme, keybindings and extensions over. Nothing is changed in the original editor. ::: 迁移你的主题、快捷键和扩展。原来的编辑器不会有任何改动。
+Import settings from VS Code or Cursor ::: 从 VS Code 或 Cursor 导入设置
+What {0} looks like ::: “{0}”模式的效果
+Change a file ::: 修改文件
+The change, shown in full ::: 完整展示更改内容
+The command, shown in full ::: 完整展示命令
+Allow once ::: 允许一次
+Reject ::: 拒绝
+Blocked: credential file ::: 已阻止：凭据文件
+Reading a key or credential file is never allowed, in any mode. ::: 读取密钥或凭据文件在任何模式下都不被允许。
+Edits ::: 编辑
+Commands ::: 命令
+Edits go through, and you review them afterwards. ::: 编辑直接生效，事后由你审查。
+Edits go through without asking, and you can still review them afterwards. ::: 编辑无需询问直接生效，事后你仍可审查。
+Commands run without asking. A command that is locked still waits for you. ::: 命令无需询问直接运行。被锁定的命令仍会等待你确认。
+Pick one, or write your own. You will see the plan, every step, and the changes before anything is kept. ::: 选择一个，或自己写一个。在保留任何内容之前，你会看到计划、每一步和所有更改。
+Choose a model first ::: 请先选择模型
+No provider has a key yet, so there is no model to ask. ::: 还没有任何提供商填写密钥，因此没有可询问的模型。
+Use a local model ::: 使用本地模型
+Explain this project ::: 讲解这个项目
+Reads it and tells you how it fits together. Changes nothing. ::: 阅读项目并告诉你它是如何组织的。不会改动任何内容。
+Read only ::: 只读
+Find out why a test fails ::: 找出测试失败的原因
+Runs the tests, reads the failure, proposes a fix. ::: 运行测试，读取失败信息，并提出修复方案。
+Runs commands ::: 运行命令
+Write tests for a file ::: 为文件编写测试
+Choose the file; it writes tests and runs them. ::: 选择文件，它会编写测试并运行。
+Edits files ::: 编辑文件
+Add a rules file for this project ::: 为此项目添加规则文件
+Writes AGENTS.md so every later task starts with what matters here. ::: 编写 AGENTS.md，让之后的每个任务都从这里的重点内容开始。
+Or describe your own task ::: 或者描述你自己的任务
+Skip, open Vader ::: 跳过，打开 Vader
+What happens after you send it ::: 发送之后会发生什么
+It works, and you can watch ::: 它开始工作，你可以随时观看
+Each step shows as a quiet line: what it read, searched, edited, ran. ::: 每一步都以安静的一行显示：它读了什么、搜索了什么、改了什么、运行了什么。
+It asks when it needs you ::: 需要你时它会询问
+The chat is marked "Needs you" in the list, even when you are in another one. ::: 即使你在另一个对话中，列表里的这个对话也会标记为“需要你”。
+You review the changes ::: 由你审查更改
+Accept a file, a part of a file, or all of it. Undo goes back to a checkpoint. ::: 可以接受一个文件、文件的一部分或全部。撤销会回到某个检查点。
+Search chats, files and commands ::: 搜索对话、文件和命令
+No changes to commit ::: 没有可提交的更改
+Scored just now from what the sources say today. Found in: {0}. It is computed again whenever it is listed, and again for what is installed. It is a guide to what to read first, not a safety check: Vader still asks before the agent runs anything. ::: 刚刚根据各来源今天的说法完成评分。来源：{0}。每次列出时都会重新计算，已安装的内容也会重新计算。它只是提示先读什么，并不是安全检查：智能体运行任何内容之前 Vader 仍会询问。
+Found in {0} ::: 来源：{0}
+Hosted by Smithery: nothing is installed here. It asks for your own Smithery key, which is sent only to server.smithery.ai. ::: 由 Smithery 托管：这里不会安装任何内容。它需要你自己的 Smithery 密钥，该密钥只会发送到 server.smithery.ai。
+What is written into your mcp.json ::: 写入你的 mcp.json 的内容
+Adds the entry to your mcp.json and starts it once to check it works. ::: 把这条记录添加到你的 mcp.json，并启动一次以检查是否能正常工作。
+Read it before you switch it on. ::: 开启之前请先阅读。
+Publisher is unknown ::: 发布者未知
+verified, {0} uses ::: 已验证，{0} 次使用
+You sign in with your Cursor account; Cursor counts the usage on your plan. ::: 你用 Cursor 账号登录；用量计入你的 Cursor 套餐。
+A program Vader downloads from {0}, the vendor’s own release location. ::: Vader 从 {0}（厂商自己的发布位置）下载的程序。
+Last {0} days ::: 最近 {0} 天
+{0} tokens ::: {0} 个 Token
+Spending per day for the last {0} days ::: 最近 {0} 天每日花费
+By model, last {0} days ::: 按模型统计，最近 {0} 天
+Downloading Vader {0} ::: 正在下载 Vader {0}
+{0} tasks are running. Restart when they are done, or now: they stop and can be continued after. ::: 有 {0} 个任务正在运行。可在它们完成后重启，或现在重启：它们会停止，之后可以继续。
+{0} task is running. Restart when it is done, or now: it stops and can be continued after. ::: 有 {0} 个任务正在运行。可在它完成后重启，或现在重启：它会停止，之后可以继续。
+The download stopped at {0}. You are still on {1}, which works as before. ::: 下载在 {0} 处中断。你仍在使用 {1}，它可以像以前一样正常使用。
+Only when you press "Check for updates", or if you turn the automatic check on. ::: 仅在你点击“检查更新”，或开启自动检查时。
+With the same access the editor has. Vader installs it through the editor's own extension manager, which also keeps it updated. ::: 拥有与编辑器相同的权限。Vader 通过编辑器自带的扩展管理器安装它，也由它保持更新。
+Not found on {0}. Start its local server, then look again. ::: 在 {0} 上未找到。请启动它的本地服务器，然后重新查找。
+{0} tools. Each use goes through the safety gate. ::: {0} 个工具。每次使用都要经过安全关卡。
+{0} tool. Each use goes through the safety gate. ::: {0} 个工具。每次使用都要经过安全关卡。
+{0} characters ::: {0} 个字符
+Found in {0}, {1} ::: 位于 {0}，{1}
+{0} files ::: {0} 个文件
+{0} file ::: {0} 个文件
+Explored {0} files ::: 已查看 {0} 个文件
+Explored {0} file ::: 已查看 {0} 个文件
+{0} files with changes ::: {0} 个文件有更改
+{0} file with changes ::: {0} 个文件有更改
+About {0} of {1} tokens of this model's window ::: 约占此模型窗口 {1} 个 Token 中的 {0}
+Why {0}% ::: 为什么是 {0}%
+Changed {0} ago ::: {0}前有更改
+Installed {0} times ::: 已安装 {0} 次
+{0} ratings ::: {0} 条评分
+{0} changed files, +{1} −{2} ::: {0} 个文件有更改，+{1} −{2}
+{0} changed file, +{1} −{2} ::: {0} 个文件有更改，+{1} −{2}
+{0} of {1} finished, {2} running ::: 已完成 {0}/{1}，{2} 个运行中
+{0} of {1} finished ::: 已完成 {0}/{1}
+exit {0} ::: 退出码 {0}
+finished in {0} ::: 用时 {0} 完成
+running for {0} ::: 已运行 {0}
+{0} answered 401 ::: {0} 返回了 401
+Listed by {0} different sources ::: 被 {0} 个不同来源收录
+{0} stars ::: {0} 颗星
+{0} min ::: {0} 分钟
+{0} h ::: {0} 小时
+{0} d ::: {0} 天
+{0} days ago ::: {0} 天前
+{0} days ::: {0} 天
+yesterday ::: 昨天
+just now ::: 刚刚
+{0} min ago ::: {0} 分钟前
+{0} h ago ::: {0} 小时前
+Needs review ::: 需要审查
+Blocked ::: 已屏蔽
+Trusted ::: 可信

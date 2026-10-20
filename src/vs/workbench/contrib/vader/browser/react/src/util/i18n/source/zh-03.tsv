@@ -1,0 +1,134 @@
+in {0} / out {1} ::: 输入 {0} / 输出 {1}
+Restart when tasks finish ::: 任务结束后重启
+Restart now ::: 立即重启
+Could not download the update ::: 无法下载更新
+Try again ::: 重试
+Download it from the website ::: 从网站下载
+Back up your data ::: 备份你的数据
+Chats, saved agents, your rules and settings. Not included: API keys and the contents of your projects. ::: 对话、已保存的智能体、你的规则和设置。不包含：API 密钥和你项目的内容。
+Save file ::: 保存文件
+Restore from {0}? ::: 从 {0} 恢复？
+Restore ::: 恢复
+Where the models come from, and which one each feature uses. A provider with a key shows its live list of models in the chat. Nothing is written into the app in advance. ::: 模型来自哪里，以及每项功能使用哪一个。已填写密钥的提供商会在对话中显示其实时模型列表。应用中不会预先写入任何内容。
+What each feature uses ::: 每项功能使用的模型
+Chat ::: 对话
+Autocomplete ::: 自动补全
+suggestions while you type ::: 输入时的建议
+Off ::: 关闭
+Apply edits ::: 应用编辑
+Ctrl K and the Apply button ::: Ctrl K 和“应用”按钮
+Same as chat ::: 与对话相同
+Commit messages ::: 提交信息
+the button in Source Control ::: 源代码管理中的按钮
+On this computer ::: 在此电脑上
+Look for local models automatically ::: 自动查找本地模型
+Running ::: 运行中
+Refresh ::: 刷新
+Not set up. Give it the address of your server. ::: 尚未设置。请提供你的服务器地址。
+Not running ::: 未运行
+Set an address ::: 设置地址
+Look again ::: 重新查找
+Cloud providers ::: 云端提供商
+Search providers ::: 搜索提供商
+Search {0} providers ::: 搜索 {0} 个提供商
+Live ::: 实时
+Not answering ::: 无响应
+Close ::: 关闭
+API Key ::: API 密钥
+Replace ::: 替换
+The key is stored on this computer and shown by its end only. Removing it erases it here; the provider keeps its own copy. ::: 密钥保存在这台电脑上，只显示末尾几位。移除后会在此处清除；提供商仍保留他们自己的副本。
+Get your key ::: 获取密钥
+Refresh models ::: 刷新模型
+Could not reach the provider. No models are listed until the provider answers. You can still add one by name. ::: 无法连接到提供商。在提供商响应之前不会列出模型。你仍然可以按名称添加模型。
+No model yet. ::: 还没有模型。
++ Add a model by name ::: + 按名称添加模型
+No key yet ::: 还没有密钥
+Add a key ::: 添加密钥
+{0} models ::: {0} 个模型
+{0} models, key ending {1} ::: {0} 个模型，密钥末尾为 {1}
+Your ChatGPT plan (Plus, Pro, Business) or an OpenAI API key, through OpenAI's Codex. ::: 你的 ChatGPT 套餐（Plus、Pro、Business）或 OpenAI API 密钥，通过 OpenAI 的 Codex 使用。
+Update to {0} ::: 更新到 {0}
+Works: {0} answered in {1} s. ::: 可用：{0} 在 {1} 秒内响应。
+Sign-in: {0}. ::: 登录方式：{0}。
+It can continue a conversation after a restart. ::: 重启后可以继续之前的对话。
+Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan. ::: 需要 Node.js。你在浏览器中用 OpenAI 账号登录；用量计入你的 OpenAI 套餐。
+{0} is available ::: {0} 可用
+Free models from OpenCode Zen (no card), your ChatGPT plan, or any provider key. ::: 来自 OpenCode Zen 的免费模型（无需银行卡）、你的 ChatGPT 套餐，或任意提供商的密钥。
+Your Cursor subscription, through Cursor's own agent. ::: 你的 Cursor 订阅，通过 Cursor 自己的智能体使用。
+Not installed ::: 未安装
+Install ::: 安装
+Needs Node.js ::: 需要 Node.js
+Your Mistral account, through Mistral's own coding agent. ::: 你的 Mistral 账号，通过 Mistral 自己的编程智能体使用。
+Your SuperGrok or X Premium+ plan, through xAI's own coding agent. ::: 你的 SuperGrok 或 X Premium+ 套餐，通过 xAI 自己的编程智能体使用。
+Your Kimi membership (a free tier exists), through Moonshot's own Kimi Code CLI. ::: 你的 Kimi 会员（有免费版），通过 Moonshot 自己的 Kimi Code CLI 使用。
+Google's Antigravity agent with your Google account's plan. ::: Google 的 Antigravity 智能体，使用你的 Google 账号所含套餐。
+Your Claude plan (Pro, Max, Team) in Anthropic's own program. ::: 你的 Claude 套餐（Pro、Max、Team），在 Anthropic 自己的程序中使用。
+A free daily allowance, no subscription: models are paid for by short text ads in the terminal. ::: 每天有免费额度，无需订阅：模型的费用由终端中的简短文字广告承担。
+Find servers in Add-ons ::: 在附加组件中查找服务器
+Add by hand ::: 手动添加
+The servers the agent can use. A server runs on this computer or talks to a service, and each tool it offers goes through the safety gate. ::: 智能体可以使用的服务器。服务器在这台电脑上运行，或与某个服务通信，它提供的每个工具都要经过安全关卡。
+Server ::: 服务器
+State ::: 状态
+remote server ::: 远程服务器
+Failed ::: 失败
+{0} did not start ::: {0} 未能启动
+`node` was not found. Install Node.js, or give the full path to it. ::: 找不到 `node`。请安装 Node.js，或提供它的完整路径。
+Edit the command ::: 编辑命令
+A tool a server adds after you set it up is not given to the agent until you look at it and allow it. Ask before an MCP tool runs, or allow it, on the Permissions page. ::: 服务器在你设置之后新增的工具，在你查看并允许之前不会提供给智能体。可在“权限”页面设置 MCP 工具运行前询问或直接允许。
+Tools it offers ::: 它提供的工具
+What the agent is told before it starts, and what it chose to remember along the way. You can read and remove all of it. ::: 智能体开始之前被告知的内容，以及它在过程中选择记住的内容。你可以查看并删除全部内容。
+Told to the agent in this order, the most specific last. ::: 按此顺序告知智能体，越具体的越靠后。
+Your instructions for every project ::: 适用于所有项目的指令
+Edit ::: 编辑
+Saved. It applies to the next message. ::: 已保存。对下一条消息生效。
+Send only my instructions ::: 只发送我的指令
+When on, Vader adds nothing to the system message except what you wrote above. The safety rules that block dangerous actions still apply. ::: 开启后，除了你在上面写的内容，Vader 不会向系统消息中添加任何东西。阻止危险操作的安全规则仍然有效。
+What the agent remembers ::: 智能体记住的内容
+This project ::: 此项目
+Nothing yet. When the agent learns something that will matter next time, it writes it here. ::: 暂无内容。智能体学到下次会用到的东西时，会写在这里。
+Memory only holds what was written with the remember tool, by the agent or by you. ::: 记忆只保存通过“记住”工具写入的内容，无论是由智能体还是由你写入。
+What the agent should always do or know, in your own words ::: 用你自己的话写下智能体应当始终遵循或了解的内容
+Browse skills in Add-ons ::: 在附加组件中浏览技能
+The skills this computer has: switch them on and off, read them, remove them. To find new ones, use Add-ons in the sidebar. ::: 这台电脑上的技能：可开启或关闭、查看、移除。要查找新技能，请使用侧边栏中的“附加组件”。
+Sources ::: 来源
+Where Add-ons looks ::: 附加组件从哪里查找
+Add-ons asks these live sources when you open it or search. A source you switch off is not asked; what you installed from it stays. Only your search words are sent, never anything from your project. ::: 你打开附加组件或搜索时，它会向这些实时来源查询。关闭的来源不会被查询，已从中安装的内容会保留。只会发送你的搜索词，绝不会发送项目中的任何内容。
+GitHub repositories of skills ::: 技能的 GitHub 仓库
+anthropics/skills, openai/skills and the repositories you add. Gives stars, last change, licence. ::: anthropics/skills、openai/skills 以及你添加的仓库。提供星标数、最近更改和许可证。
+Ask GitHub repositories of skills ::: 查询技能的 GitHub 仓库
+A live index of skills with how many times each was installed. ::: 技能的实时索引，包含每个技能的安装次数。
+Ask skills.sh ::: 查询 skills.sh
+GitHub, repositories tagged agent-skills ::: GitHub 中带 agent-skills 标签的仓库
+Any public repository that tags itself as holding skills, most starred first. ::: 任何自称包含技能的公开仓库，按星标数从高到低排列。
+Ask GitHub, repositories tagged agent-skills ::: 查询 GitHub 中带 agent-skills 标签的仓库
+Skills indexed from GitHub with the repository’s stars and when each last changed. ::: 从 GitHub 索引的技能，附带仓库的星标数和最近更改时间。
+Ask SkillsMP ::: 查询 SkillsMP
+Smithery’s registry of skills; it also says which section each belongs to. ::: Smithery 的技能注册表，同时说明每个技能所属的分类。
+Ask Smithery skills ::: 查询 Smithery 技能
+SkillNet ::: SkillNet
+A public index of community skills. ::: 社区技能的公开索引。
+Ask SkillNet ::: 查询 SkillNet
+Add-ons lists every skill it finds in these repositories. Add your own below. ::: 附加组件会列出它在这些仓库中找到的每个技能。请在下方添加你自己的仓库。
+Open on GitHub ::: 在 GitHub 上打开
+A GitHub address ::: GitHub 地址
+Repository ::: 仓库
+Add repository ::: 添加仓库
+and {0} more: {1} ::: 以及另外 {0} 个：{1}
+Show all ::: 显示全部
+Choose myself: every job uses your Chat model, unless you pick another one for it below. ::: 我自己选择：每项任务都使用你的对话模型，除非你在下方为它另选一个。
+Use ::: 使用
+Revoke ::: 撤销
+None. A rule of your own can ask or refuse before any matching command, file change or MCP tool, whatever the mode. ::: 暂无。你自己的规则可以在任何匹配的命令、文件更改或 MCP 工具之前询问或拒绝，无论处于哪种模式。
+A skill that changes at its source is switched back to “needs review” until you read it again. ::: 源头发生变化的技能会重新变为“需要审查”，直到你再次阅读它。
+Filter installed ::: 筛选已安装
+Filter installed skills ::: 筛选已安装的技能
+Skill ::: 技能
+Trust ::: 信任度
+Asks for ::: 请求权限
+Nothing special ::: 没有特殊要求
+A pinned skill is always given to the agent when it is on ::: 已置顶的技能在开启时总会提供给智能体
+Pin ::: 置顶
+Needs review {0}% ::: 需要审查 {0}%
+Trusted {0}% ::: 可信 {0}%
+Files, Terminal, Network ::: 文件、终端、网络
+Read ::: 阅读

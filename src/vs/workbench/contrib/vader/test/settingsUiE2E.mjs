@@ -42,7 +42,7 @@ const plugin = {
 };
 await esbuild.build({
 	entryPoints: [path.join(here, 'fixtures/settingsHarness.tsx')], bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'page.js'), logLevel: 'error',
-	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
+	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"', 'process.env.VADER_LANG': JSON.stringify(process.env.VADER_LANG ?? 'en'), 'process.env.VADER_PREVIEW': '""' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
 fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:900px;overflow:hidden;position:relative}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');
@@ -100,7 +100,7 @@ async function layoutProblems(page) {
 	const { page, errors } = await newPage();
 	const nav = page.locator('nav[aria-label="Settings pages"]');
 	check('the pages are in three groups named Models, Agent, Workspace', (await nav.locator('.vader-nvh').allInnerTexts()).join('|') === 'Models|Agent|Workspace');
-	check('the pages are the ones of the boards, in order', (await nav.locator('button').allInnerTexts()).join('|') === 'Models|Model router|Connected agents|Permissions|Usage and cost|Saved agents|Skills|MCP servers|Memory and instructions|Editor extensions|Editor|Privacy and network|Data and backup|About and updates');
+	check('the pages are the ones of the boards, in order', (await nav.locator('button').allInnerTexts()).join('|') === 'Models|Model router|Connected agents|Permissions|Usage and cost|Saved agents|Skills|MCP servers|Memory and instructions|Editor extensions|Editor|Privacy and network|Language|Data and backup|About and updates');
 	check('it opens on Models and says which page is current', (await page.locator(`${TID('vader-settings-nav-models')}[aria-current=page]`).count()) === 1);
 	check('there is a way back to the app', (await page.locator(TID('vader-settings-close')).innerText()).includes('Back to the app'));
 	await page.locator(TID('vader-settings-close')).click();
@@ -828,6 +828,42 @@ async function layoutProblems(page) {
 {
 	const { page } = await newPage(() => { window.__skillsOverride = []; }, 'skills');
 	check('with no skill it says what a skill is and where to find some', (await page.locator(TID('vader-skills-empty')).innerText()).includes('No skill is installed') && (await page.locator(TID('vader-skills-empty')).innerText()).includes('Add-ons'));
+	await page.close();
+}
+
+// the language of the screens (Settings, Language): English, Arabic (right to left) and Chinese; what is not in the table stays English; a person's own words are never translated
+{
+	const { page, errors } = await newPage(null, 'language');
+	const names = await page.locator('[data-testid^="vader-language-"]').allInnerTexts();
+	check('the page lists the three languages, each by its own name', names.length === 3 && names[0].startsWith('English') && names[1].includes('العربية') && names[2].includes('中文'), names.join(' | '));
+	check('English is the one in use', (await page.locator(`${TID('vader-language-en')}[aria-checked=true]`).count()) === 1);
+	const rootDir = () => page.evaluate(() => document.getElementById('root').getAttribute('dir'));
+	await page.locator(TID('vader-language-ar')).click();
+	await page.waitForTimeout(250);
+	check('choosing Arabic is saved as the setting', (await log(page)).includes('global:uiLanguage="ar"'));
+	check('Arabic turns the screen right to left', (await rootDir()) === 'rtl');
+	check('Arabic: the names of the languages are not translated', (await page.locator(TID('vader-language-zh')).innerText()).includes('中文'));
+	await page.locator(TID('vader-settings-nav-data')).click();
+	await page.waitForTimeout(250);
+	const arTitle = await page.locator(`${TID('vader-settings-page')} h1`).first().innerText();
+	check('Arabic: the title of a page is in Arabic', arTitle === 'البيانات والنسخ الاحتياطي', arTitle);
+	check('Arabic: a placeholder is in Arabic too', await page.evaluate(() => [...document.querySelectorAll('[placeholder]')].some((e) => /[؀-ۿ]/.test(e.getAttribute('placeholder')))));
+	await shot(page, 'language-ar-data');
+	await page.locator(TID('vader-settings-nav-language')).click();
+	await page.locator(TID('vader-language-zh')).click();
+	await page.waitForTimeout(250);
+	check('Chinese is a left to right language: the direction is back', (await rootDir()) === null);
+	await page.locator(TID('vader-settings-nav-data')).click();
+	await page.waitForTimeout(250);
+	check('Chinese: the title of a page is in Chinese', (await page.locator(`${TID('vader-settings-page')} h1`).first().innerText()) === '数据与备份');
+	await shot(page, 'language-zh-data');
+	await page.locator(TID('vader-settings-nav-language')).click();
+	await page.locator(TID('vader-language-en')).click();
+	await page.waitForTimeout(250);
+	await page.locator(TID('vader-settings-nav-data')).click();
+	await page.waitForTimeout(250);
+	check('back to English: the words and the direction are as they were', (await page.locator(`${TID('vader-settings-page')} h1`).first().innerText()) === 'Data and backup' && (await rootDir()) === null);
+	check('no error while the language changed', errors.length === 0, errors.join('; '));
 	await page.close();
 }
 

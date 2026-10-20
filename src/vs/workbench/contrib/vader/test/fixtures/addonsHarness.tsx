@@ -2,6 +2,7 @@
 // behind it; only the sources' answers (saved responses) and the editor's services are stand-ins. Used by test/addonsUiE2E.mjs.
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { installLanguage } from './i18nHarness'
 import { Addons } from '../../browser/react/src2/vader-addons-tsx/Addons'
 import { addonsServices } from './addonsHarnessSetup'
 
@@ -13,5 +14,6 @@ w.__accessor = {
 }
 w.__skills = installedSkills
 
+installLanguage(document.getElementById('root')!)
 createRoot(document.getElementById('root')!).render(<Addons />)
 w.__mounted = true

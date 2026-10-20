@@ -99,7 +99,7 @@ export const SavedAgentsPage = () => {
 								{configured.map(c => <option key={key(c)} value={key(c)} style={{ background: '#19191c' }}>{c.modelName}</option>)}
 							</select></span>
 					</Field>
-					<Field label='Folders it may touch'><input className='fld mo' data-testid='vader-saved-folders' placeholder='src/**, docs/** (empty: the whole project)' value={draft.folders} onChange={e => set({ folders: e.target.value })} /></Field>
+					<Field label='Folders it may touch'><input className='fld mo' data-testid='vader-saved-folders' placeholder='Folders and files it may change (empty: the whole project)' value={draft.folders} onChange={e => set({ folders: e.target.value })} /></Field>
 				</div>
 				<div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1.25fr) minmax(0,1fr)', gap: 18 }}>
 					<div className='c' style={{ gap: 8 }}>

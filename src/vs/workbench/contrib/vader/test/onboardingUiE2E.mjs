@@ -42,7 +42,7 @@ const plugin = {
 };
 await esbuild.build({
 	entryPoints: [path.join(here, 'fixtures/onboardingHarness.tsx')], bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'page.js'), logLevel: 'error',
-	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
+	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"', 'process.env.VADER_LANG': JSON.stringify(process.env.VADER_LANG ?? 'en'), 'process.env.VADER_PREVIEW': '""' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
 fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:900px;overflow:hidden;position:relative}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');

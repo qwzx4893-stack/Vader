@@ -1,0 +1,116 @@
+Nothing yet. When the agent asks to run a command, "Allow in this project" remembers that exact command here, and "Allow this host here" remembers a site. Rules that always ask (keys, installs, sudo) are never skipped. ::: 暂无。当智能体请求运行命令时，“在此项目中允许”会在这里记住那条完全相同的命令，“在此处允许此主机”会记住一个网站。始终需要询问的规则（密钥、安装、sudo）永远不会被跳过。
+{0} has no price Vader knows. Its cost is not in the totals above, and never counted as free. ::: {0} 没有 Vader 已知的价格。它的费用不在上面的合计中，也绝不会被当作免费。
+{0}: Enter the price per million tokens, like 3 or 0.25. ::: {0}：请输入每百万 Token 的价格，例如 3 或 0.25。
+{0} files in {1} pieces ::: {0} 个文件，共 {1} 个片段
+Updated {0} ago. Kept on this computer, never sent anywhere. ::: {0}前更新。保存在这台电脑上，不会发送到任何地方。
+{0} chat{1}, {2}. Export to a file, or import from one. ::: {0} 个对话，{2}。可导出为文件，或从文件导入。
+{0} models, {1} ::: {0} 个模型，{1}
+Shown in the picker: {0} of {1} ::: 选择器中显示：{0} / {1}
+Shown in the picker: ::: 选择器中显示：
+Your GitHub Copilot plan (a free plan exists; Pro and Pro+ for more), through GitHub's own Copilot CLI. ::: 你的 GitHub Copilot 套餐（有免费套餐；Pro 和 Pro+ 功能更多），通过 GitHub 自己的 Copilot CLI 使用。
+Files ::: 文件
+Terminal ::: 终端
+Network ::: 网络
+Plan ::: 计划
+Plan ready ::: 计划已就绪
+read {0}, searched {1} ::: 读取 {0} 个，搜索 {1} 次
+{0} files changed, branched from {1} ::: {0} 个文件有更改，从 {1} 分出
+{0} file changed, branched from {1} ::: {0} 个文件有更改，从 {1} 分出
+Worked out from the skill's own text. The agent still asks before it does any of these. ::: 根据技能自身的文本推断。智能体执行其中任何一项之前仍会询问。
+An npm package, started with npx (needs Node.js): {0}. ::: 一个 npm 包，通过 npx 启动（需要 Node.js）：{0}。
+{0} in all: {1}. ::: 共 {0} 项：{1}。
+{0} ran, {1} you rejected ::: {0} 项已运行，{1} 项被你拒绝
+The provider answered 429: too many requests too fast. Wait a little and send again, or choose another model. Everything the agent did is saved. ::: 提供商返回 429：请求太多太快。请稍等片刻再发送，或选择另一个模型。智能体已完成的内容都已保存。
+{0} providers. Paste a key and the live list of models appears. ::: {0} 个提供商。粘贴密钥后会显示实时模型列表。
+Works. {0} models found ::: 可用。找到 {0} 个模型
+Works. {0} model found ::: 可用。找到 {0} 个模型
+Codex, Copilot, Cursor and others, inside Vader's chat. ::: Codex、Copilot、Cursor 等，在 Vader 的对话中使用。
+Looked for Ollama on {0} and LM Studio on {1}. Start one of them, then look again. Nothing leaves your machine either way. ::: 已在 {0} 查找 Ollama，在 {1} 查找 LM Studio。请启动其中一个，然后重新查找。无论哪种情况，任何内容都不会离开你的电脑。
+{0} files accepted, {1} rejected. ::: 已接受 {0} 个文件，拒绝 {1} 个。
+Test connection ::: 测试连接
+Works: ::: 可用：
+Refresh models ::: 刷新模型
+Checking ::: 正在检查
+Looking ::: 正在查找
+Key refused ::: 密钥被拒绝
+Asking the provider for its models ::: 正在向提供商获取模型列表
+Defaults ::: 默认值
+Defaults changed ::: 默认值已更改
+Override the defaults ::: 覆盖默认值
+Overrides as JSON ::: 以 JSON 形式覆盖
+That is not valid JSON. Check the commas and the quotes. ::: 这不是有效的 JSON。请检查逗号和引号。
+It should be an object, like { "contextWindow": 128000 }. ::: 它应当是一个对象，例如 { "contextWindow": 128000 }。
+Vader does not recognise this model, so it assumes safe defaults. Set what you know about it here. ::: Vader 不认识这个模型，因此采用安全的默认值。请在这里填写你所了解的信息。
+Vader recognises it as {0}. ::: Vader 将它识别为 {0}。
+{0} comes with Vader, so you should not need to change these. ::: {0} 随 Vader 内置，通常不需要更改这些设置。
+Defaults for {0} ::: {0} 的默认值
+Defaults for ::: 默认值：
+Enable a model ::: 启用模型
+No models available ::: 没有可用的模型
+Provider required ::: 需要选择提供商
+Model name ::: 模型名称
+Model Name ::: 模型名称
+Filter models ::: 筛选模型
+Delete {0} ::: 删除 {0}
+Show {0} in the picker ::: 在选择器中显示 {0}
+Add the key first, and its models appear here. ::: 先添加密钥，它的模型就会出现在这里。
+Add the model you use by name. ::: 按名称添加你使用的模型。
+No models are listed until the provider answers. You can still add one by name. ::: 在提供商响应之前不会列出模型。你仍然可以按名称添加模型。
+A connected agent answers the chat ::: 由已连接的智能体来回答对话
+Not found{0}. Start its local server, then look again. ::: 未找到{0}。请启动它的本地服务器，然后重新查找。
+Use my own prices ::: 使用我自己的价格
+Model ::: 模型
+Provider ::: 提供商
+API key ::: API 密钥
+Paste your key ::: 粘贴你的密钥
+Test and continue ::: 测试并继续
+Continue ::: 继续
+Back ::: 返回
+Skip for now ::: 暂时跳过
+Change ::: 更改
+Project ::: 项目
+Done ::: 完成
+Send ::: 发送
+Stop ::: 停止
+Pause ::: 暂停
+Resume ::: 继续
+Retry ::: 重试
+Copy ::: 复制
+Copied ::: 已复制
+Dismiss ::: 忽略
+Accept ::: 接受
+Accept all ::: 全部接受
+Reject all ::: 全部拒绝
+Undo ::: 撤销
+Review ::: 审查
+Browser ::: 浏览器
+Terminal ::: 终端
+Conversation ::: 对话
+New chat ::: 新建对话
+Search ::: 搜索
+All agents ::: 所有智能体
+Add-ons ::: 附加组件
+Settings ::: 设置
+Projects ::: 项目
+Chats ::: 对话
+Installed ::: 已安装
+All ::: 全部
+Extensions ::: 扩展
+Agents ::: 智能体
+Skills, MCP servers, extensions and agents ::: 技能、MCP 服务器、扩展和智能体
+Sort ::: 排序
+Source ::: 来源
+Runs ::: 运行方式
+Needs ::: 需要
+Category ::: 分类
+Sort: ::: 排序：
+all ::: 全部
+anywhere ::: 任意位置
+on this computer ::: 在此电脑上
+hosted ::: 托管
+any ::: 任意
+a vendor sign-in ::: 厂商账号登录
+a terminal ::: 终端
+most trusted ::: 最可信
+name, A to Z ::: 名称 A 到 Z
+most installed ::: 安装最多

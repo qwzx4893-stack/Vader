@@ -3538,11 +3538,7 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 			'Add a rules file for this project',
 			'Explain how this project is laid out',
 			'Find and fix a failing test',
-		] : [
-			'Explain the difference between a process and a thread',
-			'Write a regular expression for semantic version ranges',
-			'Compare two ways to index a SQL table',
-		]).map((text, index) => (
+		] : []).map((text, index) => (
 			<div
 				key={index}
 				data-testid='vader-suggestion'
@@ -3628,8 +3624,8 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 						<span className='truncate flex-1'>{r.title}</span>
 						<span className='text-vader-fg-3 text-xs shrink-0'>{r.status === 'review' ? 'Review it' : r.status === 'needs_you' ? 'Needs you' : ''}</span>
 					</button>)}
-				</div> : <div className='flex flex-col gap-2 mt-2'>
-					<div className='text-vader-fg-3 text-xs'>{hasProject ? 'Start from one of these' : 'Suggestions'}</div>
+				</div> : !hasProject ? null : <div className='flex flex-col gap-2 mt-2'>
+					<div className='text-vader-fg-3 text-xs'>Start from one of these</div>
 					{initiallySuggestedPromptsHTML}
 				</div>}
 			</ErrorBoundary>

@@ -19,10 +19,14 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../../../..');
 const require = createRequire(path.join(repo, 'package.json'));
 const esbuild = require('esbuild');
-const root = path.join(here, '..');
+const root = path.join(here, '..').split(path.sep).join('/'); // forward slashes: the template strings below are import paths for esbuild
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-live-'));
 // the service keeps agents under the home folder: a throw-away one, so nothing of the real one is touched
 process.env.HOME = tmp; process.env.USERPROFILE = tmp;
+// programs written in Rust ask Windows for the home folder and ignore those variables: Codex is told where its own folder is, so a sign-in of the person running this test is not seen
+process.env.CODEX_HOME = path.join(tmp, '.codex');
+fs.mkdirSync(process.env.CODEX_HOME, { recursive: true });
+const bundleFile = path.join(fs.mkdtempSync(path.join(repo, 'node_modules', '.vader-live-')), 's.cjs');
 
 await esbuild.build({
 	stdin: {
@@ -36,12 +40,14 @@ await esbuild.build({
 		].join('\n'),
 		resolveDir: root, loader: 'ts',
 	},
-	bundle: true, platform: 'node', format: 'cjs', outfile: path.join(tmp, 's.cjs'), logLevel: 'error',
+	// the bundle sits under the repository's node_modules so that the packages kept external (yauzl, yazl) are found when it runs
+	bundle: true, platform: 'node', format: 'cjs', outfile: bundleFile, logLevel: 'error',
 	external: ['yauzl', 'yazl', 'electron', 'original-fs'],
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false } },
 	nodePaths: [path.join(repo, 'node_modules')],
 });
-const m = require(path.join(tmp, 's.cjs'));
+const m = require(bundleFile);
+process.on('exit', () => { try { fs.rmSync(path.dirname(bundleFile), { recursive: true, force: true }); } catch { /* left behind: harmless */ } });
 
 let passed = 0, failed = 0, skipped = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
@@ -61,6 +67,8 @@ const svc = new m.ExternalAgentMainService(requestService, logService);
 const statusEvents = [];
 svc.onEvent(e => { if (e.type === 'status') { statusEvents.push(e); } });
 
+// stops a program started here and what it started (on Windows a plain kill leaves the children running, and their files cannot be deleted)
+const stop = (p) => { try { if (process.platform === 'win32' && p.pid) { require('node:child_process').execFileSync('taskkill', ['/pid', String(p.pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }); } else { p.kill('SIGKILL'); } } catch { /* already gone */ } };
 const wanted = new Set(process.argv.slice(2));
 const want = (id) => wanted.size === 0 || wanted.has(id);
 const reachable = async (url) => { try { const r = await fetch(url, { method: 'HEAD', redirect: 'follow', signal: AbortSignal.timeout(15_000) }); return r.status < 500; } catch { return false; } };
@@ -94,9 +102,9 @@ try {
 		const init = await new Promise((resolve) => {
 			const { spawn } = require('node:child_process');
 			const p = spawn(spec.command, spec.args, { stdio: ['pipe', 'pipe', 'ignore'], env: { ...process.env, ...spec.env } });
-			let buf = ''; p.stdout.on('data', d => { buf += d; const i = buf.indexOf('\n'); if (i >= 0) { try { resolve(JSON.parse(buf.slice(0, i)).result); } catch { resolve(undefined); } p.kill('SIGKILL'); } });
+			let buf = ''; p.stdout.on('data', d => { buf += d; const i = buf.indexOf('\n'); if (i >= 0) { try { resolve(JSON.parse(buf.slice(0, i)).result); } catch { resolve(undefined); } stop(p); } });
 			p.stdin.write(JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: 1, clientCapabilities: { fs: { readTextFile: false, writeTextFile: false }, terminal: false, auth: { terminal: true } } } }) + '\n');
-			setTimeout(() => { p.kill('SIGKILL'); resolve(undefined); }, 30000);
+			setTimeout(() => { stop(p); resolve(undefined); }, 30000);
 		});
 		const choice = m.chooseAuthMethod(init?.authMethods ?? [], def.acp.authPreference);
 		check(`${id}: Vader's sign-in choice for it is the account one`, expect.choice(choice), JSON.stringify(choice).slice(0, 300));
@@ -161,7 +169,7 @@ try {
 			const bad = new m.ExternalAgentMainService(requestService, logService);
 			bad._live = { opencode: tampered.opencode };
 			const error = await bad.install('opencode').then(() => '', e => String(e.message));
-			check('opencode: a download whose checksum does not match is refused and leaves nothing behind', /checksum/.test(error) && (await svc.getStatuses([])).find(s => s.id === 'opencode')?.state === 'not-installed', error);
+			check('opencode: a download whose checksum does not match is refused and leaves nothing behind', /checksum/.test(error) && (await svc.getStatuses([])).find(s => s.id === 'opencode')?.source !== 'vader', error); // a program the person already has on the PATH may still be found: only Vader's own copy must be gone
 			bad.dispose();
 		}
 	}
@@ -204,6 +212,14 @@ try {
 			check(`${id}: the download installs`, installed.state === 'ready', JSON.stringify(installed));
 			const probe = await svc.probe(id);
 			check(`${id}: the real program answers the handshake`, probe.ok === true, JSON.stringify(probe));
+			if (id === 'antigravity') {
+				// Google's ACP server for editors: the four ways in that its documentation lists, and the one Vader starts
+				const ids = (probe.authMethods ?? []).map(a => a.id);
+				check('antigravity: it offers the four ways in of its documentation', ['oauth-personal', 'oauth-business', 'gemini-api-key', 'agent-platform'].every(x => ids.includes(x)), ids.join(','));
+				check('antigravity: Vader signs in with the Google account', m.chooseAuthMethod(probe.authMethods ?? [], m.externalAgentById('antigravity').acp.authPreference).method?.id === 'oauth-personal');
+				const si = await svc.checkSignIn('antigravity');
+				check('antigravity: without a sign-in it says it is not signed in, and nothing is changed', si.signedIn === false && !si.error, JSON.stringify(si));
+			}
 			await svc.uninstall(id);
 		}
 	}
@@ -211,6 +227,6 @@ try {
 	svc.dispose();
 }
 
-fs.rmSync(tmp, { recursive: true, force: true });
+try { fs.rmSync(tmp, { recursive: true, force: true, maxRetries: 12, retryDelay: 400 }); } catch { /* a program that was started here may still hold a file for a moment: the folder is in the temp folder and harmless */ }
 console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped`);
 process.exit(failed ? 1 : 0);

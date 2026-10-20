@@ -1,0 +1,134 @@
+in {0} / out {1} ::: مُدخل {0} / مُخرج {1}
+Restart when tasks finish ::: إعادة التشغيل عند انتهاء المهام
+Restart now ::: إعادة التشغيل الآن
+Could not download the update ::: تعذّر تنزيل التحديث
+Try again ::: حاول مرة أخرى
+Download it from the website ::: نزّله من الموقع
+Back up your data ::: انسخ بياناتك احتياطياً
+Chats, saved agents, your rules and settings. Not included: API keys and the contents of your projects. ::: المحادثات والوكلاء المحفوظون وقواعدك وإعداداتك. لا يشمل: مفاتيح API ومحتويات مشاريعك.
+Save file ::: حفظ الملف
+Restore from {0}? ::: الاستعادة من {0}؟
+Restore ::: استعادة
+Where the models come from, and which one each feature uses. A provider with a key shows its live list of models in the chat. Nothing is written into the app in advance. ::: من أين تأتي النماذج، وأيّها تستخدمه كل ميزة. المزوّد الذي له مفتاح تظهر قائمته الحيّة من النماذج في المحادثة. ولا يُكتب شيء في التطبيق مسبقاً.
+What each feature uses ::: ما تستخدمه كل ميزة
+Chat ::: المحادثة
+Autocomplete ::: الإكمال التلقائي
+suggestions while you type ::: اقتراحات أثناء الكتابة
+Off ::: متوقف
+Apply edits ::: تطبيق التعديلات
+Ctrl K and the Apply button ::: Ctrl K وزر التطبيق
+Same as chat ::: مثل المحادثة
+Commit messages ::: رسائل الإيداع
+the button in Source Control ::: الزر في التحكم بالمصدر
+On this computer ::: على هذا الجهاز
+Look for local models automatically ::: البحث عن النماذج المحلية تلقائياً
+Running ::: يعمل
+Refresh ::: تحديث
+Not set up. Give it the address of your server. ::: غير مُعدّ. أعطه عنوان خادمك.
+Not running ::: لا يعمل
+Set an address ::: تعيين عنوان
+Look again ::: ابحث مجدداً
+Cloud providers ::: المزوّدون السحابيون
+Search providers ::: بحث في المزوّدين
+Search {0} providers ::: بحث في {0} مزوّداً
+Live ::: مباشر
+Not answering ::: لا يستجيب
+Close ::: إغلاق
+API Key ::: مفتاح API
+Replace ::: استبدال
+The key is stored on this computer and shown by its end only. Removing it erases it here; the provider keeps its own copy. ::: المفتاح مخزّن على هذا الجهاز ولا يُعرض منه إلا آخره. إزالته تمسحه هنا؛ ويحتفظ المزوّد بنسخته الخاصة.
+Get your key ::: احصل على مفتاحك
+Refresh models ::: تحديث النماذج
+Could not reach the provider. No models are listed until the provider answers. You can still add one by name. ::: تعذّر الوصول إلى المزوّد. لا تُعرض نماذج حتى يستجيب المزوّد. ويمكنك مع ذلك إضافة نموذج بالاسم.
+No model yet. ::: لا يوجد نموذج بعد.
++ Add a model by name ::: + إضافة نموذج بالاسم
+No key yet ::: لا يوجد مفتاح بعد
+Add a key ::: إضافة مفتاح
+{0} models ::: {0} نموذج
+{0} models, key ending {1} ::: {0} نموذج، مفتاح ينتهي بـ {1}
+Your ChatGPT plan (Plus, Pro, Business) or an OpenAI API key, through OpenAI's Codex. ::: اشتراك ChatGPT لديك (Plus أو Pro أو Business) أو مفتاح OpenAI API، عبر Codex من OpenAI.
+Update to {0} ::: التحديث إلى {0}
+Works: {0} answered in {1} s. ::: يعمل: {0} أجاب خلال {1} ثانية.
+Sign-in: {0}. ::: تسجيل الدخول: {0}.
+It can continue a conversation after a restart. ::: يمكنه متابعة المحادثة بعد إعادة التشغيل.
+Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan. ::: يحتاج Node.js. تسجّل الدخول بحساب OpenAI في المتصفح؛ وتحتسب OpenAI الاستخدام على اشتراكك.
+{0} is available ::: {0} متاح
+Free models from OpenCode Zen (no card), your ChatGPT plan, or any provider key. ::: نماذج مجانية من OpenCode Zen (بلا بطاقة)، أو اشتراك ChatGPT لديك، أو مفتاح أي مزوّد.
+Your Cursor subscription, through Cursor's own agent. ::: اشتراكك في Cursor، عبر وكيل Cursor نفسه.
+Not installed ::: غير مثبّت
+Install ::: تثبيت
+Needs Node.js ::: يحتاج Node.js
+Your Mistral account, through Mistral's own coding agent. ::: حسابك في Mistral، عبر وكيل البرمجة الخاص بـ Mistral.
+Your SuperGrok or X Premium+ plan, through xAI's own coding agent. ::: اشتراكك في SuperGrok أو X Premium+، عبر وكيل البرمجة الخاص بـ xAI.
+Your Kimi membership (a free tier exists), through Moonshot's own Kimi Code CLI. ::: عضويتك في Kimi (توجد فئة مجانية)، عبر Kimi Code CLI من Moonshot.
+Google's Antigravity agent with your Google account's plan. ::: وكيل Antigravity من Google بخطة حسابك في Google.
+Your Claude plan (Pro, Max, Team) in Anthropic's own program. ::: اشتراكك في Claude (Pro أو Max أو Team) داخل برنامج Anthropic نفسه.
+A free daily allowance, no subscription: models are paid for by short text ads in the terminal. ::: حصة يومية مجانية بلا اشتراك: تُموَّل النماذج بإعلانات نصية قصيرة في الطرفية.
+Find servers in Add-ons ::: البحث عن خوادم في الإضافات
+Add by hand ::: إضافة يدوياً
+The servers the agent can use. A server runs on this computer or talks to a service, and each tool it offers goes through the safety gate. ::: الخوادم التي يستطيع الوكيل استخدامها. يعمل الخادم على هذا الجهاز أو يتحدث إلى خدمة، وتمر كل أداة يقدّمها عبر بوابة الأمان.
+Server ::: الخادم
+State ::: الحالة
+remote server ::: خادم بعيد
+Failed ::: فشل
+{0} did not start ::: لم يبدأ {0}
+`node` was not found. Install Node.js, or give the full path to it. ::: لم يُعثر على `node`. ثبّت Node.js أو أعطِ مساره الكامل.
+Edit the command ::: تعديل الأمر
+A tool a server adds after you set it up is not given to the agent until you look at it and allow it. Ask before an MCP tool runs, or allow it, on the Permissions page. ::: الأداة التي يضيفها الخادم بعد إعداده لا تُعطى للوكيل حتى تطّلع عليها وتسمح بها. اسأل قبل تشغيل أداة MCP، أو اسمح بها، في صفحة الأذونات.
+Tools it offers ::: الأدوات التي يقدّمها
+What the agent is told before it starts, and what it chose to remember along the way. You can read and remove all of it. ::: ما يُقال للوكيل قبل أن يبدأ، وما اختار أن يتذكره أثناء العمل. يمكنك قراءة كل ذلك وإزالته.
+Told to the agent in this order, the most specific last. ::: تُعطى للوكيل بهذا الترتيب، والأكثر تحديداً أخيراً.
+Your instructions for every project ::: تعليماتك لكل مشروع
+Edit ::: تعديل
+Saved. It applies to the next message. ::: تم الحفظ. يسري على الرسالة التالية.
+Send only my instructions ::: إرسال تعليماتي فقط
+When on, Vader adds nothing to the system message except what you wrote above. The safety rules that block dangerous actions still apply. ::: عند التفعيل لا يضيف Vader إلى رسالة النظام شيئاً سوى ما كتبته أعلاه. وتبقى قواعد الأمان التي تمنع الإجراءات الخطرة سارية.
+What the agent remembers ::: ما يتذكره الوكيل
+This project ::: هذا المشروع
+Nothing yet. When the agent learns something that will matter next time, it writes it here. ::: لا شيء بعد. حين يتعلم الوكيل شيئاً سيهمّ في المرة القادمة يكتبه هنا.
+Memory only holds what was written with the remember tool, by the agent or by you. ::: لا تحتفظ الذاكرة إلا بما كُتب بأداة التذكّر، سواء بواسطة الوكيل أو بواسطتك.
+What the agent should always do or know, in your own words ::: ما يجب أن يفعله الوكيل أو يعرفه دائماً، بكلماتك أنت
+Browse skills in Add-ons ::: تصفّح المهارات في الإضافات
+The skills this computer has: switch them on and off, read them, remove them. To find new ones, use Add-ons in the sidebar. ::: المهارات الموجودة على هذا الجهاز: شغّلها وأوقفها، واقرأها، وأزِلها. للعثور على مهارات جديدة استخدم «الإضافات» في الشريط الجانبي.
+Sources ::: المصادر
+Where Add-ons looks ::: أين تبحث الإضافات
+Add-ons asks these live sources when you open it or search. A source you switch off is not asked; what you installed from it stays. Only your search words are sent, never anything from your project. ::: تسأل الإضافات هذه المصادر الحيّة عند فتحها أو البحث. المصدر الذي توقفه لا يُسأل؛ وما ثبّتّه منه يبقى. تُرسل كلمات البحث فقط، ولا شيء من مشروعك أبداً.
+GitHub repositories of skills ::: مستودعات GitHub للمهارات
+anthropics/skills, openai/skills and the repositories you add. Gives stars, last change, licence. ::: anthropics/skills وopenai/skills والمستودعات التي تضيفها. يعطي النجوم وآخر تغيير والترخيص.
+Ask GitHub repositories of skills ::: سؤال مستودعات GitHub للمهارات
+A live index of skills with how many times each was installed. ::: فهرس حيّ للمهارات مع عدد مرات تثبيت كل منها.
+Ask skills.sh ::: سؤال skills.sh
+GitHub, repositories tagged agent-skills ::: GitHub، المستودعات الموسومة agent-skills
+Any public repository that tags itself as holding skills, most starred first. ::: أي مستودع عام يصف نفسه بأنه يحوي مهارات، الأكثر نجوماً أولاً.
+Ask GitHub, repositories tagged agent-skills ::: سؤال GitHub، المستودعات الموسومة agent-skills
+Skills indexed from GitHub with the repository’s stars and when each last changed. ::: مهارات مفهرسة من GitHub مع نجوم المستودع وموعد آخر تغيير.
+Ask SkillsMP ::: سؤال SkillsMP
+Smithery’s registry of skills; it also says which section each belongs to. ::: سجل Smithery للمهارات؛ ويذكر أيضاً القسم الذي تنتمي إليه كل مهارة.
+Ask Smithery skills ::: سؤال مهارات Smithery
+SkillNet ::: SkillNet
+A public index of community skills. ::: فهرس عام لمهارات المجتمع.
+Ask SkillNet ::: سؤال SkillNet
+Add-ons lists every skill it finds in these repositories. Add your own below. ::: تعرض الإضافات كل مهارة تجدها في هذه المستودعات. أضف مستودعك أدناه.
+Open on GitHub ::: فتح في GitHub
+A GitHub address ::: عنوان GitHub
+Repository ::: المستودع
+Add repository ::: إضافة مستودع
+and {0} more: {1} ::: و{0} أخرى: {1}
+Show all ::: عرض الكل
+Choose myself: every job uses your Chat model, unless you pick another one for it below. ::: أختار بنفسي: كل مهمة تستخدم نموذج محادثتك، ما لم تختر نموذجاً آخر لها أدناه.
+Use ::: استخدام
+Revoke ::: سحب
+None. A rule of your own can ask or refuse before any matching command, file change or MCP tool, whatever the mode. ::: لا شيء. يمكن لقاعدة من وضعك أن تسأل أو ترفض قبل أي أمر أو تغيير ملف أو أداة MCP مطابقة، أياً كان الوضع.
+A skill that changes at its source is switched back to “needs review” until you read it again. ::: المهارة التي تتغيّر عند مصدرها تعود إلى «تحتاج مراجعة» حتى تقرأها مجدداً.
+Filter installed ::: تصفية المثبّت
+Filter installed skills ::: تصفية المهارات المثبّتة
+Skill ::: المهارة
+Trust ::: الثقة
+Asks for ::: يطلب
+Nothing special ::: لا شيء خاص
+A pinned skill is always given to the agent when it is on ::: المهارة المثبّتة تُعطى للوكيل دائماً حين تكون مفعّلة
+Pin ::: تثبيت
+Needs review {0}% ::: تحتاج مراجعة {0}%
+Trusted {0}% ::: موثوقة {0}%
+Files, Terminal, Network ::: الملفات، الطرفية، الشبكة
+Read ::: قراءة

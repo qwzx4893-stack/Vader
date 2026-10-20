@@ -27,7 +27,7 @@ export const TRAFFIC_LIGHTS_WIDTH = 78
 export const WindowStrip = ({ children, title }: { children?: React.ReactNode, /** the name of the page, in the middle of the strip */ title?: React.ReactNode }) => {
 	const platform = platformOf()
 	if (platform === 'other') return null
-	return <div className='wc' data-testid='vader-window-strip' data-platform={platform} style={{ position: 'relative', paddingLeft: platform === 'mac' ? TRAFFIC_LIGHTS_WIDTH : 12, paddingRight: platform === 'win' ? WINDOW_CONTROLS_WIDTH : 12 }}>
+	return <div className='wc' dir='ltr' data-testid='vader-window-strip' data-platform={platform} style={{ position: 'relative', paddingLeft: platform === 'mac' ? TRAFFIC_LIGHTS_WIDTH : 12, paddingRight: platform === 'win' ? WINDOW_CONTROLS_WIDTH : 12 }}>
 		<VaderLogo style={{ width: 16, height: 16, marginRight: 8, flex: 'none' }} />
 		{children}
 		{title ? <span className='t2 tr' data-testid='vader-window-title' style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 38, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>{title}</span> : null}

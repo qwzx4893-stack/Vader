@@ -32,7 +32,7 @@ const stateWord = (def: ExternalAgentDef, state: string | undefined, sign: SignI
 }
 
 const ProbeLine = ({ id, probe }: { id: string, probe: ProbeResult }) => probe.ok
-	? <span data-testid={`vader-external-agent-${id}-probe`} data-ok='true'><Note kind='ok'>Works: {probe.agentName ?? 'the agent'}{probe.agentVersion ? ` ${probe.agentVersion}` : ''} answered in {((probe.ms ?? 0) / 1000).toFixed(1)} s.{probe.authMethods?.length ? ` Sign-in: ${probe.authMethods.map(a => a.name).join(', ')}.` : ''}{probe.canResume ? ' It can continue a conversation after a restart.' : ''}</Note></span>
+	? <span data-testid={`vader-external-agent-${id}-probe`} data-ok='true'><Note kind='ok'><span>Works: {probe.agentName ?? 'the agent'}{probe.agentVersion ? ` ${probe.agentVersion}` : ''} answered in {((probe.ms ?? 0) / 1000).toFixed(1)} s.</span>{probe.authMethods?.length ? <span> Sign-in: {probe.authMethods.map(a => a.name).join(', ')}.</span> : null}{probe.canResume ? <span> It can continue a conversation after a restart.</span> : null}</Note></span>
 	: <span data-testid={`vader-external-agent-${id}-probe`} data-ok='false'><Note kind='warn'>Test failed: {probe.error}</Note></span>
 
 const AgentRow = ({ def }: Row) => {
@@ -133,8 +133,8 @@ const CustomAgents = () => {
 		})}
 		<div className='r' style={{ gap: 10, alignItems: 'flex-end', borderTop: '1px solid var(--ln)', paddingTop: 12, flexWrap: 'wrap' }}>
 			<Field label='Name' width={150}><input className='fld' placeholder='Name' aria-label='Name' value={name} onChange={e => setName(e.target.value)} /></Field>
-			<Field label='Program' width={200}><input className='fld mo' placeholder='Program (e.g. my-agent)' aria-label='Program' value={command} onChange={e => setCommand(e.target.value)} /></Field>
-			<Field label='Arguments' width={200}><input className='fld mo' placeholder='Arguments (e.g. --acp)' aria-label='Arguments' value={args} onChange={e => setArgs(e.target.value)} /></Field>
+			<Field label='Program' width={200}><input className='fld mo' placeholder='Program' aria-label='Program' value={command} onChange={e => setCommand(e.target.value)} /></Field>
+			<Field label='Arguments' width={200}><input className='fld mo' placeholder='Arguments' aria-label='Arguments' value={args} onChange={e => setArgs(e.target.value)} /></Field>
 			<button className='pb' data-testid='vader-external-agent-custom-add' disabled={!valid} onClick={() => void add()}>Add</button>
 		</div>
 	</div>

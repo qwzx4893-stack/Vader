@@ -1,0 +1,135 @@
+Both this task and the current branch changed the same lines of {0}. Keep one side where they differ (lines only one side changed are kept either way), or let an agent merge them in the task’s own folder first. ::: غيّرت هذه المهمة والفرع الحالي الأسطر نفسها في {0}. أبقِ أحد الجانبين حيث يختلفان (الأسطر التي غيّرها جانب واحد فقط تبقى في الحالتين)، أو دع وكيلاً يدمجهما في مجلد المهمة نفسه أولاً. ::: 此任务和当前分支修改了 {0} 中的相同行。在有分歧的地方保留其中一方（只有一方修改的行无论如何都会保留），或者先让智能体在任务自己的文件夹中合并。
+Asks for {0} ::: يطلب {0} ::: 请求{0}
+, installed ::: ، ثُبّتت ::: ，已安装
+Apply Code ::: تطبيق الكود ::: 应用代码
+Copy Code ::: نسخ الكود ::: 复制代码
+Could not copy ::: تعذّر النسخ ::: 无法复制
+Execute Shell ::: تنفيذ في الصدفة ::: 在 Shell 中执行
+Failed to execute in terminal: ::: فشل التنفيذ في الطرفية: ::: 在终端中执行失败：
+Go to file ::: الانتقال إلى الملف ::: 转到文件
+Keep this change ::: الإبقاء على هذا التغيير ::: 保留此更改
+Remove this change ::: إزالة هذا التغيير ::: 移除此更改
+Stop Apply ::: إيقاف التطبيق ::: 停止应用
+This Apply block wants to run on the current file, but you might not have a file open. ::: تريد كتلة التطبيق هذه العمل على الملف الحالي، لكن ربما لا يوجد ملف مفتوح. ::: 此应用代码块想作用于当前文件，但你可能没有打开任何文件。
+This Apply block wants to run on {0}, but it might not exist. ::: تريد كتلة التطبيق هذه العمل على {0}، لكنه ربما غير موجود. ::: 此应用代码块想作用于 {0}，但它可能不存在。
+Image not loaded automatically: {0} ::: لم تُحمَّل الصورة تلقائياً: {0} ::: 图片未自动加载：{0}
+Enter instructions... ::: أدخل التعليمات... ::: 输入指令...
+At checkpoint ::: عند نقطة الاستعادة ::: 在检查点
+Changes in {0} ::: التغييرات في {0} ::: {0} 中的更改
+The two versions are the same. ::: النسختان متطابقتان. ::: 两个版本相同。
+unchanged line ::: سطر دون تغيير ::: 未更改的行
+No changes found ::: لم يُعثر على تغييرات ::: 未发现更改
+Show less ::: عرض أقل ::: 收起
+Remove the image ::: إزالة الصورة ::: 移除图片
+Remove the images ::: إزالة الصور ::: 移除图片
+Remove {0} ::: إزالة {0} ::: 移除 {0}
+The image ::: الصورة ::: 该图片
+The {0} images ::: الصور ({0}) ::: 这 {0} 张图片
+would not be sent. Nothing leaves this computer until you choose. ::: لن تُرسل. ولا شيء يغادر هذا الجهاز حتى تختار أنت. ::: 不会被发送。在你做出选择之前，任何内容都不会离开这台电脑。
+Changes ready to review ::: تغييرات جاهزة للمراجعة ::: 有更改可供审查
+Conversations that were not started in a project ::: محادثات لم تبدأ في مشروع ::: 未在项目中开始的对话
+Error accessing chat history. ::: خطأ في الوصول إلى سجل المحادثات. ::: 访问对话历史时出错。
+Stopped by an error ::: توقف بسبب خطأ ::: 因错误而停止
+it could not be made smaller ::: تعذّر تصغيرها ::: 无法缩小
+it could not be opened as an image ::: تعذّر فتحها كصورة ::: 无法作为图片打开
+it is too large even after it was made smaller ::: كبيرة جداً حتى بعد تصغيرها ::: 即使缩小后仍然太大
+only PNG, JPEG, WebP and GIF images can be sent ::: لا يمكن إرسال سوى صور PNG وJPEG وWebP وGIF ::: 只能发送 PNG、JPEG、WebP 和 GIF 图片
+No results found ::: لم يُعثر على نتائج ::: 未找到结果
+Type to filter ::: اكتب للتصفية ::: 输入以筛选
+Accept All ::: قبول الكل ::: 全部接受
+Accept File ::: قبول الملف ::: 接受文件
+Diff {0} of {1} ::: الفرق {0} من {1} ::: 差异 {0}/{1}
+File {0} of {1} ::: الملف {0} من {1} ::: 文件 {0}/{1}
+No changes ::: لا توجد تغييرات ::: 无更改
+No changes yet ::: لا توجد تغييرات بعد ::: 暂无更改
+Reject All ::: رفض الكل ::: 全部拒绝
+Reject File ::: رفض الملف ::: 拒绝文件
+{0} file{1} ::: {0} ملف ::: {0} 个文件
+{0} file{1} changed ::: {0} ملف متغيّر ::: {0} 个文件有更改
+Add to Chat ::: إضافة إلى المحادثة ::: 添加到对话
+Disable Suggestions? ::: تعطيل الاقتراحات؟ ::: 禁用建议？
+Edit Inline ::: تعديل مباشر ::: 就地编辑
+No agents are running ::: لا يعمل أي وكيل ::: 没有运行中的智能体
+No task matches “{0}” ::: لا توجد مهمة تطابق «{0}» ::: 没有匹配“{0}”的任务
+Nothing is waiting for you. ::: لا شيء بانتظارك. ::: 没有等待你处理的内容。
+Spent today ::: أُنفق اليوم ::: 今日花费
+Start a task ::: ابدأ مهمة ::: 开始任务
+Tasks you start, and the ones you finished this week, are listed here with their cost and changes. ::: المهام التي تبدأها، وتلك التي أنهيتها هذا الأسبوع، تُعرض هنا مع تكلفتها وتغييراتها. ::: 你开始的任务以及本周已完成的任务会列在这里，并附带费用和更改。
+changed, branched from ::: متغيّر، تفرّع من ::: 有更改，分支自
+in place ::: في مكانه ::: 原地
+nothing yet ::: لا شيء بعد ::: 暂无
+of {0} ::: من {0} ::: 共 {0}
+Blank page ::: صفحة فارغة ::: 空白页
+Loading the page ::: جارٍ تحميل الصفحة ::: 正在加载页面
+Nothing here. ::: لا شيء هنا. ::: 这里没有内容。
+Nothing yet. ::: لا شيء بعد. ::: 暂无内容。
+The agent has not opened a page in this task ::: لم يفتح الوكيل أي صفحة في هذه المهمة ::: 智能体在此任务中还没有打开任何页面
+The agent is paused ::: الوكيل متوقف مؤقتاً ::: 智能体已暂停
+The agent's browser did not answer ::: لم يستجب متصفح الوكيل ::: 智能体的浏览器没有响应
+When it opens one, it appears here, with what the page printed and what it asked for. ::: عندما يفتح واحدة تظهر هنا، مع ما طبعته الصفحة وما طلبته. ::: 它打开页面后会显示在这里，包括页面输出的内容和它发出的请求。
+Chat name ::: اسم المحادثة ::: 对话名称
+Delete “{0}”? ::: حذف «{0}»؟ ::: 删除“{0}”？
+Export as Markdown ::: تصدير بصيغة Markdown ::: 导出为 Markdown
+Export this chat ::: تصدير هذه المحادثة ::: 导出此对话
+More about this chat ::: المزيد عن هذه المحادثة ::: 关于此对话的更多选项
+Saves the conversation and the files it changed as a Markdown file. API keys and settings are not part of a conversation, so they are not in it. ::: يحفظ المحادثة والملفات التي غيّرتها في ملف Markdown. ومفاتيح API والإعدادات ليست جزءاً من المحادثة، فلا تدخل فيه. ::: 将对话及其更改的文件保存为 Markdown 文件。API 密钥和设置不属于对话，因此不会包含在内。
+The conversation is removed from this computer. Files it changed are not touched, and what it cost stays counted in Usage and cost. ::: تُزال المحادثة من هذا الجهاز. ولا تُمَسّ الملفات التي غيّرتها، وتظل تكلفتها محسوبة في الاستخدام والتكلفة. ::: 对话将从这台电脑上删除。它更改过的文件不受影响，它的花费仍会计入“用量与费用”。
+Turn into agent task ::: تحويل إلى مهمة وكيل ::: 转为智能体任务
+Open a folder to work in a project. ::: افتح مجلداً للعمل في مشروع. ::: 打开文件夹以在项目中工作。
+{0} update{1} ::: {0} تحديثات ::: {0} 个更新
+Could not merge {0} ::: تعذّر دمج {0} ::: 无法合并 {0}
+Keep this task’s version ::: الإبقاء على نسخة هذه المهمة ::: 保留此任务的版本
+Run started ::: بدأ التشغيل ::: 运行开始于
+Stop all ::: إيقاف الكل ::: 全部停止
+The checks failed before the merge ::: فشلت الفحوص قبل الدمج ::: 合并前检查未通过
+The task failed ::: فشلت المهمة ::: 任务失败
+the task ::: المهمة ::: 该任务
+. Your folder is as it was before the task. ::: . مجلدك كما كان قبل المهمة. ::: 。你的文件夹保持任务之前的样子。
+A second agent is checking the result ::: وكيل ثانٍ يفحص النتيجة ::: 第二个智能体正在检查结果
+Accept file ::: قبول الملف ::: 接受文件
+Accept hunk ::: قبول المقطع ::: 接受此段
+An independent check of your change found a problem. Fix it: {0} ::: وجدت مراجعة مستقلة لتغييرك مشكلة. أصلحها: {0} ::: 对你的更改进行的独立检查发现了问题。请修复：{0}
+Changes appear here as it works. ::: تظهر التغييرات هنا أثناء عمله. ::: 它工作时，更改会显示在这里。
+Commit message ::: رسالة الإيداع ::: 提交信息
+Could not run the checks ::: تعذّر تشغيل الفحوص ::: 无法运行检查
+Create pull request ::: إنشاء طلب دمج ::: 创建拉取请求
+Ctrl Enter sends ::: Ctrl Enter يرسل ::: Ctrl Enter 发送
+Fix the blocker ::: أصلح العائق ::: 修复阻塞问题
+Large and generated files are folded. Open one to read it. ::: الملفات الكبيرة والمولَّدة مطويّة. افتح أحدها لقراءته. ::: 大文件和自动生成的文件已折叠。打开其中一个即可阅读。
+Needs a GitHub remote and a branch ::: يحتاج إلى مستودع GitHub بعيد وفرع ::: 需要 GitHub 远程仓库和一个分支
+Needs changes ::: يحتاج تعديلات ::: 需要修改
+No automatic checks were found for this project. ::: لم يُعثر على فحوص تلقائية لهذا المشروع. ::: 此项目中未找到自动检查。
+Open it ::: افتحه ::: 打开
+Problems in the changed files ::: مشكلات في الملفات المتغيّرة ::: 有更改的文件中的问题
+Reject file ::: رفض الملف ::: 拒绝文件
+Reject hunk ::: رفض المقطع ::: 拒绝此段
+Send to agent ::: إرسال إلى الوكيل ::: 发送给智能体
+Sent to the agent: {0}, line {1} ::: أُرسل إلى الوكيل: {0}، السطر {1} ::: 已发送给智能体：{0}，第 {1} 行
+Tell the agent why ::: أخبر الوكيل لماذا ::: 告诉智能体原因
+The agent has not edited any file in this task yet. ::: لم يعدّل الوكيل أي ملف في هذه المهمة بعد. ::: 智能体在此任务中还没有编辑任何文件。
+The changes were applied to your folder. Commit them below, or from Source Control. ::: طُبّقت التغييرات على مجلدك. أودِعها أدناه، أو من التحكم في المصدر. ::: 更改已应用到你的文件夹。可在下方提交，或通过源代码管理提交。
+The independent check agrees ::: المراجعة المستقلة موافقة ::: 独立检查通过
+Write to the agent about this line ::: اكتب إلى الوكيل عن هذا السطر ::: 就这一行向智能体留言
+You rejected ::: رفضتَ ::: 你拒绝了
+on line ::: في السطر ::: 在第
+on {0} ::: على {0} ::: 在 {0}
+the change ::: التغيير ::: 此更改
+Nothing matches “{0}” ::: لا شيء يطابق «{0}» ::: 没有匹配“{0}”的内容
+or in {0} ::: أو في {0} ::: 或在 {0} 中
+Hide sidebar ::: إخفاء الشريط الجانبي ::: 隐藏侧边栏
+No project ::: لا يوجد مشروع ::: 无项目
+Open a recent project ::: فتح مشروع حديث ::: 打开最近的项目
+Show sidebar ::: إظهار الشريط الجانبي ::: 显示侧边栏
+Anything you type here runs as you. ::: كل ما تكتبه هنا يُنفَّذ بصفتك أنت. ::: 你在这里输入的任何内容都以你的身份运行。
+Commands the agent runs one at a time are shown in the conversation. A terminal it keeps open, such as a dev server, appears here. ::: الأوامر التي يشغّلها الوكيل واحداً تلو الآخر تظهر في المحادثة. أما الطرفية التي يُبقيها مفتوحة، مثل خادم التطوير، فتظهر هنا. ::: 智能体逐条运行的命令会显示在对话中。它保持打开的终端（例如开发服务器）会显示在这里。
+No terminal is open ::: لا توجد طرفية مفتوحة ::: 没有打开的终端
+Nothing printed yet. ::: لم يُطبع شيء بعد. ::: 暂无输出。
+Stop it ::: أوقفه ::: 停止它
+The agent has not started one. ::: لم يبدأ الوكيل واحدة. ::: 智能体还没有启动终端。
+This terminal was closed. ::: أُغلقت هذه الطرفية. ::: 此终端已关闭。
+For autocomplete: ::: للإكمال التلقائي: ::: 用于自动补全：
+For chat: ::: للمحادثة: ::: 用于对话：
+Good starter models ::: نماذج جيدة للبدء ::: 适合入门的模型
+Use the largest version of these you can! ::: استخدم أكبر إصدار منها تستطيعه! ::: 尽量使用其中最大的版本！
+Ctrl K ::: Ctrl K ::: Ctrl K
+Ctrl N ::: Ctrl N ::: Ctrl N

@@ -53,7 +53,7 @@ const SourcesTab = () => {
 			{repos.length === 0 ? <span className='t3' style={{ padding: '10px 0', borderTop: '1px solid var(--ln)' }}>No repositories yet. Add one below.</span> : null}
 			{repos.map(r => <div key={r} className='r' data-testid='vader-skills-repo' style={{ gap: 10, minHeight: 44, borderTop: '1px solid var(--ln)' }}><span className='mo t1 fl'>{r}</span><button className='tx' onClick={() => { void opener.open(URI.parse(`https://github.com/${r}`)) }}>Open on GitHub</button><button className='tx' data-testid='vader-skills-repo-remove' onClick={() => skills.removeSource(r)}>Remove</button></div>)}
 			<div className='r' style={{ gap: 8, paddingTop: 12, borderTop: '1px solid var(--ln)' }}>
-				<input className='fld fl' data-testid='vader-skills-repo-input' aria-label='Repository' placeholder='owner/repo or https://github.com/owner/repo' value={text} onChange={e => { setText(e.target.value); setProblem('') }} onKeyDown={e => { if (e.key === 'Enter') add() }} />
+				<input className='fld fl' data-testid='vader-skills-repo-input' aria-label='Repository' placeholder='A GitHub address' value={text} onChange={e => { setText(e.target.value); setProblem('') }} onKeyDown={e => { if (e.key === 'Enter') add() }} />
 				<button className='pb' data-testid='vader-skills-repo-add' disabled={!text.trim()} onClick={add}>Add repository</button>
 			</div>
 			{problem ? <div style={{ paddingTop: 8 }}><Note kind='warn' testId='vader-skills-repo-problem'>{problem}</Note></div> : null}
