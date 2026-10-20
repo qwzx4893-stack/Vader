@@ -23,6 +23,8 @@ import { McpPage } from './McpPage.js'
 import { MemoryPage } from './MemoryPage.js'
 import { matchPages, nearestPages } from '../../../../common/settingsSearch.js'
 import '../vader-shell-tsx/shell.css'
+import { WindowStrip } from '../vader-shell-tsx/WindowStrip.js'
+import { projectNameOf } from '../../../../common/threadProjects.js'
 
 // Vader's Settings in the shape of the interface boards (R08 to R30): a column on the left with a way back to the app, a search, and the pages in three groups
 // (Models, Agent, Workspace); the page on the right. Opening Settings from elsewhere can name the page (the event below), and the search filters the pages.
@@ -92,7 +94,10 @@ export const Settings = () => {
 		return <MemoryPage />
 	})()
 
-	return <div className='shell' data-testid='vader-settings-page' style={{ flexDirection: 'row' }}>
+	const projectKey = accessor.get('IChatThreadService').getCurrentProjectKey()
+	return <div className='shell' data-testid='vader-settings-page'>
+		<WindowStrip title={<>{projectKey ? <><span>{projectNameOf(projectKey)}</span><span className='t3' style={{ padding: '0 8px' }}>/</span></> : null}<span className='t1'>Settings</span></>} />
+		<div className='r fl' style={{ alignItems: 'stretch', minHeight: 0 }}>
 		<aside className='c' style={{ width: 248, flex: 'none', padding: '12px 8px', gap: 2, minHeight: 0 }}>
 			<button className='nv' data-testid='vader-settings-close' onClick={() => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID) }} style={{ marginBottom: 6 }}><Icon k='left' small />Back to the app</button>
 			<label className='srch' style={{ margin: '0 2px 6px' }}><Icon k='search' small /><input data-testid='vader-settings-search' className='fl' placeholder='Search settings' aria-label='Search settings' value={query} onChange={e => setQuery(e.target.value)} /></label>
@@ -113,5 +118,6 @@ export const Settings = () => {
 				<div key={page} className='pg'><ErrorBoundary>{body}</ErrorBoundary></div>
 			</div>
 		</main>
+		</div>
 	</div>
 }

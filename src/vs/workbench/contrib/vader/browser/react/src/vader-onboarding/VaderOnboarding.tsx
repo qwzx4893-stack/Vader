@@ -16,12 +16,14 @@ import { useAccessor, useCloudModelListState, usePolicyServiceState, useRefreshM
 import { EditorSwitchButton } from '../vader-settings-tsx/EditorSwitch.js'
 import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import { ProviderLogo } from '../util/ProviderLogo.js'
+import { AgentLogo } from '../util/AgentLogo.js'
 import { transferEditorTypes } from '../../../extensionTransferTypes.js'
 import { cloudListedProviderNames, CloudListedProviderName } from '../../../../common/cloudModelListTypes.js'
 import { displayInfoOfProviderName, isFeatureNameDisabled, localProviderNames, providerNames } from '../../../../common/vaderSettingsTypes.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import '../styles.css'
 import '../vader-shell-tsx/shell.css'
+import { WindowStrip } from '../vader-shell-tsx/WindowStrip.js'
 
 const STEP_KEY = 'vader.onboardingStep'
 type Step = 1 | 2 | 3
@@ -145,6 +147,7 @@ const Pages = () => {
 
 	return <div className='r' style={{ height: '100%', alignItems: 'stretch' }}>
 		{/* the title strip: the app has no menu here yet, so only its name */}
+		<div style={{ position: 'absolute', top: 0, left: 0, right: 0, zIndex: 1 }}><WindowStrip><span className='t2'>Vader</span></WindowStrip></div>
 		<div className='c' style={{ width: 760, flex: 'none', padding: '0 0 0 120px', minHeight: 0 }}>
 			<div className='r' style={{ height: 38, flex: 'none' }} />
 			<div className='r' style={{ height: 76, flex: 'none', alignItems: 'flex-end', paddingBottom: 14 }}><Stepper step={step} /></div>
@@ -160,6 +163,7 @@ const Pages = () => {
 						<button className='r' style={{ gap: 12, alignItems: 'flex-start', width: '100%' }} data-testid='vader-onboarding-choice-key' onClick={() => setChoice('key')}>
 							<span style={{ paddingTop: 3 }}><Radio on={choice === 'key'} /></span>
 							<span className='c fl' style={{ gap: 2 }}><span className='t1' style={{ fontWeight: 600 }}>A model with my own key</span><span className='t3'>{providerNames.length} providers. Paste a key and the live list of models appears.</span></span>
+							<span className='r t3' style={{ gap: 10, paddingTop: 3, flex: 'none' }} aria-hidden='true'>{(['openAI', 'anthropic', 'gemini', 'openRouter'] as const).map(p => <ProviderLogo key={p} providerName={p} size={14} />)}</span>
 						</button>
 						{choice === 'key' ? <div className='c' style={{ gap: 12, paddingLeft: 28 }}>
 							<div className='r' style={{ gap: 12, alignItems: 'flex-end' }}>
@@ -187,6 +191,7 @@ const Pages = () => {
 						<button className='r' style={{ gap: 12, alignItems: 'flex-start', width: '100%' }} data-testid='vader-onboarding-choice-agent' onClick={() => setChoice('agent')}>
 							<span style={{ paddingTop: 3 }}><Radio on={choice === 'agent'} /></span>
 							<span className='c fl' style={{ gap: 2 }}><span className='t1' style={{ fontWeight: 600 }}>A connected agent I already pay for</span><span className='t3'>Codex, Copilot, Cursor and others, inside Vader&apos;s chat.</span></span>
+							<span className='r t3' style={{ gap: 10, paddingTop: 3, flex: 'none' }} aria-hidden='true'>{(['codex', 'copilot', 'cursor'] as const).map(l => <AgentLogo key={l} logo={l} size={14} />)}</span>
 						</button>
 						{choice === 'agent' ? <div className='c' style={{ gap: 8, paddingLeft: 28 }} data-testid='vader-onboarding-agent-panel'>
 							{readyAgents.length > 0 ? <>
@@ -202,6 +207,7 @@ const Pages = () => {
 						<button className='r' style={{ gap: 12, alignItems: 'flex-start', width: '100%' }} data-testid='vader-onboarding-choice-local' onClick={() => setChoice('local')}>
 							<span style={{ paddingTop: 3 }}><Radio on={choice === 'local'} /></span>
 							<span className='c fl' style={{ gap: 2 }}><span className='t1' style={{ fontWeight: 600 }}>A model on this computer</span><span className='t3'>{found ? `${found.name} is running with ${found.models.length} model${found.models.length === 1 ? '' : 's'}. Nothing leaves your machine.` : 'Ollama or LM Studio. Nothing leaves your machine.'}</span></span>
+							<span className='r t3' style={{ gap: 10, paddingTop: 3, flex: 'none' }} aria-hidden='true'>{(['ollama', 'lmStudio'] as const).map(p => <ProviderLogo key={p} providerName={p} size={14} />)}</span>
 						</button>
 						{choice === 'local' ? (found ? <div className='c' style={{ gap: 8, paddingLeft: 28 }} data-testid='vader-onboarding-local-found'>
 							<span className='t2'>Found at localhost:{found.port} with {found.models.length} model{found.models.length === 1 ? '' : 's'}.</span>
@@ -278,7 +284,7 @@ const Pages = () => {
 		</div>
 
 		{/* what each step means */}
-		<div className='r fl' style={{ background: 'var(--g1)', borderLeft: '1px solid var(--ln)', justifyContent: 'center', padding: '0 60px', minWidth: 0 }}>
+		<div className='r fl' style={{ background: 'var(--g1)', borderLeft: '1px solid var(--ln)', borderTop: '1px solid var(--ln)', borderTopLeftRadius: 12, marginTop: 38, justifyContent: 'center', padding: '0 60px', minWidth: 0 }}>
 			{step === 1 ? <Side title='Before you choose' rows={[['Your key stays on this computer', 'Stored encrypted. It is only sent to the provider you choose.'], ['Your code goes to one place', 'The model you pick, and nowhere else. No analytics, no account.'], ['You decide what it may do', 'The next step sets how much it asks first. Some actions are never allowed.']]} thenTitle='Then' then={[['Open a project', 'And choose how much Vader asks before it acts.'], ['Try a first task', 'A small one, so you see what it asks and shows. You can skip it.']]} />
 				: step === 2 ? <Side title='What Balanced looks like' rows={[['Edits go through, and you review them afterwards', 'Each changed file has Accept and Reject.'], ['Commands ask first', 'Allow once, allow in this project, or reject. The whole command is shown.'], ['Credentials are never touched', 'Reading ~/.ssh/id_rsa is never allowed, in any mode.']]} />
 					: <Side title='What happens after you send it' rows={[['It works, and you can watch', 'Each step shows as a quiet line: what it read, searched, edited, ran.'], ['It asks when it needs you', 'The chat is marked "Needs you" in the list, even when you are in another one.'], ['You review the changes', 'Accept a file, a part of a file, or all of it. Undo goes back to a checkpoint.']]} />}

@@ -6,6 +6,8 @@ import { Shell } from '../../browser/react/src2/vader-shell-tsx/Shell'
 import { notify } from './shellHarnessServices'
 import { deriveThreadStatus, endsWithToolRequest, changedFilesSinceLastUserMessage } from '../../common/threadStatus'
 import { groupThreadsByProject } from '../../common/threadProjects'
+// the strip of the window is drawn on Windows and macOS (WindowStrip.tsx); the pages are looked at as they are on Windows
+;(window as unknown as { __vaderPlatform?: string }).__vaderPlatform = 'win'
 
 const w = window as any
 const NOW = Date.parse('2026-10-14T12:30:00Z')

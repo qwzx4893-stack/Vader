@@ -7,6 +7,9 @@ import { ArrowLeft, BadgeCheck, Check, ChevronRight, Copy, ExternalLink, FileTex
 import { URI } from '../../../../../../../base/common/uri.js'
 import { useAccessor } from '../util/services.js'
 import { AgentLogo } from '../util/AgentLogo.js'
+import { ProviderLogo } from '../util/ProviderLogo.js'
+import { Icon } from '../vader-shell-tsx/icons.js'
+import type { ProviderName } from '../../../../common/vaderSettingsTypes.js'
 import type { ExternalAgentLogoName } from '../../../../common/externalAgents/externalAgentCatalog.js'
 import type { ItemFact, MarketplaceItem } from '../../../../common/marketplace/marketplaceTypes.js'
 import { skillAsks, trustLevelOf } from '../../../../common/marketplace/trustScore.js'
@@ -42,19 +45,32 @@ const KIND_NOUN: Record<string, string> = { SKILL: 'Skill', MCP_SERVER: 'MCP ser
 /** a colour for a letter, the same every time for the same name, so a row without a logo is still recognisable */
 const hueOf = (s: string): number => { let h = 0; for (const c of s) h = (h * 31 + c.charCodeAt(0)) % 360; return h }
 
+/** the mark of the publisher when it is one Vader has the logo of (read from the address the add-on comes from), else nothing: a letter is better than a wrong mark */
+const PUBLISHER_MARK: { [owner: string]: ProviderName } = { anthropics: 'anthropic', anthropic: 'anthropic', openai: 'openAI', google: 'gemini', googleapis: 'gemini', 'google-gemini': 'gemini', mistralai: 'mistral', 'xai-org': 'xAI', 'deepseek-ai': 'deepseek' }
+const publisherMarkOf = (item: MarketplaceItem): ProviderName | undefined => {
+	const where = String(item.metadata.repositoryUrl ?? item.source ?? '')
+	const owner = /(?:github\.com\/|^)([A-Za-z0-9_.-]+)\//.exec(where)?.[1]?.toLowerCase()
+	return owner ? PUBLISHER_MARK[owner] : undefined
+}
+
+/** the logo of an add-on, on the tile of the boards (L01, A01): the publisher's mark, the extension's own icon, the agent's logo, a plug for a server, else the first letter */
 export const ItemLogo = ({ item, size = 40, plain }: { item: MarketplaceItem, size?: number, plain?: boolean }) => {
 	const testid = plain ? undefined : 'vader-item-logo'
 	const [failed, setFailed] = useState(false)
 	const logo = typeof item.metadata.logo === 'string' ? item.metadata.logo as ExternalAgentLogoName : undefined
 	const iconUrl = typeof item.metadata.iconUrl === 'string' ? item.metadata.iconUrl : undefined
+	const tile = { width: size, height: size, borderRadius: Math.round(size * 0.24) }
+	const inner = Math.round(size * 0.58)
 	if (item.type === 'ACP_AGENT' && logo) {
-		return <div data-testid={testid} className='shrink-0 rounded-xl border border-vader-border-3 bg-vader-bg-2 flex items-center justify-center text-vader-fg-1' style={{ width: size, height: size }}><AgentLogo logo={logo} size={Math.round(size * 0.5)} /></div>
+		return <div data-testid={testid} className='logo' style={tile}><AgentLogo logo={logo} size={inner} /></div>
 	}
 	if (iconUrl && !failed) {
-		return <img data-testid={testid} src={iconUrl} alt='' className='shrink-0 rounded-xl object-contain' style={{ width: size, height: size }} onError={() => setFailed(true)} />
+		return <img data-testid={testid} src={iconUrl} alt='' className='shrink-0 object-contain' style={tile} onError={() => setFailed(true)} />
 	}
-	const hue = hueOf(item.name)
-	return <div data-testid={testid} aria-hidden='true' className='shrink-0 rounded-xl flex items-center justify-center font-semibold select-none' style={{ width: size, height: size, fontSize: Math.round(size * 0.42), background: `hsl(${hue} 30% 22%)`, color: `hsl(${hue} 70% 80%)` }}>{item.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 1).toUpperCase() || '?'}</div>
+	const mark = publisherMarkOf(item)
+	if (mark) return <div data-testid={testid} aria-hidden='true' className='logo' style={tile}><ProviderLogo providerName={mark} size={inner} /></div>
+	if (item.type === 'MCP_SERVER') return <div data-testid={testid} aria-hidden='true' className='logo' style={tile}><Icon k='plug' /></div>
+	return <div data-testid={testid} aria-hidden='true' className='logo select-none' style={{ ...tile, fontSize: Math.round(size * 0.42), fontWeight: 600, color: 'var(--t2)' }}>{item.name.replace(/[^A-Za-z0-9]/g, '').slice(0, 1).toUpperCase() || '?'}</div>
 }
 
 const Facts = ({ facts, onLink }: { facts: readonly ItemFact[], onLink: (href: string) => void }) => <div className='flex flex-col' data-testid='vader-item-facts'>
@@ -100,8 +116,8 @@ const InstallCard = ({ item, busy, error, onAction, onActionAndEnable }: Pick<It
 		{item.installed ? <span className='flex items-center gap-1.5 text-vader-fg-2'><Check className='w-4 h-4 text-green-500' />Installed</span>
 			: busy ? <span className='flex items-center gap-1.5 text-vader-fg-2'><Loader2 className='w-4 h-4 animate-spin' />Installing</span>
 				: item.installMethod ? <>
-					<button data-testid='vader-item-install' className={`w-full h-9 rounded-md font-medium ${level === 'low' ? 'border border-vader-border-1 text-vader-fg-1' : 'bg-vader-fg-0 text-vader-bg-3 hover:opacity-90'}`} onClick={onAction}>{label}</button>
-					{item.type === 'SKILL' && onActionAndEnable && level !== 'low' ? <button data-testid='vader-item-install-enable' className='w-full h-9 rounded-md border border-vader-border-1 text-vader-fg-1' title='Install it and switch it on. You can still read it afterwards.' onClick={onActionAndEnable}>Install and switch on</button> : null}
+					<button data-testid='vader-item-install' className={`w-full h-9 rounded-md font-medium text-center ${level === 'low' ? 'border border-vader-border-1 text-vader-fg-1' : 'bg-vader-fg-0 text-vader-bg-3 hover:opacity-90'}`} onClick={onAction}>{label}</button>
+					{item.type === 'SKILL' && onActionAndEnable && level !== 'low' ? <button data-testid='vader-item-install-enable' className='w-full h-9 rounded-md border border-vader-border-1 text-vader-fg-1 text-center' title='Install it and switch it on. You can still read it afterwards.' onClick={onActionAndEnable}>Install and switch on</button> : null}
 					{hint ? <span className='text-vader-fg-3 text-sm leading-snug'>{hint}</span> : null}
 				</> : <span className='text-vader-fg-3'>{item.metadata.state === 'needs-node' ? 'Needs Node.js first' : item.metadata.state === 'unsupported' ? 'No build for this computer' : 'Nothing to install'}</span>}
 		{level === 'low' && !item.installed && item.installMethod ? <span className='text-red-500 text-sm leading-snug'>This scores {item.trustScore!.score}%. Read why before you install it.</span> : null}

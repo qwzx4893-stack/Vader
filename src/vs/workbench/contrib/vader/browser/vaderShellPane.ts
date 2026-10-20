@@ -4,6 +4,7 @@
 
 import * as nls from '../../../../nls.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
+import { isMacintosh, isWindows } from '../../../../base/common/platform.js';
 import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
@@ -52,7 +53,9 @@ class VaderShellOverlay extends Disposable {
 
 	position(): void {
 		if (!this.root) { return }
-		const titlebar = getActiveWindow().document.querySelector('.part.titlebar')
+		// on Windows and macOS the system draws the window controls over the page, so the page covers the editor's title bar and has its own strip (board R01);
+		// elsewhere the title bar stays, because it holds the controls
+		const titlebar = (isWindows || isMacintosh) ? null : getActiveWindow().document.querySelector('.part.titlebar')
 		this.root.style.top = `${titlebar ? Math.max(0, titlebar.getBoundingClientRect().bottom) : 0}px`
 	}
 

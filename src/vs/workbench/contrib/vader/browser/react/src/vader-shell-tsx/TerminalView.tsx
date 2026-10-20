@@ -4,7 +4,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccessor, useChatThreadsState } from '../util/services.js'
-import { commandsLine, terminalActivity } from '../../../../common/shellModel.js'
+import { commandsLine, terminalActivity, terminalLabel, terminalNote } from '../../../../common/shellModel.js'
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js'
 import { useShellData } from './useShellData.js'
 
@@ -71,8 +71,8 @@ export const TerminalView = () => {
 				return <button key={t.id} className={t.id === currentId ? 'ag on' : 'ag'} style={{ height: 'auto', padding: '6px 10px', alignItems: 'flex-start' }} data-testid='vader-terminal-item' data-terminal-id={t.id} onClick={() => setPicked(t.id)}>
 					<span style={{ paddingTop: 5 }}>{dot(!exists(t.id) ? 'rgba(255,255,255,.25)' : last?.status === 'running' ? '#6ea0ff' : last?.status === 'failed' ? '#f06a6e' : '#4cc38a')}</span>
 					<span className='c fl' style={{ minWidth: 0 }}>
-						<span className='tr'>{persistentTerminalNameOfId(t.id)}</span>
-						<span className='hint tr'>{!exists(t.id) ? 'closed' : last ? (last.status === 'running' ? 'running ' : last.status === 'failed' ? 'failed, ' : '') + last.command : 'kept open by the agent'}</span>
+						<span className='tr' data-testid='vader-terminal-name'>{terminalLabel(t.runs) ?? persistentTerminalNameOfId(t.id)}</span>
+						<span className='hint tr' title={last?.command}>{!exists(t.id) ? 'closed' : terminalNote(t.runs)}</span>
 					</span>
 				</button>
 			})}
@@ -92,7 +92,7 @@ export const TerminalView = () => {
 			</div> : <>
 				<div className='r' style={{ height: 56, padding: '0 20px', gap: 12, flex: 'none', borderBottom: '1px solid var(--ln)' }}>
 					<div className='c fl' style={{ minWidth: 0 }}>
-						<span className='t1' style={{ fontWeight: 600 }}>{currentId ? persistentTerminalNameOfId(currentId) : ''}</span>
+						<span className='t1' style={{ fontWeight: 600 }}>{currentId ? (current ? terminalLabel(current.runs) : undefined) ?? persistentTerminalNameOfId(currentId) : ''}</span>
 						<span className='hint tr mo'>{current?.runs[current.runs.length - 1]?.command ?? ''}</span>
 					</div>
 					{currentId && exists(currentId) ? <span className='r' style={{ gap: 7, border: '1px solid var(--ln2)', borderRadius: 14, padding: '3px 11px' }}>{dot('#6ea0ff')}<span className='t2'>Running</span></span> : <span className='t3'>Closed</span>}

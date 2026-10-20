@@ -234,6 +234,10 @@ export type ThreadType = {
 	// Vader addition: the name the person gave this conversation (Rename). Without one the conversation is named by the first thing said in it.
 	customTitle?: string;
 
+	// Vader addition: the model that answered the last time this thread ran, so All agents and the chat's header can say which model did the work of
+	// each task and not the one that is chosen now.
+	model?: { providerName: string; modelName: string };
+
 	// Vader addition: set when the person stopped a run, cleared by the next message. The chat says what it was doing when it stopped.
 	stopped?: StoppedRun;
 
@@ -790,6 +794,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
+		// remember which model this thread ran with (a hidden helper thread is not listed anywhere, so it is not marked)
+		if (modelSelection && thread && !thread.isSubagentThread && !thread.isVerificationThread && (thread.model?.providerName !== modelSelection.providerName || thread.model?.modelName !== modelSelection.modelName)) {
+			this._patchThread(threadId, { model: { providerName: modelSelection.providerName, modelName: modelSelection.modelName } })
+		}
 		return { modelSelection, modelSelectionOptions }
 	}
 

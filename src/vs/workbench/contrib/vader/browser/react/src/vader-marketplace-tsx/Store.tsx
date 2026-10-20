@@ -9,6 +9,7 @@ import type { MarketplaceItem, MarketplaceItemType } from '../../../../common/ma
 import { trustLevelOf } from '../../../../common/marketplace/trustScore.js'
 import { TrustMeter } from './TrustMeter.js'
 import { ItemLogo, ItemPage } from './ItemPage.js'
+import { Icon } from '../vader-shell-tsx/icons.js'
 
 // The list a person browses in Add-ons: rows with a logo, a name, what it is, a trust score and one white Install button; clicking a row opens the
 // item's own page (ItemPage.tsx). The data comes from IUnifiedMarketplaceService; nothing here talks to a network.
@@ -61,33 +62,40 @@ const groupOf = (t: MarketplaceItemType): GroupKey => TOOLING_TYPES.includes(t) 
 const GROUP_TITLE: Partial<Record<GroupKey, string>> = { SKILL: 'Most trusted skills', MCP_SERVER: 'MCP servers', EXTENSION: 'Extensions for the editor', TOOLING: 'Language servers, debuggers and formatters', ACP_AGENT: 'Agents you can connect' }
 const GROUP_ORDER: GroupKey[] = ['SKILL', 'MCP_SERVER', 'EXTENSION', 'TOOLING', 'ACP_AGENT']
 
+const GROUP_HINT: Partial<Record<GroupKey, string>> = {
+	SKILL: 'live from GitHub, skills.sh and the sources you added', MCP_SERVER: 'live from the MCP Registry, Smithery, npm and GitHub',
+	EXTENSION: 'live from Open VSX and the editor tooling', TOOLING: 'live from Open VSX', ACP_AGENT: 'they work inside Vader\u2019s chat',
+}
+const SEE_ALL: Partial<Record<GroupKey, string>> = { SKILL: 'See all skills', MCP_SERVER: 'See all servers', EXTENSION: 'See all extensions', TOOLING: 'See all extensions', ACP_AGENT: 'See all agents' }
+
 const AddonRow = ({ item, selected, busy, onSelect, onAction }: { item: MarketplaceItem, selected: boolean, busy: boolean, onSelect: () => void, onAction: () => void }) => {
 	const level = item.trustScore ? trustLevelOf(item.trustScore.score) : undefined
 	const review = !item.installed && level === 'low' && !!item.installMethod
 	return <div
-		className={`flex items-center gap-3 h-16 px-1 border-b border-vader-border-3 cursor-pointer min-w-0 hover:bg-vader-bg-2-hover ${selected ? 'bg-vader-bg-2 rounded-md px-2' : ''}`}
+		className='r'
+		style={{ gap: 13, height: 66, borderBottom: '1px solid var(--ln)', padding: '0 4px', minWidth: 0, cursor: 'pointer', ...(selected ? { background: 'var(--g2)', borderRadius: 6 } : {}) }}
 		data-testid='vader-addon-row'
 		role='link'
 		tabIndex={0}
 		onKeyDown={e => { if (e.key === 'Enter') onSelect() }}
 		onClick={onSelect}
 	>
-		<ItemLogo item={item} size={36} />
-		<div className='flex flex-col min-w-0 flex-1'>
-			<div className='flex items-baseline gap-2 min-w-0'>
-				<span className='font-semibold text-vader-fg-1 truncate'>{item.name}</span>
-				<span className='text-vader-fg-3 shrink-0'>{TYPE_NOUN[item.type]}</span>
+		<ItemLogo item={item} size={38} />
+		<div className='c fl' style={{ gap: 1, minWidth: 0 }}>
+			<div className='r' style={{ gap: 8 }}>
+				<span className='nm tr' data-testid='vader-addon-name'>{item.name}</span>
+				<span className='hint' style={{ flex: 'none' }}>{TYPE_NOUN[item.type]}</span>
 			</div>
-			<span className='text-vader-fg-3 truncate'>{item.description || (item.source ? `Found in ${item.source}` : 'No description')}</span>
+			<span className='t3 tr' style={{ fontSize: 12.5 }}>{item.description || (item.source ? `Found in ${item.source}` : 'No description')}</span>
 		</div>
 		{item.trustScore ? <TrustMeter score={item.trustScore} /> : null}
-		<div className='w-24 shrink-0 flex justify-end' onClick={e => e.stopPropagation()}>
-			{item.installed ? <span className='flex items-center gap-1.5 text-vader-fg-2' aria-label='Installed'><Check className='w-3.5 h-3.5 text-green-500' />Installed</span>
-				: busy ? <span className='flex items-center gap-1.5 text-vader-fg-2'><Loader2 className='w-3.5 h-3.5 animate-spin' />Installing</span>
-					: review ? <button className='px-3.5 py-1 rounded-md border border-vader-border-1 text-vader-fg-1' onClick={onSelect}>Review</button>
-						: item.installMethod ? <button data-testid='vader-addon-install' className='px-3.5 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 font-medium hover:opacity-90' aria-label={`${typeof item.metadata.actionLabel === 'string' ? item.metadata.actionLabel : item.metadata.openOnly ? 'Open' : 'Install'} ${item.name}`} onClick={onAction}>{typeof item.metadata.actionLabel === 'string' ? item.metadata.actionLabel : item.metadata.openOnly ? 'Open' : 'Install'}</button>
+		<span style={{ width: 92, display: 'flex', justifyContent: 'flex-end', flex: 'none' }} onClick={e => e.stopPropagation()}>
+			{item.installed ? <span className='r t2' style={{ gap: 6 }} aria-label='Installed'><span style={{ color: '#4cc38a', display: 'flex' }}><Check className='w-3.5 h-3.5' /></span>Installed</span>
+				: busy ? <span className='r t2' style={{ gap: 6 }}><Loader2 className='w-3.5 h-3.5 animate-spin' />Installing</span>
+					: review ? <button className='gb' style={{ height: 28, padding: '0 14px' }} onClick={onSelect}>Review</button>
+						: item.installMethod ? <button data-testid='vader-addon-install' className='pb' style={{ height: 28, padding: '0 14px' }} aria-label={`${typeof item.metadata.actionLabel === 'string' ? item.metadata.actionLabel : item.metadata.openOnly ? 'Open' : 'Install'} ${item.name}`} onClick={onAction}>{typeof item.metadata.actionLabel === 'string' ? item.metadata.actionLabel : item.metadata.openOnly ? 'Open' : 'Install'}</button>
 							: null}
-		</div>
+		</span>
 	</div>
 }
 
@@ -185,14 +193,14 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 		/>
 	}
 	return <div className='flex min-w-0 min-h-0 flex-1 text-root'>
-		<div className='flex flex-col gap-4 min-w-0 flex-1 overflow-y-auto pr-2'>
+		<div className='flex flex-col min-w-0 flex-1 overflow-y-auto scroll' style={{ gap: 18, paddingBottom: 24 }}>
 			{failed.length > 0 ? <div className='text-yellow-600'>{failed.length === 1 ? 'One source' : `${failed.length} sources`} could not be read just now: {failed.join(' ')}</div> : null}
 			{Object.entries(errorOf).map(([k, msg]) => <div key={k} data-testid='vader-addon-error' role='alert' className='flex items-start gap-3 text-red-500'><span className='flex-1'>Could not add {items.find(i => keyOf(i) === k)?.name ?? 'it'}: {msg}</span><button className='text-vader-fg-2 hover:text-vader-fg-1 shrink-0' onClick={() => setErrorOf(e => { const { [k]: _drop, ...rest } = e; return rest })}>Dismiss</button></div>)}
 			{loading && items.length === 0 ? <div className='text-vader-fg-3 py-6'>Loading...</div> : null}
 			{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{q.trim() ? `Nothing matches "${q.trim()}". Searched every source that is turned on.` : installedOnly ? 'Nothing is installed yet.' : 'Nothing to show yet.'}</div> : null}
-			{grouped && groups.length > 0 ? groups.map(g => <div key={g.type} className='flex flex-col'>
-				<div className='flex items-center gap-3 h-9'><span className='font-semibold text-vader-fg-1'>{GROUP_TITLE[g.type]}</span><span className='flex-1' />{onSeeAll ? <button className='text-vader-fg-2 hover:text-vader-fg-1' onClick={() => onSeeAll(g.type === 'TOOLING' ? 'EXTENSION' : g.type)}>See all</button> : null}</div>
-				<div className='grid gap-x-10' style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>{g.list.slice(0, 4).map(rowOf)}</div>
+			{grouped && groups.length > 0 ? groups.map(g => <div key={g.type} className='flex flex-col' style={{ gap: 2 }}>
+				<div className='r' style={{ height: 34, gap: 12 }}><span className='t1' data-testid='vader-addons-group-title' style={{ fontWeight: 600, fontSize: 14 }}>{GROUP_TITLE[g.type]}</span><span className='hint tr narrow-hide'>{GROUP_HINT[g.type]}</span><span className='fl' />{onSeeAll ? <button className='tx' style={{ color: 'var(--t2)' }} data-testid='vader-addons-see-all' onClick={() => onSeeAll(g.type === 'TOOLING' ? 'EXTENSION' : g.type)}>{SEE_ALL[g.type] ?? 'See all'}<Icon k='right' small /></button> : null}</div>
+				<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', columnGap: 40 }}>{g.list.slice(0, 4).map(rowOf)}</div>
 			</div>) : <div className='grid gap-x-10' style={{ gridTemplateColumns: 'repeat(2,minmax(0,1fr))' }}>{shown.map(rowOf)}</div>}
 		</div>
 	</div>

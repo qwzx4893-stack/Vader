@@ -59,7 +59,7 @@ export const CheckpointsButton = () => {
 
 	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
 		<button type='button' data-testid='vader-checkpoints-button' aria-expanded={open} aria-haspopup='dialog' className='underline-offset-2 hover:underline hover:text-vader-fg-1' onClick={() => { setOpen(o => !o); setPicked([]); setAsking(false); setComparing(false) }}>Checkpoints</button>
-		{open ? <div className='absolute bottom-full left-1/2 mb-2 z-50 flex justify-center' style={{ width: 0 }}><div role='dialog' aria-label='Checkpoints' data-testid='vader-checkpoints' className='motion-safe:animate-card-in shrink-0 rounded-xl border border-vader-border-2 bg-vader-bg-1 py-2 shadow-lg flex flex-col text-[13px] text-vader-fg-1' style={{ width: 360, maxWidth: 'calc(100vw - 24px)' }}>
+		{open ? <div className='absolute bottom-full left-0 mb-2 z-50'><div role='dialog' aria-label='Checkpoints' data-testid='vader-checkpoints' className='motion-safe:animate-card-in shrink-0 rounded-xl border border-vader-border-2 bg-vader-bg-1 py-2 shadow-lg flex flex-col text-[13px] text-vader-fg-1' style={{ width: 360, maxWidth: 'calc(100vw - 24px)' }}>
 			<div className='px-4 pb-1 text-xs text-vader-fg-3'>Each step the agent finished, with its changes</div>
 			<div className='max-h-64 overflow-auto' data-testid='vader-checkpoints-list'>
 				{[...steps].reverse().map(s => <button key={s.n} type='button' data-testid='vader-checkpoint-row' data-n={s.n} aria-pressed={picked.includes(s.n)}

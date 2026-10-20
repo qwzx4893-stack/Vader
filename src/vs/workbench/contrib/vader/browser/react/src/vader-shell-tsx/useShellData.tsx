@@ -24,6 +24,8 @@ export type ShellThread = {
 	usage: ThreadUsage | undefined
 	projectKey: string | null
 	lastModified: string
+	/** the model that answered the last time it ran (undefined for a conversation that never ran since this was recorded) */
+	model?: { providerName: string, modelName: string }
 	/** how many messages the thread has that are shown to the person */
 	messageCount: number
 	/** its own copy of the project, while it has one or once merged (common/taskCopyModel.ts) */
@@ -77,7 +79,7 @@ export const useShellData = (): ShellData => {
 				const status = chat.getThreadStatus(id)
 				const th: ShellThread = {
 					id, title: threadTitle(t), status, group: agentGroupOf(status), age: ageLabel(t.lastModified, now), isTask: isAgentTask(t),
-					changedFiles: changedFilePaths(t.messages), usage: chat.getThreadUsage(id), projectKey: g.key, lastModified: t.lastModified,
+					changedFiles: changedFilePaths(t.messages), usage: chat.getThreadUsage(id), projectKey: g.key, lastModified: t.lastModified, model: t.model,
 					messageCount: t.messages.filter(m => m.role === 'user' || m.role === 'assistant').length,
 				}
 				const c = copies?.getState(id)

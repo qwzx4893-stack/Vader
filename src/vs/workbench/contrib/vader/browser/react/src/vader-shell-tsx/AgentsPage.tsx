@@ -5,9 +5,12 @@
 import React, { useMemo, useState } from 'react'
 import { useAccessor, useChatThreadsState, useOrchestrationRunsState } from '../util/services.js'
 import { ParallelRuns } from './ParallelRuns.js'
-import { AGENT_GROUP_ORDER, AGENT_GROUP_TITLE, AgentGroupId, latestTaskList, recentActivity } from '../../../../common/shellModel.js'
+import { AGENT_GROUP_ORDER, AGENT_GROUP_TITLE, AgentGroupId, latestTaskList, recentActivity, subAgents } from '../../../../common/shellModel.js'
 import { formatCost, formatUsd } from '../../../../common/usageAccounting.js'
-import { Icon, ReviewRing, Spinner, WaitDot } from './icons.js'
+import { Icon, ReviewRing, Spinner, WaitDot, WarnTri } from './icons.js'
+import { ProviderLogo } from '../util/ProviderLogo.js'
+import { friendlyModelName } from '../../../../common/modelPickerGroups.js'
+import type { ProviderName } from '../../../../common/vaderSettingsTypes.js'
 import { ShellThread, useShellData } from './useShellData.js'
 
 // All agents (board R04): every agent task in one table, grouped by where it stands, with the cost and the changes of each, and on the right what the
@@ -36,7 +39,7 @@ export const AgentsPage = () => {
 	const [closed, setClosed] = useState<Partial<Record<AgentGroupId, boolean>>>({})
 
 	const query = q.trim().toLowerCase()
-	const tasks = data.tasks.filter(t => !query || t.title.toLowerCase().includes(query))
+	const tasks = data.tasks.filter(t => !query || t.title.toLowerCase().includes(query) || (t.copy?.branch ?? '').toLowerCase().includes(query))
 	const counts: Record<AgentGroupId, number> = { needs_you: 0, running: 0, review: 0, merged: 0 }
 	for (const t of data.tasks) counts[t.group]++
 	const selected = data.tasks.find(t => t.id === picked) ?? tasks.find(t => t.group === 'needs_you') ?? tasks[0]
@@ -51,7 +54,8 @@ export const AgentsPage = () => {
 		const thread = state.allThreads[selected.id]
 		const plan = thread ? latestTaskList(thread.messages) : undefined
 		const acts = thread ? recentActivity(thread.messages, 3) : []
-		return { plan, acts }
+		const subs = thread ? subAgents(thread.messages) : []
+		return { plan, acts, subs }
 	})() : undefined
 
 	return <div className='c fl' style={{ minHeight: 0 }} data-testid='vader-shell-agents-page'>
@@ -62,7 +66,7 @@ export const AgentsPage = () => {
 				{AGENT_GROUP_ORDER.filter(g => g !== 'merged').map(g => <button key={g} className={filter === g ? 't1' : 't3'} style={filter === g ? { paddingBottom: 1, borderBottom: '1px solid var(--ac)' } : undefined} data-testid={`vader-shell-agents-tab-${g}`} onClick={() => setFilter(g)}>{AGENT_GROUP_TITLE[g]} <span style={{ opacity: .7 }}>{counts[g]}</span></button>)}
 			</div>
 			<label className='r t3' style={{ width: 220, height: 28, padding: '0 10px', gap: 8, border: '1px solid var(--ln2)', borderRadius: 6 }}>
-				<Icon k='search' small /><input className='fl' data-testid='vader-shell-agents-filter' placeholder='Filter by task' value={q} onChange={e => setQ(e.target.value)} />
+				<Icon k='search' small /><input className='fl' data-testid='vader-shell-agents-filter' placeholder='Filter by task or branch' value={q} onChange={e => setQ(e.target.value)} />
 			</label>
 			<button className='pb' data-testid='vader-shell-agents-new' onClick={() => { chat.openNewThread(); shellService.show('conversation', 'conversation') }}><Icon k='plus' small />New agent</button>
 		</div>
@@ -89,7 +93,7 @@ export const AgentsPage = () => {
 							<Glyph t={t} />
 							<span className={g.id === 'merged' ? 't2 tr' : 't1 tr'}>{t.title}</span>
 							<span className='tr t3 mo' data-testid='vader-shell-agent-branch'>{t.copy ? (t.copy.merged ? t.copy.base : t.copy.branch) : t.changedFiles.length > 0 ? 'in place' : ''}</span>
-							<span className='tr t3'>{accessor.get('IVaderSettingsService').state.modelSelectionOfFeature?.Chat?.modelName ?? ''}</span>
+							<span className='r t2 tr' style={{ gap: 7 }} data-testid='vader-shell-agent-model'>{t.model ? <><ProviderLogo providerName={t.model.providerName as ProviderName} size={13} /><span className='tr'>{friendlyModelName(t.model.providerName, t.model.modelName).text}</span></> : null}</span>
 							<span>{plan ? (plan.done >= plan.total ? 'done' : `${plan.done} of ${plan.total}`) : g.id === 'merged' || g.id === 'review' ? 'done' : ''}</span>
 							<span data-testid='vader-shell-agent-changes'>{t.copy && (t.copy.added !== undefined || t.copy.removed !== undefined) && t.copy.files > 0 ? <span className='mo'><span style={{ color: '#4cc38a' }}>+{t.copy.added ?? 0}</span> <span style={{ color: '#f06a6e' }}>{'\u2212'}{t.copy.removed ?? 0}</span></span> : t.changedFiles.length > 0 || (t.copy && t.copy.files > 0) ? <span className='t2'>{t.copy && t.copy.files > 0 ? t.copy.files : t.changedFiles.length} file{(t.copy && t.copy.files > 0 ? t.copy.files : t.changedFiles.length) === 1 ? '' : 's'}</span> : <span className='t3'>no changes</span>}</span>
 							<span className='t2'>{cost}</span>
@@ -109,9 +113,19 @@ export const AgentsPage = () => {
 					<span className='hint'>Latest</span>
 					{detail.acts.map((a, i) => <span key={i} className='r' style={{ gap: 10 }}><span className='t3' style={{ width: 62 }}>{a.verb}</span><span className='mo t1 tr'>{a.target}</span></span>)}
 				</div> : null}
+				{detail && detail.subs.length > 0 ? <div className='c' style={{ gap: 4 }} data-testid='vader-shell-agent-subs'>
+					<span className='hint'>Sub-agents</span>
+					{detail.subs.map((s, i) => <span key={i} className='r' style={{ gap: 10 }} data-testid='vader-shell-agent-sub' data-state={s.state}>
+						{s.state === 'running' ? <Spinner /> : s.state === 'failed' ? <WarnTri color='#f2a3a6' /> : <svg width='14' height='14' viewBox='0 0 15 15' aria-label='Finished' style={{ flex: 'none' }}><path d='m4.4 7.6 2.2 2.1 4-4.2' fill='none' stroke='#5f5f5f' strokeWidth='1.3' strokeLinecap='round' strokeLinejoin='round' /></svg>}
+						<span className='t1 tr fl'>{s.label}</span><span className='t3 sm'>{s.kind}</span>
+					</span>)}
+				</div> : null}
 				{detail?.plan ? <div className='c' style={{ gap: 4 }}>
 					<span className='hint'>Plan {detail.plan.done} of {detail.plan.total}</span>
-					{detail.plan.tasks.slice(0, 6).map((t, i) => <span key={i} className={t.status === 'done' ? 't3 tr' : 't1 tr'}>{t.status === 'done' ? '✓ ' : t.status === 'in_progress' ? '○ ' : '  '}{t.text}</span>)}
+{detail.plan.tasks.slice(0, 6).map((t, i) => <span key={i} className={t.status === 'in_progress' ? 'r t1' : 'r t3'} style={{ gap: 9 }} data-status={t.status}>
+						{t.status === 'done' ? <svg width='14' height='14' viewBox='0 0 15 15' aria-label='Done' style={{ flex: 'none' }}><path d='m3.4 7.7 2.5 2.4 5.2-5.4' fill='none' stroke='#8a8a91' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' /></svg> : t.status === 'in_progress' ? <Spinner /> : <svg width='14' height='14' viewBox='0 0 14 14' aria-label='To do' style={{ flex: 'none' }}><circle cx='7' cy='7' r='4.4' fill='none' stroke='#6f6f76' strokeWidth='1.3' /></svg>}
+						<span className='tr'>{t.text}</span>
+					</span>)}
 				</div> : null}
 				{selected.copy && !selected.copy.merged ? <div className='c' style={{ gap: 4 }} data-testid='vader-shell-agent-worktree'>
 <span className='hint'>Worktree</span>

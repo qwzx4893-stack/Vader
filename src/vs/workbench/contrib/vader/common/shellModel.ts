@@ -113,6 +113,31 @@ export function agentGroupOf(status: ThreadStatus): AgentGroupId {
 
 // ---- what an agent has been doing (the "Steps" column and the detail panel of All agents)
 
+// ---- the helpers a task handed work to (board R04, "Sub-agents")
+
+export type SubAgent = { readonly label: string; /** what kind of helper: research, browser, verify, or the name of the saved agent */ readonly kind: string; readonly state: 'running' | 'done' | 'failed' };
+
+const oneLine = (s: string, n = 70): string => { const t = s.replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n - 1) + '\u2026' : t; };
+
+/** the helpers the agent started in this conversation, in the order it started them, with whether each is still working */
+export function subAgents(messages: readonly MessageLike[]): SubAgent[] {
+	const out: SubAgent[] = [];
+	for (const m of messages) {
+		if (m.role !== 'tool' || !m.name) continue;
+		const state: SubAgent['state'] = m.type === 'success' ? (((m.result ?? {}) as { hadError?: boolean }).hadError ? 'failed' : 'done') : m.type === 'running_now' || m.type === 'tool_request' ? 'running' : m.type === 'tool_error' ? 'failed' : 'done';
+		if (m.type === 'rejected' || m.type === 'invalid_params') continue;
+		const p = (m.params ?? {}) as { task?: unknown; objective?: unknown; agentName?: unknown; specs?: unknown };
+		if (m.name === 'delegate_research_task' && typeof p.task === 'string') out.push({ label: oneLine(p.task), kind: 'research', state });
+		else if (m.name === 'delegate_browser_task' && typeof p.task === 'string') out.push({ label: oneLine(p.task), kind: 'browser', state });
+		else if (m.name === 'delegate_subagent_task' && typeof p.task === 'string') out.push({ label: oneLine(p.task), kind: typeof p.agentName === 'string' && p.agentName ? p.agentName : 'helper', state });
+		else if (m.name === 'run_verification_agent') out.push({ label: typeof p.objective === 'string' && p.objective ? oneLine(p.objective) : 'Check the result, read-only', kind: 'verify', state });
+		else if (m.name === 'delegate_parallel_tasks' && Array.isArray(p.specs)) {
+			for (const s of p.specs as { task?: unknown; agentName?: unknown }[]) if (typeof s?.task === 'string') out.push({ label: oneLine(s.task), kind: typeof s.agentName === 'string' && s.agentName ? s.agentName : 'parallel', state });
+		}
+	}
+	return out;
+}
+
 /** the task list the agent last wrote, if it wrote one */
 export function latestTaskList(messages: readonly MessageLike[]): { tasks: Task[]; total: number; done: number } | undefined {
 	for (let i = messages.length - 1; i >= 0; i--) {
@@ -200,8 +225,10 @@ export function terminalActivity(messages: readonly MessageLike[]): { terminals:
 		const status: TerminalRun['status'] = m.type === 'rejected' ? 'rejected' : m.type === 'tool_request' ? 'waiting' : m.type === 'running_now' ? 'running' : m.type === 'tool_error' ? 'failed' : 'done';
 		const reason = (m.result as { resolveReason?: { type?: string; exitCode?: number } } | null)?.resolveReason;
 		const exitCode = reason?.type === 'done' ? reason.exitCode : undefined;
-		const finalStatus: TerminalRun['status'] = status === 'done' && exitCode !== undefined && exitCode !== 0 ? 'failed' : status;
-		if (finalStatus === 'rejected') rejected++; else if (finalStatus === 'done' || finalStatus === 'failed') { ran++; if (finalStatus === 'failed') failed++; }
+		// a command the agent stopped waiting for (a dev server, a watcher) is still running
+		const stillRunning = status === 'done' && reason?.type === 'timeout';
+		const finalStatus: TerminalRun['status'] = stillRunning ? 'running' : status === 'done' && exitCode !== undefined && exitCode !== 0 ? 'failed' : status;
+		if (finalStatus === 'rejected') rejected++; else if (finalStatus === 'done' || finalStatus === 'failed' || finalStatus === 'running') { ran++; if (finalStatus === 'failed') failed++; }
 		const run: TerminalRun = { command, status: finalStatus, exitCode };
 		if (m.name === 'run_persistent_command' && p.persistentTerminalId) { const l = byId.get(p.persistentTerminalId) ?? []; l.push(run); byId.set(p.persistentTerminalId, l); }
 		else oneOff.push(run);
@@ -209,6 +236,36 @@ export function terminalActivity(messages: readonly MessageLike[]): { terminals:
 	const terminals: TerminalOfTask[] = [...byId.entries()].map(([id, runs]) => ({ id, persistent: true, runs }));
 	if (oneOff.length > 0) terminals.push({ id: 'commands', persistent: false, runs: oneOff });
 	return { terminals, ran, failed, rejected };
+}
+
+/**
+ * What a person calls a terminal by what runs in it ("dev server", "tests") rather than by its number. Read from the first command that ran there; a command it does
+ * not recognise is called by its program, and a terminal nothing ran in has no name of its own (undefined: the caller says "Terminal 2" or whatever it has).
+ */
+export function terminalLabel(runs: readonly { readonly command: string }[]): string | undefined {
+	const first = runs.find(r => r.command.trim().length > 0)?.command.trim();
+	if (!first) return undefined;
+	const c = first.toLowerCase();
+	if (/\b(test|tests|jest|vitest|pytest|mocha|playwright test|cargo test|go test)\b/.test(c)) return 'tests';
+	if (/\b(lint|eslint|tsc|typecheck|type-check|check)\b/.test(c)) return 'checks';
+	if (/\b(build|compile|bundle|webpack|rollup|esbuild|make)\b/.test(c)) return 'build';
+	if (/\b(install|add|ci|restore|bundle install|pip install|npm i)\b/.test(c) && /\b(npm|pnpm|yarn|pip|bun|cargo|go|dotnet|bundle|gem)\b/.test(c)) return 'install';
+	if (/\b(dev|start|serve|server|watch|preview|run dev|runserver|uvicorn|flask run|http\.server|vite|next dev|nodemon)\b/.test(c)) return 'dev server';
+	if (/\b(git)\b/.test(c)) return 'git';
+	const token = first.split(/\s+/)[0].split(/[\\/]/).pop() ?? '';
+	const program = token.replace(/\.exe$/i, '');
+	return program ? program.toLowerCase() : undefined;
+}
+
+/** what the list says under a terminal's name: whether the agent left it open, or how its last command ended */
+export function terminalNote(runs: readonly TerminalRun[]): string {
+	const last = runs[runs.length - 1];
+	if (!last) return 'kept open by the agent';
+	if (last.status === 'running') return 'running, kept open by the agent';
+	if (last.status === 'waiting') return 'waiting for you to allow it';
+	if (last.status === 'failed') return last.exitCode !== undefined ? `failed, exit ${last.exitCode}` : 'failed';
+	if (last.status === 'rejected') return 'you rejected the last command';
+	return last.exitCode !== undefined ? `finished, exit ${last.exitCode}` : 'finished';
 }
 
 /** what the line under the terminals says about the commands a task ran */

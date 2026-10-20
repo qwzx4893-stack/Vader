@@ -2,12 +2,13 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useAccessor, useShellState } from '../util/services.js'
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { glyphOf } from '../../../../common/shellModel.js'
 import { Icon, ReviewRing, Spinner, WaitDot, Gap } from './icons.js'
 import { ShellThread, useShellData } from './useShellData.js'
+import { platformOf } from './WindowStrip.js'
 
 // The left side of the window (boards R01 and R03): new chat, search, all agents, what needs you, the projects with their conversations, the
 // conversations that belong to no project, and Add-ons and Settings at the bottom.
@@ -36,6 +37,25 @@ export const ThreadRow = ({ t, selected, nested, onOpen }: { t: ShellThread, sel
 		<span className='m'>{t.age}</span>
 	</button>
 
+/** how many of the add-ons on this computer have an update waiting (an extension whose gallery lists a newer version); nothing is shown while there are none */
+const useAddonUpdates = (): number => {
+	const accessor = useAccessor()
+	const [count, setCount] = useState(0)
+	useEffect(() => {
+		let live = true
+		const look = async () => {
+			try {
+				const items = await accessor.get('IUnifiedMarketplaceService')?.listInstalled?.()
+				if (live && Array.isArray(items)) setCount(items.filter(i => i.installMethod === 'update').length)
+			} catch { /* a source that cannot be asked is not an update */ }
+		}
+		void look()
+		const timer = setInterval(() => { void look() }, 10 * 60_000)
+		return () => { live = false; clearInterval(timer) }
+	}, [accessor])
+	return count
+}
+
 export const Nav = () => {
 	const accessor = useAccessor()
 	const chat = accessor.get('IChatThreadService')
@@ -43,6 +63,7 @@ export const Nav = () => {
 	const shellService = accessor.get('IVaderShellService')
 	const shell = useShellState()
 	const data = useShellData()
+	const updates = useAddonUpdates()
 	const [closed, setClosed] = useState<Record<string, boolean | undefined>>({})
 
 	const open = (id: string) => { chat.switchToThread(id); shellService.show('conversation') }
@@ -52,7 +73,7 @@ export const Nav = () => {
 	const isOpen = (key: string | null) => closed[key ?? '__chats__'] === undefined ? key === data.currentProjectKey : !closed[key ?? '__chats__']
 	const toggle = (key: string | null) => setClosed(c => ({ ...c, [key ?? '__chats__']: isOpen(key) }))
 
-	return <div className='c' style={{ width: 264, flex: 'none', padding: '8px 8px 10px', overflow: 'hidden' }} data-testid='vader-shell-nav'>
+	return <div className='c' style={{ width: 264, flex: 'none', padding: `${platformOf() === 'other' ? 8 : 2}px 8px 10px`, overflow: 'hidden' }} data-testid='vader-shell-nav'>
 		<button className='nv t1' data-testid='vader-shell-new-chat' onClick={() => { chat.openNewThread(); shellService.show('conversation', 'conversation') }}>
 			<Icon k='plus' /><span className='fl'>New chat</span><span className='t4 sm'>Ctrl N</span>
 		</button>
@@ -87,6 +108,7 @@ export const Nav = () => {
 		<div className='hl' style={{ margin: '6px 2px' }} />
 		<button className={shell.page === 'addons' ? 'nv on' : 'nv'} data-testid='vader-shell-addons' onClick={() => shellService.show('addons')}>
 			<Icon k='grid' /><span className='fl'>Add-ons</span>
+			{updates > 0 ? <span className='sm' data-testid='vader-shell-addons-updates' title={`${updates} update${updates === 1 ? '' : 's'}`} style={{ background: 'var(--g3)', borderRadius: 9, padding: '0 7px', color: 'var(--t2)' }}>{updates}</span> : null}
 		</button>
 		<button className='nv' data-testid='vader-shell-settings' onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }}>
 			<Icon k='gear' /><span className='fl'>Settings</span>

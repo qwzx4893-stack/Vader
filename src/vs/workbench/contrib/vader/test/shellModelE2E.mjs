@@ -75,6 +75,37 @@ check('a GitHub remote gives the pull request page of the branch', R.pullRequest
 check('another host, no remote or no branch gives no page', R.pullRequestPageUrl('https://gitlab.com/a/b.git', 'x') === undefined && R.pullRequestPageUrl('', 'x') === undefined && R.pullRequestPageUrl('https://github.com/a/b', '') === undefined);
 check('the commit button says what it will commit', R.commitSummary(3, 112, 6) === '3 changed files, +112 \u22126' && R.commitSummary(1, 2, 0) === '1 changed file, +2 \u22120' && R.commitSummary(0, 0, 0) === 'No changes to commit');
 
+// ---- a command the agent stopped waiting for is still running
+{
+	const act = M.terminalActivity([tool('open_persistent_terminal', 'success', {}, { persistentTerminalId: '1' }), tool('run_persistent_command', 'success', { command: 'npm run dev', persistentTerminalId: '1' }, { result: 'ready', resolveReason: { type: 'timeout' } }), tool('run_persistent_command', 'success', { command: 'echo hi', persistentTerminalId: '1' }, { result: 'hi', resolveReason: { type: 'done', exitCode: 0 } })]);
+	check('a persistent command that timed out is running, one that ended is done', act.terminals[0].runs[0].status === 'running' && act.terminals[0].runs[1].status === 'done' && act.ran === 2);
+}
+
+// ---- what a terminal is called, and what it says about itself
+{
+	const L = (...cmds) => M.terminalLabel(cmds.map(command => ({ command })));
+	check('a terminal is called by what runs in it', L('npm run dev') === 'dev server' && L('npm test') === 'tests' && L('npm run build') === 'build' && L('pnpm install') === 'install' && L('npx eslint .') === 'checks' && L('git status') === 'git', [L('npm run dev'), L('npm test'), L('npm run build'), L('pnpm install'), L('npx eslint .'), L('git status')].join('|'));
+	check('a command it does not know is called by its program, and an empty terminal has no name', L('python3 script.py') === 'python3' && L('C:\\tools\\mytool.exe --flag') === 'mytool' && M.terminalLabel([]) === undefined && L('') === undefined, [L('python3 script.py'), L('C:\\tools\\mytool.exe --flag')].join('|'));
+	const R = (status, exitCode) => [{ command: 'x', status, exitCode }];
+	check('the note says whether it is kept open or how it ended', M.terminalNote([]) === 'kept open by the agent' && M.terminalNote(R('running')) === 'running, kept open by the agent' && M.terminalNote(R('done', 0)) === 'finished, exit 0' && M.terminalNote(R('failed', 2)) === 'failed, exit 2' && M.terminalNote(R('waiting')) === 'waiting for you to allow it' && M.terminalNote(R('rejected')) === 'you rejected the last command');
+}
+
+// ---- the helpers a task started
+{
+	const subs = M.subAgents([
+		tool('delegate_research_task', 'success', { task: 'How the summary is measured' }, { threadId: 'a', conclusion: 'x', changedFilePaths: [], stalledAwaitingApproval: false, hadError: false }),
+		tool('run_verification_agent', 'running_now', { objective: 'Check the result' }),
+		tool('delegate_subagent_task', 'success', { task: 'Write the tests', agentName: 'Reviewer' }, { threadId: 'b', conclusion: 'x', changedFilePaths: [], stalledAwaitingApproval: false, hadError: true }),
+		tool('delegate_parallel_tasks', 'success', { specs: [{ task: 'Probe cloud', agentName: null, usesWorktree: true }, { task: 'Probe local', agentName: 'Researcher', usesWorktree: false }] }),
+		tool('delegate_browser_task', 'rejected', { task: 'never ran' }),
+		tool('read_file', 'success', { uri: { fsPath: 'C:\\p\\a.ts' } }),
+	]);
+	check('each helper the agent started is listed, in order, with its kind', subs.map(s => `${s.kind}:${s.label}`).join('|') === 'research:How the summary is measured|verify:Check the result|Reviewer:Write the tests|parallel:Probe cloud|Researcher:Probe local', subs.map(s => `${s.kind}:${s.label}`).join('|'));
+	check('what is still working says so, what ended with an error says so, the rest is done', subs.map(s => s.state).join(',') === 'done,running,failed,done,done');
+	check('a helper the person refused is not listed, nor is any other tool', !subs.some(s => s.label === 'never ran'));
+	check('a long task is cut to one line', M.subAgents([tool('delegate_research_task', 'success', { task: 'x'.repeat(200) })])[0].label.length <= 70);
+}
+
 fs.rmSync(tmp, { recursive: true, force: true });
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

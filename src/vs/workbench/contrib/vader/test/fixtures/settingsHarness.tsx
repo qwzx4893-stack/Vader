@@ -7,6 +7,8 @@ import { notify } from './settingsHarnessServices'
 import { providerNames } from '../../common/vaderSettingsTypes'
 import { builtInPolicyRules } from '../../common/policy/builtInPolicyRules'
 import { addToLedger, dayKey } from '../../common/usageAccounting'
+// the strip of the window is drawn on Windows and macOS (WindowStrip.tsx); the pages are looked at as they are on Windows
+;(window as unknown as { __vaderPlatform?: string }).__vaderPlatform = 'win'
 
 const w = window as any
 w.__log = [] as string[]
@@ -171,7 +173,12 @@ let memRecords: any = { project: [{ id: 'm1', scope: 'project', scopeKey: 'p', l
 w.__memory = { state: memRecords }
 const setMem = (m: any) => { memRecords = m; w.__memory = { state: m }; notify() }
 const memorySvc: any = { remove(id: string) { w.__log.push(`memory:remove:${id}`); setMem({ project: memRecords.project.filter((x: any) => x.id !== id), agent: memRecords.agent.filter((x: any) => x.id !== id) }) }, clearScope(s: string) { w.__log.push(`memory:clear:${s}`); setMem({ ...memRecords, [s]: [] }) } }
-const fileSvc: any = { async resolve(uri: any) { const n = String(uri.path ?? uri).split('/').pop(); if (n === 'AGENTS.md' || n === '.vaderrules') return { isFile: true, size: n === 'AGENTS.md' ? 1229 : 480 }; throw new Error('not found') } }
+w.__vaderignore = undefined as string | undefined
+const fileSvc: any = {
+	async exists(uri: any) { return String(uri.path ?? uri).endsWith('/.vaderignore') ? w.__vaderignore !== undefined : false },
+	async readFile(uri: any) { if (w.__vaderignore === undefined) throw new Error('not found'); return { value: { toString: () => w.__vaderignore } } },
+	async createFile(uri: any, buf: any) { w.__log.push(`create:${String(uri.path ?? uri).split('/').pop()}`); w.__vaderignore = buf.toString() },
+	async resolve(uri: any) { const n = String(uri.path ?? uri).split('/').pop(); if (n === 'AGENTS.md' || n === '.vaderrules') return { isFile: true, size: n === 'AGENTS.md' ? 1229 : 480 }; throw new Error('not found') } }
 w.__workspaceFolders = w.__workspaceFolders ?? [{ name: 'vader-app', uri: { scheme: 'file', authority: '', path: '/work/vader-app', toString() { return 'file://' + this.path }, fsPath: 'C:\\work\\vader-app', with(c: any) { return { ...this, ...c } } } }]
 const workspaceSvc: any = { getWorkspace: () => ({ folders: w.__workspaceFolders }) }
 const shellSvc: any = { openEditor() { w.__log.push('shell:editor') } }

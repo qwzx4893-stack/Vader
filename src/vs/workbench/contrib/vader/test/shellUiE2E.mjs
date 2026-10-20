@@ -334,7 +334,7 @@ async function layoutProblems(page) {
 {
 	const { page, errors } = await newPage();
 	await page.locator(TID('vader-shell-tab-terminal')).click();
-	check('the terminal the agent kept open is listed with the command it runs', (await page.locator(TID('vader-terminal-item')).first().innerText()).includes('Vader Agent') && (await page.locator(TID('vader-terminal-item')).first().innerText()).includes('npm run dev'));
+	check('the terminal the agent kept open is listed by what runs in it, with how it stands, and its pane says the command', (await page.locator(TID('vader-terminal-name')).first().innerText()) === 'dev server' && (await page.locator(TID('vader-terminal-item')).first().innerText()).includes('kept open by the agent') && (await page.locator(TID('vader-shell-terminal-view')).innerText()).includes('npm run dev'));
 	check('its output is shown', (await page.locator(TID('vader-terminal-output')).innerText()).includes('VITE v6.0.1'));
 	check('a terminal the task did not start is under Yours', (await page.locator('[data-terminal-id="2"]').count()) === 1 && (await page.getByText('Yours', { exact: true }).count()) === 1);
 	check('the commands the task ran are counted, with what the person rejected', (await page.locator(TID('vader-terminal-commands')).innerText()).includes('3 in all: 2 ran, 1 you rejected'), await page.locator(TID('vader-terminal-commands')).innerText());

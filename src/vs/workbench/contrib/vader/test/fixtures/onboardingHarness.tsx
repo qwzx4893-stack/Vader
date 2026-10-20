@@ -5,6 +5,8 @@ import { createRoot } from 'react-dom/client'
 import { VaderOnboarding } from '../../browser/react/src2/vader-onboarding/VaderOnboarding'
 import { notify } from './onboardingHarnessServices'
 import { providerNames, localProviderNames } from '../../common/vaderSettingsTypes'
+// the strip of the window is drawn on Windows and macOS (WindowStrip.tsx); the pages are looked at as they are on Windows
+;(window as unknown as { __vaderPlatform?: string }).__vaderPlatform = 'win'
 
 const w = window as any
 w.__log = [] as string[]

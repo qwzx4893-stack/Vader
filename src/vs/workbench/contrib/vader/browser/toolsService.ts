@@ -11,13 +11,15 @@ import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
 import { withUriAlias } from '../common/toolArgAliases.js'
-import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
+import { LintErrorItem, LintNotes, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
 import { IVaderModelService } from '../common/vaderModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVaderCommandBarService } from './vaderCommandBarServiceTypes.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
 import { foldersBetween, FoundRules, NestedRulesGiven, nestedRulesText, rulesFileNames } from '../common/instructions/nestedRules.js'
+import { LintStreak, lintReport, settleLints, splitLintDelta } from '../common/lintDelta.js'
+import { AGENT_IGNORE_FILE, AgentIgnore, NOTHING_IGNORED, blockedMessage, makeAgentIgnore, relativeTo } from '../common/agentIgnore.js'
 import { awaitOutput, awaitWords, DEFAULT_AWAIT_SECONDS, MAX_AWAIT_SECONDS, parsePattern } from '../common/awaitOutput.js'
 import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
@@ -870,14 +872,9 @@ export class ToolsService implements IToolsService {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
 				}
 				await editCodeService.callBeforeApplyOrEdit(uri)
+				const lintBefore = this._getLintErrors(uri).lintErrors ?? [] // what the file's problems were before this edit (common/lintDelta.ts)
 				editCodeService.instantlyRewriteFile({ uri, newContent })
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-				return { result: lintErrorsPromise }
+				return { result: this._lintAfterEdit(uri, lintBefore) }
 			},
 
 			edit_file: async ({ uri, searchReplaceBlocks }) => {
@@ -886,16 +883,9 @@ export class ToolsService implements IToolsService {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
 				}
 				await editCodeService.callBeforeApplyOrEdit(uri)
+				const lintBefore = this._getLintErrors(uri).lintErrors ?? [] // what the file's problems were before this edit (common/lintDelta.ts)
 				editCodeService.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks })
-
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-
-				return { result: lintErrorsPromise }
+				return { result: this._lintAfterEdit(uri, lintBefore) }
 			},
 			// ---
 			run_command: async ({ command, cwd, terminalId }) => {
@@ -1061,6 +1051,41 @@ export class ToolsService implements IToolsService {
 			return `[page ${snapshot.pageId}] ${snapshot.title}\n${snapshot.url}\n\n${snapshot.snapshotText}`
 		}
 
+		// ---- files the agent must not see (common/agentIgnore.ts): the files listed in .vaderignore are not read, listed, searched or changed. The list is read again at every call, so that
+		// a change to it takes effect at once. What a shell command reads is not inspected.
+		const ignoreOf = async (uri: URI): Promise<AgentIgnore> => {
+			const folder = workspaceContextService.getWorkspace().folders.find(f => relativeTo(f.uri.fsPath, uri.fsPath) !== undefined)
+			if (!folder) return NOTHING_IGNORED
+			try { return makeAgentIgnore(folder.uri.fsPath, (await fileService.readFile(URI.joinPath(folder.uri, AGENT_IGNORE_FILE), { limits: { size: 200_000 } })).value.toString()) } catch { return NOTHING_IGNORED }
+		}
+		const refuse = async (uri: URI, isDir = false): Promise<void> => { if ((await ignoreOf(uri)).blocks(uri.fsPath, isDir)) throw new Error(blockedMessage(uri.fsPath)) }
+		const tools = this.callTool as unknown as Record<string, (params: any) => Promise<any>>
+		for (const name of ['read_file', 'search_in_file', 'read_lint_errors', 'edit_file', 'rewrite_file', 'delete_file_or_folder', 'get_dir_tree']) {
+			const inner = tools[name]
+			tools[name] = async (params: any) => { await refuse(params.uri, name === 'get_dir_tree'); return inner(params) }
+		}
+		{
+			const inner = tools['create_file_or_folder']
+			tools['create_file_or_folder'] = async (params: any) => { await refuse(params.uri, !!params.isFolder); return inner(params) }
+			const ls = tools['ls_dir']
+			tools['ls_dir'] = async (params: any) => {
+				await refuse(params.uri, true)
+				const r = await ls(params)
+				const ig = await ignoreOf(params.uri)
+				if (r?.result?.children) r.result.children = r.result.children.filter((c: { uri: URI, isDirectory: boolean }) => !ig.blocks(c.uri.fsPath, c.isDirectory))
+				return r
+			}
+			for (const name of ['search_pathnames_only', 'search_for_files']) {
+				const search = tools[name]
+				tools[name] = async (params: any) => {
+					const r = await search(params)
+					const folder = workspaceContextService.getWorkspace().folders[0]
+					if (folder && r?.result?.uris) { const ig = await ignoreOf(folder.uri); r.result.uris = r.result.uris.filter((u: URI) => !ig.blocks(u.fsPath)) }
+					return r
+				}
+			}
+		}
+
 		// given to the LLM after the call for successful tool calls
 		this.stringOfResult = {
 			read_file: (params, result) => {
@@ -1167,8 +1192,8 @@ export class ToolsService implements IToolsService {
 			edit_file: (params, result) => {
 				const lintErrsString = (
 					this.vaderSettingsService.state.globalSettings.includeToolLintErrors ?
-						(result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
-							: ` No lint errors found.`)
+						(result.lintNotes ? lintReport({ fresh: result.lintErrors ?? [], old: result.lintNotes.old, fixed: result.lintNotes.fixed }, { stringify: stringifyLintErrors, streak: result.lintNotes.streak })
+							: (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.` : ` No lint errors found.`))
 						: '')
 
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
@@ -1176,8 +1201,8 @@ export class ToolsService implements IToolsService {
 			rewrite_file: (params, result) => {
 				const lintErrsString = (
 					this.vaderSettingsService.state.globalSettings.includeToolLintErrors ?
-						(result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
-							: ` No lint errors found.`)
+						(result.lintNotes ? lintReport({ fresh: result.lintErrors ?? [], old: result.lintNotes.old, fixed: result.lintNotes.fixed }, { stringify: stringifyLintErrors, streak: result.lintNotes.streak })
+							: (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.` : ` No lint errors found.`))
 						: '')
 
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
@@ -1280,6 +1305,21 @@ export class ToolsService implements IToolsService {
 
 	}
 
+
+	private readonly _lintStreak = new LintStreak()
+
+	/**
+	 * The problems of a file after an edit, as what the edit changed (common/lintDelta.ts): the editor's list is waited for until it has settled, then compared with the list from before the
+	 * edit, so that the agent is told what its change introduced and not what the file already had.
+	 */
+	private async _lintAfterEdit(uri: URI, before: LintErrorItem[]): Promise<{ lintErrors: LintErrorItem[] | null, lintNotes: LintNotes }> {
+		const read = () => this._getLintErrors(uri).lintErrors ?? []
+		const sig = (items: LintErrorItem[]) => JSON.stringify(items.map(l => [l.code, l.message, l.startLineNumber]))
+		await settleLints({ signature: () => sig(read()), now: () => Date.now(), sleep: ms => timeout(ms) }, sig(before))
+		const d = splitLintDelta(before, read())
+		const streak = this._lintStreak.record(uri.toString(), d.fresh.length > 0)
+		return { lintErrors: d.fresh.length ? d.fresh : null, lintNotes: { old: d.old, fixed: d.fixed, streak } }
+	}
 
 	private _getLintErrors(uri: URI): { lintErrors: LintErrorItem[] | null } {
 		const lintErrors = this.markerService

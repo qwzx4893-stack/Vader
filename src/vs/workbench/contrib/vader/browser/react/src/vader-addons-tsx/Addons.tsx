@@ -6,6 +6,7 @@ import React, { useState } from 'react'
 import { Search } from 'lucide-react'
 import { AddonsMark, SettingsMark } from './marks.js'
 import '../styles.css'
+import '../vader-shell-tsx/shell.css'
 import { useAccessor, useIsDark } from '../util/services.js'
 import type { MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
 import { StoreView } from '../vader-marketplace-tsx/Store.js'
@@ -44,42 +45,37 @@ export const Addons = () => {
 	const kindOfTab: CategoryKind | undefined = tab === 'skills' ? 'skill' : tab === 'mcp' ? 'mcp' : tab === 'extensions' ? 'extension' : undefined
 	const sections = kindOfTab ? CATEGORIES[kindOfTab] : []
 
-	return <div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ height: '100%', width: '100%', display: 'flex' }} data-testid='vader-addons-page'>
-		<div className='flex flex-col w-full h-full bg-vader-bg-1 text-vader-fg-1 text-root min-w-0'>
-			<div className={`flex flex-col gap-3 px-8 pt-6 shrink-0 ${pageOpen ? 'hidden' : ''}`}>
-				<div className='flex items-center gap-3'>
-					<AddonsMark size={22} strokeWidth={1.5} className='text-vader-fg-2' />
-					<h2 className='text-2xl font-semibold'>Add-ons</h2>
-					<span className='text-vader-fg-3'>Skills, MCP servers, extensions and agents</span>
-					<span className='flex-1' />
-					<button
-						data-testid='vader-addons-installed'
-						className={`px-3 py-1 rounded-md border ${installedOnly ? 'border-vader-border-1 bg-vader-bg-3 text-vader-fg-1' : 'border-vader-border-2 text-vader-fg-2'}`}
-						aria-pressed={installedOnly}
-						onClick={() => setInstalledOnly(v => !v)}
-					>Installed</button>
-					<button className='p-1.5 rounded-md text-vader-fg-3 hover:text-vader-fg-1' title='Settings: where add-ons come from, and the ones you have' aria-label='Open Settings' onClick={() => commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID)}><SettingsMark size={16} /></button>
+	// the page's own pages (a skill, a server) are written with the editor-wide utility classes, which only apply inside the Vader scope; it adds no box of its own
+	return <div className={`@@vader-scope ${isDark ? 'dark' : ''}`} style={{ display: 'contents' }}><div className='shell addons-shell' data-testid='vader-addons-page'>
+		<div className='c fl' style={{ minHeight: 0, minWidth: 0 }}>
+			<div className='c' style={{ padding: '22px 32px 0', flex: 'none', gap: 14, ...(pageOpen ? { display: 'none' } : {}) }}>
+				<div className='r' style={{ gap: 12 }}>
+					<span className='ttl'>Add-ons</span><span className='t3' style={{ marginLeft: 6 }}>Skills, MCP servers, extensions and agents</span><span className='fl' />
+					<button className='gb' style={{ height: 30, ...(installedOnly ? { background: 'var(--g3)' } : {}) }} data-testid='vader-addons-installed' aria-pressed={installedOnly} onClick={() => setInstalledOnly(v => !v)}>Installed</button>
+					<button className='ic' title='Settings: where add-ons come from, and the ones you have' aria-label='Open Settings' onClick={() => commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID)}><SettingsMark size={15} strokeWidth={1.4} /></button>
 				</div>
-				<label className='flex items-center gap-2 px-3 py-2 rounded-lg border border-vader-border-2 bg-vader-bg-2 max-w-[560px]'>
-					<Search className='w-4 h-4 text-vader-fg-3' />
-					<input data-testid='vader-addons-search' className='flex-1 bg-transparent outline-none text-vader-fg-1' placeholder={PLACEHOLDER[tab]} value={query} onChange={e => setQuery(e.target.value)} />
-				</label>
-				<div className='flex items-end justify-between border-b border-vader-border-3'>
-					<div className='flex' role='tablist'>
-						{TABS.map(t => <button key={t.id} role='tab' aria-selected={tab === t.id} data-testid={`vader-addons-tab-${t.id}`} className={`px-1 py-2 mr-5 border-b ${tab === t.id ? 'border-vader-fg-1 text-vader-fg-1' : 'border-transparent text-vader-fg-3'}`} onClick={() => { setTab(t.id); setCategory(null) }}>{t.label}</button>)}
-					</div>
-					<div className='pb-2 flex items-center gap-4 text-vader-fg-3 text-sm'>
-						<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-green-500' />80 to 100 high trust</span>
-						<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-yellow-500' />50 to 79 read first</span>
-						<span className='flex items-center gap-1.5'><span className='w-2 h-2 rounded-full bg-red-500' />under 50 risky</span>
-					</div>
+				<div className='r' style={{ gap: 12 }}>
+					<label className='srch' style={{ width: 540, height: 34 }}>
+						<Search className='w-4 h-4' style={{ width: 15, height: 15, flex: 'none' }} />
+						<input data-testid='vader-addons-search' className='fl' placeholder={PLACEHOLDER[tab]} aria-label={PLACEHOLDER[tab]} value={query} onChange={e => setQuery(e.target.value)} />
+					</label>
+					<span className='fl' />
+					<span className='r hint narrow-hide' style={{ gap: 14 }}>
+						<span className='r' style={{ gap: 6 }}><span className='dot' style={{ background: '#4cc38a' }} />80 to 100 high trust</span>
+						<span className='r' style={{ gap: 6 }}><span className='dot' style={{ background: '#e2a93f' }} />50 to 79 read first</span>
+						<span className='r' style={{ gap: 6 }}><span className='dot' style={{ background: '#f06a6e' }} />under 50 risky</span>
+					</span>
+				</div>
+				<div className='r' style={{ borderBottom: '1px solid var(--ln)' }} role='tablist'>
+					{TABS.map(t => <button key={t.id} role='tab' aria-selected={tab === t.id} data-testid={`vader-addons-tab-${t.id}`} className={tab === t.id ? 'tb on' : 'tb'} onClick={() => { setTab(t.id); setCategory(null) }}>{t.label}</button>)}
+					<span className='fl' />
 				</div>
 			</div>
-			{sections.length > 0 && !pageOpen ? <div className='flex flex-wrap gap-2 px-8 pt-3 shrink-0' data-testid='vader-addons-sections'>
-				<button className={`px-3 py-1 rounded-full border text-sm ${category === null ? 'border-vader-border-1 bg-vader-bg-3 text-vader-fg-1' : 'border-vader-border-3 text-vader-fg-2'}`} onClick={() => setCategory(null)}>All</button>
-				{sections.map(c => <button key={c.id} data-testid={`vader-addons-section-${c.id}`} className={`px-3 py-1 rounded-full border text-sm ${category === c.id ? 'border-vader-border-1 bg-vader-bg-3 text-vader-fg-1' : 'border-vader-border-3 text-vader-fg-2'}`} onClick={() => setCategory(c.id)}>{c.label}</button>)}
+			{sections.length > 0 && !pageOpen ? <div className='r' style={{ flexWrap: 'wrap', gap: 8, padding: '12px 32px 0', flex: 'none' }} data-testid='vader-addons-sections'>
+				<button className={category === null ? 'gb' : 'tx'} style={category === null ? { background: 'var(--g3)' } : { border: '1px solid var(--ln)' }} onClick={() => setCategory(null)}>All</button>
+				{sections.map(c => <button key={c.id} data-testid={`vader-addons-section-${c.id}`} className={category === c.id ? 'gb' : 'tx'} style={category === c.id ? { background: 'var(--g3)' } : { border: '1px solid var(--ln)' }} onClick={() => setCategory(c.id)}>{c.label}</button>)}
 			</div> : null}
-			<div className='flex flex-1 min-h-0 px-8 pt-3 pb-4'>
+			<div className='c fl' style={{ padding: pageOpen ? '20px 32px 0' : '8px 32px 0', minHeight: 0 }}>
 				<StoreView
 					key={`${tab}:${category ?? ''}`}
 					category={category ?? undefined}
@@ -93,5 +89,5 @@ export const Addons = () => {
 				/>
 			</div>
 		</div>
-	</div>
+	</div></div>
 }

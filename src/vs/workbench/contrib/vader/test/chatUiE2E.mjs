@@ -316,7 +316,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 // ===================================================================== a new chat: with a project, without one, offline
 {
 	const { page, errors } = await newPage();
-	check('a new chat in a project says there are no chats yet and what to do', (await page.locator(TID('vader-landing')).innerText()).includes('No chats in vader-app yet') && (await page.locator(TID('vader-landing')).innerText()).includes('Describe a task in the box below'));
+	check('a new chat in a project says where it is and what Agent mode does there', (await page.locator(TID('vader-landing-title')).innerText()) === 'New chat in vader-app' && (await page.locator(TID('vader-landing-text')).innerText()).includes('its own copy of the project, so nothing in your folder changes until you accept') && (await page.locator(TID('vader-input')).getAttribute('placeholder')) === 'Describe the task');
 	const sug = (await page.locator(`${TID('vader-landing')} .vader-cursor-pointer`).allInnerTexts()).map(flat).filter(Boolean);
 	check('it offers three starts that are about the project', sug.join('|') === 'Add a rules file for this project|Explain how this project is laid out|Find and fix a failing test', sug.join('|'));
 	await page.getByText('Explain how this project is laid out').click();
@@ -994,7 +994,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.evaluate(() => { document.getElementById('root').style.width = '780px'; document.getElementById('root').style.margin = '0 auto'; });
 	await page.evaluate(() => window.__addMessages({ role: 'user', content: 'Put summaries before the blind cut', displayContent: 'Put summaries before the blind cut', selections: [], state: { stagingSelections: [], isBeingEdited: false } }, { role: 'assistant', displayContent: 'The trim starts at 50% of the window, so it starts cutting before the summary has a chance. I will put all three steps on one budget and prune old tool output before summarising.', reasoning: '', anthropicReasoning: null }, { role: 'tool', type: 'tool_request', name: 'run_command', params: { command: 'node src/vs/workbench/contrib/vader/test/contextBudgetE2E.mjs', cwd: null, terminalId: null }, rawParams: {}, id: 'w1', result: null, content: '(Awaiting user permission...)' }));
 	await page.waitForTimeout(300);
-	check('at the window width the footer keeps the whole label and one row', (await page.locator(TID('vader-add-context')).innerText()) === '@ Add context' && (await page.evaluate(() => { const a = document.querySelector('[data-testid="vader-add-context"]').getBoundingClientRect(), b = document.querySelector('[data-testid="vader-send"]').getBoundingClientRect(); return Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 14; })));
+	check('at the window width the footer keeps the whole label and one row', (await page.locator(TID('vader-add-context')).innerText()) === 'Add context' && (await page.evaluate(() => { const a = document.querySelector('[data-testid="vader-add-context"]').getBoundingClientRect(), b = document.querySelector('[data-testid="vader-send"]').getBoundingClientRect(); return Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 14; })));
 	await shot(page, '13-window-width');
 	await page.close();
 }

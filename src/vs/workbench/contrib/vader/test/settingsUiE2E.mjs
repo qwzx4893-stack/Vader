@@ -339,6 +339,10 @@ async function layoutProblems(page) {
 	const contacts = (await page.locator(TID('vader-privacy-contact')).allInnerTexts()).map(flat);
 	check('everyone Vader can contact is listed with why, and the host', contacts.length === 6 && contacts[0].includes('Your model provider') && contacts.some(c => c.includes('open-vsx.org')) && contacts.some(c => c.includes('registry.modelcontextprotocol.io')), contacts.join(' | '));
 	check('the page says there is no analytics, no crash reporter and no account', (await page.locator(TID('vader-settings-privacy')).innerText()).includes('no crash reporter, no account'));
+	check('a project with no .vaderignore says so, and offers to create one', (await page.locator(TID('vader-privacy-ignore-detail')).innerText()).includes('None in this project') && (await page.locator(TID('vader-privacy-ignore-create')).count()) === 1);
+	await page.locator(TID('vader-privacy-ignore-create')).click();
+	await page.waitForSelector(TID('vader-privacy-ignore-open'));
+	check('Create writes the file with its explanation and opens it', (await log(page)).includes('create:.vaderignore') && (await log(page)).some(x => x.startsWith('command:vscode.open')) && (await page.locator(TID('vader-privacy-ignore-detail')).innerText()).startsWith('0 patterns.'));
 	check('the release check says it is off until the person turns it on', contacts.find(c => c.startsWith('Release check')).includes('Only when you press'));
 	await page.locator(TID('vader-settings-privacy-autocheck')).click();
 	check('turning the automatic check on is the real setting, and the list changes its wording', (await log(page)).includes('global:autoCheckUpdates=true') && (await page.locator(TID('vader-privacy-contact')).nth(3).innerText()).includes('Now on'));

@@ -20,7 +20,7 @@ settingsOfProvider.anthropic = { models: [{ modelName: 'claude-sonnet-4-5', type
 w.__settings = {
 	settingsOfProvider, modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' }, Autocomplete: null, Apply: null, SCM: null },
 	_modelOptions: [{ name: 'claude-sonnet-4-5', selection: { providerName: 'anthropic', modelName: 'claude-sonnet-4-5' } }], overridesOfModel: { anthropic: { 'claude-sonnet-4-5': { contextWindow: 100000 } } }, optionsOfModelSelection: { Chat: {}, Autocomplete: {}, Apply: {}, SCM: {} },
-	globalSettings: { chatMode: 'agent', autoApprove: {}, externalAgentId: null, dailySpendLimitUsd: null, autoAcceptLLMChanges: false, isOnboardingComplete: true },
+	globalSettings: { chatMode: 'agent', taskCopies: true, autoApprove: {}, externalAgentId: null, dailySpendLimitUsd: null, autoAcceptLLMChanges: false, isOnboardingComplete: true },
 }
 if (w.__noModel) { w.__settings.modelSelectionOfFeature.Chat = null; w.__settings.settingsOfProvider.anthropic = { models: [], _didFillInProviderSettings: false, apiKey: '' }; w.__settings._modelOptions = [] }
 w.__policy = { state: { mode: 'balanced' } }

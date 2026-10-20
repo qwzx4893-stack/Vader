@@ -39,7 +39,7 @@ export const ChoiceMenu = <T extends string>({ testId, label, rows, value, onCha
 	if (!current) return null
 	return <div ref={ref} className={`relative inline-block ${className}`} onClick={e => e.stopPropagation()} onKeyDown={onKeyDown}>
 		<button type='button' data-testid={testId} aria-haspopup='listbox' aria-expanded={open} aria-label={label} onClick={() => open ? setOpen(false) : openIt()}
-			className='flex items-center gap-1 h-5 bg-transparent whitespace-nowrap hover:brightness-90'>
+			className='flex items-center gap-1 h-7 px-1.5 rounded-md bg-transparent whitespace-nowrap hover:text-vader-fg-1 hover:bg-vader-bg-2-hover transition-colors duration-150'>
 			<span>{current.name}</span><Caret />
 		</button>
 		{open ? <div role='listbox' aria-label={label} data-testid={testId + '-menu'}

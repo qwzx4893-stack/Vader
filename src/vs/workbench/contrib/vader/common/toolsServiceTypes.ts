@@ -9,6 +9,8 @@ import { RawToolParamsObj } from './sendLLMMessageTypes.js';
 export type TerminalResolveReason = { type: 'timeout', waitingFor?: { prompt: string, secret: boolean } } | { type: 'done', exitCode: number }
 
 export type LintErrorItem = { code: string, message: string, startLineNumber: number, endLineNumber: number }
+/** what an edit did to the problems of a file besides the ones it introduced (those are `lintErrors`): how many were there before and still are, how many it fixed, and how many edits in a row to this file have left problems (common/lintDelta.ts) */
+export type LintNotes = { old: number, fixed: number, streak: number }
 
 // Partial of IFileStat
 export type ShallowDirectoryItem = {
@@ -210,8 +212,8 @@ export type BuiltinToolResultType = {
 	'browser_page_errors': { errors: import('./browser/browserToolServiceTypes.js').PageErrorEntry[] },
 	'browser_network_log': { entries: import('./browser/browserToolServiceTypes.js').NetworkEntry[] },
 	// ---
-	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
-	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
+	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null, lintNotes?: LintNotes }>,
+	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null, lintNotes?: LintNotes }>,
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
 	// ---

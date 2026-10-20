@@ -9,6 +9,7 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import type { ConversationTab } from '../../../vaderShellService.js'
 import { Icon } from './icons.js'
 import { chatToMarkdown, exportFileName } from '../../../../common/chatExport.js'
+import { friendlyModelName } from '../../../../common/modelPickerGroups.js'
 import { useShellData } from './useShellData.js'
 import { ReviewView } from './ReviewView.js'
 import { BrowserView } from './BrowserView.js'
@@ -56,7 +57,9 @@ export const ConversationPage = () => {
 	const data = useShellData()
 	const cur = data.all.find(t => t.id === data.currentId)
 	const pause = cur ? chat.getPause(cur.id) : undefined
-	const model = settingsState.modelSelectionOfFeature?.Chat?.modelName
+	// the model that did this conversation's work; for one that has not run yet, the one chosen now
+	const sel = cur?.model ?? settingsState.modelSelectionOfFeature?.Chat
+	const model = sel ? friendlyModelName(sel.providerName, sel.modelName).text : undefined
 	const isTask = !!cur?.isTask
 	const mode = settingsState.globalSettings.chatMode
 	// looking back through a chat: its name, a file of it, deleting it
@@ -77,12 +80,13 @@ export const ConversationPage = () => {
 	const title = () => renaming
 		? <input className='fld' autoFocus data-testid='vader-shell-rename-input' aria-label='Chat name' placeholder='Chat name' value={draft} style={{ width: 320, height: 28 }} onChange={e => setDraft(e.target.value)} onBlur={saveRename}
 			onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveRename() } if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setRenaming(false) } }} />
-		: <span className='t1 tr' style={{ fontWeight: 600, maxWidth: 420, minWidth: 40 }} data-testid='vader-shell-conversation-title' title='Double-click to rename' onDoubleClick={cur ? startRename : undefined}>{cur?.title ?? 'New chat'}</span>
+		: <span className='t1 tr' style={{ fontWeight: 600, fontSize: 14, maxWidth: 420, minWidth: 40 }} data-testid='vader-shell-conversation-title' title='Double-click to rename' onDoubleClick={cur ? startRename : undefined}>{cur?.title ?? 'New chat'}</span>
 
 	return <div className='c fl' style={{ minHeight: 0 }} data-testid='vader-shell-conversation' data-tab={shell.tab}>
 		<div className='r' style={{ height: 44, padding: '0 20px', gap: 12, flex: 'none', borderBottom: '1px solid var(--ln)' }}>
 			{isTask || !cur ? <>
 				{title()}
+				{cur?.copy?.branch ? <span className='mo t3 tr narrow-hide' title='The branch this task works on' data-testid='vader-shell-conversation-branch'>{cur.copy.branch}</span> : null}
 				{model ? <span className='t3 tr narrow-hide'>{model}</span> : null}
 			</> : <>
 				<span className='r t3 narrow-hide' style={{ gap: 8 }}><Icon k='folder' /><span>{data.currentProjectName}</span></span>
