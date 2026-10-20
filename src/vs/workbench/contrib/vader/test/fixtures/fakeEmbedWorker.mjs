@@ -7,6 +7,7 @@ const marker = (n) => fs.existsSync(path.join(workerData.root, workerData.name, 
 if (marker('NOT_READY')) { parentPort.postMessage({ ready: false }); }
 else if (marker('DIES_AT_START')) { process.exit(1); }
 else {
+	fs.appendFileSync(path.join(workerData.root, workerData.name, 'STARTS'), 'x'); // one mark for every start of this worker
 	parentPort.postMessage({ ready: true });
 	parentPort.on('message', ({ id, texts }) => {
 		if (texts.some(t => t === 'FAIL')) { parentPort.postMessage({ id, error: 'the model failed' }); return; }

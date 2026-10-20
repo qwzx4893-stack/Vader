@@ -26,7 +26,7 @@ async function main(): Promise<void> {
 		tf.env.localModelPath = workerData.root
 		tf.env.allowRemoteModels = false // the model is part of the app; nothing is ever fetched
 		tf.env.allowLocalModels = true
-		pipe = await tf.pipeline('feature-extraction', workerData.name, { dtype: 'q8', session_options: { intraOpNumThreads: workerData.threads, interOpNumThreads: 1, enableCpuMemArena: false, enableMemPattern: false } })
+		pipe = await tf.pipeline('feature-extraction', workerData.name, { dtype: workerData.dtype, session_options: { intraOpNumThreads: workerData.threads, interOpNumThreads: 1, enableCpuMemArena: false, enableMemPattern: false } })
 	} catch (e) {
 		port.postMessage({ ready: false, why: e instanceof Error ? e.message : String(e) }) // the host does not need the reason; it is for whoever looks into why search by meaning is off
 		return
@@ -34,7 +34,7 @@ async function main(): Promise<void> {
 	port.postMessage({ ready: true })
 	port.on('message', async (m: { id: number; texts: string[] }) => {
 		try {
-			const out = await pipe(m.texts, { pooling: 'cls', normalize: true })
+			const out = await pipe(m.texts, { pooling: workerData.pooling, normalize: true })
 			const dims = out.dims[out.dims.length - 1]
 			const copy = new Float32Array(out.data) // a transferable copy of exactly these numbers
 			port.postMessage({ id: m.id, dims, vectors: copy.buffer }, [copy.buffer])

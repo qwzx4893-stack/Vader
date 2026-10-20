@@ -6,7 +6,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
 import type { Hit } from '../common/codebaseIndex/bm25Index.js';
-import { EmbedQueue, filePriority, fuse, missingAmongTop, normalize, textForEmbedding, VectorStore, Vec } from '../common/codebaseIndex/semantic.js';
+import { blend, EmbedQueue, filePriority, isEmbeddable, missingAmongTop, normalize, textForEmbedding, VectorStore, Vec } from '../common/codebaseIndex/semantic.js';
 
 // Meaning-based search for one project, on top of the word index (codebaseIndexer.ts). The rules that keep it light are in common/codebaseIndex/semantic.ts; this is the part that touches the
 // disk and a model. The model is optional: when there is none (it is not installed, or it failed to start) nothing here does anything and the word search works as before.
@@ -67,7 +67,7 @@ export class SemanticLayer {
 	lastSlice: { embedded: number; stopped: string } | undefined
 
 	constructor(private readonly _file: string, private readonly _factory: EmbedderFactory, private readonly _o: SemanticOptions = {}) {
-		this._queue = new EmbedQueue(this._store, { batch: 8, duty: _o.duty ?? 0.4 })
+		this._queue = new EmbedQueue(this._store, { batch: 4, duty: _o.duty ?? 0.4 }) // 4 at a time: a question waits for at most the batch in flight (about 1.3 s with a code model)
 	}
 
 	get state(): MeaningState { return { ready: this._store.size, waiting: this._queue.pending, on: this._tried ? !!this._embedder : undefined } }
@@ -92,6 +92,7 @@ export class SemanticLayer {
 	/** a file was (re)indexed: its pieces are noted and the ones that have no vector are queued */
 	onFile(rel: string, text: string, chunks: readonly ChunkRef[], mtimeMs: number, size: number): void {
 		this._forget(rel)
+		if (!isEmbeddable(rel)) { this._piecesOfFile.set(rel, []); this._changed(); return } // known, and nothing in it is embedded
 		const lines = text.replace(/\r\n/g, '\n').split('\n')
 		const pieces: Piece[] = []
 		const now = Date.now()
@@ -171,19 +172,19 @@ export class SemanticLayer {
 
 	// ---- searching
 
-	/** the word ranking joined with the meaning ranking; on any trouble, the word ranking as it was */
+	/** the meaning ranking leads and the word ranking adds a small bonus (blend() in semantic.ts); on any trouble, the word ranking as it was */
 	async rerank(query: string, hits: readonly Hit[], limit = 80): Promise<Hit[]> {
 		const model = await this._model()
 		if (!model || this._store.size + this._queue.pending === 0) return [...hits]
 		try {
 			const qv = normalize(await this._within(model.embedQuery(query), this._o.queryMs ?? 2500))
-			// the best word matches that have no vector yet are embedded now, a bounded few, so the first search is good before the background work has caught up
-			const max = this._o.onDemandMax ?? 24
-			const topHashes = hits.slice(0, max).map(h => this._hashOfKey.get(keyOf(h.chunk.file, h.chunk.start, h.chunk.end))).filter((h): h is string => !!h)
+			// the best word matches that have no vector yet are embedded now, a few of them, so the first search is good before the background work has caught up
+			const max = this._o.onDemandMax ?? 4
+			const topHashes = hits.slice(0, max * 3).map(h => this._hashOfKey.get(keyOf(h.chunk.file, h.chunk.start, h.chunk.end))).filter((h): h is string => !!h)
 			const need = missingAmongTop(topHashes, this._store, max).filter(h => this._textOfHash.has(h))
 			if (need.length) {
 				try {
-					const vecs = await this._within(model.embedDocs(need.map(h => this._textOfHash.get(h)!)), this._o.onDemandMs ?? 2500)
+					const vecs = await this._within(model.embedDocs(need.map(h => this._textOfHash.get(h)!)), this._o.onDemandMs ?? 1500)
 					need.forEach((h, i) => { if (this._store.put(h, vecs[i])) this._textOfHash.delete(h) })
 					this._queue.forget(new Set([...this._locs.keys()].filter(h => !this._store.has(h))))
 					this._schedulePersist()
@@ -191,20 +192,21 @@ export class SemanticLayer {
 			}
 			const floor = this._o.floor ?? 0.2
 			const dense = this._store.topK(qv, 40, h => this._locs.has(h)).filter(d => d.score >= floor)
-			const denseKeys: string[] = []
+			if (dense.length === 0) return [...hits]
 			const locOfKey = new Map<string, Loc>()
-			for (const d of dense) for (const l of this._locs.get(d.hash) ?? []) { const k = keyOf(l.file, l.start, l.end); if (!locOfKey.has(k)) { locOfKey.set(k, l); denseKeys.push(k) } }
-			if (denseKeys.length === 0) return [...hits]
-			const wordKeys = hits.map(h => keyOf(h.chunk.file, h.chunk.start, h.chunk.end))
-			const byKey = new Map<string, Hit>(hits.map((h, i) => [wordKeys[i], h]))
+			const denseScored: { id: string; score: number }[] = []
+			for (const d of dense) for (const l of this._locs.get(d.hash) ?? []) { const k = keyOf(l.file, l.start, l.end); if (!locOfKey.has(k)) { locOfKey.set(k, l); denseScored.push({ id: k, score: d.score }) } }
+			const byKey = new Map<string, Hit>(hits.map(h => [keyOf(h.chunk.file, h.chunk.start, h.chunk.end), h]))
+			const wordScored = hits.map(h => ({ id: keyOf(h.chunk.file, h.chunk.start, h.chunk.end), score: h.score }))
 			const out: Hit[] = []
-			for (const f of fuse([{ ids: wordKeys }, { ids: denseKeys, weight: 1.1 }])) {
+			const embedded = (key: string): boolean => { const h = this._hashOfKey.get(key); return !!h && this._store.has(h) }
+			for (const f of blend(denseScored, wordScored, { limit, embedded })) {
 				const old = byKey.get(f.id)
 				if (old) { out.push({ chunk: old.chunk, score: f.score * 1000 }); continue }
 				const l = locOfKey.get(f.id)
 				if (l) out.push({ chunk: { id: -1, file: l.file, start: l.start, end: l.end, len: 0, symbol: l.symbol }, score: f.score * 1000 })
 			}
-			return out.slice(0, limit)
+			return out
 		} catch { return [...hits] }
 	}
 

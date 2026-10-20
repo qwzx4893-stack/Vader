@@ -119,9 +119,9 @@ if (!args.includes('--no-model')) {
 		fs.mkdirSync(path.dirname(path.join(modelDir, file)), { recursive: true });
 		fs.writeFileSync(path.join(modelDir, file), buf);
 	}
-	fs.writeFileSync(path.join(modelDir, 'LICENSE-NOTE.txt'), `${lock.name}\nSource: ${lock.source} (revision ${lock.revision})\nLicense: ${lock.license}\n`);
+	fs.writeFileSync(path.join(modelDir, 'LICENSE-NOTE.txt'), `${lock.name}\nSource: ${lock.source} (revision ${lock.revision})\nOriginal: ${lock.original}\nLicense: ${lock.license}\nProvenance: ${lock.provenance}\n`);
 }
 
-fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ model: lock.name, revision: lock.revision, platform, arch, packages: [...needed].sort() }, null, 1));
+fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ model: { name: lock.name, revision: lock.revision, ...lock.runtime }, platform, arch, packages: [...needed].sort() }, null, 1));
 fs.rmSync(work, { recursive: true, force: true });
 console.log(`embedding folder ready: ${out}\n  packages: ${[...needed].sort().join(', ')}\n  runtime ${mb(size(outNm))} MB${args.includes('--no-model') ? '' : `, model ${mb(size(modelDir))} MB`}`);

@@ -40,36 +40,60 @@ The ten-minute rule approximates "once per task", because the tool does not know
 
 ## Search by meaning
 
-The word index finds code by its words. A small embedding model finds it by what it means ("where do we stop too many requests" finds the rate limiter even
-when no word matches). The two rankings are joined by reciprocal rank fusion (`common/codebaseIndex/semantic.ts`, `electron-main/semanticLayer.ts`).
+The word index finds code by its words. An embedding model finds it by what it means ("where do we stop too many requests" finds the rate limiter even when no word
+matches). `common/codebaseIndex/semantic.ts` holds the rules, `electron-main/semanticLayer.ts` the part that touches the disk, `localEmbedder.ts` and `embedWorker.ts` the model.
 
-**Model:** Snowflake arctic-embed-xs (Apache 2.0), 22 million parameters, 384-number vectors, about 23 MB in 8-bit form, run with transformers.js in a worker
-thread (`electron-main/embedWorker.ts`, `localEmbedder.ts`). It is part of the app, never fetched from the network.
+**Which model, and why (measured, not assumed).** The first choice was Snowflake arctic-embed-xs because it is small. It is an English text model, and on code it was no better than
+the word index. The benchmark below picked a code model instead.
 
-**How it stays light** (all of it tested without a model, `test/semanticE2E.mjs`):
-- A piece of code is embedded once per content; the vector is kept under the hash of its text. Rebuilding the index, or the same code in two files, costs nothing.
-- The text sent to the model is cut to 1,200 characters, so no piece costs more than another.
-- Work is done in 400 ms slices with a duty cycle of 30%: after each batch the queue rests more than twice as long as the batch took. One or two threads, in a worker.
-- Files changed lately are embedded first. Nothing is embedded while the computer is on battery power.
-- At search time only the best word matches that have no vector yet (at most 24, 2.5 s) are embedded on the spot, so the first search is good before the background work is done.
-- Vectors are bytes (one per number), at most 60,000 of them (about 23 MB), saved next to the index.
-- A model that is missing, fails, or is slow (2.5 s) leaves the word results exactly as they were.
+Benchmark: 189 queries made from real JSDoc descriptions (93 from Vader's code, 96 from VS Code's own `base`, `platform` and `editor/common/core`), each looking for the chunk that holds
+the declaration, with every comment removed from the code; 1,146 chunks. "Pure meaning" queries have every word that also appears in the target code removed. The corpus is small
+(about 570 chunks each), real projects are harder. The numbers are single-shot retrieval, not agent success.
 
-**What ships and how:** `build/embedding/prepare.mjs` makes the folder `resources/embedding` (runtime 33.7 MB + model 22.6 MB = about 56 MB added to the install and to
-each update): transformers.js 4.3.1 and onnxruntime-node for one platform (installed on its own from `build/embedding/package-lock.json`, scripts off, so the editor's own install
-is unchanged), a stand-in for `sharp` (image handling, never used here), and the model files checked byte for byte against `build/embedding/model.lock.json` (Hugging Face revision
-`d8c86521...`, licence Apache-2.0 as stated in the model card). The Windows workflow runs it between packaging and the installer. The app looks for the folder in
+| model (licence, int8 size) | pieces/s, 2 threads | peak RAM | as written: top-1 / top-5 | pure meaning: top-1 / top-5 | names only: top-1 / top-5 |
+|---|---|---|---|---|---|
+| the word index alone | - | - | 18% / 43% | 6% / 16% | 7% / 39% |
+| arctic-embed-xs (Apache, 23 MB) | about 13 | 160 MB | 16% / 43% | 8% / 25% | n/a |
+| all-MiniLM-L6-v2 (Apache, 22 MB) | 22 | 231 MB | 21% / 47% | 8% / 30% | 21% / 53% |
+| jina-embeddings-v2-base-code (Apache, 154 MB) | 4.3 | 407 MB | 29% / 58% | 20% / 40% | 26% / 69% |
+| **CodeRankEmbed (MIT, 132 MB)** | 3.5 (4.2 at 600 characters) | 326 MB | **36% / 67%** | **24% / 51%** | **31% / 79%** |
+
+(arctic numbers are from the first run, with five models sharing the CPU, so its speed is a rough figure; the others were measured one at a time.)
+CodeRankEmbed at 600 characters per piece loses about 3 points of top-1 and runs 15% faster, so 600 is what ships. Models under non-commercial licences (jina-code-embeddings, SFR-Embedding-Code) were not considered.
+
+**Joining the two rankings.** Equal-weight reciprocal rank fusion, the first design, made a strong code model clearly worse (CodeRankEmbed, pure meaning, top-1: 24% alone, 10% fused). What
+works is meaning first plus a small word bonus (`blend()`): 24% alone, 21% with the bonus, and it keeps the exact-name matches that only words find. A piece with no vector yet is ranked
+near the tenth meaning match plus a larger word bonus; a word match that has a vector but is not among the nearest goes after them. Measured with 10% to 100% of the pieces embedded
+(all three kinds of query): never worse than the words alone at any coverage, and at 100% the same as meaning alone (top-1 28%, top-5 65%, against 10% and 33% for words alone). The first
+version of the blend, which put those embedded-but-not-near matches near the top, fell to 24% / 50% at full coverage.
+
+**What ships and how:** `build/embedding/prepare.mjs` makes the folder `resources/embedding` (runtime 33.7 MB + model 132.9 MB = about 167 MB added to the install and to each update):
+transformers.js 4.3.1 and onnxruntime-node for one platform (installed on its own from `build/embedding/package-lock.json`, scripts off, so the editor's own install is unchanged), a
+stand-in for `sharp` (image handling, never used here), and the model files checked byte for byte against `build/embedding/model.lock.json`. Which model, its pooling, and the question
+prefix are written to `manifest.json`, so the model can be changed without touching the code. The Windows workflow runs the script between packaging and the installer. The app looks in
 `<resources>/embedding` (or `VADER_EMBEDDING_DIR`); without it Settings says "Search by meaning is not available in this install" and search stays on words.
 
-**Measured on a Core i7-12700H (20 threads), with the real model in a worker thread, over this repository's `common/` folder (141 files, 1,223 pieces):**
-- starting the model: about 0.4 s; embedding a question: 3 to 4 ms;
-- embedding a piece of code: about 50 to 110 ms depending on the threads and memory setting (the memory arena is off: about 150 to 200 MB instead of 430 MB, at 1.5 times the time);
-- the whole project is ready after about 4 minutes of background work (duty cycle 40%), searches in between are answered with the pieces ready so far plus the best word matches embedded on the spot (0.5 to 2 s the first time, 6 to 30 ms after);
-- on 8 questions written in other words than the code uses, the model put the right file first 8 times out of 8 (a toy set of 8 files, not a benchmark).
-A project of 20,000 pieces would take roughly an hour of background time at this speed; that is an extrapolation, not a measurement.
+Provenance: the int8 ONNX file is a third-party conversion (`mrsladoje/CodeRankEmbed-onnx-int8`, revision e74f446d...) of `nomic-ai/CodeRankEmbed` (MIT), documented as dynamic int8
+with `reduce_range`. Vader did not make it. An ONNX file is a graph of operations, not a program; that it behaves like the original is shown by the benchmark above (the original authors report
+CoIR 60.1 for the full-precision model). Making the conversion in the build from the original weights would remove the third party; it needs PyTorch and was not done.
+
+**How it stays light** (the rules are tested without a model, `test/semanticE2E.mjs`):
+- Only source code is embedded (not data, text, tests, generated files), at most 12,000 pieces, the files changed most lately first, and a piece once per content (the vector is kept under the hash of its text).
+- The text sent to the model is cut to 600 characters, so no piece costs more than another.
+- Work is done in 3-second slices with a duty cycle of 40% in a worker thread with one or two threads; nothing is embedded while the computer is on battery power.
+- The worker is stopped after 90 seconds without a question and started again by the next one, so an editor that is not being searched holds none of the model's memory.
+- At search time only the best 4 word matches that have no vector yet (1.5 s at most) are embedded on the spot, and the background work embeds 4 pieces at a time so a question never waits for more than one small batch.
+- Vectors are bytes (768 per piece, about 11 MB for 12,000), saved next to the index.
+- A model that is missing, fails or is slow (2.5 s) leaves the word results exactly as they were; a failing model is tried again later, five times at most.
+
+**Cost, measured on a Core i7-12700H (20 threads)**, real worker, real model, over this repository's `common/` folder (141 files, 1,225 pieces): starting the model about 1 to 2 s; a question about
+40 ms of model time; a piece about 240 to 350 ms of model time. At a 40% duty cycle the pieces come at about 1.2 a second, so this folder takes about 17 minutes of background time, a project of
+3,000 pieces about 40 minutes, and the cap of 12,000 about 2.8 hours. Memory of the process while embedding: about 300 to 350 MB, none when the worker has stopped. Until everything is ready,
+search is answered by the pieces that are ready plus the words (and 4 embedded on the spot); **while the background work is running, a search takes about 1 to 3 seconds** (it waits for the batch in flight
+and embeds those 4), and about 50 ms once everything is embedded. For an agent calling the tool that is acceptable; it would be slow for typing-time search.
 
 **Honest limits:**
 - Never run inside a packaged, installed Vader: the workflow step, the asar layout and the worker start from the installed app are untested until a Windows build is made.
-- arctic-embed-xs is an English text model, not a code model; for code it works because the file path and symbol name are in what it reads, and the word ranking is always part of the answer.
-- Only Windows x64 has been prepared on this machine (`--platform`/`--arch` for the others are untested).
-- The tests of the rules (35 checks), the indexer with a stand-in model (20), and the worker protocol with a stand-in worker (16) do not use the real model; the real model was exercised by hand.
+- The benchmark is single-shot retrieval over about 570 chunks on two TypeScript codebases. It does not show how much the agent finishes more tasks; the agent can also search again, grep and read files. Cursor reports 12.5% higher answer accuracy from semantic search over grep alone (its own model, its own evaluation).
+- Only Windows x64 has been prepared on this machine.
+- The tests of the rules, the indexer with a stand-in model, and the worker protocol with a stand-in worker do not use the real model; the real model was exercised by hand.

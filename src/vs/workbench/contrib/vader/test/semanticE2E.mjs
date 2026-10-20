@@ -53,7 +53,7 @@ check('the model is shown the file, the name and the code, cut to a fixed size',
 	check('the store survives being saved and loaded, with the same answers', back.size === 2 && back.topK(q, 1)[0].hash === 'h1' && Math.abs(back.topK(q, 1)[0].score - st.topK(q, 1)[0].score) < 1e-9);
 	check('a damaged save loads as empty instead of failing', S.VectorStore.fromJSON({ dims: 384, hashes: ['a', 'b'], data: 'AAAA' }).size === 0 && S.VectorStore.fromJSON({ dims: 4, hashes: ['a'], data: '%%%' }).size === 0);
 	const j = new S.VectorStore(); for (let i = 0; i < 500; i++) j.put('k' + i, embedText('word' + i + ' limit'));
-	check('500 vectors take about 190 KB, not 770 KB of floats', JSON.stringify(j.toJSON()).length < 300_000, String(JSON.stringify(j.toJSON()).length));
+	check('500 vectors of 768 numbers take about 510 KB saved, not 1.5 MB of floats', JSON.stringify(j.toJSON()).length < 600_000, String(JSON.stringify(j.toJSON()).length));
 }
 
 // ---- fusing the two rankings
@@ -62,6 +62,27 @@ check('the model is shown the file, the name and the code, cut to a fixed size',
 	check('what both lists rank high is first, and what only one has is kept', r[0].id === 'a' && r.map(x => x.id).sort().join('') === 'abcd', JSON.stringify(r));
 	check('a heavier list counts more', S.fuse([{ ids: ['x', 'y'], weight: 1 }, { ids: ['y', 'x'], weight: 3 }])[0].id === 'y');
 	check('an empty list changes nothing', S.fuse([{ ids: ['x', 'y'] }, { ids: [] }]).map(a => a.id).join('') === 'xy');
+}
+
+// ---- which files are embedded
+check('source code is embedded; data, text, tests, generated and vendored files are not',
+	['src/a.ts', 'src\b\c.py', 'lib/x.go', 'app/Main.java', 'a.tsx'].every(S.isEmbeddable) &&
+	['README.md', 'package.json', 'data.csv', 'src/a.test.ts', 'src/a.spec.js', 'test/helper.ts', 'src/__tests__/a.ts', 'dist/a.js', 'node_modules/x/index.js', 'a.min.js', 'types.d.ts', 'src/fooE2E.mjs', 'build/x.ts', 'logo.png'].every(f => !S.isEmbeddable(f)));
+
+// ---- joining the two rankings: meaning leads, words add a small bonus
+{
+	const dense = [{ id: 'a', score: 0.8 }, { id: 'b', score: 0.7 }, { id: 'c', score: 0.5 }];
+	const words = [{ id: 'c', score: 12 }, { id: 'a', score: 6 }, { id: 'z', score: 3 }];
+	const r = S.blend(dense, words);
+	check('a piece the words like most does not jump over a piece that is much nearer by meaning', r[0].id === 'a' && r[1].id === 'b' && r.map(x => x.id).includes('c'), JSON.stringify(r));
+	check('what only the words found is kept, ranked near the tenth meaning match', r.some(x => x.id === 'z') && S.blend(dense, [{ id: 'z', score: 9 }], { priorRank: 2 }).find(x => x.id === 'z').score > 0.7);
+	check('with no meaning ranking the words decide, in their own order', S.blend([], words).map(x => x.id).join('') === 'caz', S.blend([], words).map(x => x.id).join(''));
+	const close = S.blend([{ id: 'p', score: 0.601 }, { id: 'q', score: 0.60 }], [{ id: 'q', score: 10 }, { id: 'p', score: 1 }]);
+	check('between two pieces equally near by meaning, the words break the tie', close[0].id === 'q');
+	const aware = S.blend([{ id: 'a', score: 0.8 }, { id: 'b', score: 0.4 }], [{ id: 'z', score: 9 }, { id: 'y', score: 8 }], { embedded: id => id === 'z' });
+	const at = (id) => aware.findIndex(x => x.id === id);
+	check('a word match without a vector is put near the top; one that has a vector but is not among the nearest is not (it sits at the end of the nearest)', aware[0].id === 'a' && at('y') < at('b') && at('z') > at('y'), aware.map(x => x.id).join(''));
+	check('the list is cut to the limit and empty input gives nothing', S.blend(dense, words, { limit: 2 }).length === 2 && S.blend([], []).length === 0);
 }
 
 // ---- the queue, with a clock that moves only when the model works or the queue rests

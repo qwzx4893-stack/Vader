@@ -5,17 +5,19 @@
 // Meaning-based search that costs little. The project index (bm25Index.ts) finds code by its words; a small embedding model finds it by what it means ("where do we stop too many
 // requests" finds the rate limiter). Running a model over every chunk of a project is what makes such search heavy, so this file is the part that keeps it light, and it is pure
 // (the model, the clock and the sleeping are given to it), so the rules are tested without a model:
+//  - only code is embedded (not data, text or tests), and at most MAX_VECTORS pieces, the ones in the files changed most lately first: a code model costs about a quarter of a second a piece;
 //  - a chunk is embedded once per content: the vector is kept under the hash of the text, so the same text in another file, or the same file after a change elsewhere in it, costs nothing;
 //  - the text sent to the model is cut to a fixed size, so no chunk costs more than another;
 //  - work is done in short slices with a duty cycle: after each batch the queue rests as long as the batch took times (1/duty - 1), so the model never holds a core for long;
 //  - the order is what the person is likely to ask about: files opened or changed lately first;
 //  - at search time only the best words-matches that have no vector yet are embedded on the spot (a bounded few), so the first search is good before the background work has finished;
 //  - vectors are stored as bytes (one byte per number, 4x smaller than floats), and there is a ceiling on how many are kept;
-//  - the word ranking and the meaning ranking are joined by reciprocal rank fusion, so neither needs the other's score scale.
+//  - the meaning ranking leads and the word ranking adds a small bonus (blend()): measured with a code model, joining the two as equals (reciprocal rank fusion) was clearly worse than
+//    meaning alone, and meaning plus a small word bonus was as good as meaning alone and still keeps what only the words can find.
 
-export const EMBED_DIMS = 384
-export const MAX_EMBED_CHARS = 800
-export const MAX_VECTORS = 60_000
+export const EMBED_DIMS = 768
+export const MAX_EMBED_CHARS = 600
+export const MAX_VECTORS = 12_000
 
 export type Vec = Float32Array
 
@@ -108,6 +110,38 @@ export function fuse(lists: { ids: readonly string[]; weight?: number }[], k = 6
 	const score = new Map<string, number>()
 	for (const l of lists) l.ids.forEach((id, rank) => score.set(id, (score.get(id) ?? 0) + (l.weight ?? 1) / (k + rank + 1)))
 	return [...score.entries()].map(([id, s]) => ({ id, score: s })).sort((a, b) => b.score - a.score)
+}
+
+/** the files whose pieces are embedded: source code. Data, text and tests cost as much as code and answer questions about code less often. */
+export function isEmbeddable(rel: string): boolean {
+	const p = rel.split('\\').join('/').toLowerCase()
+	if (!/\.(ts|tsx|js|jsx|mjs|cjs|py|go|rs|java|kt|kts|cs|cpp|cc|c|h|hpp|rb|php|swift|scala|sh|ps1|sql|vue|svelte|dart|lua|zig)$/.test(p)) return false
+	if (/(^|\/)(tests?|__tests__|spec|fixtures|e2e|mocks?|node_modules|dist|build|out|vendor)\//.test(p)) return false
+	if (/\.(test|spec|min|d)\.[a-z]+$/.test(p) || /e2e\.[a-z]+$/.test(p)) return false
+	return true
+}
+
+export type Scored = { id: string; score: number }
+
+/**
+ * The meaning ranking leads and the word ranking adds a small bonus. `dense` is the pieces nearest the question by meaning (cosine, best first), `words` the best word matches (their
+ * own scores, best first). A piece with a meaning score gets it plus `wordBonus` times its word score relative to the best word match; a piece that only the words found (it has
+ * no vector yet) is put where the `priorRank`-th nearest piece is and gets the larger `onlyWordsBonus`, so a strong word match still reaches the top of the list while a project that has
+ * few vectors yet is answered mostly by its words. One that has a vector but is not among the nearest goes after them (`embedded` says which have one). Measured with a code model at 10% to 100%
+ * of the pieces embedded: never worse than the words alone, and at 100% the same as the meaning alone.
+ */
+export function blend(dense: readonly Scored[], words: readonly Scored[], o: { limit?: number; wordBonus?: number; onlyWordsBonus?: number; priorRank?: number; embedded?: (id: string) => boolean } = {}): Scored[] {
+	const wordBonus = o.wordBonus ?? 0.05, onlyWordsBonus = o.onlyWordsBonus ?? 0.15, priorRank = o.priorRank ?? 10
+	const top = words.length ? words[0].score || 1 : 1
+	const bonus = new Map(words.map(w => [w.id, w.score / top]))
+	const prior = dense.length ? dense[Math.min(priorRank, dense.length) - 1].score : 0.2
+	const last = dense.length ? dense[dense.length - 1].score : 0.2
+	const out = new Map<string, number>()
+	for (const d of dense) out.set(d.id, d.score + wordBonus * (bonus.get(d.id) ?? 0))
+	// a word match that has a vector but is not among the nearest is, by the model's own measure, not near: it goes after them. One without a vector is unknown to the model and is put in
+	// at the prior.
+	for (const w of words) if (!out.has(w.id)) out.set(w.id, o.embedded?.(w.id) ? last - 0.02 + wordBonus * (bonus.get(w.id) ?? 0) : prior + onlyWordsBonus * (bonus.get(w.id) ?? 0))
+	return [...out.entries()].map(([id, score]) => ({ id, score })).sort((a, b) => b.score - a.score).slice(0, o.limit ?? 80)
 }
 
 export type Todo = { hash: string; text: string; priority: number }
