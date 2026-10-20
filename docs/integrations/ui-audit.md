@@ -35,3 +35,11 @@ Message column and message box (R01), edit card with numbered lines and marked w
 ## Not verified here
 
 The packaged app was not run. The window strip depends on the system drawing the window controls over the page (Windows, macOS); that is the one part that cannot be seen in a browser harness.
+
+## Second pass: the whole window beside the whole board (2026-10-20)
+
+Every board was put beside the real page at the same size (1440 x 900; the shell, Settings and first-run tests were at 862 high, which made the pictures look unlike the boards). Side-by-side pictures of 38 pages are made by the tests plus `scratchpad` scripts and kept in `ui-compare/`.
+
+Changed: Settings frame and widths; Connected agents, Skills, MCP servers, Memory (two equal columns); Add-ons filters and the Installed page; item pages (checks, framed second button); first-run panels (R22 to R24); the frame of buttons inside the window (a real fault, see the changelog); the error card.
+
+Not changed, and why: the examples of the boards (their names, numbers and files) are not copied; "Trust" per MCP server (no score is kept for a server added by hand); the Updates tab of Skills (a skill that changed at its source already shows Read); a language selector on the first screen (one language); "Works in its own copy of this folder" on the project step (true only when the per-task copy is on, so the text stays the one that is always true); the Works with chips of an extension page (the source gives none).

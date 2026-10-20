@@ -50,7 +50,7 @@ export const McpPage = () => {
 								<span className='logo sm'><Icon k='plug' /></span>
 								<button className='c' style={{ minWidth: 0, gap: 1 }} aria-expanded={isOpen} data-testid='vader-mcp-expand' onClick={() => setOpen(isOpen ? undefined : name)}>
 									<span className='t1' style={{ fontWeight: 600 }}>{name}</span>
-									<span className='hint tr mo'>{server.command ? server.command : 'remote server'}{server.status === 'success' ? ` · ${tools.length} tool${tools.length === 1 ? '' : 's'}` : ''}</span>
+									<span className='hint tr'>{server.command ? server.command : 'remote server'}{server.status === 'success' ? ` · ${tools.length} tool${tools.length === 1 ? '' : 's'}` : ''}</span>
 								</button>
 								<span className='r' style={{ gap: 8 }}>{server.status === 'loading' ? <Spinner /> : <span className='dot' style={{ background: st.color }} />}<span className='t2'>{st.label}</span></span>
 								<span className='r' style={{ justifyContent: 'flex-end' }}><Switch on={on} label={`${name} on`} testId='vader-mcp-switch' onChange={() => { void mcp.toggleServerIsOn(name, !on) }} /></span>

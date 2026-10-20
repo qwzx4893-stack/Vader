@@ -53,8 +53,8 @@ export const MemoryPage = () => {
 
 	return <div data-testid='vader-settings-memory'>
 		<PageHead title='Memory and instructions' desc='What the agent is told before it starts, and what it chose to remember along the way. You can read and remove all of it.' />
-		<div className='r' style={{ gap: 44, alignItems: 'flex-start' }}>
-			<div className='c fl' style={{ minWidth: 0 }}>
+		<div className='r' style={{ gap: 28, alignItems: 'flex-start', maxWidth: 800 }}>
+			<div className='c' style={{ minWidth: 0, flex: '1 1 0' }}>
 				<span className='t1' style={{ fontWeight: 600 }}>Instructions</span>
 				<span className='hint' style={{ padding: '2px 0 8px' }}>Told to the agent in this order, the most specific last.</span>
 				<div data-testid='vader-memory-layers'>
@@ -82,7 +82,7 @@ export const MemoryPage = () => {
 				</div>
 			</div>
 
-			<div className='c' style={{ width: 400, flex: 'none' }}>
+			<div className='c' style={{ minWidth: 0, flex: '1 1 0' }}>
 				<div className='r' style={{ paddingBottom: 8 }}><span className='t1 fl' style={{ fontWeight: 600 }}>What the agent remembers</span>{mem.project.length > 0 ? <button className='tx' data-testid='vader-memory-clear' onClick={() => memory.clearScope('project')}>Clear project memory</button> : null}</div>
 				<div className='r' role='tablist' style={{ gap: 18, borderBottom: '1px solid var(--ln)', height: 36 }}>
 					{([['project', 'This project', mem.project.length], ['agent', 'Saved agents', mem.agent.length]] as const).map(([id, label, n]) => <button key={id} role='tab' aria-selected={tab === id} data-testid={`vader-memory-tab-${id}`} className={tab === id ? 'tb on' : 'tb'} style={{ margin: 0, height: 36 }} onClick={() => setTab(id)}>{label} <span className='t4' style={{ marginLeft: 4 }}>{n}</span></button>)}
