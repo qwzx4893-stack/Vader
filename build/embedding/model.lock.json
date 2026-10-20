@@ -11,13 +11,63 @@
 		"queryPrefix": "Represent this query for searching relevant code: ",
 		"docPrefix": "",
 		"dims": 768,
-		"requiredFiles": ["onnx/model.onnx", "tokenizer.json", "tokenizer_config.json", "config.json"]
+		"requiredFiles": [
+			"onnx/model.onnx",
+			"tokenizer.json",
+			"tokenizer_config.json",
+			"config.json"
+		]
 	},
 	"files": {
-		"config.json": { "bytes": 1371, "sha256": "d9cac600c987632c33d61a7ed7f7b3ff0a52e7eb41440b661266a9c88f75ebcd" },
-		"tokenizer.json": { "bytes": 711649, "sha256": "91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854" },
-		"tokenizer_config.json": { "bytes": 1447, "sha256": "8de9ab7560d7fb63338c00736faac7bb9d85d49da44c774c607e7766b59614ea" },
-		"LICENSE": { "bytes": 1186, "sha256": "7a9d86a2e80f5acae8d5bff7ef3393b5051b705de45d2e70530f5f801b3a1440" },
-		"onnx/model.onnx": { "bytes": 138619279, "sha256": "4eae31d09b1843103a1ebd5e2b2e24b5a5cad441a33906b35b12b1e2ed91d1db" }
+		"config.json": {
+			"bytes": 1371,
+			"sha256": "d9cac600c987632c33d61a7ed7f7b3ff0a52e7eb41440b661266a9c88f75ebcd"
+		},
+		"tokenizer.json": {
+			"bytes": 711649,
+			"sha256": "91f1def9b9391fdabe028cd3f3fcc4efd34e5d1f08c3bf2de513ebb5911a1854"
+		},
+		"tokenizer_config.json": {
+			"bytes": 1447,
+			"sha256": "8de9ab7560d7fb63338c00736faac7bb9d85d49da44c774c607e7766b59614ea"
+		},
+		"LICENSE": {
+			"bytes": 1186,
+			"sha256": "7a9d86a2e80f5acae8d5bff7ef3393b5051b705de45d2e70530f5f801b3a1440"
+		},
+		"onnx/model.onnx": {
+			"bytes": 138619279,
+			"sha256": "4eae31d09b1843103a1ebd5e2b2e24b5a5cad441a33906b35b12b1e2ed91d1db"
+		}
+	},
+	"static": {
+		"name": "potion-code-16m-v2",
+		"source": "https://huggingface.co/minishlab/potion-code-16M-v2",
+		"revision": "e9d2a44ca6a05ac6685f3b23709ea57eb7352d5b",
+		"original": "https://huggingface.co/minishlab/potion-code-16M-v2",
+		"license": "MIT (stated in the model card's metadata; the repository has no LICENSE file)",
+		"provenance": "Made by MinishLab (the authors of Model2Vec): distilled from nomic-ai/CodeRankEmbed with Model2Vec and Tokenlearn, then fine-tuned on 1.2 million CornStack pairs. A static table of 63,457 tokens x 256 numbers (16-bit); no code runs from it.",
+		"runtime": {
+			"dims": 256,
+			"requiredFiles": [
+				"model.safetensors",
+				"tokenizer.json",
+				"config.json"
+			]
+		},
+		"files": {
+			"config.json": {
+				"bytes": 59,
+				"sha256": "148e5691a6fcc553437156859701fba017a1ba5d340b170f17e0f3668fb861a7"
+			},
+			"tokenizer.json": {
+				"bytes": 1024340,
+				"sha256": "107bbdcbad4bff1d299b7a4c3a2fb17c52890688b7dd0e4c9deab79d3c4f3d45"
+			},
+			"model.safetensors": {
+				"bytes": 32490072,
+				"sha256": "75cf7a6c2171b230ad19b1e7d8e0b1aee86da5a02af8e7cacedd9921d227623c"
+			}
+		}
 	}
 }

@@ -9,7 +9,7 @@ import { createDecorator } from '../../../../../platform/instantiation/common/in
 // What it is and what it leaves out: docs/integrations/codebase-index.md.
 
 export type IndexStatus = 'idle' | 'indexing' | 'ready' | 'error'
-export type IndexState = { status: IndexStatus; files: number; chunks: number; rootHash: string; updatedAt: number; truncated: boolean; message?: string; progress?: { done: number; total: number }; /** search by meaning: pieces with a vector, pieces waiting for one, and whether a model is running (undefined until it has been tried) */ meaning?: { ready: number; waiting: number; on?: boolean } }
+export type IndexState = { status: IndexStatus; files: number; chunks: number; rootHash: string; updatedAt: number; truncated: boolean; message?: string; progress?: { done: number; total: number }; /** search by meaning: pieces with a vector, pieces waiting for one, and whether a model is running (undefined until it has been tried) */ meaning?: { ready: number; waiting: number; on?: boolean; quick?: number } }
 export type SearchOutcome = { text: string; results: { file: string; start: number; end: number; score: number }[]; files: number; stale: boolean }
 
 export interface ICodebaseIndexMainService {

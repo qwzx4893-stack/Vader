@@ -101,27 +101,38 @@ needed.add('sharp (stand-in)');
 // the licences of what is shipped travel with it
 for (const name of needed) for (const f of fs.existsSync(path.join(nm, name)) ? fs.readdirSync(path.join(nm, name)) : []) if (/^licen[cs]e/i.test(f) || /^notice/i.test(f)) { fs.mkdirSync(path.join(outNm, name), { recursive: true }); fs.copyFileSync(path.join(nm, name, f), path.join(outNm, name, f)); }
 
-// ---- 3. the model, checked byte for byte against the lock
-const modelDir = path.join(out, 'models', lock.name);
-if (!args.includes('--no-model')) {
-	for (const [file, want] of Object.entries(lock.files)) {
+// ---- 3. the models, checked byte for byte against the lock: the code model (lock) and the quick tier (lock.static)
+async function fetchModel(spec) {
+	const dir = path.join(out, 'models', spec.name);
+	for (const [file, want] of Object.entries(spec.files)) {
 		let buf;
-		const cached = modelCache && path.join(modelCache, lock.name, file);
+		const cached = modelCache && path.join(modelCache, spec.name, file);
 		if (cached && fs.existsSync(cached)) buf = fs.readFileSync(cached);
 		if (!buf || buf.length !== want.bytes || sha256(buf) !== want.sha256) {
-			const url = `${lock.source}/resolve/${lock.revision}/${file}`;
+			const url = `${spec.source}/resolve/${spec.revision}/${file}`;
 			console.log(`fetching ${url}`);
 			const res = await fetch(url);
 			if (!res.ok) { console.error(`${url}: ${res.status}`); process.exit(1); }
 			buf = Buffer.from(await res.arrayBuffer());
 		}
 		if (buf.length !== want.bytes || sha256(buf) !== want.sha256) { console.error(`${file} does not match the lock (got ${buf.length} bytes, sha256 ${sha256(buf)})`); process.exit(1); }
-		fs.mkdirSync(path.dirname(path.join(modelDir, file)), { recursive: true });
-		fs.writeFileSync(path.join(modelDir, file), buf);
+		fs.mkdirSync(path.dirname(path.join(dir, file)), { recursive: true });
+		fs.writeFileSync(path.join(dir, file), buf);
 	}
-	fs.writeFileSync(path.join(modelDir, 'LICENSE-NOTE.txt'), `${lock.name}\nSource: ${lock.source} (revision ${lock.revision})\nOriginal: ${lock.original}\nLicense: ${lock.license}\nProvenance: ${lock.provenance}\n`);
+	fs.writeFileSync(path.join(dir, 'LICENSE-NOTE.txt'), `${spec.name}
+Source: ${spec.source} (revision ${spec.revision})
+Original: ${spec.original}
+License: ${spec.license}
+Provenance: ${spec.provenance}
+`);
+	return dir;
+}
+const modelDir = path.join(out, 'models', lock.name);
+if (!args.includes('--no-model')) {
+	await fetchModel(lock);
+	await fetchModel(lock.static);
 }
 
-fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ model: { name: lock.name, revision: lock.revision, ...lock.runtime }, platform, arch, packages: [...needed].sort() }, null, 1));
+fs.writeFileSync(path.join(out, 'manifest.json'), JSON.stringify({ model: { name: lock.name, revision: lock.revision, ...lock.runtime }, static: { name: lock.static.name, revision: lock.static.revision, ...lock.static.runtime }, platform, arch, packages: [...needed].sort() }, null, 1));
 fs.rmSync(work, { recursive: true, force: true });
-console.log(`embedding folder ready: ${out}\n  packages: ${[...needed].sort().join(', ')}\n  runtime ${mb(size(outNm))} MB${args.includes('--no-model') ? '' : `, model ${mb(size(modelDir))} MB`}`);
+console.log(`embedding folder ready: ${out}\n  packages: ${[...needed].sort().join(', ')}\n  runtime ${mb(size(outNm))} MB${args.includes('--no-model') ? '' : `, code model ${mb(size(modelDir))} MB, quick tier ${mb(size(path.join(out, 'models', lock.static.name)))} MB`}`);

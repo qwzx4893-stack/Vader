@@ -10,6 +10,7 @@ import { Disposable } from '../../../../base/common/lifecycle.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
 import { CodebaseIndexer } from './codebaseIndexer.js';
 import { createLocalEmbedder, embeddingDirOf } from './localEmbedder.js';
+import { createStaticEmbedder } from './staticEmbedder.js';
 import { ICodebaseIndexMainService, IndexState, SearchOutcome } from '../common/codebaseIndex/codebaseIndexTypes.js';
 
 // One index per open project, in the app's data folder. The index of a project is made when the project is opened (or the first time the agent searches it), kept current while it
@@ -39,7 +40,7 @@ export class CodebaseIndexMainService extends Disposable implements ICodebaseInd
 		ix = new CodebaseIndexer(key, path.join(this._environment.userDataPath, 'vader-index'),
 			// search by meaning: the small model that ships with the app, in a worker thread; none if it is not there (localEmbedder.ts), and not run while on battery power
 			() => createLocalEmbedder({ embeddingDir: embeddingDirOf((process as unknown as { resourcesPath?: string }).resourcesPath ?? ''), workerPath: FileAccess.asFileUri('vs/workbench/contrib/vader/electron-main/embedWorker.js').fsPath, cores: os.cpus().length }),
-			{ hold: () => onBattery() });
+			{ hold: () => onBattery(), quickFactory: () => createStaticEmbedder(embeddingDirOf((process as unknown as { resourcesPath?: string }).resourcesPath ?? '')) });
 		ix.onDidChange = state => this._onDidChangeState.fire({ root: key, state });
 		this._indexers.set(key, ix);
 		while (this._indexers.size > MAX_OPEN_INDEXES) {

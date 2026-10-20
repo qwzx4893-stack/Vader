@@ -18,6 +18,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-semantic-'));
 await esbuild.build({ entryPoints: [path.join(here, '../common/codebaseIndex/semantic.ts')], bundle: true, platform: 'node', format: 'esm', outfile: path.join(tmp, 'm.mjs'), logLevel: 'silent' });
 const S = await import(pathToFileURL(path.join(tmp, 'm.mjs')).href);
+await esbuild.build({ entryPoints: [path.join(here, '../common/codebaseIndex/staticModel.ts')], bundle: true, platform: 'node', format: 'esm', outfile: path.join(tmp, 'sm.mjs'), logLevel: 'silent' });
+const SM = await import(pathToFileURL(path.join(tmp, 'sm.mjs')).href);
 
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
@@ -158,6 +160,41 @@ const todo = (n, base = 0) => Array.from({ length: n }, (_, i) => ({ hash: 'c' +
 	check('fused with a words ranking that missed the file, the meaning ranking still puts it in the top two', fused.slice(0, 2).includes(dense[0]), fused.join(','));
 	const fused2 = S.fuse([{ ids: [dense[0], 'x.ts'] }, { ids: [dense[0]] }]).map(x => x.id);
 	check('and a file both rankings like is first', fused2[0] === dense[0]);
+}
+
+// ---- the quick tier: a static table read from a .safetensors file, tokens looked up and averaged
+{
+	const f16 = (x) => { // a float as 16 bits (the values used here are small and exact)
+		const dv = new DataView(new ArrayBuffer(4)); dv.setFloat32(0, x); const b = dv.getUint32(0); const sign = (b >>> 16) & 0x8000; const e = ((b >>> 23) & 0xff) - 127 + 15; const m = (b >>> 13) & 0x3ff;
+		return x === 0 ? sign : sign | (e << 10) | m;
+	};
+	const rows = [[1, 0, 0, 0], [0, 1, 0, 0], [0.5, 0.5, 0, 0], [0, 0, 1, 0], [0, 0, 0, 0]]; // token 4 is "unknown"
+	const flat = rows.flat().map(f16);
+	const header = Buffer.from(JSON.stringify({ embeddings: { dtype: 'F16', shape: [5, 4], data_offsets: [0, flat.length * 2] } }));
+	const file = Buffer.alloc(8 + header.length + flat.length * 2);
+	file.writeBigUInt64LE(BigInt(header.length), 0); header.copy(file, 8); flat.forEach((h, i) => file.writeUInt16LE(h, 8 + header.length + i * 2));
+	const table = SM.parseSafetensors(new Uint8Array(file));
+	check('a safetensors file with one 16-bit table is read: rows, numbers per row and the values', table && table.rows === 5 && table.dims === 4 && SM.halfToFloat()[table.data[8]] === 0.5 && SM.halfToFloat()[table.data[0]] === 1, JSON.stringify(table && { r: table.rows, d: table.dims }));
+	check('a damaged file, a table of another type or shape, or a wrong size is refused, not misread', SM.parseSafetensors(new Uint8Array(5)) === undefined && SM.parseSafetensors(new Uint8Array(file.subarray(0, file.length - 4))) === undefined
+		&& (() => { const h2 = Buffer.from(JSON.stringify({ embeddings: { dtype: 'F32', shape: [5, 4], data_offsets: [0, 80] } })); const f2 = Buffer.alloc(8 + h2.length + 80); f2.writeBigUInt64LE(BigInt(h2.length), 0); h2.copy(f2, 8); return SM.parseSafetensors(new Uint8Array(f2)); })() === undefined);
+	check('16-bit floats are read right: 1, -2, 0.5, and a small value', Math.abs(SM.halfToFloat()[0x3c00] - 1) < 1e-9 && SM.halfToFloat()[0xc000] === -2 && SM.halfToFloat()[0x3800] === 0.5 && Math.abs(SM.halfToFloat()[0x0400] - Math.pow(2, -14)) < 1e-12);
+	const words = { a: 0, b: 1, ab: 2, c: 3, zzz: 4 };
+	const emb = new SM.StaticEmbedder(table, text => text.split(' ').filter(Boolean).map(w => words[w] ?? -1), { unkId: 4 });
+	const v = emb.embed('a b');
+	check('the vector of a text is the average of its tokens, scaled to length one', Math.abs(v[0] - Math.SQRT1_2) < 1e-3 && Math.abs(v[1] - Math.SQRT1_2) < 1e-3 && Math.abs(Math.hypot(...v) - 1) < 1e-6, [...v].join(','));
+	check('unknown tokens, words not in the table and an empty text do not count, and do not make NaN', Math.abs(emb.embed('a zzz nonsense')[0] - 1) < 1e-3 && emb.embed('').every(x => x === 0) && emb.embed('zzz').every(x => x === 0));
+	check('a long text is cut to the token limit', (() => { const e2 = new SM.StaticEmbedder(table, () => [0, 0, 0, 1, 1, 1, 1], { maxTokens: 3 }); const x = e2.embed('x'); return Math.abs(x[0] - 1) < 1e-3 && Math.abs(x[1]) < 1e-3; })());
+	check('two texts about the same thing are nearer than two about different things', (() => { const dot = (p, q) => p.reduce((s, x, i) => s + x * q[i], 0); return dot(emb.embed('a ab'), emb.embed('b ab')) > dot(emb.embed('a'), emb.embed('c')); })());
+}
+{
+	// pieces a search has just found are wanted first
+	const st = new S.VectorStore(); const q = new S.EmbedQueue(st, { batch: 1, duty: 1 });
+	q.add([{ hash: 'recent', text: 'recent', priority: 100 }, { hash: 'old', text: 'old', priority: 1 }, { hash: 'found', text: 'found', priority: 0 }]);
+	q.bump(['found', 'not-queued']);
+	q.add([{ hash: 'second', text: 'second', priority: 0 }, { hash: 'first', text: 'first', priority: 0 }]); q.bump(['first', 'second']); // best first: the order given is kept
+	const seen = []; const w = world(1);
+	await q.runSlice({ ...w.io, embed: async (t) => { seen.push(...t); return t.map(embedText); } }, 1000);
+	check('what a search found goes ahead of the pieces of recent files, and an unknown piece is ignored', seen.join(',') === 'found,first,second,recent,old', seen.join(','));
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

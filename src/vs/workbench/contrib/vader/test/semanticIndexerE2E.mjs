@@ -166,6 +166,63 @@ check('the vectors were saved with the index', fs.readdirSync(store).some(f => f
 	await ix2.dispose();
 }
 
+// ---- the quick tier: every piece has a vector at once, it answers alone when there is no code model, and it is saved
+const quickModel = () => { const q = { docs: 0, queries: 0, embed(t) { if (t.length > 40 && t.includes('\n')) q.docs++; else q.queries++; const v = new Float32Array(16); for (const w of t.toLowerCase().split(/[^a-z]+/)) { if (w in CONCEPT) v[CONCEPT[w]] += 1; else if (w) v[8 + (w.length % 8)] += 0.05; } const n = Math.hypot(...v) || 1; return v.map(x => x / n); }, dims: 16 }; return q; };
+{
+	const q = quickModel();
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-quick'), async () => undefined, { ...opts, quickFactory: async () => q });
+	await ix.sync();
+	check('every piece of the project has a quick vector without waiting for any code model', await until(() => ix.state.meaning && ix.state.meaning.quick >= 5, 6000), JSON.stringify(ix.state.meaning));
+	const r = await ix.search('how do we stop too many hits');
+	check('with no code model the quick tier alone finds the code by what it means', r.results[0]?.file === 'src/guard.ts' && ix.state.meaning.on === false, JSON.stringify(r.results.map(x => x.file)));
+	const w = await ix.search('bucket tokens');
+	check('and a search by exact words still finds it', w.results[0]?.file === 'src/guard.ts');
+	await ix.dispose();
+	const q2 = quickModel();
+	const again = new CodebaseIndexer(project, path.join(tmp, 'store-quick'), async () => undefined, { ...opts, quickFactory: async () => q2 });
+	await again.sync(); await wait(300);
+	const r2 = await again.search('how do we stop too many hits');
+	check('the next start reads the quick vectors from disk and does not make them again', q2.docs === 0 && r2.results[0]?.file === 'src/guard.ts', `docs embedded again: ${q2.docs}`);
+	await again.dispose();
+}
+{
+	const q = quickModel(); const m = model();
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-both'), async () => m, { ...opts, quickFactory: async () => q });
+	await ix.sync();
+	await until(() => m.docTexts >= 5 && ix.state.meaning && ix.state.meaning.waiting === 0 && ix.state.meaning.quick >= 5, 8000);
+	const r = await ix.search('how do we stop too many hits');
+	check('with both tiers a question in other words finds the code, and the state counts both', r.results[0]?.file === 'src/guard.ts' && ix.state.meaning.on === true && ix.state.meaning.quick >= 5 && ix.state.meaning.ready >= 5, JSON.stringify(ix.state.meaning));
+	const r2 = await ix.search('retry again with backoff');
+	check('another question, another file', r2.results[0]?.file === 'src/net.ts', JSON.stringify(r2.results.map(x => x.file)));
+	await ix.dispose();
+}
+{
+	const none = new CodebaseIndexer(project, path.join(tmp, 'store-qnone'), async () => undefined, { ...opts, quickFactory: async () => undefined });
+	await none.sync();
+	check('a quick tier that is not installed is the same as none', (await none.search('bucket tokens')).results[0]?.file === 'src/guard.ts' && none.state.meaning?.quick === undefined);
+	await none.dispose();
+	const bad = new CodebaseIndexer(project, path.join(tmp, 'store-qbad'), async () => undefined, { ...opts, quickFactory: async () => { throw new Error('table damaged'); } });
+	await bad.sync();
+	check('a quick tier that fails to load leaves the words as they were', (await bad.search('bucket tokens')).results[0]?.file === 'src/guard.ts');
+	await bad.dispose();
+}
+{
+	// a search puts the pieces it found first in the code model's queue: with many pieces and a slow model, the piece a question is about is embedded before the rest
+	const big = path.join(tmp, 'big2');
+	for (let i = 0; i < 30; i++) write(big, `src/f${i}.ts`, `export function other${i}() {\n  return render(${i})\n}\n`);
+	write(big, 'src/target.ts', 'export function throttle(requests) {\n  return bucket.take(requests.length)\n}\n');
+	{ const old = new Date(Date.now() - 3 * 365 * 86_400_000); fs.utimesSync(path.join(big, 'src/target.ts'), old, old); } // a file untouched for years: by its age alone it would be the last to be embedded
+	const seen = []; const q = quickModel(); const m0 = model();
+	const slowM = { ...m0, async embedDocs(t) { await wait(80); seen.push(...t.map(x => x.split('\n')[0])); return t.map(embedText); }, embedQuery: m0.embedQuery, dispose() { } };
+	const ix = new CodebaseIndexer(big, path.join(tmp, 'store-bump'), async () => slowM, { ...opts, quickFactory: async () => q, onDemandMax: 0, sliceMs: 40 });
+	await ix.sync();
+	await ix.search('how do we stop too many hits'); // finds src/target.ts by meaning in the quick tier
+	await until(() => seen.some(x => x.includes('target.ts')), 8000);
+	const at = seen.findIndex(x => x.includes('target.ts'));
+	check('the piece a question is about is embedded by the code model before most of the project', at >= 0 && at < 12, `position ${at} of ${seen.length} embedded so far`);
+	await ix.dispose();
+}
+
 // ---- on battery nothing is embedded
 {
 	const m = model(); let held = true;

@@ -40,60 +40,101 @@ The ten-minute rule approximates "once per task", because the tool does not know
 
 ## Search by meaning
 
-The word index finds code by its words. An embedding model finds it by what it means ("where do we stop too many requests" finds the rate limiter even when no word
-matches). `common/codebaseIndex/semantic.ts` holds the rules, `electron-main/semanticLayer.ts` the part that touches the disk, `localEmbedder.ts` and `embedWorker.ts` the model.
+The word index finds code by its words. Embedding models find it by what it means ("where do we stop too many requests" finds the rate limiter even when no word matches). There are
+two tiers, because the model that is good at code is slow and the model that is fast is only a little better than words:
 
-**Which model, and why (measured, not assumed).** The first choice was Snowflake arctic-embed-xs because it is small. It is an English text model, and on code it was no better than
-the word index. The benchmark below picked a code model instead.
+- **Quick tier**: `potion-code-16M-v2` (MIT, 31 MB), a static model distilled from the code model: tokens are looked up in a table and averaged, no neural network runs. About 0.4 ms a piece, so
+  every piece of a project has a vector within a second or two of being indexed, and a question costs well under a millisecond. Joined with the words it makes the "cheap ranking".
+- **Code model**: CodeRankEmbed (MIT, 132 MB int8), a transformer trained on code, in a worker thread. About a quarter to half a second a piece, so it works in the background, and the pieces
+  that searches find among the best cheap candidates are embedded first. Its vectors lead the final ranking where there are any.
 
-Benchmark: 189 queries made from real JSDoc descriptions (93 from Vader's code, 96 from VS Code's own `base`, `platform` and `editor/common/core`), each looking for the chunk that holds
-the declaration, with every comment removed from the code; 1,146 chunks. "Pure meaning" queries have every word that also appears in the target code removed. The corpus is small
-(about 570 chunks each), real projects are harder. The numbers are single-shot retrieval, not agent success.
+Files: `common/codebaseIndex/semantic.ts` (rules), `staticModel.ts` (the table), `electron-main/semanticLayer.ts` (the two tiers on disk), `staticEmbedder.ts` (loads the quick tier),
+`localEmbedder.ts` and `embedWorker.ts` (the code model). Either model may be missing: with neither, search is the word search as before.
 
-| model (licence, int8 size) | pieces/s, 2 threads | peak RAM | as written: top-1 / top-5 | pure meaning: top-1 / top-5 | names only: top-1 / top-5 |
+### How the models were chosen (measured, not assumed)
+
+The first choice was Snowflake arctic-embed-xs because it is small. It is an English text model, and on code it was no better than the word index. A benchmark picked the models instead.
+
+Benchmark: 189 queries made from real JSDoc descriptions (93 from Vader's code, 96 from VS Code's own `base`, `platform` and `editor/common/core`), each looking for the chunk that holds the declaration,
+with every comment removed from the code; 1,146 chunks. "Pure meaning" queries have every word that also appears in the target code removed. "Names" queries are the declaration's own name split into words.
+The corpus is small (about 570 chunks each); real projects are harder. The numbers are single-shot retrieval, not agent success.
+
+| model (licence, size) | pieces/s | peak RAM | as written: top-1 / top-5 | pure meaning: top-1 / top-5 | names: top-1 / top-5 |
 |---|---|---|---|---|---|
 | the word index alone | - | - | 18% / 43% | 6% / 16% | 7% / 39% |
-| arctic-embed-xs (Apache, 23 MB) | about 13 | 160 MB | 16% / 43% | 8% / 25% | n/a |
+| arctic-embed-xs (Apache, 23 MB) | about 13 | 160 MB | 16% / 43% | 8% / 25% | - |
 | all-MiniLM-L6-v2 (Apache, 22 MB) | 22 | 231 MB | 21% / 47% | 8% / 30% | 21% / 53% |
+| **potion-code-16M-v2, static (MIT, 31 MB)** | **about 2,600** | **about 32 MB (the table)** | 16% / 45% | 6% / 25% | 14% / 44% |
+| potion + words (equal-weight fusion) | - | - | 21% / 47% | 6% / 23% | 12% / 42% |
 | jina-embeddings-v2-base-code (Apache, 154 MB) | 4.3 | 407 MB | 29% / 58% | 20% / 40% | 26% / 69% |
-| **CodeRankEmbed (MIT, 132 MB)** | 3.5 (4.2 at 600 characters) | 326 MB | **36% / 67%** | **24% / 51%** | **31% / 79%** |
+| **CodeRankEmbed (MIT, 132 MB)** | 3.5 to 4.2 | 326 MB | **36% / 67%** | **24% / 51%** | **31% / 79%** |
 
-(arctic numbers are from the first run, with five models sharing the CPU, so its speed is a rough figure; the others were measured one at a time.)
-CodeRankEmbed at 600 characters per piece loses about 3 points of top-1 and runs 15% faster, so 600 is what ships. Models under non-commercial licences (jina-code-embeddings, SFR-Embedding-Code) were not considered.
+(arctic numbers are from the first run, with five models sharing the CPU, so its speed is rough; the others were measured one at a time. Models under non-commercial licences, jina-code-embeddings and
+SFR-Embedding-Code, were not considered.) The static model's own publishers report the same picture on CoIR: 39 for it, 42 for BM25, 59 for CodeRankEmbed. Their Semble project reports quality on par
+with CodeRankEmbed for a static model plus BM25 plus code-aware ranking signals on a benchmark of its own (about 1,250 queries over 63 repositories); on the fine-grained piece-level benchmark above the
+gap was large, so that claim was not reproduced here (their benchmark and ranking signals are not the same).
 
-**Joining the two rankings.** Equal-weight reciprocal rank fusion, the first design, made a strong code model clearly worse (CodeRankEmbed, pure meaning, top-1: 24% alone, 10% fused). What
-works is meaning first plus a small word bonus (`blend()`): 24% alone, 21% with the bonus, and it keeps the exact-name matches that only words find. A piece with no vector yet is ranked
-near the tenth meaning match plus a larger word bonus; a word match that has a vector but is not among the nearest goes after them. Measured with 10% to 100% of the pieces embedded
-(all three kinds of query): never worse than the words alone at any coverage, and at 100% the same as meaning alone (top-1 28%, top-5 65%, against 10% and 33% for words alone). The first
-version of the blend, which put those embedded-but-not-near matches near the top, fell to 24% / 50% at full coverage.
+Training or tuning a small model ourselves was considered and not done: the static model is exactly that (distilled from the code model, tuned on 1.2 million pairs by specialists) and reaches about a
+third of the code model's gain here; conventional contrastive fine-tuning is reported to often hurt strong models unless a stronger teacher is distilled; per-project training is not possible on a
+person's processor.
 
-**What ships and how:** `build/embedding/prepare.mjs` makes the folder `resources/embedding` (runtime 33.7 MB + model 132.9 MB = about 167 MB added to the install and to each update):
-transformers.js 4.3.1 and onnxruntime-node for one platform (installed on its own from `build/embedding/package-lock.json`, scripts off, so the editor's own install is unchanged), a
-stand-in for `sharp` (image handling, never used here), and the model files checked byte for byte against `build/embedding/model.lock.json`. Which model, its pooling, and the question
-prefix are written to `manifest.json`, so the model can be changed without touching the code. The Windows workflow runs the script between packaging and the installer. The app looks in
-`<resources>/embedding` (or `VADER_EMBEDDING_DIR`); without it Settings says "Search by meaning is not available in this install" and search stays on words.
+### Joining the rankings
 
-Provenance: the int8 ONNX file is a third-party conversion (`mrsladoje/CodeRankEmbed-onnx-int8`, revision e74f446d...) of `nomic-ai/CodeRankEmbed` (MIT), documented as dynamic int8
-with `reduce_range`. Vader did not make it. An ONNX file is a graph of operations, not a program; that it behaves like the original is shown by the benchmark above (the original authors report
-CoIR 60.1 for the full-precision model). Making the conversion in the build from the original weights would remove the third party; it needs PyTorch and was not done.
+- Equal-weight reciprocal rank fusion of the words and a strong code model made it clearly worse (pure meaning, top-1: 24% alone, 10% fused). What works is meaning first plus a small word bonus
+  (`blend()`): 24% alone, 21% with the bonus, and it keeps the exact-name matches that only words find.
+- The words and the quick tier are fused as equals (that is the cheap ranking: 21% / 47% as written), and the cheap ranking takes the place of the word ranking in the blend. A piece with no code-model
+  vector is ranked near the tenth meaning match plus a larger bonus; a piece that has a vector but is not among the nearest goes after them.
+- Measured with 0% to 100% of the pieces embedded by the code model (the three kinds of query pooled), top-1 / top-5:
 
-**How it stays light** (the rules are tested without a model, `test/semanticE2E.mjs`):
-- Only source code is embedded (not data, text, tests, generated files), at most 12,000 pieces, the files changed most lately first, and a piece once per content (the vector is kept under the hash of its text).
-- The text sent to the model is cut to 600 characters, so no piece costs more than another.
-- Work is done in 3-second slices with a duty cycle of 40% in a worker thread with one or two threads; nothing is embedded while the computer is on battery power.
-- The worker is stopped after 90 seconds without a question and started again by the next one, so an editor that is not being searched holds none of the model's memory.
-- At search time only the best 4 word matches that have no vector yet (1.5 s at most) are embedded on the spot, and the background work embeds 4 pieces at a time so a question never waits for more than one small batch.
-- Vectors are bytes (768 per piece, about 11 MB for 12,000), saved next to the index.
-- A model that is missing, fails or is slow (2.5 s) leaves the word results exactly as they were; a failing model is tried again later, five times at most.
+| pieces with a code-model vector | words alone | words + code model | **cheap ranking + code model (shipped)** |
+|---|---|---|---|
+| 0% | 10% / 33% | 10% / 33% | **13% / 37%** |
+| 25% | 10% / 33% | 13% / 35% | **14% / 40%** |
+| 50% | 10% / 33% | 17% / 44% | **20% / 49%** |
+| 100% | 10% / 33% | 28% / 65% | **31% / 67%** |
 
-**Cost, measured on a Core i7-12700H (20 threads)**, real worker, real model, over this repository's `common/` folder (141 files, 1,225 pieces): starting the model about 1 to 2 s; a question about
-40 ms of model time; a piece about 240 to 350 ms of model time. At a 40% duty cycle the pieces come at about 1.2 a second, so this folder takes about 17 minutes of background time, a project of
-3,000 pieces about 40 minutes, and the cap of 12,000 about 2.8 hours. Memory of the process while embedding: about 300 to 350 MB, none when the worker has stopped. Until everything is ready,
-search is answered by the pieces that are ready plus the words (and 4 embedded on the spot); **while the background work is running, a search takes about 1 to 3 seconds** (it waits for the batch in flight
-and embeds those 4), and about 50 ms once everything is embedded. For an agent calling the tool that is acceptable; it would be slow for typing-time search.
+- Candidates then code-model re-ranking was also measured: re-ranking the cheap top 30 with the code model gives the same top-1 as the code model on everything (33%, 20%, 33% against 33%, 19%, 34%), but the
+  top 30 holds the right piece only in 84% of ordinary queries, 59% of pure-meaning ones and 75% of name ones, so top-5 falls on those (43% against 47% and 69% against 80%). The shipped design keeps
+  the code model embedding the whole project in the background, and uses this finding only to decide the order: candidates of searches first.
 
-**Honest limits:**
-- Never run inside a packaged, installed Vader: the workflow step, the asar layout and the worker start from the installed app are untested until a Windows build is made.
-- The benchmark is single-shot retrieval over about 570 chunks on two TypeScript codebases. It does not show how much the agent finishes more tasks; the agent can also search again, grep and read files. Cursor reports 12.5% higher answer accuracy from semantic search over grep alone (its own model, its own evaluation).
-- Only Windows x64 has been prepared on this machine.
-- The tests of the rules, the indexer with a stand-in model, and the worker protocol with a stand-in worker do not use the real model; the real model was exercised by hand.
+### What ships and how
+
+`build/embedding/prepare.mjs` makes the folder `resources/embedding`: runtime 33.7 MB + code model 132.9 MB + quick tier 32.0 MB = about 199 MB added to the install and to each update.
+transformers.js 4.3.1 and onnxruntime-node for one platform (installed on its own from `build/embedding/package-lock.json`, scripts off, so the editor's own install is unchanged), a stand-in for `sharp`
+(image handling, never used here), and the model files checked byte for byte against `build/embedding/model.lock.json`. Which models, their pooling and the question prefix are in `manifest.json`, so a
+model can be changed without touching the code. The Windows workflow runs the script between packaging and the installer. The app looks in `<resources>/embedding` (or `VADER_EMBEDDING_DIR`).
+
+Provenance: the code model's int8 ONNX file is a third-party conversion (`mrsladoje/CodeRankEmbed-onnx-int8`, revision e74f446d...) of `nomic-ai/CodeRankEmbed` (MIT), documented as dynamic int8 with
+`reduce_range`; the quick tier (`minishlab/potion-code-16M-v2`, revision e9d2a44c..., licence MIT per its model card, no LICENSE file in the repository) is by the authors of Model2Vec. Vader made neither.
+An ONNX file is a graph of operations and a static model is a table of numbers; neither is a program. That they behave as published is shown by the benchmark above (the original authors report CoIR 60.1 for
+the full-precision code model). Making the conversion in the build from the original weights would remove the third party; it needs PyTorch and was not done. My JavaScript reading of the static model was
+checked against the official Python library: cosine 1.0000 on four texts.
+
+### How it stays light (the rules are tested without a model, `test/semanticE2E.mjs`)
+
+- Only source code is embedded (not data, text, tests, generated files). The code model embeds at most 12,000 pieces, the files changed most lately first, and a piece once per content (the vector is kept
+  under the hash of its text); the quick tier has no practical limit (a piece is 256 bytes).
+- The code model sees 600 characters of a piece, so no piece costs more than another. It works in 3-second slices of 4 pieces at a time with a duty cycle of 40%, in a worker thread with one or two threads;
+  nothing is embedded while the computer is on battery power. The worker is stopped after 90 seconds without a question and started again by the next one.
+- A search puts its best 30 cheap candidates first in the code model's queue, and does not wait for the code model for more than 0.7 s: past that the cheap ranking answers.
+- A model that is missing, fails or is slow leaves the cheap ranking (or the word results) as the answer; a failing code model is tried again later, five times at most.
+- Vectors are bytes, saved next to the index: 768 per piece for the code model (about 11 MB for 12,000) and 256 for the quick tier.
+
+### Cost, measured on a Core i7-12700H (20 threads), with the real models over this repository's `common/` folder (141 files, about 1,225 pieces)
+
+- Quick tier: 1,146 pieces in 0.44 s; a question in well under a millisecond; the table is about 32 MB in memory.
+- Code model: starting it 1 to 2 s; a piece 240 to 520 ms of model time across the runs (the machine was not otherwise idle in the slower ones), which is 0.7 to 1.2 pieces a second at a 40% duty cycle.
+  This folder therefore takes about 17 to 30 minutes of background time to be fully embedded, a project of 3,000 pieces about 40 to 70 minutes, and the cap of 12,000 several hours. Memory while embedding:
+  about 340 to 560 MB (the higher figure while the model starts), none once the worker has stopped.
+- A search: 1.8 s for the first one after the models start, 33 to 713 ms while the background work runs, 53 to 83 ms when it is idle. Only about 7% to 18% of the pieces had a code-model vector at the end
+  of those runs; the results then come mostly from the cheap ranking, which is the point of having it.
+
+### Honest limits
+
+- Never run inside a packaged, installed Vader: the workflow step, the asar layout and the worker start from the installed app are untested until a Windows build is made. The install grows by about 199 MB.
+- The benchmark is single-shot retrieval over about 570 chunks on two TypeScript codebases. It does not show how much more often the agent finishes tasks; the agent can also search again, grep and read
+  files. Cursor reports 12.5% higher answer accuracy from semantic search over grep alone (its own model, its own evaluation).
+- Looking at six real questions over this repository by eye, the results with both tiers were about as good as the words' and found a relevant file (`awaitOutput.ts`) that the words missed, and lost
+  another relevant one (`gitWorktreeTypes.ts`); that is an impression, not a measurement.
+- Only Windows x64 has been prepared on this machine. Using the graphics processor (DirectML) for the code model could make it much faster; it was not tried.
+- The tests of the rules, the indexer with stand-in models, the worker protocol with a stand-in worker and the loader with a stand-in folder do not use the real models; the real models were exercised by hand.

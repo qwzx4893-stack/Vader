@@ -144,6 +144,9 @@ export function blend(dense: readonly Scored[], words: readonly Scored[], o: { l
 	return [...out.entries()].map(([id, score]) => ({ id, score })).sort((a, b) => b.score - a.score).slice(0, o.limit ?? 80)
 }
 
+/** above any priority a file can have (filePriority is at most 110) */
+export const BUMP_PRIORITY = 1_000_000
+
 export type Todo = { hash: string; text: string; priority: number }
 
 export type QueueIO = {
@@ -173,6 +176,10 @@ export class EmbedQueue {
 			this._todo.set(t.hash, { ...t }); n++
 		}
 		return n
+	}
+	/** these pieces are wanted now (a search has just found them among its best, `hashes` best first): they go ahead of everything queued, in the order given */
+	bump(hashes: readonly string[], priority = BUMP_PRIORITY): void {
+		hashes.forEach((h, i) => { const t = this._todo.get(h); const p = priority - i; if (t && t.priority < p) t.priority = p })
 	}
 	forget(live: ReadonlySet<string>): void { for (const h of [...this._todo.keys()]) if (!live.has(h)) this._todo.delete(h) }
 
