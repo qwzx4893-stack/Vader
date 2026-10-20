@@ -111,7 +111,7 @@ export const ErrorDisplay = ({
 			{/* what the provider itself said, never hidden */}
 			<p className={`text-vader-fg-3 text-sm whitespace-pre-wrap break-words ${card ? 'border-t border-vader-border-3 pt-2' : ''}`} data-testid='vader-error-message'>{message}</p>
 
-			{card ? <div className='flex flex-wrap gap-2'>{card.actions.map(a => buttons[a])}</div> : null}
+			{card ? <div className='flex flex-wrap gap-2'>{card.actions.map(a => buttons[a])}</div> : <div className='flex flex-wrap gap-2'><button data-testid='vader-error-settings' className='px-3 py-1 rounded-md border border-vader-border-2 text-vader-fg-1 text-sm' onClick={openSettings}>Open settings</button></div>}
 
 			{isExpanded && details ? <div className='border-t border-vader-border-3 pt-2 overflow-auto'>
 				<span className='font-semibold text-vader-fg-1'>Full error: </span>

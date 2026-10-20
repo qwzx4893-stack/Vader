@@ -125,7 +125,7 @@ const shot = async (page, name) => { await auditShot(page, name); await page.scr
 	await view('10-error', () => {
 		const c = window.__chat;
 		c.switchToThread('t-chat');
-		c.streamState = { ...c.streamState, 't-chat': { isRunning: undefined, error: { message: 'OpenRouter limits this key for now. The provider answered 429: too many requests too fast.', fullError: null } } };
+		c.streamState = { ...c.streamState, 't-chat': { isRunning: undefined, error: { message: '429 Too Many Requests: slow down', fullError: Object.assign(new Error('429 Too Many Requests: slow down'), { status: 429 }) } } };
 		window.__notify();
 	});
 	// the run states of the conversation (boards S01, S03, S12), on the open task

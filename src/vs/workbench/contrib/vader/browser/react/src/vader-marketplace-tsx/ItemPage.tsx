@@ -117,7 +117,7 @@ const InstallCard = ({ item, busy, error, onAction, onActionAndEnable }: Pick<It
 			: busy ? <span className='flex items-center gap-1.5 text-vader-fg-2'><Loader2 className='w-4 h-4 animate-spin' />Installing</span>
 				: item.installMethod ? <>
 					<button data-testid='vader-item-install' className={`w-full h-9 rounded-md font-medium text-center ${level === 'low' ? 'border border-vader-border-1 text-vader-fg-1' : 'bg-vader-fg-0 text-vader-bg-3 hover:opacity-90'}`} onClick={onAction}>{label}</button>
-					{item.type === 'SKILL' && onActionAndEnable && level !== 'low' ? <button data-testid='vader-item-install-enable' className='w-full h-9 rounded-md border border-vader-border-1 text-vader-fg-1 text-center' title='Install it and switch it on. You can still read it afterwards.' onClick={onActionAndEnable}>Install and switch on</button> : null}
+					{item.type === 'SKILL' && onActionAndEnable && level !== 'low' ? <button data-testid='vader-item-install-enable' className='gb' style={{ width: '100%', height: 36, justifyContent: 'center' }} title='Install it and switch it on. You can still read it afterwards.' onClick={onActionAndEnable}>Install and switch on</button> : null}
 					{hint ? <span className='text-vader-fg-3 text-sm leading-snug'>{hint}</span> : null}
 				</> : <span className='text-vader-fg-3'>{item.metadata.state === 'needs-node' ? 'Needs Node.js first' : item.metadata.state === 'unsupported' ? 'No build for this computer' : 'Nothing to install'}</span>}
 		{level === 'low' && !item.installed && item.installMethod ? <span className='text-red-500 text-sm leading-snug'>This scores {item.trustScore!.score}%. Read why before you install it.</span> : null}
@@ -200,7 +200,7 @@ const FlowBox = ({ title, sub, strong }: { title: string, sub: string, strong?: 
 const FlowArrow = ({ label }: { label: string }) => <div className='flex flex-col items-center justify-center shrink-0 gap-0.5 text-vader-fg-3' style={{ width: 76 }}><span className='text-xs'>{label}</span><span aria-hidden='true'>⟶</span></div>
 
 const Step = ({ n, title, detail }: { n: number, title: string, detail: string }) => <div className='flex items-start gap-3.5 py-3 border-t border-vader-border-3'>
-	<span className='shrink-0 rounded-full border border-vader-border-1 text-vader-fg-2 flex items-center justify-center text-xs' style={{ width: 24, height: 24 }}>{n}</span>
+	<span className='shrink-0 rounded-full text-vader-fg-1 flex items-center justify-center' style={{ width: 22, height: 22, background: 'var(--g3)' }} data-step={n}><svg className='i' viewBox='0 0 24 24' aria-hidden='true' style={{ width: 13, height: 13 }}><path d='m5 12.5 4.5 4.5L19 7.5' /></svg></span>
 	<span className='flex flex-col gap-0.5 min-w-0'><span className='font-medium text-vader-fg-1'>{title}</span><span className='text-vader-fg-3 leading-relaxed'>{detail}</span></span>
 </div>
 

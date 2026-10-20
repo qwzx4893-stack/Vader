@@ -46,7 +46,7 @@ await esbuild.build({
 	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
-fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:862px;overflow:hidden}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');
+fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:900px;overflow:hidden}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');
 
 const chromePath = (() => {
 	if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -68,7 +68,7 @@ const TID = (id) => `[data-testid="${id}"]`;
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
 async function newPage() {
-	const page = await browser.newPage({ viewport: { width: 1440, height: 862 } });
+	const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 	const errors = [];
 	page.on('pageerror', (e) => { errors.push(String(e)); if (process.env.QA_DEBUG) console.log('PAGEERROR', String(e).slice(0, 400)); });
 	page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

@@ -45,7 +45,7 @@ await esbuild.build({
 	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
-fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:862px;overflow:hidden;position:relative}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');
+fs.writeFileSync(path.join(tmp, 'index.html'), '<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>html,body{margin:0;background:#0b0b0c;color:#e6e6e6}#root{width:1440px;height:900px;overflow:hidden;position:relative}</style></head><body><div id="root"></div><script src="page.js"></script></body></html>');
 
 const chromePath = (() => {
 	if (process.env.CHROME_PATH) return process.env.CHROME_PATH;
@@ -68,7 +68,7 @@ const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
 /** `setup` runs in the page before the first run is drawn: what the provider answers, what is found, the open folder, the step remembered */
 async function newPage(setup) {
-	const page = await browser.newPage({ viewport: { width: 1440, height: 862 } });
+	const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
 	const errors = [];
 	page.on('pageerror', (e) => errors.push(String(e)));
 	page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });

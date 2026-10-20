@@ -21,7 +21,6 @@ import { VADER_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
-import { WarningBox } from '../vader-settings-tsx/WarningBox.js';
 import { getModelCapabilities, getIsReasoningEnabledState, modelSupportsVision } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
@@ -3354,7 +3353,6 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 					showDismiss={true}
 				/>
 
-				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
 			</div>
 		}
 
