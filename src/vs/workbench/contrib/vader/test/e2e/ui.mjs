@@ -22,13 +22,27 @@ export async function isOnboarding(page) {
 }
 
 /** First-run flow, exactly as a new user sees it: Models (skipped here) -> Project -> First task (skipped) -> the IDE; then the provider is set up in the Settings page. */
-export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model }) {
+export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model, taskCopies }) {
 	await page.locator(TID('vader-welcome-continue')).click({ timeout: 30_000 });
 	await page.locator(TID('vader-onboarding-continue')).click({ timeout: 15_000 });
 	await page.locator(TID('vader-import-done')).click({ timeout: 15_000 });
 	await sleep(1200); // the welcome overlay fades out
 	await configureOpenAICompatible(page, { baseURL, apiKey, model });
+	// Agent mode works in a copy of the project on its own branch and the folder changes only when the person merges; the scenarios look at the files
+	// in the folder, so they ask for the agent to edit it directly (the copy has its own scenario)
+	if (taskCopies !== true) { await setTaskCopies(page, false); }
 	await page.waitForSelector(CHAT_INPUT, { timeout: 30_000 });
+}
+
+/** Settings > Permissions > "Work in a copy of the project". */
+export async function setTaskCopies(page, on) {
+	await runCommand(page, 'Vader: Open Settings');
+	await page.locator(TID('vader-settings-nav-permissions')).click({ timeout: 20_000 });
+	const sw = page.locator(TID('vader-perm-taskcopies'));
+	await sw.waitFor({ state: 'visible', timeout: 10_000 });
+	if ((await sw.getAttribute('aria-checked')) !== String(on)) { await sw.click(); await sleep(300); }
+	await page.locator(TID('vader-settings-close')).click();
+	await sleep(300);
 }
 
 /** In the Settings page: point the OpenAI-Compatible provider at `baseURL` and add one model (this is how a user adds their first provider). */
@@ -98,14 +112,18 @@ export async function reject(page) { await page.locator(TID('vader-tool-reject')
 
 /** Everything in the chat, in on-screen order. */
 export async function transcript(page) {
+	// reads and searches that follow one another are folded into one line ("Explored 2 files"): open each fold, so that its calls are in the list
+	const opened = await page.locator(TID('vader-explored-toggle')).evaluateAll(els => els.filter(e => e.getAttribute('aria-expanded') === 'false').map(e => e.click()).length).catch(() => 0);
+	if (opened) { await sleep(200); }
 	return page.evaluate(() => {
-		const sel = '[data-testid="vader-user-text"],[data-testid="vader-assistant-text"],[data-testid="vader-tool"],[data-testid="vader-error"]';
+		const sel = '[data-testid="vader-user-text"],[data-testid="vader-assistant-text"],[data-testid="vader-tool"],[data-testid="vader-plan"],[data-testid="vader-error"]';
 		return [...document.querySelectorAll(sel)].map(e => ({ kind: e.getAttribute('data-testid').replace('vader-', ''), text: (e.innerText || e.textContent || '').trim() }));
 	});
 }
 
 export const assistantTexts = async (page) => (await transcript(page)).filter(m => m.kind === 'assistant-text').map(m => m.text);
-export const toolHeaders = async (page) => (await transcript(page)).filter(m => m.kind === 'tool').map(m => m.text);
+// the list of tasks the agent keeps is drawn as a card of its own ("Plan 1 of 3"), not as a tool line
+export const toolHeaders = async (page) => (await transcript(page)).filter(m => m.kind === 'tool' || m.kind === 'plan').map(m => m.text);
 export const errorTexts = async (page) => (await transcript(page)).filter(m => m.kind === 'error').map(m => m.text);
 
 export async function waitForText(page, text, { timeout = 30_000, scope = 'body' } = {}) {

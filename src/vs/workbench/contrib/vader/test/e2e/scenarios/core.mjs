@@ -5,6 +5,7 @@
 // Core chat / agent scenarios for a model with NATIVE (OpenAI-style) tool calling - the path a real user takes
 // with GPT/Claude-class models. Each scenario scripts the "model" and asserts on what the real app did.
 
+import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -71,7 +72,7 @@ export const coreScenarios = [
 			await t.send('fix the bug and tell me when the tests pass');
 			t.check('agent returns to idle', await t.idle());
 			const headers = await t.ui.toolHeaders(t.page);
-			t.check('an "Updated the task list" tool call is shown in the chat', headers.some(h => /updated the task list/i.test(h)), JSON.stringify(headers));
+			t.check('the task list is shown in the chat (as the Plan card)', headers.some(h => /updated the task list|^plan\b/i.test(h)), JSON.stringify(headers));
 			const result = t.server.chatRequests()[1]?.ctx.lastToolResult ?? '';
 			t.check('the model gets the list back with the count', result.includes('Task list updated (1 of 3 done)') && result.includes('[~] Fix it'), result.slice(0, 200));
 		},
@@ -316,6 +317,38 @@ export const coreScenarios = [
 			await t.send('second');
 			t.check('agent returns to idle after a dropped connection', await t.idle({ timeout: 90_000 }));
 			t.check('a dropped connection is reported to the user', (await t.ui.errorTexts(t.page)).length > 0);
+		},
+	},
+	{
+		// Agent mode works in a copy of the project on its own branch (boards S06 and R01); every other scenario turns this off, because it looks at the folder
+		name: 'task copy: the agent edits a copy on its own branch and the folder changes only when the person merges',
+		timeout: 120_000,
+		fn: async (t) => {
+			const git = (...args) => execFileSync('git', args, { cwd: t.ws, encoding: 'utf8' }).trim();
+			const before = git('rev-parse', 'HEAD');
+			await t.ui.setTaskCopies(t.page, true);
+			try {
+				t.use(seq([
+					{ text: 'Fixing the bug.', toolCalls: [{ name: 'edit_file', args: { uri: t.abs('src/app.js'), search_replace_blocks: SR('  return a - b; // BUG: should add', '  return a + b;') } }] },
+					{ text: 'The add function is fixed.' },
+				]));
+				await t.send('fix the bug in src/app.js');
+				const asked = await t.waitApproval(30_000);
+				t.check('the edit asks for approval', asked);
+				if (asked) { await t.approve(); }
+				t.check('agent returns to idle', await t.idle({ allowApproval: false, timeout: 60_000 }));
+				t.check('the person\'s folder is not changed by the agent', t.read('src/app.js').includes('a - b') && !t.read('src/app.js').includes('a + b'), t.read('src/app.js'));
+				const merge = t.page.locator('[data-testid="vader-taskcopy-merge"]');
+				t.check('the card offers to merge the task into the project', await merge.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false));
+				await t.waitFor(() => merge.isEnabled(), 15_000);
+				await t.shot('task-copy-before-merge');
+				await merge.click();
+				t.check('after the merge the folder has the fix', await t.waitFor(() => t.read('src/app.js').includes('return a + b;'), 30_000), t.read('src/app.js'));
+			} finally {
+				// the merge left a commit on the project's branch: put the fixture back for the scenarios that follow
+				try { git('reset', '--hard', '-q', before); git('clean', '-fdxq'); } catch { /* the next scenario resets the folder too */ }
+				await t.ui.setTaskCopies(t.page, false).catch(() => { });
+			}
 		},
 	},
 ];
