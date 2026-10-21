@@ -124,9 +124,10 @@ const hasKeyLeak = (r) => JSON.stringify(r.error ?? {}).includes('KEY-123456');
 		const rc = req?.body.tools?.find(t => t.function?.name === 'run_command')?.function.parameters;
 		check('openAI: run_command requires command but not cwd', JSON.stringify(rc?.required) === '["command"]', JSON.stringify(rc?.required));
 		// every turn carries the whole tool list; it is cached by the providers that cache prefixes, but it is still what a small or local model has to read each time.
-		// 26.6 KB for 43 tools when this budget was set (see docs/AGENT_SESSIONS.md): growing past 30 KB needs a deliberate decision, not an accident.
+		// 26.6 KB for 43 tools when this budget was set (see docs/AGENT_SESSIONS.md): growing past the budget needs a deliberate decision, not an accident.
+		// Decision of 2026-10-21: 31.6 KB for 47 tools (await_terminal, search by meaning, repo_map and rules in folders came after), budget raised to 34 KB. Past that, shorten the descriptions first.
 		const toolBytes = JSON.stringify(req?.body.tools ?? []).length;
-		check(`openAI: the tool list sent every turn stays within its size budget (${toolBytes} of 30000 bytes, ${req?.body.tools?.length} tools)`, toolBytes > 0 && toolBytes <= 30_000, toolBytes);
+		check(`openAI: the tool list sent every turn stays within its size budget (${toolBytes} of 34000 bytes, ${req?.body.tools?.length} tools)`, toolBytes > 0 && toolBytes <= 34_000, toolBytes);
 	}
 }
 {
