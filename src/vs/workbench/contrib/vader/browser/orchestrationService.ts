@@ -12,7 +12,8 @@ import { IAgentGatewayService } from '../common/agentGateway/agentGatewayTypes.j
 import { IGitWorktreeMainService } from '../common/worktree/gitWorktreeService.js';
 import { IAgentsService } from '../common/agents/agentsService.js';
 import { IVerificationService } from '../common/verification/verificationTypes.js';
-import { conflictResolutionPrompt } from '../common/orchestration/conflictPrompt.js';
+import { resolveTaskConflict } from '../common/worktree/conflictResolution.js';
+import { deltaSummary, judgeCheck } from '../common/verification/diagnosticsDelta.js';
 
 export * from '../common/orchestration/orchestrationTypes.js';
 
@@ -237,18 +238,37 @@ This is an isolated git worktree - a separate checkout of this same repository, 
 		// check be integrated unreviewed by default. No checks detected for the project is
 		// never treated as a pass or a fail - the merge proceeds exactly as before this gate
 		// existed, since there's nothing here to judge it against.
-		const preMergeEvidence = await this._verificationService.gatherEvidence({ cwd: created.worktreePath });
+		const preMergeEvidence = await this._verificationService.gatherEvidence({ cwd: created.worktreePath, keepOutput: true });
+		// A check that fails in the copy is the task's doing only if it did not fail before: the failing checks are run again on the project as it was, and only a problem that is new
+		// (or a check that fails with output nothing can be read from) refuses the merge (common/verification/diagnosticsDelta.ts).
+		let deltaNote = '';
+		let nothingNew = false;
 		if (preMergeEvidence.checksDetected && preMergeEvidence.checks.some(c => !c.passed)) {
+			const failing = preMergeEvidence.checks.filter(c => !c.passed);
+			const baseEvidence = await this._verificationService.gatherEvidence({ cwd: repoPath, only: failing.map(c => c.name), keepOutput: true });
+			const verdicts = failing.map(c => {
+				const b = baseEvidence.checks.find(x => x.name === c.name);
+				return judgeCheck({ name: c.name, passed: false, exitCode: c.exitCode, output: c.output ?? c.outputTail }, b ? { name: b.name, passed: b.passed, exitCode: b.exitCode, output: b.output ?? b.outputTail } : undefined);
+			});
+			if (verdicts.every(v => !v.regression)) {
+				deltaNote = deltaSummary(verdicts); // nothing new: the merge goes on, and says what was already failing
+				nothingNew = true;
+			} else {
+				t.deltaNote = deltaSummary(verdicts);
+			}
+		}
+		if (preMergeEvidence.checksDetected && !nothingNew && preMergeEvidence.checks.some(c => !c.passed)) {
 			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
 			t.status = 'error';
 			t.mergeOutcome = 'verification_failed';
 			const failed = preMergeEvidence.checks.filter(c => !c.passed).map(c => c.name).join(', ');
-			t.errorMessage = `Pre-merge verification failed in the isolated worktree (${failed}). Not merged - branch "${created.branchName}" and its worktree are left in place for manual review.`;
+			t.errorMessage = `Pre-merge verification failed in the isolated worktree (${failed}). Not merged - branch "${created.branchName}" and its worktree are left in place for manual review.${t.deltaNote ? `\n${t.deltaNote}` : ''}`;
 			return; // never auto-remove a worktree whose verification failed
 		}
 		if (preMergeEvidence.checksDetected) {
 			t.preMergeChecks = preMergeEvidence.checks.map(c => ({ name: c.name, command: c.command, passed: c.passed }));
 		}
+		if (deltaNote) t.conclusion = `${t.conclusion ? t.conclusion + '\n\n' : ''}${deltaNote}`;
 
 		const targetBranch = await this._gitWorktreeService.getCurrentBranch(repoPath);
 		const mergeResult = await this._gitWorktreeService.commitAndMergeWorktreeBranch({
@@ -303,27 +323,16 @@ This is an isolated git worktree - a separate checkout of this same repository, 
 		};
 		const keep = (reason: string): { ok: false; reason: string } => { t.errorMessage = reason; this._fire(); return { ok: false, reason }; };
 
-		if (choice !== 'agent') {
-			const merged = await this._gitWorktreeService.mergeWorktreeBranchPreferring({ repoPath, worktreePath, branchName, targetBranch, prefer: choice, commitMessage });
-			return merged.ok ? finish() : keep(`Nothing was merged: ${merged.reason}`);
-		}
-
-		// let an agent merge: the current branch goes into the task's worktree, an agent removes the markers there, then the result is merged as usual
-		const started = await this._gitWorktreeService.startMergeInWorktree({ worktreePath, targetBranch });
-		if (!started.ok) return keep(`The merge could not be started: ${started.reason}`);
-		if (started.conflictFiles.length) {
-			const files = started.conflictFiles;
-			const result = await this._agentGatewayService.runIsolatedTask({
-				task: conflictResolutionPrompt({ worktreePath, targetBranch, files, task: t.task }),
+		// one implementation for every task that meets changes already on its target branch (common/worktree/conflictResolution.ts)
+		const resolved = await resolveTaskConflict({
+			git: this._gitWorktreeService,
+			runAgent: (prompt) => this._agentGatewayService.runIsolatedTask({
+				task: prompt,
 				agentId: this._resolveAgentId(t.agentName),
 				onThreadCreated: (threadId) => { t.threadId = threadId; this._fire(); },
-			});
-			if (result.hadError || result.stalledAwaitingApproval) return keep('The agent could not finish merging the two versions. The worktree is left as it is for you to look at.');
-		}
-		const done = await this._gitWorktreeService.finishMergeInWorktree({ worktreePath, commitMessage: `Merge ${targetBranch} into ${branchName}` });
-		if (!done.ok) return keep(done.stillConflicted?.length ? `The agent left conflict markers in: ${done.stillConflicted.join(', ')}. Nothing was merged.` : `Nothing was merged: ${done.reason}`);
-		const merged = await this._gitWorktreeService.commitAndMergeWorktreeBranch({ repoPath, worktreePath, branchName, targetBranch, commitMessage });
-		return merged.ok ? finish() : keep(`The two versions were merged in the worktree, but the final merge failed: ${merged.reason}`);
+			}),
+		}, { repoPath, worktreePath, branchName, targetBranch, task: t.task, choice, commitMessage });
+		return resolved.ok ? finish() : keep(resolved.reason);
 	}
 }
 

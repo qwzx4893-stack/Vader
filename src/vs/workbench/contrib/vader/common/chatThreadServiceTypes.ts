@@ -7,6 +7,10 @@ import { URI } from '../../../../base/common/uri.js';
 import { VaderFileSnapshot } from './editCodeServiceTypes.js';
 import { AnthropicReasoning, RawToolParamsObj } from './sendLLMMessageTypes.js';
 import { ToolCallParams, ToolName, ToolResult } from './toolsServiceTypes.js';
+import { GateInfo } from './gateModel.js';
+import { ChatImage } from './imageRules.js'
+import { FileOps } from './checkpointFileOps.js'
+import { UsedSkill } from './skillMatch.js';
 
 export type ToolMessage<T extends ToolName> = {
 	role: 'tool';
@@ -14,7 +18,11 @@ export type ToolMessage<T extends ToolName> = {
 	id: string;
 	rawParams: RawToolParamsObj;
 	mcpServerName: string | undefined; // the server name at the time of the call
+	/** how long the call took, in milliseconds (optional so saved chats stay valid) */
+	durationMs?: number;
 	outputPruned?: boolean; // optional so saved chats stay valid: the model is sent a note instead of the result (common/contextBudget.ts); `content` keeps the full text
+	/** what the safety gate decided about this call (the rule, or the scope, or the read-only mode), so the chat can say it in words (common/gateModel.ts) */
+	gate?: GateInfo;
 } & (
 		// in order of events:
 		| { type: 'invalid_params', result: null, name: T, }
@@ -68,6 +76,8 @@ export type CheckpointEntry = {
 	userModifications: {
 		vaderFileSnapshotOfURI: { [fsPath: string]: VaderFileSnapshot | undefined };
 	};
+	/** files the agent made or deleted right after this checkpoint, so that going back can remove or bring them back (common/checkpointFileOps.ts) */
+	fileOps?: FileOps;
 }
 
 
@@ -77,6 +87,10 @@ export type ChatMessage =
 		role: 'user';
 		content: string; // content displayed to the LLM on future calls - allowed to be '', will be replaced with (empty)
 		displayContent: string; // content displayed to user  - allowed to be '', will be ignored
+		/** images sent with the message, to the model the person chose (common/imageRules.ts); optional so saved chats stay valid */
+		images?: ChatImage[];
+		/** the skills this message used, and why (common/skillMatch.ts): what was put in front of the model, and what the chat says under the message */
+		skillsUsed?: UsedSkill[];
 		selections: StagingSelectionItem[] | null; // the user's selection
 		state: {
 			stagingSelections: StagingSelectionItem[];

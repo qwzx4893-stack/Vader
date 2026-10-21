@@ -117,6 +117,17 @@ jobs:
         run: npm run gulp vscode-win32-%ARCH%-min
         shell: cmd
 
+      # Search by meaning: the small runtime and the embedding model (about 56 MB, checked against build/embedding/model.lock.json) go into
+      # resources/embedding next to the app, where electron-main/localEmbedder.ts looks. Without this folder the app still works and search stays on
+      # words. The script has been run by hand on this machine (build/embedding/prepare.mjs), but this step has NOT yet run in the workflow or inside an installed app.
+      - name: Add the search-by-meaning runtime and model
+        shell: pwsh
+        run: |
+          $appDir = Get-ChildItem -Path ".." -Directory -Filter "VSCode-win32-*" | Select-Object -First 1
+          if (-not $appDir) { throw 'packaged application folder not found' }
+          node build/embedding/prepare.mjs --out "$($appDir.FullName)\resources\embedding" --platform win32 --arch $env:ARCH
+          if ($LASTEXITCODE -ne 0) { throw 'embedding runtime preparation failed' }
+
       # Catches the "installed app dies at startup with ERR_MODULE_NOT_FOUND" class of bug on the
       # real bundles, before an installer is even built.
       - name: Check main-process bundles import only resolvable packages

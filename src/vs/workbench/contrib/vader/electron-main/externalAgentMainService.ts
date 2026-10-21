@@ -45,6 +45,8 @@ const IS_WINDOWS = process.platform === 'win32'
 const STDERR_TAIL_BYTES = 4000
 const INIT_TIMEOUT_MS = 60_000
 const PROBE_TIMEOUT_MS = 30_000
+// starting a conversation the first time can take a while: OpenCode fetched its model list for 44 seconds on a cold start on Windows, so the sign-in checks wait two minutes
+const SESSION_START_TIMEOUT_MS = 120_000
 const SIGN_IN_TIMEOUT_MS = 5 * 60_000
 const NPM_TIMEOUT_MS = 10 * 60_000
 const IDLE_STOP_MS = 30 * 60_000
@@ -304,7 +306,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 		const root = path.join(agentsDir(), def.id)
 		const dir = path.join(root, dist.version)
-		await fs.promises.rm(dir, { recursive: true, force: true })
+		await fs.promises.rm(dir, { recursive: true, force: true, maxRetries: 12, retryDelay: 400 })
 		await fs.promises.mkdir(dir, { recursive: true })
 		try {
 			const manifest = dist.distribution.npx ? await this._installNpm(def, dist.version, dist.distribution.npx, dir) : await this._installBinary(def, dist, dir)
@@ -385,7 +387,8 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		const def = externalAgentById(agentId)
 		if (!def || def.kind !== 'acp') { throw new Error(`"${agentId}" is not an agent Vader downloads.`) }
 		for (const [key, s] of this._sessions) { if (s.agentId === agentId) { await this.closeSession(key) } }
-		await fs.promises.rm(path.join(agentsDir(), def.id), { recursive: true, force: true })
+		// on Windows the program (and what it started) is still being stopped when the files are removed, and a running .exe cannot be deleted: try again for a few seconds
+		await fs.promises.rm(path.join(agentsDir(), def.id), { recursive: true, force: true, maxRetries: 12, retryDelay: 400 })
 		return { id: agentId, state: 'not-installed' }
 	}
 
@@ -534,7 +537,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			return await this._temporary(`check:${agentId}`, agentId, custom, async ({ connection, init, exited, cwd }) => {
 				const canSignOut = !!(init.agentCapabilities as { auth?: { logout?: unknown } } | undefined)?.auth?.logout
 				try {
-					await withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), 30_000, 'The agent did not answer.')
+					await withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), SESSION_START_TIMEOUT_MS, 'The agent did not answer.')
 					return { signedIn: true, canSignOut }
 				} catch (e) {
 					if (isAuthRequiredError(e)) { return { signedIn: false, canSignOut } }
@@ -553,7 +556,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		try {
 			return await this._temporary(key, agentId, custom, async ({ connection, init, exited, spec, cwd }) => {
 				const canSignOut = !!(init.agentCapabilities as { auth?: { logout?: unknown } } | undefined)?.auth?.logout
-				const startConversation = () => withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), 30_000, `${name} did not answer.`)
+				const startConversation = () => withTimeout(Promise.race([connection.agent.request(acp.methods.agent.session.new, { cwd, mcpServers: [] }), exited]), SESSION_START_TIMEOUT_MS, `${name} did not answer.`)
 				try { await startConversation(); return { signedIn: true, canSignOut } } catch (e) { if (!isAuthRequiredError(e)) { throw e } }
 				try {
 					await this._signIn(key, connection, init.authMethods ?? [], def?.acp?.authPreference, name, spec, exited)

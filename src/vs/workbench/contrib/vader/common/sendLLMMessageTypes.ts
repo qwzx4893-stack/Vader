@@ -3,6 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import { AnthropicImagePart, GeminiImagePart, OpenAIImagePart, TextPart } from './imageRules.js';
 import { InternalToolInfo } from './prompt/prompts.js'
 import { ToolName, ToolParamName } from './toolsServiceTypes.js'
 import { ChatMode, ModelSelection, ModelSelectionOptions, OverridesOfModel, ProviderName, RefreshableProviderName, SettingsOfProvider } from './vaderSettingsTypes.js'
@@ -38,12 +39,16 @@ export type AnthropicLLMChatMessage = {
 } | {
 	role: 'user',
 	content: string | (
-		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; }
+		{ type: 'text'; text: string; } | { type: 'tool_result'; tool_use_id: string; content: string; } | AnthropicImagePart
 	)[]
 }
 export type OpenAILLMChatMessage = {
-	role: 'system' | 'user' | 'developer';
+	role: 'system' | 'developer';
 	content: string;
+} | {
+	role: 'user';
+	/** a string, or the parts of a message that carries images (common/imageRules.ts) */
+	content: string | (TextPart | OpenAIImagePart)[];
 } | {
 	role: 'assistant',
 	content: string | (AnthropicReasoning | { type: 'text'; text: string })[];
@@ -64,6 +69,7 @@ export type GeminiLLMChatMessage = {
 	role: 'user';
 	parts: (
 		| { text: string; }
+		| GeminiImagePart
 		| { functionResponse: { id: string; name: ToolName, response: { output: string } } }
 	)[];
 }

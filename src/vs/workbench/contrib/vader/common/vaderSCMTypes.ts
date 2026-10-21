@@ -31,6 +31,13 @@ export interface IVaderSCMService {
 	 * @param path Path to the git repository
 	 */
 	gitLog(path: string): Promise<string>
+	/**
+	 * Stage everything and commit it with the given message (what the review page's Commit button does). The message goes to git as one argument, never through a
+	 * shell. Resolves with the short hash of the new commit; rejects with git's own words when it cannot commit (nothing to commit, no identity set, a hook said no).
+	 */
+	gitCommitAll(path: string, message: string): Promise<string>
+	/** the address of the remote called origin, or '' when there is none */
+	gitRemoteUrl(path: string): Promise<string>
 }
 
 export const IVaderSCMService = createDecorator<IVaderSCMService>('vaderSCMService')

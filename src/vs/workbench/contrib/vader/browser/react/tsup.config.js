@@ -15,6 +15,7 @@ export default defineConfig({
 		'./src2/quick-edit-tsx/index.tsx',
 		'./src2/diff/index.tsx',
 		'./src2/vader-addons-tsx/index.tsx',
+		'./src2/vader-shell-tsx/index.tsx',
 	],
 	outDir: './out',
 	format: ['esm'],

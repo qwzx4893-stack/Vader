@@ -6,8 +6,11 @@ import { createDecorator } from '../../../../platform/instantiation/common/insta
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
 import { ChatMessage, CompactedSummaryEntry } from '../common/chatThreadServiceTypes.js';
-import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities } from '../common/modelCapabilities.js';
+import { getIsReasoningEnabledState, getReservedOutputTokenSpace, getModelCapabilities, modelSupportsVision } from '../common/modelCapabilities.js';
+import { ChatImage, giveImagesToMessages, imagePlaceholder, sentWithImages as imagesKeptIn } from '../common/imageRules.js';
 import { reParsedToolXMLString, chat_systemMessage } from '../common/prompt/prompts.js';
+import { copyInstructions } from '../common/taskCopyModel.js';
+import { skillPrompt } from '../common/skillMatch.js';
 import { AnthropicLLMChatMessage, AnthropicReasoning, GeminiLLMChatMessage, LLMChatMessage, LLMFIMMessage, OpenAILLMChatMessage, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { IVaderSettingsService } from '../common/vaderSettingsService.js';
 import { ChatMode, FeatureName, ModelSelection, ProviderName } from '../common/vaderSettingsTypes.js';
@@ -54,6 +57,8 @@ type SimpleLLMMessage = {
 } | {
 	role: 'user';
 	content: string;
+	/** images sent with this message; turned into the provider's own image parts at the end (common/imageRules.ts) */
+	images?: ChatImage[];
 } | {
 	role: 'assistant';
 	content: string;
@@ -63,6 +68,9 @@ type SimpleLLMMessage = {
 
 
 const TRIM_TO_LEN = 120
+
+/** how many of the latest messages keep their images in every request; older ones are named only */
+const MAX_MESSAGES_WITH_IMAGES = 3
 
 
 
@@ -202,7 +210,7 @@ export const prepareMessages_anthropic_tools = (messages: SimpleLLMMessage[], su
 		}
 
 		if (currMsg.role === 'user') {
-			out.push({ role: 'user', content: currMsg.content })
+			out.push({ role: 'user', content: currMsg.content, ...(currMsg.images?.length ? { images: currMsg.images } : {}) } as AnthropicLLMChatMessage)
 			assistantOfThisRun = undefined
 			resultsOfThisRun = undefined
 			continue
@@ -265,10 +273,16 @@ const prepareMessages_XML_tools = (messages: SimpleLLMMessage[], supportsAnthrop
 			if (llmChatMessages.length === 0 || llmChatMessages[llmChatMessages.length - 1].role !== 'user')
 				llmChatMessages.push({
 					role: 'user',
-					content: c.content
-				})
-			else
+					content: c.content,
+					...(c.role === 'user' && c.images?.length ? { images: c.images } : {}),
+				} as AnthropicOrOpenAILLMMessage)
+			else {
 				llmChatMessages[llmChatMessages.length - 1].content += '\n\n' + c.content
+				if (c.role === 'user' && c.images?.length) {
+					const prev = llmChatMessages[llmChatMessages.length - 1] as { images?: ChatImage[] }
+					prev.images = [...(prev.images ?? []), ...c.images]
+				}
+			}
 		}
 	}
 	return llmChatMessages
@@ -286,7 +300,10 @@ const prepareOpenAIOrAnthropicMessages = ({
 	supportsAnthropicReasoning,
 	contextWindow,
 	reservedOutputTokenSpace,
+	imageStyle,
 }: {
+	/** how images are given to this provider (common/imageRules.ts) */
+	imageStyle: 'anthropic' | 'openai',
 	messages: SimpleLLMMessage[],
 	systemMessage: string,
 	aiInstructions: string,
@@ -464,6 +481,10 @@ const prepareOpenAIOrAnthropicMessages = ({
 		}
 	}
 
+	// ================ images ================
+	// a user message that carries images becomes the parts the provider takes: the images, then the text
+	giveImagesToMessages(llmMessages as unknown as { role: string, content: unknown, images?: ChatImage[] }[], imageStyle)
+
 	return {
 		messages: llmMessages,
 		separateSystemMessage: separateSystemMessageStr,
@@ -505,6 +526,9 @@ const prepareGeminiMessages = (messages: AnthropicLLMChatMessage[]) => {
 					if (c.type === 'text') {
 						return { text: c.text }
 					}
+					else if (c.type === 'image') {
+						return { inlineData: { mimeType: c.source.media_type, data: c.source.data } }
+					}
 					else if (c.type === 'tool_result') {
 						if (!latestToolName) return null
 						return { functionResponse: { id: c.tool_use_id, name: latestToolName, response: { output: c.content } } }
@@ -538,13 +562,13 @@ const prepareMessages = (params: {
 
 	// if need to convert to gemini style of messaes, do that (treat as anthropic style, then convert to gemini style)
 	if (params.providerName === 'gemini' || specialFormat === 'gemini-style') {
-		const res = prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat === 'gemini-style' ? 'anthropic-style' : undefined })
+		const res = prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat === 'gemini-style' ? 'anthropic-style' : undefined, imageStyle: 'anthropic' })
 		const messages = res.messages as AnthropicLLMChatMessage[]
 		const messages2 = prepareGeminiMessages(messages)
 		return { messages: messages2, separateSystemMessage: res.separateSystemMessage }
 	}
 
-	return prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat })
+	return prepareOpenAIOrAnthropicMessages({ ...params, specialToolFormat: specialFormat, imageStyle: params.providerName === 'anthropic' ? 'anthropic' : 'openai' })
 }
 
 
@@ -553,7 +577,8 @@ const prepareMessages = (params: {
 export interface IConvertToLLMMessageService {
 	readonly _serviceBrand: undefined;
 	prepareLLMSimpleMessages: (opts: { simpleMessages: SimpleLLMMessage[], systemMessage: string, modelSelection: ModelSelection | null, featureName: FeatureName }) => { messages: LLMChatMessage[], separateSystemMessage: string | undefined }
-	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null, agentId?: string | null }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
+	/** `copy`: the agent works in its own copy of the project (common/taskCopyModel.ts); the prompt names that folder as the workspace and says so */
+	prepareLLMChatMessages: (opts: { chatMessages: ChatMessage[], chatMode: ChatMode, modelSelection: ModelSelection | null, agentId?: string | null, copy?: { worktreePath: string, branchName: string } }) => Promise<{ messages: LLMChatMessage[], separateSystemMessage: string | undefined }>
 	prepareFIMMessage(opts: { messages: LLMFIMMessage, }): { prefix: string, suffix: string, stopTokens: string[] }
 }
 
@@ -587,13 +612,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	// skill is still composed (it can still help), but visibly labeled unverified so the
 	// model - and the user reading the instructions layers in Settings - both see it hasn't
 	// been vetted. See common/skills/ and docs/integrations/skills.md.
-	private _renderActiveSkillInstructions(): string {
+	// Only the skills the conversation used are given in full (common/skillMatch.ts: a task that names a skill or fits what it says it is for); the others are listed by
+	// name and purpose with how to ask for one. Requests that are not chat (a quick edit, a commit message) carry no skills.
+	private _renderActiveSkillInstructions(usedIds: ReadonlySet<string> | undefined): string {
+		if (!usedIds) return '';
 		const active = this.skillService.listActive();
 		if (active.length === 0) return '';
-		return active.map(s => {
-			const label = s.trustState === 'review_required' ? `${s.name} (UNVERIFIED - not yet reviewed, treat with appropriate skepticism)` : s.name;
-			return `### Skill: ${label}\n${s.instructions}`;
-		}).join('\n\n');
+		const used = active.filter(s => usedIds.has(s.id)).map(s => ({ name: s.name, instructions: s.instructions, unverified: s.trustState === 'review_required' }));
+		const others = active.filter(s => !usedIds.has(s.id)).map(s => ({ name: s.name, description: s.description }));
+		return skillPrompt(used, others);
 	}
 
 	// Read the rules file of each workspace folder: .vaderrules, else AGENTS.md, else CLAUDE.md (common/instructions/workspaceRulesFiles.ts)
@@ -631,14 +658,14 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	// Get combined AI instructions, composed by Vader's layered instruction system
 	// (system invariants + policy summary + global settings + .vaderrules +
 	// memory), in fixed precedence order. See common/instructions/instructionsService.ts.
-	private _getCombinedAIInstructions(agentId?: string): string {
+	private _getCombinedAIInstructions(agentId?: string, usedSkillIds?: ReadonlySet<string>): string {
 		const globalAIInstructions = this.vaderSettingsService.state.globalSettings.aiInstructions;
 		const vaderRulesFileContent = this._getVaderRulesFileContents();
 		const agentInstructions = agentId ? this.agentsService.getAgent(agentId)?.instructions : undefined;
 		const workspaceRoot = this.workspaceContextService.getWorkspace().folders[0]?.uri.fsPath;
 		const projectMemory = this._renderMemoryRecords('project', workspaceRoot);
 		const agentMemory = agentId ? this._renderMemoryRecords('agent', agentId) : '';
-		const skill = this._renderActiveSkillInstructions();
+		const skill = this._renderActiveSkillInstructions(usedSkillIds);
 		return this.instructionsService.compose({ globalUser: globalAIInstructions, workspace: vaderRulesFileContent, projectMemory, agent: agentInstructions, agentMemory, skill })
 	}
 
@@ -669,8 +696,8 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 	}
 
 	// system message
-	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, contextEngineOpts: { userMessage: string, mentionedURIs: URI[], contextWindow: number }) => {
-		const workspaceFolders = this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
+	private _generateChatMessagesSystemMessage = async (chatMode: ChatMode, specialToolFormat: 'openai-style' | 'anthropic-style' | 'gemini-style' | undefined, contextEngineOpts: { userMessage: string, mentionedURIs: URI[], contextWindow: number }, copy?: { worktreePath: string, branchName: string }) => {
+		const workspaceFolders = copy ? [copy.worktreePath] : this.workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 
 		const openedURIModels = this.modelService.getModels().filter(m => m.isAttachedToEditor()).map(m => m.uri)
 		const openedURIs = openedURIModels.map(u => u.fsPath) || [];
@@ -695,7 +722,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 		const persistentTerminalIDs = this.terminalToolService.listPersistentTerminalIds()
 		const systemMessage = chat_systemMessage({ workspaceFolders, openedURIs, directoryStr, activeURI, persistentTerminalIDs, chatMode, mcpTools, includeXMLToolDefinitions, contextEngineBlock })
-		return systemMessage
+		return copy ? `${systemMessage}\n\n${copyInstructions(copy.worktreePath, copy.branchName)}` : systemMessage
 	}
 
 
@@ -703,10 +730,15 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 
 	// --- LLM Chat messages ---
 
-	private _chatMessagesToSimpleMessages(chatMessages: ChatMessage[]): SimpleLLMMessage[] {
+	private _chatMessagesToSimpleMessages(chatMessages: ChatMessage[], modelSeesImages = false): SimpleLLMMessage[] {
 		const simpleLLMMessages: SimpleLLMMessage[] = []
+		// images go to a model that can read them, and only the latest few stay in every request (an older one is named, not repeated)
+		const imageCarriers = chatMessages.map((m, i) => m.role === 'user' && m.images && m.images.length > 0 ? i : -1).filter(i => i >= 0)
+		const sentWithImages = imagesKeptIn(imageCarriers, modelSeesImages, MAX_MESSAGES_WITH_IMAGES)
+		let msgIdx = -1
 
 		for (const m of chatMessages) {
+			msgIdx++
 			if (m.role === 'checkpoint') continue
 			if (m.role === 'interrupted_streaming_tool') continue
 			if (m.role === 'assistant') {
@@ -727,9 +759,11 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 				})
 			}
 			else if (m.role === 'user') {
+				const named = m.images && m.images.length > 0 && !sentWithImages.has(msgIdx)
 				simpleLLMMessages.push({
 					role: m.role,
-					content: m.content,
+					content: named ? `${m.content}\n${m.images!.map(imagePlaceholder).join(' ')}` : m.content,
+					...(sentWithImages.has(msgIdx) ? { images: m.images } : {}),
 				})
 			}
 			else if (m.role === 'compacted_summary') {
@@ -775,7 +809,7 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 		})
 		return { messages, separateSystemMessage };
 	}
-	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection, agentId }) => {
+	prepareLLMChatMessages: IConvertToLLMMessageService['prepareLLMChatMessages'] = async ({ chatMessages, chatMode, modelSelection, agentId, copy }) => {
 		if (modelSelection === null) return { messages: [], separateSystemMessage: undefined }
 
 		const { overridesOfModel } = this.vaderSettingsService.state
@@ -796,16 +830,17 @@ class ConvertToLLMMessageService extends Disposable implements IConvertToLLMMess
 			userMessage: lastUserMessage?.role === 'user' ? lastUserMessage.displayContent : '',
 			mentionedURIs,
 			contextWindow,
-		})
+		}, copy)
 		const systemMessage = disableSystemMessage ? '' : fullSystemMessage;
 
 		const modelSelectionOptions = this.vaderSettingsService.state.optionsOfModelSelection['Chat'][modelSelection.providerName]?.[modelSelection.modelName]
 
 		// Get combined AI instructions (including the running agent's own, if any)
-		const aiInstructions = this._getCombinedAIInstructions(agentId ?? undefined);
+		const usedSkillIds = new Set(chatMessages.flatMap(m => m.role === 'user' ? (m.skillsUsed ?? []).map(u => u.id) : []))
+		const aiInstructions = this._getCombinedAIInstructions(agentId ?? undefined, usedSkillIds);
 		const isReasoningEnabled = getIsReasoningEnabledState('Chat', providerName, modelName, modelSelectionOptions, overridesOfModel)
 		const reservedOutputTokenSpace = getReservedOutputTokenSpace(providerName, modelName, { isReasoningEnabled, overridesOfModel })
-		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages)
+		const llmMessages = this._chatMessagesToSimpleMessages(chatMessages, modelSupportsVision(providerName, modelName))
 
 		const { messages, separateSystemMessage } = prepareMessages({
 			messages: llmMessages,

@@ -78,6 +78,14 @@ check('a project cannot keep more than 200', A.withApproval(full, '/p', cmd('one
 const round = A.parseApprovalState(JSON.parse(JSON.stringify(st)));
 check('what is stored reads back, and nonsense is dropped', A.isApproved(round, '/work/api', { kind: 'mcp', server: 'github', tool: 'search_issues' }) && Object.keys(A.parseApprovalState({ version: 1, projects: { '/p': { 'command\u0000x': { kind: 'mcp', label: 1 } }, '/q': 5 } }).projects).length === 0 && Object.keys(A.parseApprovalState('x').projects).length === 0 && Object.keys(A.parseApprovalState({ version: 2, projects: { '/p': {} } }).projects).length === 0);
 
+// ---- a site the project allows
+const host = (h) => ({ kind: 'host', host: h });
+let hs = A.withApproval(A.EMPTY_APPROVAL_STATE, '/work/api', host('API.Stripe.com'), 5);
+check('a site is remembered by its host only, whatever the case', A.isApproved(hs, '/work/api', host('api.stripe.com')) === true && A.isApproved(hs, '/work/api', host('stripe.com')) === false && A.isApproved(hs, '/work/web', host('api.stripe.com')) === false);
+check('a site is never mixed up with a command of the same text', A.isApproved(hs, '/work/api', cmd('api.stripe.com')) === false && A.approvalKeyOf(host('a.test')) !== A.approvalKeyOf(cmd('a.test')));
+check('a host with a path or a space in it is not kept', A.approvalKeyOf(host('a.test/x')) === null && A.approvalKeyOf(host('a b')) === null && A.approvalKeyOf(host('')) === null);
+check('it is listed as a site, and reads back from storage', A.listApprovals(hs, '/work/api')[0].kind === 'host' && A.listApprovals(hs, '/work/api')[0].label === 'api.stripe.com' && A.isApproved(A.parseApprovalState(JSON.parse(JSON.stringify(hs))), '/work/api', host('api.stripe.com')));
+
 // ---- a review comment
 const c = R.composeReviewComment({ path: 'src/limiter.ts', line: 21, snippet: 'const hits = []\nhits.push(now)', text: '  Old hits are never cleared.  ' });
 check('a comment names the file and the line, shows the code and says what is wanted', /src\/limiter\.ts, line 21/.test(c) && /hits\.push\(now\)/.test(c) && /Old hits are never cleared\./.test(c) && !/  Old hits/.test(c));

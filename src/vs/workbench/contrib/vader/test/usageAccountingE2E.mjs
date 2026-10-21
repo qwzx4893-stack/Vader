@@ -81,6 +81,30 @@ try {
 	let led = U.addToLedger({}, d1, turn, 0.4, 'billed');
 	led = U.addToLedger(led, d1, turn, 0.6, 'estimate');
 	check('the day keeps what was billed apart too, and it is read back', near(led[d1].billedCostUsd, 0.4) && near(U.parseLedger(JSON.parse(JSON.stringify(led)))[d1].billedCostUsd, 0.4));
+
+	// ---- which model the money went to (Settings > Usage and cost, "By model")
+	{
+		const now = new Date(2026, 9, 14, 12);
+		const today = U.dayKey(now), old = U.dayKey(new Date(2026, 9, 10)), tooOld = U.dayKey(new Date(2026, 8, 1));
+		const son = { providerName: 'anthropic', modelName: 'claude-sonnet-4-5', isLocal: false };
+		const ds = { providerName: 'openRouter', modelName: 'deepseek/deepseek-v3.2', isLocal: false };
+		const qw = { providerName: 'ollama', modelName: 'qwen3-coder', isLocal: true };
+		const acme = { providerName: 'openAI-compatible', modelName: 'acme-internal-70b', isLocal: false };
+		let m = {};
+		m = U.addToLedger(m, today, { inputTokens: 1000, outputTokens: 100 }, 0.5, 'estimate', son);
+		m = U.addToLedger(m, old, { inputTokens: 3000, outputTokens: 300 }, 1.5, 'estimate', son);
+		m = U.addToLedger(m, today, { inputTokens: 500, outputTokens: 50 }, 0.2, 'billed', ds);
+		m = U.addToLedger(m, today, { inputTokens: 700, outputTokens: 70 }, 0, 'free', qw);
+		m = U.addToLedger(m, today, { inputTokens: 90, outputTokens: 9 }, undefined, 'unpriced', acme);
+		m = U.addToLedger(m, tooOld, { inputTokens: 9, outputTokens: 9 }, 9, 'estimate', son);
+		const rows = U.modelRows(m, 14, now);
+		check('a model’s days are added up, and days older than the window are left out', rows.length === 4 && rows[0].modelName === 'claude-sonnet-4-5' && rows[0].inputTokens === 4000 && rows[0].outputTokens === 400 && near(rows[0].costUsd, 2.0));
+		check('each model says where its number comes from', rows.find(r => r.modelName === 'claude-sonnet-4-5').source === 'estimate' && rows.find(r => r.modelName === 'deepseek/deepseek-v3.2').source === 'billed' && rows.find(r => r.modelName === 'qwen3-coder').source === 'free' && rows.find(r => r.modelName === 'acme-internal-70b').source === 'unpriced');
+		check('an unpriced model is never shown as free', rows.find(r => r.modelName === 'acme-internal-70b').costUsd === 0 && rows.find(r => r.modelName === 'acme-internal-70b').source !== 'free');
+		const days = U.lastDays(m, 14, now);
+		check('the last 14 days are listed oldest first, ending today, with 0 for a day without use', days.length === 14 && days[13].day === today && days[0].day === U.dayKey(new Date(2026, 9, 1)) && days[13].costUsd > 0 && days[5].costUsd === 0);
+		check('the per-model figures are read back from storage and nonsense is dropped', (() => { const back = U.parseLedger(JSON.parse(JSON.stringify(m))); return U.modelRows(back, 14, now).length === 4 && !U.parseLedger({ [today]: { costUsd: 1, inputTokens: 1, outputTokens: 1, models: { x: { providerName: 5 } } } })[today].models; })());
+	}
 	check('an amount that is partly an estimate is shown with the approximate sign', U.formatCost(0.31, 0) === '≈ $0.31' && U.formatCost(0.31, undefined) === '≈ $0.31' && U.formatCost(1.0, 0.4) === '≈ $1.00');
 	check('an amount the provider billed in full is shown plainly', U.formatCost(0.12, 0.12) === '$0.12');
 	check('the provider pages are real https addresses', Object.values(U.PROVIDER_USAGE_PAGES).every(x => new URL(x.url).protocol === 'https:') && U.PROVIDER_USAGE_PAGES.openRouter.url === 'https://openrouter.ai/activity');

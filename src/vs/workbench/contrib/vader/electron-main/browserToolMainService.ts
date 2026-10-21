@@ -2,6 +2,7 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
+import { isSecretField, SECRET_FIELD_REFUSAL } from '../common/browserErrorWords.js';
 import { existsSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { Disposable } from '../../../../base/common/lifecycle.js';
@@ -300,6 +301,9 @@ export class BrowserToolMainService extends Disposable implements IBrowserToolMa
 		const { id, entry } = await this._resolvePage(pageId);
 		await this._withStaleRefHandling(async () => {
 			const locator = entry.page.locator(`aria-ref=${ref}`);
+			// the agent does not type a password, a one-time code or a card number: that is the person's to give, in their own browser
+			const field = await locator.evaluate((el: Element) => { const i = el as HTMLInputElement; return { type: i.type, autocomplete: i.autocomplete, name: i.name, id: i.id, label: i.getAttribute('aria-label') ?? '' } }, undefined, { timeout: 10_000 }).catch(() => undefined);
+			if (field && isSecretField(field)) throw new Error(SECRET_FIELD_REFUSAL);
 			await locator.fill(text, { timeout: 10_000 });
 			if (submit) await locator.press('Enter');
 		});

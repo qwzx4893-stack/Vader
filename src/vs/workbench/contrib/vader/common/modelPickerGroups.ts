@@ -52,3 +52,37 @@ export const pickerLayout = <S>(options: readonly PickerOption<S>[], query: stri
 /** A search box is worth showing once there are more models than fit on a screen. */
 export const SEARCH_BOX_FROM = 8
 export const showSearchBox = (totalModels: number): boolean => totalModels > SEARCH_BOX_FROM
+
+// ---- the words of the picker's states (board S04)
+
+/** "OpenAI", "OpenAI and Gemini", "OpenAI, Gemini and Groq" */
+export const listNames = (names: readonly string[]): string => names.length <= 1 ? (names[0] ?? '') : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`
+
+/** what the picker says when the search finds nothing: what was searched, and which providers could not be, for lack of a key */
+export const noMatchWords = (query: string, searchedWithKey: number, withoutKey: readonly string[]): { headline: string, detail: string } => ({
+	headline: `No model named “${query.trim()}”.`,
+	detail: `Searched ${searchedWithKey} provider${searchedWithKey === 1 ? '' : 's'} with a key.${withoutKey.length > 0 ? ` ${listNames(withoutKey.slice(0, 3))} ${withoutKey.length === 1 ? 'has' : 'have'} no key yet.` : ''}`,
+})
+
+/** the line under the providers that have no key yet */
+export const addableLine = (count: number): string => `${count} provider${count === 1 ? '' : 's'} can be added. Models appear as soon as a key works.`
+
+/** how long ago, in the words of the footer ("fetched just now") */
+export const agoWords = (ms: number): string => ms < 45_000 ? 'just now' : ms < 90 * 60_000 ? `${Math.max(1, Math.round(ms / 60_000))} min ago` : ms < 36 * 3_600_000 ? `${Math.round(ms / 3_600_000)} h ago` : `${Math.round(ms / 86_400_000)} days ago`
+
+/** a list that was fetched is used for this long before the picker asks again when it opens */
+export const LIST_MAX_AGE_MS = 10 * 60_000
+export const listIsStale = (fetchedAt: number | undefined, now: number): boolean => fetchedAt === undefined || now - fetchedAt >= LIST_MAX_AGE_MS
+
+/** Anthropic's ids read as names ("claude-sonnet-4-5" -> "Claude Sonnet 4.5"); any other id is shown as the provider wrote it */
+export const friendlyModelName = (providerName: string, id: string): { text: string, mono: boolean } => {
+	if (providerName === 'anthropic') {
+		const m = /^claude-(?:(\d)(?:-(\d))?-)?(opus|sonnet|haiku)(?:-(\d)(?:-(\d))?)?(?:-\d{8})?$/.exec(id)
+		if (m) {
+			const family = m[3].charAt(0).toUpperCase() + m[3].slice(1)
+			const major = m[4] ?? m[1], minor = m[4] !== undefined ? m[5] : m[2]
+			return { text: `Claude ${family}${major ? ` ${major}${minor ? `.${minor}` : ''}` : ''}`, mono: false }
+		}
+	}
+	return { text: id, mono: true }
+}

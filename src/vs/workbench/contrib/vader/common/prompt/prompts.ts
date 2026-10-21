@@ -477,6 +477,16 @@ export const builtinTools: {
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
 	},
 
+	await_terminal: {
+		name: 'await_terminal',
+		description: `Waits for a persistent terminal (a dev server, a watcher, a long build you started with run_persistent_command) to print something, then returns what it printed since this call. Give a pattern to wait for (for example "ready|listening on"), or leave it empty to wait until the output has been quiet for 5 seconds. It returns when the pattern appears or the time is up (default 30 seconds, at most 120), so you do not have to ask the terminal again and again. It does not run anything.`,
+		params: {
+			persistent_terminal_id: { description: `The ID of the persistent terminal.` },
+			until_regex: { description: `Optional. A pattern (a regular expression) in the output that ends the wait.` },
+			timeout_seconds: { description: `Optional. How long to wait at most (default 30, at most 120).` },
+		}
+	},
+
 	create_persistent_agent: {
 		name: 'create_persistent_agent',
 		description: `Creates a new permanent, named agent that persists across sessions with its own instructions, so future tasks needing this same expertise or scope can be handed to it directly instead of you re-explaining context each time. Use this when you notice a task needs a specialized, repeatable role (e.g. "the person keeps asking Vulkan questions, a Vulkan Specialist agent would help"), not for one-off tasks.`,
@@ -515,6 +525,15 @@ export const builtinTools: {
 		params: {
 			focus: { description: `Optional. Files or folders the task is about, comma separated. Empty for the whole project.` },
 			max_tokens: { description: `Optional. Map size in tokens (default 2500, max 8000).` },
+		}
+	},
+
+	codebase_search: {
+		name: 'codebase_search',
+		description: `Finds the places in the project that best match a description or a few names, ranked, each with its lines. Use it to answer "where is X done" or "what handles Y" without knowing the file: describe what the code does, or give the names you expect (a function, a type, a word from a file name). It reads an index of the project on this computer that is kept current, so it also finds code you have not opened. For an exact text or a regex use search_for_files; for the layout of a project use repo_map. Read the files it points to before you change them.`,
+		params: {
+			query: { description: `What you are looking for, in words and names, e.g. "retry a request with backoff" or "RateLimiter tokens".` },
+			search_in_folder: { description: 'Optional. Only look inside this folder.' },
 		}
 	},
 

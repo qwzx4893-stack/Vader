@@ -119,36 +119,39 @@ export const generalScenarios = [
 			const visible = async (id) => t.page.locator(TID(id)).waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false);
 			await t.ui.runCommand(t.page, 'Vader: Open Settings');
 			await t.page.locator(TID('vader-settings-page')).waitFor({ state: 'visible', timeout: 20_000 });
-			for (const tab of ['models', 'localProviders', 'providers', 'agent', 'context', 'mcp', 'featureOptions', 'extensions', 'privacy', 'data', 'about', 'all']) {
-				t.check(`the "${tab}" entry is in the sidebar`, (await t.page.locator(TID(`vader-settings-nav-${tab}`)).count()) === 1);
+			for (const tab of ['models', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
+				t.check(`the "${tab}" page is in the sidebar`, (await t.page.locator(TID(`vader-settings-nav-${tab}`)).count()) === 1);
 			}
 
-			await t.page.locator(TID('vader-settings-nav-agent')).click();
-			t.check('Agent & Permissions shows the chat-mode chooser', await visible('vader-settings-chatmode'));
-			await t.page.locator(TID('vader-chatmode-plan')).click();
+			await t.page.locator(TID('vader-settings-nav-permissions')).click();
+			t.check('Permissions shows the three modes', await visible('vader-perm-mode'));
+			await t.page.locator(TID('vader-perm-mode-safe')).click();
 			await t.sleep(300);
-			t.check('choosing Plan selects it', (await t.page.locator(TID('vader-chatmode-plan')).getAttribute('aria-pressed')) === 'true');
-			t.check('and deselects Agent', (await t.page.locator(TID('vader-chatmode-agent')).getAttribute('aria-pressed')) === 'false');
-			await t.page.locator(TID('vader-chatmode-agent')).click();
+			t.check('choosing Safe selects it', (await t.page.locator(TID('vader-perm-mode-safe')).getAttribute('aria-checked')) === 'true');
+			t.check('and deselects Balanced', (await t.page.locator(TID('vader-perm-mode-balanced')).getAttribute('aria-checked')) === 'false');
+			await t.page.locator(TID('vader-perm-mode-balanced')).click();
+
+			await t.page.locator(TID('vader-settings-nav-usage')).click();
+			t.check('Usage and cost shows the estimate for today', await visible('vader-usage-today'));
 
 			await t.page.locator(TID('vader-settings-nav-extensions')).click();
-			t.check('Extensions is shown', await visible('vader-settings-extensions'));
+			t.check('Editor extensions is shown', await visible('vader-settings-extensions'));
 			t.check('it names the Open VSX registry', /open-vsx\.org/.test(await t.page.locator(TID('vader-settings-gallery')).innerText()));
 			t.check('and shows the signature switch', await visible('vader-settings-verify-signature'));
 
 			await t.page.locator(TID('vader-settings-nav-privacy')).click();
-			t.check('Privacy & Network is shown', await visible('vader-settings-privacy'));
+			t.check('Privacy and network is shown', await visible('vader-settings-privacy'));
 			const contacts = await t.page.locator(TID('vader-settings-contacts')).innerText();
 			t.check('it lists the registry and the release check', /open-vsx\.org/.test(contacts) && /api\.github\.com/.test(contacts), contacts.slice(0, 200));
 			t.check('the background release check is off by default', /Only when you press/.test(contacts), contacts.slice(0, 400));
 
 			await t.page.locator(TID('vader-settings-nav-about')).click();
-			t.check('About & Updates is shown', await visible('vader-settings-about'));
+			t.check('About and updates is shown', await visible('vader-settings-about'));
 			t.check('it shows the Vader version', /\d+\.\d+\.\d+/.test(await t.page.locator(TID('vader-settings-version')).innerText()));
 
 			await t.page.locator(TID('vader-settings-nav-data')).click();
-			const dataText = await t.page.locator(TID('vader-settings-page')).innerText();
-			t.check('Data & Backup offers import, export and the editor switch', /Import Settings/.test(dataText) && /Export Chats/.test(dataText) && /One-Click Switch/.test(dataText));
+			const dataText = await t.page.locator(TID('vader-settings-data')).innerText();
+			t.check('Data and backup offers export, import and the editor switch', /Export/.test(dataText) && /Import/.test(dataText) && /Coming from another editor/.test(dataText));
 
 			await t.page.locator(TID('vader-settings-close')).click();
 			await t.sleep(300);

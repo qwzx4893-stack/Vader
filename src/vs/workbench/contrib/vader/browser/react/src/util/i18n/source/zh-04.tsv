@@ -1,0 +1,185 @@
+A blocked skill is never given to the agent and cannot be switched on. ::: 被屏蔽的技能绝不会提供给智能体，也无法开启。
+Needs you ::: 需要你
+Double-click to rename ::: 双击重命名
+Open in editor ::: 在编辑器中打开
+Send this message again from here: what came after it is replaced ::: 从这里重新发送此消息：之后的内容将被替换
+Hide the change ::: 隐藏更改
+Run a command? ::: 运行命令？
+Asks in {0} mode ::: 在{0}模式下会询问
+In {0}. It can write files. ::: 位于 {0}。它可以写入文件。
+Allow this, and do not ask about this exact one in this project again ::: 允许此操作，并且在此项目中不再针对这条完全相同的操作询问
+Allow in this project ::: 在此项目中允许
+The agent edits a copy of this project on its own branch. Your folder does not change until you accept. ::: 智能体在独立分支上编辑此项目的副本。在你接受之前，你的文件夹不会改变。
+Add context: a file, the terminal output, a page, the git changes ::: 添加上下文：文件、终端输出、页面、git 更改
+How much the model thinks before it answers ::: 模型回答前思考的程度
+Tokens the providers reported for this chat ::: 提供商为此对话上报的 Token 数
+Worked out from list prices. Your provider's bill can differ (discounts, taxes, cache writes). See Settings, Spending. ::: 按标价计算。你的提供商账单可能有所不同（折扣、税费、缓存写入）。参见“设置”中的“花费”。
+≈ {0} this chat ::: 本次对话约 {0}
+Worked out from list prices unless the provider reported the charge ::: 按标价计算，除非提供商上报了实际费用
+≈ {0} today ::: 今天约 {0}
+The branch this task works on ::: 此任务所在的分支
+Jump to the newest message ::: 跳到最新消息
+Ready to review ::: 可供审查
+Filter by task or branch ::: 按任务或分支筛选
+no changes ::: 无更改
+done ::: 已完成
+Waiting for you ::: 等待你
+Skills, MCP servers, extensions and agents ::: 技能、MCP 服务器、扩展和智能体
+Settings: where add-ons come from, and the ones you have ::: 设置：附加组件的来源，以及你已有的附加组件
+Search skills, MCP servers, extensions and agents ::: 搜索技能、MCP 服务器、扩展和智能体
+80 to 100 high trust ::: 80 到 100 高度可信
+50 to 79 read first ::: 50 到 79 请先阅读
+under 50 risky ::: 低于 50 有风险
+live from GitHub, skills.sh and the sources you added ::: 实时来自 GitHub、skills.sh 和你添加的来源
+live from the MCP Registry, Smithery, npm and GitHub ::: 实时来自 MCP 注册表、Smithery、npm 和 GitHub
+live from Open VSX and the editor tooling ::: 实时来自 Open VSX 和编辑器工具链
+live from Open VSX ::: 实时来自 Open VSX
+Most trusted skills ::: 最可信的技能
+MCP servers ::: MCP 服务器
+Extensions for the editor ::: 编辑器扩展
+Language servers, debuggers and formatters ::: 语言服务器、调试器和格式化工具
+Agents you can connect ::: 可连接的智能体
+they work inside Vader’s chat ::: 它们在 Vader 的对话中工作
+See all skills ::: 查看全部技能
+See all servers ::: 查看全部服务器
+See all extensions ::: 查看全部扩展
+See all agents ::: 查看全部智能体
+See all ::: 查看全部
+Documents and files ::: 文档与文件
+Coding and review ::: 编码与审查
+Testing and QA ::: 测试与质量保证
+DevOps and cloud ::: DevOps 与云
+Data and analytics ::: 数据与分析
+Design and UI ::: 设计与界面
+Writing and content ::: 写作与内容
+Research and web ::: 研究与网络
+Productivity and automation ::: 效率与自动化
+Agents and prompts ::: 智能体与提示词
+Security ::: 安全
+Search the official MCP Registry ::: 搜索官方 MCP 注册表
+Search extensions on Open VSX ::: 在 Open VSX 上搜索扩展
+Search skills ::: 搜索技能
+Search agents ::: 搜索智能体
+Code and Git ::: 代码与 Git
+Browser and testing ::: 浏览器与测试
+Databases ::: 数据库
+Docs and knowledge ::: 文档与知识库
+Cloud and DevOps ::: 云与 DevOps
+Chat and tickets ::: 聊天与工单
+Search and web ::: 搜索与网络
+Files and storage ::: 文件与存储
+Design and media ::: 设计与媒体
+Data and finance ::: 数据与金融
+Memory and AI ::: 记忆与 AI
+Programming languages ::: 编程语言
+Linters ::: 代码检查工具
+Formatters ::: 格式化工具
+Debuggers ::: 调试器
+Testing ::: 测试
+Source control ::: 源代码管理
+Themes ::: 主题
+Snippets ::: 代码片段
+Machine learning ::: 机器学习
+Data science and notebooks ::: 数据科学与 Notebook
+Keymaps ::: 快捷键映射
+What it asks for ::: 它请求的权限
+The terminal ::: 终端
+Runs commands such as npm install, each one asked first. ::: 运行 npm install 之类的命令，每条命令都会先询问。
+The network ::: 网络
+Not asked ::: 未请求
+Asks for it ::: 已请求
+Fetches pages, documentation and packages. ::: 获取网页、文档和软件包。
+Reads and writes files in the open project. ::: 读取和写入已打开项目中的文件。
+The first lines of SKILL.md ::: SKILL.md 的开头几行
+Read all of it ::: 阅读全部
+Install, switched off ::: 安装（保持关闭）
+Install it and switch it on. You can still read it afterwards. ::: 安装并开启。之后你仍可以阅读它。
+Install and switch on ::: 安装并开启
+It is stored switched off. Read it, then switch it on when you are ready. ::: 它会以关闭状态保存。先阅读，准备好后再开启。
+Nothing here gives a reason to hold back. ::: 这里没有任何需要犹豫的理由。
+Published by {0}, a known organisation ::: 由 {0} 发布，这是一个已知的组织
+Published by {0}, not on the known list ::: 由 {0} 发布，不在已知名单上
+Found in ::: 来源
+More in {0} ::: {0} 中的更多内容
+What it gives the agent ::: 它为智能体提供什么
+Before you add it ::: 添加之前
+Nothing to install first ::: 无需先安装任何东西
+The listing names no runtime. ::: 该条目没有说明运行环境。
+No secrets ::: 不需要密钥
+It asks for nothing to sign in with. A server that does is shown here with each secret named before it is added. ::: 它不需要任何登录凭据。需要凭据的服务器会在添加前在此列出每一项所需的密钥。
+Where it is saved ::: 保存位置
+One entry in your mcp.json, which you can open and edit. Removing it removes the entry. ::: 在你的 mcp.json 中新增一条记录，你可以打开并编辑。移除它即删除这条记录。
+No signature to check ::: 没有可核验的签名
+A server runs on your computer or talks to a service. Adding one asks you first, and its tools go through the safety gate like any other. ::: 服务器在你的电脑上运行，或与某个服务通信。添加之前会先询问你，它的工具和其他工具一样要经过安全关卡。
+installs ::: 安装次数
+version ::: 版本
+last updated ::: 最近更新
+An extension runs code inside the editor ::: 扩展会在编辑器内运行代码
+Installed and updated by the editor, like any other extension. ::: 与其他扩展一样，由编辑器安装和更新。
+The publisher proved it owns its domain ::: 发布者已证明其拥有该域名
+Runs code inside the editor ::: 在编辑器内运行代码
+{0} (verified) ::: {0}（已验证）
+An agent you connect runs with your own account for it. Its usage and cost are not counted by Vader; they appear in that product’s own usage page. ::: 你连接的智能体使用你在该产品中的账号运行。Vader 不统计它的用量和费用；这些会显示在该产品自己的用量页面中。
+Set up {0} ::: 设置 {0}
+Works inside Vader's chat (Agent Client Protocol) ::: 在 Vader 的对话中使用（Agent Client Protocol）
+Install it here: Vader downloads the vendor’s own program. ::: 在这里安装：Vader 会下载厂商自己的程序。
+Sign in: {0} Vader never sees your password or token. ::: 登录：{0} Vader 绝不会接触你的密码或令牌。
+Open Settings, Connected agents, and choose it for the chat. ::: 打开“设置”中的“已连接的智能体”，并将它选为对话使用的智能体。
+Plan, limits and cost ::: 套餐、限制与费用
+Inside Vader’s chat (Agent Client Protocol) ::: 在 Vader 对话中（Agent Client Protocol）
+Ready, version {0} ::: 就绪，版本 {0}
+Counted by the vendor on your plan, not by Vader ::: 由厂商按你的套餐统计，不由 Vader 统计
+Other agents you can connect ::: 其他可连接的智能体
+Back to Add-ons ::: 返回附加组件
+{0} · Agent Client Protocol registry · v{1} ::: {0} · Agent Client Protocol 注册表 · v{1}
+Running the checks ::: 正在运行检查
+Independent check not run ::: 未运行独立检查
+Open the pull request page for this branch ::: 打开此分支的拉取请求页面
+The agent is using this page ::: 智能体正在使用此页面
+It can click and type here. It cannot reach pages outside the sites it was told to visit. ::: 它可以在这里点击和输入。无法访问被要求访问的网站之外的页面。
+Pages the agent opened ::: 智能体打开的页面
+What it did here ::: 它在这里做了什么
+Reload the page ::: 重新加载页面
+Open in my browser ::: 在我的浏览器中打开
+Terminals of this task ::: 此任务的终端
+running, kept open by the agent ::: 运行中，由智能体保持打开
+Commands this task ran ::: 此任务运行过的命令
+The agent started this terminal. Anything you type here runs as you, not as the agent. ::: 这个终端由智能体启动。你在这里输入的任何内容都以你的身份运行，而不是智能体。
+Opened page in browser ::: 在浏览器中打开了页面
+Clicked in page ::: 在页面中点击了
+New chat in {0} ::: 在 {0} 中新建对话
+In Agent mode it works in its own copy of the project, so nothing in your folder changes until you accept. ::: 在智能体模式下它在项目的独立副本中工作，在你接受之前你的文件夹不会有任何改变。
+Enter sends, Shift Enter adds a line. ::: 按 Enter 发送，按 Shift Enter 换行。
+Pick up where you left off ::: 继续上次的内容
+Chat, no changes to files ::: 对话，不会更改文件
+{0} limits this key for now ::: {0} 暂时限制了此密钥
+Show the full error ::: 显示完整错误
+Hide the full error ::: 隐藏完整错误
+Run started {0} ::: 运行开始于 {0}
+Each task works in its own copy of the project. Finished work is merged one by one. ::: 每个任务都在项目的独立副本中工作。完成的工作会逐个合并。
+Conflict in {0} ::: {0} 中有冲突
+Let an agent merge them ::: 让智能体来合并
+Keep the current version ::: 保留当前版本
+Keep this task’s version ::: 保留此任务的版本
+Open the file ::: 打开文件
+Wait for the task to finish ::: 等待任务完成
+It will not start another step. Nothing it has done is lost. ::: 它不会再开始新的步骤。已完成的内容不会丢失。
+You stopped it. What it had done so far is kept. ::: 你已停止它。到目前为止它完成的内容会保留。
+Continue the task ::: 继续任务
+Switch to plan mode ::: 切换到计划模式
+Check the changes with a second agent ::: 让第二个智能体检查更改
+Summarise the earlier steps now ::: 立即总结之前的步骤
+Save a note for this project ::: 为此项目保存备注
+Write an AGENTS.md for this project ::: 为此项目撰写 AGENTS.md
+files ::: 个文件
+folders ::: 个文件夹
+Welcome to Vader ::: 欢迎使用 Vader
+A model with my own key ::: 使用我自己密钥的模型
+Pick a model next ::: 接下来选择模型
+A connected agent I already pay for ::: 我已付费订阅的已连接智能体
+A model on this computer ::: 这台电脑上的模型
+Ollama or LM Studio. Nothing leaves your machine. ::: Ollama 或 LM Studio。任何内容都不会离开你的电脑。
+Before you choose ::: 选择之前
+Your key stays on this computer ::: 你的密钥留在这台电脑上
+Stored encrypted. It is only sent to the provider you choose. ::: 加密存储。只会发送给你选择的提供商。
+Your code goes to one place ::: 你的代码只发往一处

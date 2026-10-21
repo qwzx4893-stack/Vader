@@ -1,0 +1,182 @@
+All releases ::: كل الإصدارات
+Apache 2.0, and the open-source parts it is built on ::: Apache 2.0، والأجزاء مفتوحة المصدر المبني عليها
+Built ::: تاريخ البناء
+Built on the open-source VS Code workbench (Microsoft, MIT) and on Void by Glass Devtools, Inc. (Apache 2.0). It runs its agent on the Cline SDK (Apache 2.0). ::: مبني على بيئة VS Code مفتوحة المصدر (مايكروسوفت، MIT) وعلى Void من Glass Devtools, Inc. (Apache 2.0). ويشغّل وكيله على Cline SDK (Apache 2.0).
+Check for new releases automatically ::: التحقق من الإصدارات الجديدة تلقائياً
+Check for updates ::: التحقق من التحديثات
+Checked just now. Nothing is installed without your click. ::: تم التحقق الآن. لا يُثبَّت شيء دون نقرتك.
+Checking… ::: جارٍ التحقق…
+Commit ::: الإيداع (Commit)
+Help ::: المساعدة
+Licence ::: الترخيص
+Licences ::: التراخيص
+Looking at the public list of releases… ::: جارٍ الاطلاع على القائمة العامة للإصدارات…
+Looks at the public list of Vader releases and sends nothing about you. Off by default. ::: يطّلع على القائمة العامة لإصدارات Vader ولا يرسل أي شيء عنك. معطّل افتراضياً.
+Not checked yet in this session. Nothing is installed without your click. ::: لم يتم التحقق بعد في هذه الجلسة. لا يُثبَّت شيء دون نقرتك.
+Report an issue ::: الإبلاغ عن مشكلة
+Source code ::: الشيفرة المصدرية
+Third-party notices ::: إشعارات الأطراف الخارجية
+This build ::: هذا الإصدار
+Updates ::: التحديثات
+Vader could not look for updates just now. ::: تعذّر على Vader البحث عن تحديثات الآن.
+Vader {0} ::: Vader {0}
+Version ::: الإصدار
+What changed in this version ::: ما الذي تغيّر في هذا الإصدار
+development build ::: نسخة تطوير
+not recorded ::: غير مسجّل
+· built on VS Code ::: · مبني على VS Code
+(version {0}) ::: (الإصدار {0})
+, up to date ::: ، محدّث
+: Vader uses it as it is, nothing is downloaded. ::: : يستخدمه Vader كما هو، ولا يُنزَّل شيء.
+Add ::: إضافة
+Any program that speaks the Agent Client Protocol on its standard input and output can be added. It runs with your user’s rights, so add only programs you trust. The list at agentclientprotocol.com shows what exists. ::: يمكن إضافة أي برنامج يتحدث بروتوكول Agent Client Protocol عبر المدخل والمخرج القياسيين. يعمل بصلاحيات مستخدمك، لذا أضف البرامج التي تثق بها فقط. القائمة في agentclientprotocol.com تبيّن المتاح.
+Arguments ::: المعاملات
+Arguments (e.g. --acp) ::: المعاملات
+Check for newer versions ::: التحقق من إصدارات أحدث
+Checking sign-in... ::: جارٍ التحقق من تسجيل الدخول...
+Checking... ::: جارٍ التحقق...
+Connect ::: ربط
+Connected agents ::: الوكلاء المرتبطون
+Could not read the agent list: {0} ::: تعذّرت قراءة قائمة الوكلاء: {0}
+Found on this computer ::: موجود على هذا الجهاز
+In a terminal ::: في طرفية
+In the chat ::: في المحادثة
+In use ::: قيد الاستخدام
+Installed by Vader, version ::: ثبّته Vader، الإصدار
+It can continue a conversation after a restart. ::: يمكنه متابعة المحادثة بعد إعادة التشغيل.
+Less ::: أقل
+More ::: المزيد
+More about {0} ::: المزيد عن {0}
+Name ::: الاسم
+Newer versions found for: {0}. ::: توجد إصدارات أحدث لـ: {0}.
+Not available for this computer ::: غير متاح لهذا الجهاز
+Not signed in ::: لم يتم تسجيل الدخول
+Open in a terminal ::: فتح في طرفية
+Program ::: البرنامج
+Program (e.g. my-agent) ::: البرنامج
+Program not found ::: لم يُعثر على البرنامج
+Programs from other companies that you already pay for, used inside Vader’s chat. You sign in with your own account in the vendor’s program. Vader never sees the token. The agent keeps its own tools and permission rules, and its usage is counted on your account. ::: برامج من شركات أخرى تدفع اشتراكها بالفعل، تُستخدم داخل محادثة Vader. تسجّل الدخول بحسابك في برنامج الشركة نفسها، ولا يرى Vader الرمز أبداً. يحتفظ الوكيل بأدواته وقواعد أذوناته، ويُحتسب استخدامه على حسابك.
+Ready ::: جاهز
+Sign out ::: تسجيل الخروج
+Sign-in: ::: تسجيل الدخول:
+Sign-in: {0}. ::: تسجيل الدخول: {0}.
+Signed in ::: تم تسجيل الدخول
+Test connection ::: اختبار الاتصال
+Test failed: ::: فشل الاختبار:
+The agents are up to date. ::: الوكلاء محدّثون.
+Update to ::: التحديث إلى
+Use my models ::: استخدام نماذجي
+Versions from the public agent registry ::: إصدارات من سجل الوكلاء العام
+Website ::: الموقع
+Works: ::: يعمل:
+Your own agent ::: وكيلك الخاص
+answered in ::: أجاب خلال
+is available ::: متاح
+the agent ::: الوكيل
+All chats were deleted ::: حُذفت كل المحادثات
+Back to what a new install has. Chats stay. ::: يعود إلى ما في التثبيت الجديد. تبقى المحادثات.
+Back up and restore ::: النسخ الاحتياطي والاستعادة
+Back up... ::: نسخ احتياطي...
+Bring over the theme, keybindings and extensions ::: نقل السمة واختصارات لوحة المفاتيح والامتدادات
+Chats and agent tasks ::: المحادثات ومهام الوكيل
+Chats imported ::: تم استيراد المحادثات
+Chats, saved agents, your rules and settings. Restoring only adds what is not here yet. ::: المحادثات والوكلاء المحفوظون وقواعدك وإعداداتك. الاستعادة تضيف فقط ما ليس موجوداً هنا بعد.
+Clear ::: مسح
+Coming from another editor ::: القادم من محرر آخر
+Data and backup ::: البيانات والنسخ الاحتياطي
+Delete all chats ::: حذف كل المحادثات
+Delete chat ::: حذف المحادثة
+Delete chats... ::: حذف المحادثات...
+Editor settings, keyboard shortcuts and theme ::: إعدادات المحرر واختصارات لوحة المفاتيح والسمة
+Erases the keys from this computer. The providers keep their own copies. ::: يمسح المفاتيح من هذا الجهاز. يحتفظ المزوّدون بنسخهم الخاصة.
+Every saved key was removed from this computer ::: أُزيل كل مفتاح محفوظ من هذا الجهاز
+Everything is stored on this computer. API keys and custom headers are left out of an export, so the file is safe to share. ::: كل شيء مخزّن على هذا الجهاز. تُستثنى مفاتيح API والترويسات المخصصة من التصدير، فالملف آمن للمشاركة.
+Everything of yours in one file ::: كل ما يخصك في ملف واحد
+Export ::: تصدير
+Exported the settings, without keys ::: صُدّرت الإعدادات بدون المفاتيح
+Exported {0} chats ::: صُدّرت {0} محادثة
+For a bug report ::: للإبلاغ عن خطأ
+Import ::: استيراد
+Keep it ::: إبقاؤه
+Keyboard ::: لوحة المفاتيح
+Logs ::: السجلات
+Nothing is changed in the other editor. Keys and chats are not copied. ::: لا يتغيّر شيء في المحرر الآخر. لا تُنسخ المفاتيح ولا المحادثات.
+Open the logs folder ::: فتح مجلد السجلات
+Remove every saved key ::: إزالة كل مفتاح محفوظ
+Remove keys... ::: إزالة المفاتيح...
+Reset settings ::: إعادة ضبط الإعدادات
+Reset settings... ::: إعادة ضبط الإعدادات...
+Restore... ::: استعادة...
+Restored {0} chat{1}, {2} saved agent{3} and {4} rule{5}. Nothing that was here was changed. ::: تمت استعادة {0} محادثة و{2} وكيلاً محفوظاً و{4} قاعدة. لم يتغيّر شيء مما كان هنا.
+Saved agents, rules and settings stay. ::: يبقى الوكلاء المحفوظون والقواعد والإعدادات.
+Saved {0}: {1} chat{2}, {3} saved agent{4}, your rules and settings, without keys ::: تم الحفظ {0}: {1} محادثة، و{3} وكيلاً محفوظاً، وقواعدك وإعداداتك، بدون مفاتيح
+Settings ::: الإعدادات
+Settings imported ::: تم استيراد الإعدادات
+Settings imported. Keys on this computer were kept. ::: تم استيراد الإعدادات. بقيت المفاتيح الموجودة على هذا الجهاز.
+Settings were reset ::: أُعيد ضبط الإعدادات
+Show it again ::: إظهارها مرة أخرى
+The editor itself ::: المحرر نفسه
+The welcome screen ::: شاشة الترحيب
+Theme ::: السمة
+Without keys, safe to share in a bug report ::: بدون مفاتيح، آمن للمشاركة في بلاغ عن خطأ
+{0} could not be read as {1}: {2} ::: تعذّرت قراءة {0} على أنه {1}: {2}
+{0} was not restored. {1} ::: لم تتم استعادة {0}. {1}
+A fast model works best here ::: النموذج السريع هو الأفضل هنا
+After you pause, a model suggests a change near the cursor, such as the same rename in the next place. Tab accepts, Esc dismisses. Each suggestion is a request to a model, at most 20 a minute; the code around the cursor and your last few edits are sent to it. ::: بعد أن تتوقف، يقترح نموذج تغييراً قرب المؤشر، مثل إعادة التسمية نفسها في الموضع التالي. Tab يقبل وEsc يتجاهل. كل اقتراح هو طلب إلى نموذج، بحدّ أقصى 20 في الدقيقة؛ ويُرسل إليه الكود حول المؤشر وآخر تعديلاتك.
+Edit here (Ctrl K) and applying changes ::: التعديل هنا (Ctrl K) وتطبيق التغييرات
+Editor ::: المحرر
+Faster and cheaper. Turn off to rewrite the whole file each time. ::: أسرع وأرخص. عطّله لإعادة كتابة الملف كاملاً في كل مرة.
+Help that appears inside a file, and which model gives it. ::: المساعدة التي تظهر داخل الملف، وأي نموذج يقدمها.
+Include errors and warnings after an edit ::: تضمين الأخطاء والتحذيرات بعد التعديل
+Model for Ctrl K and applying ::: نموذج Ctrl K والتطبيق
+Model for commit messages ::: نموذج رسائل الإيداع
+Model for suggestions ::: نموذج الاقتراحات
+Off lets applying use its own model ::: إيقافه يتيح للتطبيق استخدام نموذجه الخاص
+Reset ::: إعادة ضبط
+Reset Editor settings? ::: إعادة ضبط إعدادات المحرر؟
+Reset these settings ::: إعادة ضبط هذه الإعدادات
+Rewrite only the lines that change ::: إعادة كتابة الأسطر المتغيّرة فقط
+Show Add to chat and Edit next to selected code ::: إظهار «إضافة إلى المحادثة» و«تعديل» بجانب الكود المحدّد
+Source control ::: التحكم في المصدر
+Suggest the next edit ::: اقتراح التعديل التالي
+Suggest the next lines ::: اقتراح الأسطر التالية
+Suggestions while you type ::: الاقتراحات أثناء الكتابة
+Suggestions, Ctrl K, applying and commit messages go back to how a new install has them. The models you chose, your keys and your chats are not touched. ::: تعود الاقتراحات وCtrl K والتطبيق ورسائل الإيداع إلى حالتها في التثبيت الجديد. لا تُمَسّ النماذج التي اخترتها ولا مفاتيحك ولا محادثاتك.
+Tab accepts, Esc dismisses. Off by default. It works with models that can fill in the middle of a file. ::: Tab يقبل وEsc يتجاهل. معطّل افتراضياً. يعمل مع النماذج القادرة على ملء منتصف الملف.
+The agent reads the editor’s problems for the file it just changed ::: يقرأ الوكيل مشكلات المحرر للملف الذي غيّره للتو
+The button next to the message box ::: الزر بجانب مربع الرسالة
+Use the chat model for applying changes ::: استخدام نموذج المحادثة لتطبيق التغييرات
+What the agent sees ::: ما يراه الوكيل
+Write the commit message with the chat model ::: كتابة رسالة الإيداع بنموذج المحادثة
+Bringing it over... ::: جارٍ النقل...
+Brought over from ::: تم النقل من
+Extensions list ::: قائمة الامتدادات
+From {0} ::: من {0}
+Looking... ::: جارٍ البحث...
+Not now ::: ليس الآن
+Snippets ::: المقتطفات
+Theme and keybindings ::: السمة واختصارات المفاتيح
+Vader can copy your theme, keybindings and extensions list. Keys and chats are not copied. ::: يستطيع Vader نسخ سمتك واختصارات المفاتيح وقائمة الامتدادات. لا تُنسخ المفاتيح ولا المحادثات.
+settings found ::: إعدادات موجودة
+{0} settings found ::: عُثر على {0} إعداد
+{0} was not found on this computer, or it has no settings to bring over. ::: لم يُعثر على {0} على هذا الجهاز، أو لا توجد لديه إعدادات يمكن نقلها.
+Browse extensions ::: تصفّح الامتدادات
+Editor extensions ::: امتدادات المحرر
+Extensions guide ::: دليل الامتدادات
+Extensions that Microsoft publishes only on its own Marketplace (for example Remote-SSH and the C/C++ pack) are not on Open VSX. The guide lists alternatives, or install a .vsix you trust. ::: الامتدادات التي تنشرها مايكروسوفت في متجرها فقط (مثل Remote-SSH وحزمة C/C++) غير موجودة في Open VSX. يعرض الدليل بدائل، أو ثبّت ملف .vsix تثق به.
+Install from VSIX... ::: التثبيت من ملف VSIX...
+Marketplace ::: المتجر
+Not available ::: غير متاح
+Off by default: Open VSX does not sign extensions with the Microsoft certificate chain this check needs, so turning it on makes extensions from Open VSX fail to install. ::: معطّل افتراضياً: لا توقّع Open VSX الامتدادات بسلسلة شهادات مايكروسوفت التي يحتاجها هذا الفحص، لذا تفعيله يجعل تثبيت الامتدادات من Open VSX يفشل.
+Open VSX, the open extension registry ::: Open VSX، سجل الامتدادات المفتوح
+Require signed extensions ::: اشتراط امتدادات موقّعة
+Safety ::: الأمان
+Vader runs VS Code extensions: themes, languages, formatters, debuggers and more. ::: يشغّل Vader امتدادات VS Code: السمات واللغات ومنسّقات الكود وأدوات التنقيح وغيرها.
+Where they come from ::: مصدرها
+not configured ::: غير مُعدّ
+My models ::: نماذجي
+Your account with the vendor ::: حسابك لدى الشركة
+Your own keys and local models ::: مفاتيحك ونماذجك المحلية
+Choose a model ::: اختر نموذجاً
+Model for {0} ::: نموذج {0}
+No model is set up for this yet ::: لم يُعدّ نموذج لهذا بعد

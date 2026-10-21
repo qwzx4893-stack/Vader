@@ -3,7 +3,15 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
+import { spawn } from 'child_process';
+import { Emitter, Event } from '../../../../base/common/event.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { ILifecycleMainService } from '../../../../platform/lifecycle/electron-main/lifecycleMainService.js';
+import { downloadFile, DownloadError } from './updateDownloader.js';
+import { downloadFailureReason, pickInstaller, ReleaseAsset, sha256Of, summaryOfNotes, UpdateOffer, UpdateState } from '../common/updateModel.js';
 import { IEnvironmentMainService } from '../../../../platform/environment/electron-main/environmentMainService.js';
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { asJson, IRequestService, isSuccess } from '../../../../platform/request/common/request.js';
@@ -36,7 +44,69 @@ export const isNewerVersion = (candidate: string, current: string): boolean => {
 export class VaderMainUpdateService extends Disposable implements IVaderUpdateService {
 	_serviceBrand: undefined;
 
+	private readonly _onDidChangeUpdateState = this._register(new Emitter<UpdateState>());
+	readonly onDidChangeUpdateState: Event<UpdateState> = this._onDidChangeUpdateState.event;
+	private _state: UpdateState = { kind: 'idle' };
+	private _abort: AbortController | undefined;
+
+	private _setState(s: UpdateState): void { this._state = s; this._onDidChangeUpdateState.fire(s); }
+	async getUpdateState(): Promise<UpdateState> { return this._state; }
+
+	async dismissUpdate(): Promise<void> {
+		if (this._state.kind === 'downloading') return;
+		this._setState({ kind: 'idle' });
+	}
+
+	async cancelUpdateDownload(): Promise<void> { this._abort?.abort(); }
+
+	async downloadUpdate(): Promise<void> {
+		const s = this._state;
+		if (s.kind !== 'available' && s.kind !== 'failed') return;
+		const offer = s.offer;
+		if (!offer.asset) return;
+		const current = this._productService.vaderVersion ?? 'this version';
+		const dir = path.join(os.tmpdir(), 'vader-update');
+		const dest = path.join(dir, offer.asset.name);
+		this._abort = new AbortController();
+		let last = 0;
+		this._setState({ kind: 'downloading', offer, done: 0, total: offer.asset.size });
+		try {
+			fs.mkdirSync(dir, { recursive: true });
+			await downloadFile({
+				url: offer.asset.url, dest, expectedSize: offer.asset.size, sha256: offer.asset.sha256, signal: this._abort.signal,
+				onProgress: (done, total) => { const now = Date.now(); if (now - last > 150) { last = now; this._setState({ kind: 'downloading', offer, done, total: total || offer.asset!.size }); } },
+			});
+			this._setState({ kind: 'ready', offer, file: dest });
+		} catch (e) {
+			const err = e as DownloadError;
+			if (err.code === 'cancelled') { this._setState({ kind: 'available', offer }); return; }
+			this._setState({ kind: 'failed', offer, done: err.bytes ?? 0, reason: downloadFailureReason({ code: err.code, message: err.message, status: err.status }), current });
+		} finally {
+			this._abort = undefined;
+		}
+	}
+
+	async installUpdate(): Promise<{ ok: true } | { ok: false; reason: string }> {
+		const s = this._state;
+		if (s.kind !== 'ready') return { ok: false, reason: 'There is no downloaded update to install.' };
+		try {
+			const st = fs.statSync(s.file);
+			if (!st.isFile() || (s.offer.asset && st.size !== s.offer.asset.size)) return { ok: false, reason: 'The downloaded file is no longer whole. Download it again.' };
+		} catch { return { ok: false, reason: 'The downloaded file is gone. Download it again.' }; }
+		try {
+			// the installer closes Vader if it is still open and opens it again when it is done; it runs on its own, so Vader can quit
+			const child = spawn(s.file, ['/SILENT', '/CLOSEAPPLICATIONS', '/RESTARTAPPLICATIONS'], { detached: true, stdio: 'ignore' });
+			child.on('error', () => { /* reported below by the missing quit; a failed start leaves Vader running */ });
+			child.unref();
+		} catch (e) {
+			return { ok: false, reason: `The installer could not be started: ${e instanceof Error ? e.message : String(e)}` };
+		}
+		setTimeout(() => { void this._lifecycleMainService.quit(); }, 400);
+		return { ok: true };
+	}
+
 	constructor(
+		@ILifecycleMainService private readonly _lifecycleMainService: ILifecycleMainService,
 		@IEnvironmentMainService private readonly _envMainService: IEnvironmentMainService,
 		@IUpdateService private readonly _updateService: IUpdateService,
 		@IProductService private readonly _productService: IProductService,
@@ -122,7 +192,7 @@ export class VaderMainUpdateService extends Disposable implements IVaderUpdateSe
 		try {
 			const context = await this._requestService.request({ type: 'GET', url: RELEASES_API_URL, headers: { 'Accept': 'application/vnd.github+json' }, callSite: 'vaderUpdate.checkReleases' }, cts.token)
 			if (!isSuccess(context)) throw new Error(`GitHub answered ${context.res.statusCode}`)
-			const release = await asJson<{ tag_name?: string, html_url?: string, draft?: boolean, prerelease?: boolean }>(context)
+			const release = await asJson<{ tag_name?: string, html_url?: string, draft?: boolean, prerelease?: boolean, body?: string, assets?: ReleaseAsset[] }>(context)
 			const tag = release?.tag_name
 			if (!release || !tag || release.draft || release.prerelease) {
 				return { message: explicit ? `Vader ${current} is up to date.` : null } as const
@@ -130,7 +200,12 @@ export class VaderMainUpdateService extends Disposable implements IVaderUpdateSe
 			if (isNewerVersion(tag, current)) {
 				const url = typeof release.html_url === 'string' && release.html_url.startsWith('https://github.com/qwzx4893-stack/Vader/')
 					? release.html_url : 'https://github.com/qwzx4893-stack/Vader/releases/latest'
-				return { message: `Vader ${tag.replace(/^v/, '')} is available (you have ${current}).`, action: 'release', url } as const
+				const version = tag.replace(/^v/, '')
+				const picked = pickInstaller(release.assets ?? [], version, process.platform, process.arch)
+				const offer: UpdateOffer = { version, tag, releaseUrl: url, summary: summaryOfNotes(release.body), ...(picked ? { asset: { name: picked.name, size: picked.size, url: picked.browser_download_url, sha256: sha256Of(picked.digest) } } : {}) }
+				// what is being downloaded or waits to be installed is not replaced by a second look at the same release
+				if (this._state.kind === 'idle' || this._state.kind === 'available' || this._state.kind === 'failed') this._setState({ kind: 'available', offer })
+				return { message: `Vader ${version} is available (you have ${current}).`, action: 'release', url } as const
 			}
 			return { message: explicit ? `Vader ${current} is up to date.` : null } as const
 		}

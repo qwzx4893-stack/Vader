@@ -11,15 +11,21 @@ import { ISearchService } from '../../../services/search/common/search.js'
 import { IEditCodeService } from './editCodeServiceInterface.js'
 import { ITerminalToolService } from './terminalToolService.js'
 import { withUriAlias } from '../common/toolArgAliases.js'
-import { LintErrorItem, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
+import { LintErrorItem, LintNotes, BuiltinToolCallParams, BuiltinToolResultType, BuiltinToolName, ToolApprovalType, toolApprovalTypes } from '../common/toolsServiceTypes.js'
 import { IVaderModelService } from '../common/vaderModelService.js'
 import { EndOfLinePreference } from '../../../../editor/common/model.js'
 import { IVaderCommandBarService } from './vaderCommandBarServiceTypes.js'
 import { computeDirectoryTree1Deep, IDirectoryStrService, stringifyDirectoryTree1Deep } from '../common/directoryStrService.js'
 import { IMarkerService, MarkerSeverity } from '../../../../platform/markers/common/markers.js'
+import { foldersBetween, FoundRules, NestedRulesGiven, nestedRulesText, rulesFileNames } from '../common/instructions/nestedRules.js'
+import { LintStreak, lintReport, settleLints, splitLintDelta } from '../common/lintDelta.js'
+import { AGENT_IGNORE_FILE, AgentIgnore, NOTHING_IGNORED, blockedMessage, makeAgentIgnore, relativeTo } from '../common/agentIgnore.js'
+import { awaitOutput, awaitWords, DEFAULT_AWAIT_SECONDS, MAX_AWAIT_SECONDS, parsePattern } from '../common/awaitOutput.js'
+import { waitingForModel } from '../common/terminalInput.js'
 import { timeout } from '../../../../base/common/async.js'
 import { RawToolParamsObj } from '../common/sendLLMMessageTypes.js'
 import { MAX_CHILDREN_URIs_PAGE, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_BG_COMMAND_TIME, MAX_TERMINAL_INACTIVE_TIME } from '../common/prompt/prompts.js'
+import { ICodebaseIndexMainService } from '../common/codebaseIndex/codebaseIndexService.js'
 import { IVaderSettingsService } from '../common/vaderSettingsService.js'
 import { generateUuid } from '../../../../base/common/uuid.js'
 import { IAgentsService } from '../common/agents/agentsService.js'
@@ -179,7 +185,7 @@ export interface IToolsService {
 	 * section. `run_verification` itself calls this with the workspace root, so there is
 	 * exactly one implementation of the detection/execution logic, not two.
 	 */
-	runVerificationChecksAt(root: URI): Promise<{ checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[], detected: boolean }>;
+	runVerificationChecksAt(root: URI, only?: readonly string[]): Promise<{ checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string, output: string }[], detected: boolean }>;
 }
 
 export const IToolsService = createDecorator<IToolsService>('ToolsService');
@@ -211,9 +217,34 @@ export class ToolsService implements IToolsService {
 		@IBrowserToolMainService private readonly browserToolService: IBrowserToolMainService,
 		@IMemoryService private readonly memoryService: IMemoryService,
 		@ISkillService private readonly skillService: ISkillService,
+		@ICodebaseIndexMainService codebaseIndexService: ICodebaseIndexMainService,
 		@IPathService pathService: IPathService,
 	) {
 		const queryBuilder = instantiationService.createInstance(QueryBuilder);
+
+		// Rules files inside folders, for the file just read (common/instructions/nestedRules.ts)
+		const nestedGiven = new NestedRulesGiven()
+		const nestedRulesFor = async (uri: URI): Promise<string> => {
+			try {
+				for (const folder of workspaceContextService.getWorkspace().folders) {
+					const root = folder.uri.fsPath.replace(/\\/g, '/').replace(/\/+$/, '')
+					const dirs = foldersBetween(folder.uri.fsPath, uri.fsPath)
+					if (dirs.length === 0) continue
+					const found: FoundRules[] = []
+					for (const dir of dirs) {
+						for (const name of rulesFileNames()) {
+							const ruleUri = URI.joinPath(folder.uri, dir.slice(root.length + 1), name)
+							const text = await fileService.readFile(ruleUri, { limits: { size: 200_000 } }).then(f => f.value.toString(), () => undefined)
+							if (text === undefined) continue
+							if (nestedGiven.fresh(ruleUri.fsPath, text, Date.now())) found.push({ dir, file: name, text })
+							break
+						}
+					}
+					return nestedRulesText(root, found)
+				}
+			} catch { /* a rules file that cannot be read is left out */ }
+			return ''
+		}
 
 		// paths the model writes are resolved against the folder that is open (see resolveFilePath)
 		const validateURI = (uriStr: unknown) => validateURIWith(uriStr, workspaceContextService.getWorkspace().folders[0]?.uri, pathService.userHome({ preferLocal: true }))
@@ -225,7 +256,7 @@ export class ToolsService implements IToolsService {
 			return validateURI(cwd).fsPath
 		}
 
-		this.runVerificationChecksAt = async (root: URI) => {
+		this.runVerificationChecksAt = async (root: URI, only?: readonly string[]) => {
 			let scripts: Record<string, string> = {}
 			try {
 				const pkgUri = URI.joinPath(root, 'package.json')
@@ -241,9 +272,9 @@ export class ToolsService implements IToolsService {
 
 			// order matters: typecheck/lint before test, since a build/type error is usually the cheaper, more useful signal
 			const candidateScriptNames = ['build', 'compile', 'typecheck', 'type-check', 'lint', 'test']
-			const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string').slice(0, 5)
+			const scriptsToRun = candidateScriptNames.filter(name => typeof scripts[name] === 'string' && (!only || only.includes(name))).slice(0, 5)
 
-			const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string }[] = []
+			const checks: { name: string, command: string, passed: boolean, exitCode: number | null, outputTail: string, output: string }[] = []
 			for (const scriptName of scriptsToRun) {
 				const command = `${packageManager} ${scriptName}`
 				const { resPromise } = await this.terminalToolService.runCommand(command, { type: 'temporary', cwd: root.fsPath, terminalId: generateUuid() })
@@ -255,6 +286,7 @@ export class ToolsService implements IToolsService {
 					passed: exitCode === 0,
 					exitCode,
 					outputTail: result.slice(-4000),
+					output: result.slice(-60000),
 				})
 			}
 
@@ -478,6 +510,13 @@ export class ToolsService implements IToolsService {
 				return { persistentTerminalId };
 			},
 
+			await_terminal: (params: RawToolParamsObj) => {
+				const persistentTerminalId = validateProposedTerminalId(params.persistent_terminal_id)
+				const untilRegex = validateOptionalStr('until_regex', params.until_regex)
+				if (untilRegex !== null && untilRegex.trim() !== '') { const p = parsePattern(untilRegex); if (!p.ok) throw new Error(p.reason) }
+				const seconds = validateNumber(params.timeout_seconds, { default: DEFAULT_AWAIT_SECONDS })
+				return { persistentTerminalId, untilRegex: untilRegex !== null && untilRegex.trim() !== '' ? untilRegex : null, timeoutSeconds: Math.max(1, Math.min(MAX_AWAIT_SECONDS, seconds ?? DEFAULT_AWAIT_SECONDS)) }
+			},
 			delegate_subagent_task: (params: RawToolParamsObj) => {
 				const { task: taskUnknown, agent_name: agentNameUnknown } = params
 				const task = validateStr('task', taskUnknown)
@@ -532,6 +571,11 @@ export class ToolsService implements IToolsService {
 				return { providerId, itemName }
 			},
 
+			codebase_search: (params: RawToolParamsObj) => {
+				const query = validateStr('query', params.query)
+				const searchInFolder = validateOptionalURI(params.search_in_folder)
+				return { query, searchInFolder }
+			},
 			repo_map: (params: RawToolParamsObj) => {
 				const focus = validateOptionalStr('focus', params.focus)
 				const maxTokens = Math.min(8000, Math.max(500, validateNumber(params.max_tokens, { default: 2500 }) ?? 2500))
@@ -607,7 +651,8 @@ export class ToolsService implements IToolsService {
 				const fileContents = contents.slice(fromIdx, toIdx + 1) // paginate
 				const hasNextPage = (contents.length - 1) - toIdx >= 1
 				const totalFileLen = contents.length
-				return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines } }
+				const nestedRules = await nestedRulesFor(uri)
+				return { result: { fileContents, totalFileLen, hasNextPage, totalNumLines, ...(nestedRules ? { nestedRules } : {}) } }
 			},
 
 			ls_dir: async ({ uri, pageNumber }) => {
@@ -794,7 +839,7 @@ export class ToolsService implements IToolsService {
 				const root = workspaceContextService.getWorkspace().folders[0]?.uri
 				if (!root) return { result: { checks: [], detected: false } }
 				const result = await this.runVerificationChecksAt(root)
-				return { result }
+				return { result: { ...result, checks: result.checks.map(({ output: _output, ...c }) => c) } }
 			},
 			run_verification_agent: async ({ objective, maxIterations }) => {
 				// Resolved at call time, not injected: IVerificationService depends on IToolsService, and an injected
@@ -827,14 +872,9 @@ export class ToolsService implements IToolsService {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
 				}
 				await editCodeService.callBeforeApplyOrEdit(uri)
+				const lintBefore = this._getLintErrors(uri).lintErrors ?? [] // what the file's problems were before this edit (common/lintDelta.ts)
 				editCodeService.instantlyRewriteFile({ uri, newContent })
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-				return { result: lintErrorsPromise }
+				return { result: this._lintAfterEdit(uri, lintBefore) }
 			},
 
 			edit_file: async ({ uri, searchReplaceBlocks }) => {
@@ -843,16 +883,9 @@ export class ToolsService implements IToolsService {
 					throw new Error(`Another LLM is currently making changes to this file. Please stop streaming for now and ask the user to resume later.`)
 				}
 				await editCodeService.callBeforeApplyOrEdit(uri)
+				const lintBefore = this._getLintErrors(uri).lintErrors ?? [] // what the file's problems were before this edit (common/lintDelta.ts)
 				editCodeService.instantlyApplySearchReplaceBlocks({ uri, searchReplaceBlocks })
-
-				// at end, get lint errors
-				const lintErrorsPromise = Promise.resolve().then(async () => {
-					await timeout(2000)
-					const { lintErrors } = this._getLintErrors(uri)
-					return { lintErrors }
-				})
-
-				return { result: lintErrorsPromise }
+				return { result: this._lintAfterEdit(uri, lintBefore) }
 			},
 			// ---
 			run_command: async ({ command, cwd, terminalId }) => {
@@ -866,6 +899,12 @@ export class ToolsService implements IToolsService {
 			open_persistent_terminal: async ({ cwd }) => {
 				const persistentTerminalId = await this.terminalToolService.createPersistentTerminal({ cwd })
 				return { result: { persistentTerminalId } }
+			},
+			await_terminal: async ({ persistentTerminalId, untilRegex, timeoutSeconds }) => {
+				if (!this.terminalToolService.persistentTerminalExists(persistentTerminalId)) throw new Error(`Terminal ${persistentTerminalId} does not exist. Open one with open_persistent_terminal, or look at the ids you have.`)
+				const parsed = untilRegex ? parsePattern(untilRegex) : undefined
+				const r = await awaitOutput({ read: () => this.terminalToolService.readTerminal(persistentTerminalId), sleep: ms => timeout(ms), now: () => Date.now() }, { re: parsed && parsed.ok ? parsed.re : undefined, timeoutMs: timeoutSeconds * 1000 })
+				return { result: { text: awaitWords(r, persistentTerminalId, untilRegex), reason: r.reason, waitedMs: r.waitedMs } }
 			},
 			kill_persistent_terminal: async ({ persistentTerminalId }) => {
 				// Close the background terminal by sending exit
@@ -933,6 +972,13 @@ export class ToolsService implements IToolsService {
 				return { result: { itemName: item.name, providerId: item.providerId, actionTaken: item.installMethod } }
 			},
 
+			codebase_search: async ({ query, searchInFolder }) => {
+				if (!vaderSettingsService.state.globalSettings.codebaseIndex) throw new Error('The project index is turned off (Settings, Privacy and network). Use search_for_files or repo_map.')
+				const root = workspaceContextService.getWorkspace().folders[0]?.uri.fsPath
+				if (!root) throw new Error('codebase_search needs an open folder. Open a folder first (File > Open Folder).')
+				const out = await codebaseIndexService.search(root, query, { directories: searchInFolder ? [searchInFolder.fsPath] : undefined })
+				return { result: { text: out.text, found: out.results.length, files: out.files } }
+			},
 			repo_map: async ({ focus, maxTokens }) => {
 				const folders = workspaceContextService.getWorkspace().folders
 				if (folders.length === 0) throw new Error('repo_map needs an open folder. Open a folder first (File > Open Folder).')
@@ -1005,10 +1051,45 @@ export class ToolsService implements IToolsService {
 			return `[page ${snapshot.pageId}] ${snapshot.title}\n${snapshot.url}\n\n${snapshot.snapshotText}`
 		}
 
+		// ---- files the agent must not see (common/agentIgnore.ts): the files listed in .vaderignore are not read, listed, searched or changed. The list is read again at every call, so that
+		// a change to it takes effect at once. What a shell command reads is not inspected.
+		const ignoreOf = async (uri: URI): Promise<AgentIgnore> => {
+			const folder = workspaceContextService.getWorkspace().folders.find(f => relativeTo(f.uri.fsPath, uri.fsPath) !== undefined)
+			if (!folder) return NOTHING_IGNORED
+			try { return makeAgentIgnore(folder.uri.fsPath, (await fileService.readFile(URI.joinPath(folder.uri, AGENT_IGNORE_FILE), { limits: { size: 200_000 } })).value.toString()) } catch { return NOTHING_IGNORED }
+		}
+		const refuse = async (uri: URI, isDir = false): Promise<void> => { if ((await ignoreOf(uri)).blocks(uri.fsPath, isDir)) throw new Error(blockedMessage(uri.fsPath)) }
+		const tools = this.callTool as unknown as Record<string, (params: any) => Promise<any>>
+		for (const name of ['read_file', 'search_in_file', 'read_lint_errors', 'edit_file', 'rewrite_file', 'delete_file_or_folder', 'get_dir_tree']) {
+			const inner = tools[name]
+			tools[name] = async (params: any) => { await refuse(params.uri, name === 'get_dir_tree'); return inner(params) }
+		}
+		{
+			const inner = tools['create_file_or_folder']
+			tools['create_file_or_folder'] = async (params: any) => { await refuse(params.uri, !!params.isFolder); return inner(params) }
+			const ls = tools['ls_dir']
+			tools['ls_dir'] = async (params: any) => {
+				await refuse(params.uri, true)
+				const r = await ls(params)
+				const ig = await ignoreOf(params.uri)
+				if (r?.result?.children) r.result.children = r.result.children.filter((c: { uri: URI, isDirectory: boolean }) => !ig.blocks(c.uri.fsPath, c.isDirectory))
+				return r
+			}
+			for (const name of ['search_pathnames_only', 'search_for_files']) {
+				const search = tools[name]
+				tools[name] = async (params: any) => {
+					const r = await search(params)
+					const folder = workspaceContextService.getWorkspace().folders[0]
+					if (folder && r?.result?.uris) { const ig = await ignoreOf(folder.uri); r.result.uris = r.result.uris.filter((u: URI) => !ig.blocks(u.fsPath)) }
+					return r
+				}
+			}
+		}
+
 		// given to the LLM after the call for successful tool calls
 		this.stringOfResult = {
 			read_file: (params, result) => {
-				return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}`
+				return `${params.uri.fsPath}\n\`\`\`\n${result.fileContents}\n\`\`\`${nextPageStr(result.hasNextPage)}${result.hasNextPage ? `\nMore info because truncated: this file has ${result.totalNumLines} lines, or ${result.totalFileLen} characters.` : ''}${result.nestedRules ?? ''}`
 			},
 			ls_dir: (params, result) => {
 				const dirTreeStr = stringifyDirectoryTree1Deep(params, result)
@@ -1111,8 +1192,8 @@ export class ToolsService implements IToolsService {
 			edit_file: (params, result) => {
 				const lintErrsString = (
 					this.vaderSettingsService.state.globalSettings.includeToolLintErrors ?
-						(result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
-							: ` No lint errors found.`)
+						(result.lintNotes ? lintReport({ fresh: result.lintErrors ?? [], old: result.lintNotes.old, fixed: result.lintNotes.fixed }, { stringify: stringifyLintErrors, streak: result.lintNotes.streak })
+							: (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.` : ` No lint errors found.`))
 						: '')
 
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
@@ -1120,8 +1201,8 @@ export class ToolsService implements IToolsService {
 			rewrite_file: (params, result) => {
 				const lintErrsString = (
 					this.vaderSettingsService.state.globalSettings.includeToolLintErrors ?
-						(result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.`
-							: ` No lint errors found.`)
+						(result.lintNotes ? lintReport({ fresh: result.lintErrors ?? [], old: result.lintNotes.old, fixed: result.lintNotes.fixed }, { stringify: stringifyLintErrors, streak: result.lintNotes.streak })
+							: (result.lintErrors ? ` Lint errors found after change:\n${stringifyLintErrors(result.lintErrors)}.\nIf this is related to a change made while calling this tool, you might want to fix the error.` : ` No lint errors found.`))
 						: '')
 
 				return `Change successfully made to ${params.uri.fsPath}.${lintErrsString}`
@@ -1133,6 +1214,9 @@ export class ToolsService implements IToolsService {
 					return `${result_}\n(exit code ${resolveReason.exitCode})`
 				}
 				// normal command
+				if (resolveReason.type === 'timeout' && resolveReason.waitingFor) {
+					return `${result_}\n${waitingForModel(resolveReason.waitingFor)}`
+				}
 				if (resolveReason.type === 'timeout') {
 					return `${result_}\nTerminal command ran, but was automatically killed by Vader after ${MAX_TERMINAL_INACTIVE_TIME}s of inactivity and did not finish successfully. To try with more time, open a persistent terminal and run the command there.`
 				}
@@ -1147,6 +1231,9 @@ export class ToolsService implements IToolsService {
 					return `${result_}\n(exit code ${resolveReason.exitCode})`
 				}
 				// bg command
+				if (resolveReason.type === 'timeout' && resolveReason.waitingFor) {
+					return `${result_}\nTerminal command is still running in terminal ${persistentTerminalId}, and it is waiting for input. ${waitingForModel(resolveReason.waitingFor)}`
+				}
 				if (resolveReason.type === 'timeout') {
 					return `${result_}\nTerminal command is running in terminal ${persistentTerminalId}. The given outputs are the results after ${MAX_TERMINAL_BG_COMMAND_TIME} seconds.`
 				}
@@ -1157,6 +1244,7 @@ export class ToolsService implements IToolsService {
 				const { persistentTerminalId } = result;
 				return `Successfully created persistent terminal. persistentTerminalId="${persistentTerminalId}"`;
 			},
+			await_terminal: (_params, result) => result.text,
 			kill_persistent_terminal: (params, _result) => {
 				return `Successfully closed terminal "${params.persistentTerminalId}".`;
 			},
@@ -1177,6 +1265,7 @@ export class ToolsService implements IToolsService {
 			install_marketplace_capability: (params, result) => {
 				return `${result.actionTaken} succeeded for "${result.itemName}" (${result.providerId}).`;
 			},
+			codebase_search: (params, result) => result.text,
 			repo_map: (params, result) => {
 				if (!result.text) return 'No source files in a language the map covers (TypeScript, JavaScript, Python, Go, Rust, Java, Kotlin, C#, Ruby, PHP, C, C++) were found in this project.'
 				const head = `Project map: ${result.shownFiles} of ${result.mappedFiles} source files shown, most depended-on first. Each line is "line number: definition".${result.timedOut ? ' Reading was cut short by a time limit, so some files are missing.' : ''}`
@@ -1216,6 +1305,21 @@ export class ToolsService implements IToolsService {
 
 	}
 
+
+	private readonly _lintStreak = new LintStreak()
+
+	/**
+	 * The problems of a file after an edit, as what the edit changed (common/lintDelta.ts): the editor's list is waited for until it has settled, then compared with the list from before the
+	 * edit, so that the agent is told what its change introduced and not what the file already had.
+	 */
+	private async _lintAfterEdit(uri: URI, before: LintErrorItem[]): Promise<{ lintErrors: LintErrorItem[] | null, lintNotes: LintNotes }> {
+		const read = () => this._getLintErrors(uri).lintErrors ?? []
+		const sig = (items: LintErrorItem[]) => JSON.stringify(items.map(l => [l.code, l.message, l.startLineNumber]))
+		await settleLints({ signature: () => sig(read()), now: () => Date.now(), sleep: ms => timeout(ms) }, sig(before))
+		const d = splitLintDelta(before, read())
+		const streak = this._lintStreak.record(uri.toString(), d.fresh.length > 0)
+		return { lintErrors: d.fresh.length ? d.fresh : null, lintNotes: { old: d.old, fixed: d.fixed, streak } }
+	}
 
 	private _getLintErrors(uri: URI): { lintErrors: LintErrorItem[] | null } {
 		const lintErrors = this.markerService

@@ -5,9 +5,12 @@ import { RawToolParamsObj } from './sendLLMMessageTypes.js';
 
 
 
-export type TerminalResolveReason = { type: 'timeout' } | { type: 'done', exitCode: number }
+/** `waitingFor`: the command had stopped on a question (a password, [y/N]) when Vader gave up on it (common/terminalInput.ts) */
+export type TerminalResolveReason = { type: 'timeout', waitingFor?: { prompt: string, secret: boolean } } | { type: 'done', exitCode: number }
 
 export type LintErrorItem = { code: string, message: string, startLineNumber: number, endLineNumber: number }
+/** what an edit did to the problems of a file besides the ones it introduced (those are `lintErrors`): how many were there before and still are, how many it fixed, and how many edits in a row to this file have left problems (common/lintDelta.ts) */
+export type LintNotes = { old: number, fixed: number, streak: number }
 
 // Partial of IFileStat
 export type ShallowDirectoryItem = {
@@ -140,6 +143,7 @@ export type BuiltinToolCallParams = {
 	'open_persistent_terminal': { cwd: string | null },
 	'run_persistent_command': { command: string; persistentTerminalId: string },
 	'kill_persistent_terminal': { persistentTerminalId: string },
+	'await_terminal': { persistentTerminalId: string, untilRegex: string | null, timeoutSeconds: number },
 	// ---
 	'create_persistent_agent': { name: string, description: string, instructions: string, allowedApprovalTypes: ToolApprovalType[] | null, filesystemScopeGlobs: string[] | null },
 	'delegate_subagent_task': { task: string, agentName: string | null },
@@ -163,6 +167,7 @@ export type BuiltinToolCallParams = {
 	'update_task_list': { tasks: string },
 	// Vader addition: a map of the project's source files and what other files depend on (common/repoMap.ts). `focus` lists files or folders the task is about.
 	'repo_map': { focus: string | null, maxTokens: number },
+	'codebase_search': { query: string, searchInFolder: URI | null },
 	// Vader addition: install a skill you already have the instructions text for (via
 	// fetch_skill_instructions, or your own distilled instructions) - see common/skills/.
 	// Installed skills start disabled and 'review_required'; the user enables/trusts them.
@@ -179,7 +184,7 @@ export type BuiltinToolCallParams = {
 
 // RESULT OF TOOL CALL
 export type BuiltinToolResultType = {
-	'read_file': { fileContents: string, totalFileLen: number, totalNumLines: number, hasNextPage: boolean },
+	'read_file': { fileContents: string, totalFileLen: number, totalNumLines: number, hasNextPage: boolean, /** rules files in the folders above this file (common/instructions/nestedRules.ts) */ nestedRules?: string },
 	'ls_dir': { children: ShallowDirectoryItem[] | null, hasNextPage: boolean, hasPrevPage: boolean, itemsRemaining: number },
 	'get_dir_tree': { str: string, },
 	'search_pathnames_only': { uris: URI[], hasNextPage: boolean },
@@ -207,8 +212,8 @@ export type BuiltinToolResultType = {
 	'browser_page_errors': { errors: import('./browser/browserToolServiceTypes.js').PageErrorEntry[] },
 	'browser_network_log': { entries: import('./browser/browserToolServiceTypes.js').NetworkEntry[] },
 	// ---
-	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
-	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null }>,
+	'rewrite_file': Promise<{ lintErrors: LintErrorItem[] | null, lintNotes?: LintNotes }>,
+	'edit_file': Promise<{ lintErrors: LintErrorItem[] | null, lintNotes?: LintNotes }>,
 	'create_file_or_folder': {},
 	'delete_file_or_folder': {},
 	// ---
@@ -216,6 +221,7 @@ export type BuiltinToolResultType = {
 	'run_persistent_command': { result: string; resolveReason: TerminalResolveReason; },
 	'open_persistent_terminal': { persistentTerminalId: string },
 	'kill_persistent_terminal': {},
+	'await_terminal': { text: string, reason: 'matched' | 'quiet' | 'timeout', waitedMs: number },
 	// ---
 	'create_persistent_agent': { agentId: string },
 	'delegate_subagent_task': { threadId: string, conclusion: string, changedFilePaths: string[], stalledAwaitingApproval: boolean, hadError: boolean },
@@ -228,6 +234,7 @@ export type BuiltinToolResultType = {
 	'remember': { memoryId: string, scope: 'project' | 'agent' },
 	'update_task_list': { text: string, total: number, done: number },
 	'repo_map': { text: string, shownFiles: number, mappedFiles: number, scannedFiles: number, timedOut: boolean },
+	'codebase_search': { text: string, found: number, files: number },
 	'install_skill': { skillId: string },
 	'install_marketplace_capability': { itemName: string, providerId: string, actionTaken: string },
 }

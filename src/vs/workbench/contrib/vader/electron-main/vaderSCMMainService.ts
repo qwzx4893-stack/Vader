@@ -97,4 +97,25 @@ export class VaderSCMService implements IVaderSCMService {
 	gitLog(path: string): Promise<string> {
 		return git(['log', '--pretty=format:%h|%s|%ad', '--date=short', '--no-merges', '-n', '5'], path)
 	}
+
+	async gitCommitAll(path: string, message: string): Promise<string> {
+		const text = (message ?? '').trim()
+		if (!text) { throw new Error('Write a message for the commit first.') }
+		// git writes warnings (line-ending notes) to stderr on success, so success is the exit code and not an empty stderr
+		const run = async (args: string[]) => {
+			try {
+				return (await execFile('git', [...safeGitConfigArgs(), ...args], { cwd: path, timeout: GIT_TIMEOUT_MS * 3, maxBuffer: GIT_MAX_BUFFER, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })).stdout.trim()
+			} catch (e) {
+				const err = e as { stderr?: string; stdout?: string; message?: string }
+				throw new Error((err.stderr || err.stdout || err.message || 'git failed').toString().trim().slice(0, 1500))
+			}
+		}
+		await run(['add', '-A'])
+		await run(['commit', '-m', text])
+		return run(['rev-parse', '--short', 'HEAD'])
+	}
+
+	async gitRemoteUrl(path: string): Promise<string> {
+		try { return await git(['remote', 'get-url', 'origin'], path) } catch { return '' }
+	}
 }

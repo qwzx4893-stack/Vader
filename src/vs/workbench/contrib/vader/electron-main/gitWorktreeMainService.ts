@@ -7,7 +7,7 @@ import { promisify } from 'util';
 import { execFile as _execFile } from 'child_process';
 import * as path from 'path';
 import * as fs from 'fs';
-import { CreateWorktreeResult, IGitWorktreeMainService, MergeWorktreeResult } from '../common/worktree/gitWorktreeTypes.js';
+import { CreateWorktreeResult, IGitWorktreeMainService, MergeWorktreeResult, RepoInspection } from '../common/worktree/gitWorktreeTypes.js';
 
 const execFile = promisify(_execFile);
 
@@ -23,9 +23,25 @@ const execFile = promisify(_execFile);
 // subprocess can hang (suspenders) - 60s is generous for any of the local operations above while
 // still being a real, finite bound instead of none at all.
 const GIT_TIMEOUT_MS = 60_000;
+
+// A commit or a merge needs a name to put on it. A computer where git was never set up has none, and every commit here would stop with "Please tell me who you are" although nothing
+// is wrong with the project. Where the person has set a name, theirs is used; where not, Vader's own stands in for the call (it is never written to any configuration).
+const identityKnown = new Map<string, boolean>();
+const identityEnv = async (cwd: string): Promise<{ [k: string]: string }> => {
+	let known = identityKnown.get(cwd);
+	if (known === undefined) {
+		try {
+			const { stdout } = await execFile('git', [...safeGitConfigArgs(), 'config', 'user.email'], { cwd, timeout: GIT_TIMEOUT_MS });
+			known = stdout.trim().length > 0;
+		} catch { known = false; }
+		identityKnown.set(cwd, known);
+	}
+	return known ? {} : { GIT_AUTHOR_NAME: 'Vader', GIT_AUTHOR_EMAIL: 'vader@localhost', GIT_COMMITTER_NAME: 'Vader', GIT_COMMITTER_EMAIL: 'vader@localhost' };
+};
+
 const git = async (args: string[], cwd: string): Promise<string> => {
 	try {
-		const { stdout } = await execFile('git', [...safeGitConfigArgs(), ...args], { cwd, timeout: GIT_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } });
+		const { stdout } = await execFile('git', [...safeGitConfigArgs(), ...args], { cwd, timeout: GIT_TIMEOUT_MS, env: { ...process.env, GIT_TERMINAL_PROMPT: '0', ...(await identityEnv(cwd)) } });
 		return stdout.trim();
 	} catch (e) {
 		if (e && typeof e === 'object' && 'killed' in e && (e as { killed?: boolean }).killed && 'signal' in e && (e as { signal?: string }).signal === 'SIGTERM') {
@@ -172,6 +188,114 @@ export class GitWorktreeMainService implements IGitWorktreeMainService {
 			await git(['commit', '--no-edit', '-m', commitMessage], worktreePath);
 			return { ok: true };
 		} catch (e) {
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	// ---- a task's own copy of the project
+
+	async inspectRepo(repoPath: string): Promise<RepoInspection> {
+		try {
+			if ((await git(['rev-parse', '--is-inside-work-tree'], repoPath)) !== 'true') return { isRepo: false, hasCommits: false, branch: '', dirtyFiles: 0 };
+		} catch {
+			return { isRepo: false, hasCommits: false, branch: '', dirtyFiles: 0 };
+		}
+		let hasCommits = true;
+		try { await git(['rev-parse', '--verify', 'HEAD'], repoPath); } catch { hasCommits = false; }
+		const branch = await git(['branch', '--show-current'], repoPath).catch(() => '');
+		// Vader keeps its own files (screenshots, memory) in `.vader/`; they are not the person's changes and a copy never needs them
+		const status = await git(['status', '--porcelain', '--untracked-files=all'], repoPath).catch(() => '');
+		const dirtyFiles = status.split('\n').map(l => l.slice(3).trim().replace(/^"|"$/g, '')).filter(f => f && !f.startsWith('.vader/')).length;
+		return { isRepo: true, hasCommits, branch, dirtyFiles };
+	}
+
+	async initRepo(repoPath: string): Promise<{ ok: true } | { ok: false; reason: string }> {
+		try {
+			const inside = await git(['rev-parse', '--is-inside-work-tree'], repoPath).catch(() => '');
+			if (inside !== 'true') await git(['init', '-b', 'main'], repoPath).catch(() => git(['init'], repoPath)); // an older git has no -b
+			await git(['add', '-A'], repoPath);
+			await git(['commit', '--allow-empty', '-m', 'Initial commit (made by Vader so that tasks can work in their own copy)'], repoPath);
+			return { ok: true };
+		} catch (e) {
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	async commitAllChanges({ repoPath, message }: { repoPath: string; message: string }): Promise<{ ok: true } | { ok: false; reason: string }> {
+		try {
+			await git(['add', '-A'], repoPath);
+			if (await git(['status', '--porcelain'], repoPath)) await git(['commit', '-m', message], repoPath);
+			return { ok: true };
+		} catch (e) {
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	async headOf(repoPath: string): Promise<string> {
+		try { return await git(['rev-parse', 'HEAD'], repoPath); } catch { return ''; }
+	}
+
+	async changedFilesVsBase({ worktreePath, baseBranch }: { worktreePath: string; baseBranch: string }): Promise<string[]> {
+		if (!isSafeRef(baseBranch)) return [];
+		try {
+			await git(['add', '-A'], worktreePath);
+			const base = await git(['merge-base', baseBranch, 'HEAD'], worktreePath);
+			const names = await git(['diff', ...SAFE_DIFF_FLAGS, '--cached', '--name-only', base], worktreePath);
+			return names.split('\n').map(s => s.trim()).filter(f => f && !f.startsWith('.vader/'));
+		} catch {
+			return [];
+		}
+	}
+
+	async diffNumstatVsBase({ worktreePath, baseBranch }: { worktreePath: string; baseBranch: string }): Promise<{ added: number; removed: number }> {
+		if (!isSafeRef(baseBranch)) return { added: 0, removed: 0 };
+		try {
+			await git(['add', '-A'], worktreePath);
+			const base = await git(['merge-base', baseBranch, 'HEAD'], worktreePath);
+			const out = await git(['diff', ...SAFE_DIFF_FLAGS, '--cached', '--numstat', base], worktreePath);
+			let added = 0, removed = 0;
+			for (const l of out.split('\n')) {
+				const m = /^(\d+)\t(\d+)\t(.+)$/.exec(l.trim());
+				if (m && !m[3].startsWith('.vader/')) { added += Number(m[1]); removed += Number(m[2]); }
+			}
+			return { added, removed };
+		} catch {
+			return { added: 0, removed: 0 };
+		}
+	}
+
+	async conflictMarkersIn(worktreePath: string): Promise<string[]> {
+		return (await git(['grep', '-l', '-E', '^(<<<<<<< |=======$|>>>>>>> )', '--', '.'], worktreePath).catch(() => '')).split('\n').map(s => s.trim()).filter(Boolean);
+	}
+
+	async stashChanges({ repoPath, message }: { repoPath: string; message: string }): Promise<{ ok: true; stashed: boolean } | { ok: false; reason: string }> {
+		try {
+			if (!(await git(['status', '--porcelain'], repoPath))) return { ok: true, stashed: false };
+			await git(['stash', 'push', '--include-untracked', '-m', message], repoPath);
+			return { ok: true, stashed: true };
+		} catch (e) {
+			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
+		}
+	}
+
+	async popStash(repoPath: string): Promise<{ ok: true } | { ok: false; reason: string; kept: boolean }> {
+		try {
+			await git(['stash', 'pop'], repoPath);
+			return { ok: true };
+		} catch (e) {
+			// git keeps the stash when applying it stops on a clash, so nothing the person had is lost
+			const kept = (await git(['stash', 'list'], repoPath).catch(() => '')).length > 0;
+			return { ok: false, reason: e instanceof Error ? e.message : String(e), kept };
+		}
+	}
+
+	async undoMerge({ repoPath, mergeSha }: { repoPath: string; mergeSha: string }): Promise<{ ok: true } | { ok: false; reason: string }> {
+		if (!/^[0-9a-f]{7,64}$/i.test(mergeSha)) return { ok: false, reason: 'That is not a commit Vader made.' };
+		try {
+			await git(['revert', '-m', '1', '--no-edit', mergeSha], repoPath);
+			return { ok: true };
+		} catch (e) {
+			try { await git(['revert', '--abort'], repoPath); } catch { /* nothing was in progress */ }
 			return { ok: false, reason: e instanceof Error ? e.message : String(e) };
 		}
 	}

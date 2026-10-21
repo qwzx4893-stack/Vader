@@ -14,6 +14,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { auditShot } from './fixtures/uiAudit.mjs';
 
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
@@ -57,7 +58,7 @@ const plugin = {
 };
 await esbuild.build({
 	entryPoints: [path.join(here, 'fixtures/addonsHarness.tsx')], bundle: true, platform: 'browser', format: 'iife', outfile: path.join(tmp, 'page.js'), logLevel: 'error',
-	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"' },
+	plugins: [plugin], jsx: 'automatic', loader: { '.json': 'json', '.css': 'css' }, define: { 'process.env.NODE_ENV': '"production"', 'process.env.VADER_LANG': JSON.stringify(process.env.VADER_LANG ?? 'en'), 'process.env.VADER_PREVIEW': '""' },
 	tsconfigRaw: { compilerOptions: { experimentalDecorators: true, useDefineForClassFields: false, jsx: 'react-jsx' } },
 });
 const html = `<!doctype html><html><head><meta charset="utf-8"><link rel="stylesheet" href="page.css"><style>
@@ -100,7 +101,7 @@ const rows = (page) => page.locator('[data-testid=vader-addon-row]');
 const waitRows = async (page, min = 1, timeout = 20000) => { await page.waitForFunction((m) => document.querySelectorAll('[data-testid=vader-addon-row]').length >= m, min, { timeout }); };
 const tab = (page, id) => page.locator(`[data-testid=vader-addons-tab-${id}]`);
 let shotN = 0;
-const shot = async (page, name) => { const f = path.join(shots, `${String(++shotN).padStart(2, '0')}-${name}.png`); await page.screenshot({ path: f }); };
+const shot = async (page, name) => { await auditShot(page, name); const f = path.join(shots, `${String(++shotN).padStart(2, '0')}-${name}.png`); await page.screenshot({ path: f }); };
 
 /** nothing cut off or spilling, in the part of the page that is on screen */
 const layoutProblems = (page) => page.evaluate(() => {
@@ -136,7 +137,7 @@ try {
 		const lum = (c) => { const m = c.startsWith('color(') ? c.match(/[0-9.]+/g).slice(0, 3).map((x) => Number(x) * 255) : c.match(/[0-9.]+/g).slice(0, 3).map(Number); return (0.2126 * m[0] + 0.7152 * m[1] + 0.0722 * m[2]) / 255; };
 		check('Install is a white button with black text', nInstall >= 4 && look.text === 'Install' && lum(look.bg) > 0.8 && lum(look.color) < 0.25, nInstall + ' ' + JSON.stringify(look));
 		check('there is no round plus button any more', (await page.locator('button[aria-label^="Add "]').count()) === 0);
-		const sectionsTitles = await page.locator('span.vader-font-semibold').allInnerTexts();
+		const sectionsTitles = await page.locator('[data-testid=vader-addons-group-title]').allInnerTexts();
 		check('the front page has one short list for each kind: skills, MCP servers, extensions, tooling, agents', ['Most trusted skills', 'MCP servers', 'Extensions for the editor', 'Agents you can connect'].every((t) => sectionsTitles.includes(t)), sectionsTitles.join('|'));
 		const legend = await page.getByText('80 to 100 high trust').count();
 		check('the trust legend is there', legend === 1);
@@ -154,8 +155,8 @@ try {
 		await tab(page, 'skills').click();
 		await waitRows(page, 6);
 		const first = rows(page).first();
-		const name = (await first.locator('span.vader-font-semibold').first().innerText()).trim();
-		await first.locator('span.vader-font-semibold').first().click();
+		const name = (await first.locator('[data-testid=vader-addon-name]').first().innerText()).trim();
+		await first.locator('[data-testid=vader-addon-name]').first().click();
 		await page.waitForSelector('[data-testid=vader-item-page]');
 		const kind = await page.locator('[data-testid=vader-item-page]').getAttribute('data-kind');
 		check('clicking the card (not the button) opens the skill’s own page', kind === 'skill' && (await page.locator('[data-testid=vader-item-page] h2').innerText()).trim() === name);
@@ -198,24 +199,37 @@ try {
 		await tab(page, 'skills').click();
 		await waitRows(page, 6);
 		const target = rows(page).filter({ has: page.locator('[data-testid=vader-addon-install]') }).first();
-		const tname = (await target.locator('span.vader-font-semibold').first().innerText()).trim();
+		const tname = (await target.locator('[data-testid=vader-addon-name]').first().innerText()).trim();
 		await target.locator('[data-testid=vader-addon-install]').click();
 		await page.waitForFunction((n) => (window.__installed || []).includes(`skill:${n}`) || document.querySelector('[data-testid=vader-addon-error]'), tname, { timeout: 15000 });
 		check('installing from a row does not fail', (await page.locator('[data-testid=vader-addon-error]').count()) === 0, await page.locator('[data-testid=vader-addon-error]').allInnerTexts());
 		check('the Install button installs and does not open the page', (await page.locator('[data-testid=vader-item-page]').count()) === 0);
-		await page.waitForFunction((n) => { const rs = [...document.querySelectorAll('[data-testid=vader-addon-row]')]; const r = rs.find((x) => x.querySelector('span.vader-font-semibold')?.textContent.trim() === n); return r && /Installed/.test(r.innerText); }, tname, { timeout: 15000 });
+		await page.waitForFunction((n) => { const rs = [...document.querySelectorAll('[data-testid=vader-addon-row]')]; const r = rs.find((x) => x.querySelector('[data-testid=vader-addon-name]')?.textContent.trim() === n); return r && /Installed/.test(r.innerText); }, tname, { timeout: 15000 });
 		check('the row then says Installed', true);
 		await page.getByRole('button', { name: 'Installed', exact: true }).click();
-		await page.waitForTimeout(400);
-		const only = await rows(page).count();
-		check('the Installed switch lists only what is installed', only === 1 && /Installed/.test(await rows(page).first().innerText()), String(only));
-		await page.getByRole('button', { name: 'Installed', exact: true }).click();
+		await page.waitForSelector('[data-testid=vader-installed-page]', { timeout: 10000 });
+		await page.waitForSelector('[data-testid=vader-installed-row]', { timeout: 10000 });
+		const names = await page.locator('[data-testid=vader-installed-name]').allInnerTexts();
+		check('the Installed page lists what is installed, the skill just added among it', names.includes(tname), names.join(', '));
+		check('the Installed page groups by kind with a title each', (await page.locator('[data-testid=vader-installed-group]').count()) >= 1);
+		await page.locator('[data-testid=vader-installed-filter]').fill('zzzz-nothing');
+		check('the filter on the Installed page says nothing matches', /Nothing installed matches/.test(await page.locator('[data-testid=vader-installed-page]').innerText()));
+		await page.locator('[data-testid=vader-installed-filter]').fill('');
+		const mine = page.locator('[data-testid=vader-installed-row]').filter({ hasText: tname }).first();
+		check('a skill not yet read has Read and a switch that cannot be used before reading', (await mine.locator('[data-testid=vader-installed-read]').count()) === 1 && await mine.locator('[data-testid=vader-installed-switch]').isDisabled());
+		check('the banner then says a skill waits to be read', /switched off until you read/.test(await page.locator('[data-testid=vader-installed-banner]').innerText()));
+		await page.locator('[data-testid=vader-installed-review]').click();
+		check('Review updates shows only what waits', (await page.locator('[data-testid=vader-installed-row]').count()) >= 1);
+		await page.locator('[data-testid=vader-installed-review]').click();
+		await page.locator('[data-testid=vader-installed-back]').click();
+		await page.waitForSelector('[data-testid=vader-addons-installed]', { timeout: 10000 });
+		check('the arrow goes back to Add-ons', (await page.locator('[data-testid=vader-installed-page]').count()) === 0);
 		await tab(page, 'skills').click();
 		await waitRows(page, 6);
 		// install from the page, with the second button that also switches the skill on
 		const second = rows(page).filter({ has: page.locator('[data-testid=vader-addon-install]') }).first();
-		const sname = (await second.locator('span.vader-font-semibold').first().innerText()).trim();
-		await second.locator('span.vader-font-semibold').first().click();
+		const sname = (await second.locator('[data-testid=vader-addon-name]').first().innerText()).trim();
+		await second.locator('[data-testid=vader-addon-name]').first().click();
 		await page.waitForSelector('[data-testid=vader-item-install-enable]', { timeout: 10000 });
 		await page.locator('[data-testid=vader-item-install-enable]').click();
 		await page.waitForFunction((n) => (window.__installed || []).includes(`skill:${n}`) && (window.__installed || []).some((x) => /^enable:.*:true$/.test(x)), sname, { timeout: 15000 });
@@ -230,12 +244,12 @@ try {
 		const { page, errors } = await newPage();
 		await tab(page, 'mcp').click();
 		await waitRows(page, 5);
-		const names = await rows(page).locator('span.vader-font-semibold').allInnerTexts();
+		const names = await rows(page).locator('[data-testid=vader-addon-name]').allInnerTexts();
 		check('the MCP tab lists servers from several sources', names.length >= 5, names.join(','));
 		const chips = await page.locator('[data-testid=vader-addons-sections] button').allInnerTexts();
 		check('the MCP tab has its own sections', chips[0] === 'All' && chips.includes('Code and Git') && chips.includes('Databases') && chips.includes('Chat and tickets'), chips.join('|'));
-		const smith = rows(page).filter({ has: page.locator('span.vader-font-semibold', { hasText: /^GitHub$/ }) }).first();
-		await smith.locator('span.vader-font-semibold').first().click();
+		const smith = rows(page).filter({ has: page.locator('[data-testid=vader-addon-name]', { hasText: /^GitHub$/ }) }).first();
+		await smith.locator('[data-testid=vader-addon-name]').first().click();
 		await page.waitForSelector('[data-testid=vader-item-page][data-kind=mcp]');
 		const tabsInPage = await page.locator('[data-testid^=vader-item-tab-]').allInnerTexts();
 		check('an MCP server’s page has Overview, Setup and Why NN%', tabsInPage[0] === 'Overview' && tabsInPage[1] === 'Setup' && /^Why/.test(tabsInPage[2]), tabsInPage.join('|'));
@@ -261,12 +275,12 @@ try {
 		const before = await rows(page).count();
 		await page.locator('[data-testid=vader-addons-section-documents]').click();
 		await page.waitForFunction(() => document.querySelectorAll('[data-testid=vader-addon-row]').length > 0 && (window.__calls.skillsSh || []).includes('pdf'), null, { timeout: 15000 });
-		const docNames = await rows(page).locator('span.vader-font-semibold').allInnerTexts();
+		const docNames = await rows(page).locator('[data-testid=vader-addon-name]').allInnerTexts();
 		check('choosing "Documents and files" asks the sources for it and lists documents (pdf is there)', docNames.some((n) => /pdf|docx|xlsx/i.test(n)), docNames.join(','));
 		check('a section shows fewer rows than "All" and says nothing about counts', docNames.length > 0 && docNames.length <= before + 12);
 		await page.locator('[data-testid=vader-addons-section-testing]').click();
 		await page.waitForTimeout(600);
-		const testNames = await rows(page).locator('span.vader-font-semibold').allInnerTexts();
+		const testNames = await rows(page).locator('[data-testid=vader-addon-name]').allInnerTexts();
 		check('another section lists other skills', testNames.join() !== docNames.join(), testNames.join(','));
 		await page.getByRole('button', { name: 'All', exact: true }).first().click();
 		await waitRows(page, 6);
@@ -288,7 +302,7 @@ try {
 		const { page, errors } = await newPage();
 		await tab(page, 'extensions').click();
 		await waitRows(page, 3);
-		await rows(page).first().locator('span.vader-font-semibold').first().click();
+		await rows(page).first().locator('[data-testid=vader-addon-name]').first().click();
 		await page.waitForSelector('[data-testid=vader-item-page][data-kind=extension]');
 		check('an extension’s page has its icon, rating, installs and version up top', (await page.locator('[data-testid=vader-item-stats]').count()) === 1 && /installs/.test(await page.locator('[data-testid=vader-item-stats]').innerText()) && (await page.locator('[data-testid=vader-item-page] img[data-testid=vader-item-logo]').count()) === 1);
 		const t = await page.locator('[data-testid^=vader-item-tab-]').allInnerTexts();
@@ -303,12 +317,12 @@ try {
 		const a = await newPage();
 		await tab(a.page, 'agents').click();
 		await waitRows(a.page, 10);
-		const agentNames = await rows(a.page).locator('span.vader-font-semibold').allInnerTexts();
+		const agentNames = await rows(a.page).locator('[data-testid=vader-addon-name]').allInnerTexts();
 		check('the Agents tab lists all ten agents Vader can connect', agentNames.length === 10 && ['Codex', 'Cursor', 'GitHub Copilot', 'OpenCode', 'Mistral Vibe', 'Grok Build', 'Kimi Code', 'Antigravity', 'Claude Code', 'Freebuff'].every((n) => agentNames.includes(n)), agentNames.join(','));
 		check('an agent has no sections and no trust figure (its vendor, not a stranger, publishes it)', (await a.page.locator('[data-testid=vader-addons-sections]').count()) === 0 && (await rows(a.page).locator('[aria-label^="Trust"]').count()) === 0);
 		const claude = rows(a.page).filter({ hasText: 'Claude Code' });
 		check('the terminal agent’s button says "Set up" and the one that cannot run here says nothing', /Set up/.test(await claude.innerText()) && !/Install/.test(await rows(a.page).filter({ hasText: 'GitHub Copilot' }).innerText()));
-		await rows(a.page).filter({ hasText: 'Cursor' }).locator('span.vader-font-semibold').first().click();
+		await rows(a.page).filter({ hasText: 'Cursor' }).locator('[data-testid=vader-addon-name]').first().click();
 		await a.page.waitForSelector('[data-testid=vader-item-page][data-kind=agent]');
 		check('an agent’s page has three steps, the plan note and the vendor’s own logo', (await a.page.locator('[data-testid=vader-item-step-list] > div').count()) === 3 && (await a.page.getByText('Plan, limits and cost').count()) === 1 && (await a.page.locator('svg[data-agent-logo=cursor]').count()) >= 1);
 		check('the agent’s facts say who counts the cost', (await a.page.getByText('Counted by the vendor on your plan, not by Vader').count()) === 1);
@@ -333,7 +347,7 @@ try {
 		await page.locator('[data-testid=vader-addons-search]').fill('pdf');
 		await page.waitForFunction(() => (window.__calls.skillsSh || []).includes('pdf') && (window.__calls.smithery || []).includes('pdf'), null, { timeout: 15000 });
 		await page.waitForTimeout(500);
-		const found = await rows(page).locator('span.vader-font-semibold').allInnerTexts();
+		const found = await rows(page).locator('[data-testid=vader-addon-name]').allInnerTexts();
 		check('a search asks every source for the words and lists what they found', found.some((n) => /pdf/i.test(n)) && found.length >= 3, found.join(','));
 		await shot(page, 'search-pdf');
 		await page.locator('[data-testid=vader-addons-search]').fill('');

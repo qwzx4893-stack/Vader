@@ -124,8 +124,9 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		id: 'antigravity', name: 'Antigravity', kind: 'acp', logo: 'antigravity',
 		tagline: 'Google\'s Antigravity agent with your Google account\'s plan.',
 		website: 'https://antigravity.google/docs/ide/extensions',
-		note: 'Google\'s own agent server for editors (listed in the ACP registry). The models are the ones your plan offers; limits and data use are Google\'s.',
-		acp: { registryId: 'antigravity-acp', loginNote: 'Sign in with your Google account when Antigravity asks.', archivePrefixes: ['https://dl.google.com/agy-extensions/'] },
+		note: 'Google\'s own agent server for editors (Antigravity ACP, listed in the ACP registry). You sign in with your Google account; the models are the ones your plan offers; limits and data use are Google\'s.',
+		// Google's ACP server offers four ways in (its own docs, "Authentication and licensing"): a Google account (Free, Pro, Ultra), Gemini Enterprise by OAuth, a Gemini API key and Gemini Enterprise by key or ADC. A person's own Google account is the one Vader starts.
+		acp: { registryId: 'antigravity-acp', loginNote: 'A browser page opens to sign in with your Google account (the Free, Pro and Ultra plans work).', authPreference: ['oauth-personal'], archivePrefixes: ['https://dl.google.com/agy-extensions/'] },
 	},
 	{
 		id: 'freebuff', name: 'Freebuff', kind: 'terminal', logo: 'freebuff',

@@ -60,6 +60,18 @@ check('a search box appears only for long lists', !G.showSearchBox(8) && G.showS
 	check('800 models: a search takes well under a frame (16 ms)', ms < 16, `${ms} ms`);
 }
 
+// ---- the words of the states (board S04)
+check('names are listed the way a person says them', G.listNames(['OpenAI']) === 'OpenAI' && G.listNames(['OpenAI', 'Gemini']) === 'OpenAI and Gemini' && G.listNames(['A', 'B', 'C']) === 'A, B and C' && G.listNames([]) === '');
+{
+	const w = G.noMatchWords('sonnet 9', 4, ['OpenAI', 'Gemini']);
+	check('nothing found says what was searched and which providers could not be', w.headline === 'No model named “sonnet 9”.' && w.detail === 'Searched 4 providers with a key. OpenAI and Gemini have no key yet.');
+	check('one provider and none missing read right', G.noMatchWords(' x ', 1, []).detail === 'Searched 1 provider with a key.' && G.noMatchWords('x', 2, ['Groq']).detail === 'Searched 2 providers with a key. Groq has no key yet.');
+}
+check('the line under the providers with no key counts them', G.addableLine(48) === '48 providers can be added. Models appear as soon as a key works.' && G.addableLine(1).startsWith('1 provider can be added'));
+check('"fetched" is said as a person would', G.agoWords(1000) === 'just now' && G.agoWords(5 * 60_000) === '5 min ago' && G.agoWords(3 * 3_600_000) === '3 h ago' && G.agoWords(3 * 86_400_000) === '3 days ago');
+check('a list is asked for again after ten minutes, never before', !G.listIsStale(1000, 1000 + 9 * 60_000) && G.listIsStale(1000, 1000 + 10 * 60_000) && G.listIsStale(undefined, 5));
+check('Anthropic ids read as names, other ids are left as written', G.friendlyModelName('anthropic', 'claude-sonnet-4-5').text === 'Claude Sonnet 4.5' && G.friendlyModelName('anthropic', 'claude-3-5-haiku-20241022').text === 'Claude Haiku 3.5' && G.friendlyModelName('anthropic', 'claude-opus-4-1').text === 'Claude Opus 4.1' && G.friendlyModelName('openRouter', 'deepseek/deepseek-v3.2').mono === true && G.friendlyModelName('anthropic', 'something-else').text === 'something-else');
+
 // ---- how the picker is wired (static checks)
 const read = (rel) => fs.readFileSync(path.join(here, rel), 'utf8');
 const picker = read('../browser/react/src/vader-settings-tsx/ProviderModelPicker.tsx'), dropdown = read('../browser/react/src/vader-settings-tsx/ModelDropdown.tsx');

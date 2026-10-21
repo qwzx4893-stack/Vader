@@ -67,6 +67,14 @@ import { IAgentOrchestrationService, ParallelRunState } from '../../../orchestra
 import { IExternalAgentsService, ExternalAgentsState } from '../../../externalAgents/externalAgentsService.js'
 import { IAgentRuntimeRegistryService } from '../../../agentRuntime/agentRuntimeRegistryService.js'
 import { IUnifiedMarketplaceService } from '../../../../common/marketplace/marketplaceTypes.js'
+import { IVaderShellService, ShellState } from '../../../vaderShellService.js'
+import { IVaderReviewService } from '../../../vaderReviewService.js'
+import { ITaskCopyService } from '../../../taskCopyService.js'
+import { IVaderUpdateService } from '../../../../common/vaderUpdateService.js'
+import { ICodebaseIndexMainService, IndexState } from '../../../../common/codebaseIndex/codebaseIndexService.js'
+import { IVaderUpdateCoordinator } from '../../../vaderUpdateCoordinator.js'
+import { IVerificationService } from '../../../../common/verification/verificationTypes.js'
+import { IBrowserToolMainService } from '../../../../common/browser/browserToolService.js'
 
 
 // normally to do this you'd use a useEffect that calls .onDidChangeState(), but useEffect mounts too late and misses initial state changes
@@ -116,6 +124,11 @@ const memoryStateListeners: Set<(s: { project: MemoryRecord[]; agent: MemoryReco
 let externalAgentsState: ExternalAgentsState
 const externalAgentsStateListeners: Set<(s: ExternalAgentsState) => void> = new Set()
 
+let shellState: ShellState
+const shellStateListeners: Set<(s: ShellState) => void> = new Set()
+
+const usageListeners: Set<() => void> = new Set()
+
 let orchestrationRunsState: ParallelRunState[]
 const orchestrationRunsStateListeners: Set<(s: ParallelRunState[]) => void> = new Set()
 
@@ -144,9 +157,10 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		memoryService: accessor.get(IMemoryService),
 		orchestrationService: accessor.get(IAgentOrchestrationService),
 		externalAgentsService: accessor.get(IExternalAgentsService),
+		shellService: accessor.get(IVaderShellService),
 	}
 
-	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService, externalAgentsService } = stateServices
+	const { settingsStateService, chatThreadsStateService, refreshModelService, themeService, editCodeService, vaderCommandBarService, modelService, mcpService, agentsService, policyService, modelRouterService, skillService, memoryService, orchestrationService, externalAgentsService, shellService } = stateServices
 
 
 
@@ -276,6 +290,18 @@ export const _registerServices = (accessor: ServicesAccessor) => {
 		})
 	)
 
+	shellState = shellService.state
+	disposables.push(
+		shellService.onDidChange(() => {
+			shellState = shellService.state
+			shellStateListeners.forEach(l => l(shellState))
+		})
+	)
+
+	disposables.push(
+		chatThreadsStateService.onDidChangeUsage(() => { usageListeners.forEach(l => l()) })
+	)
+
 	orchestrationRunsState = orchestrationService.runs
 	disposables.push(
 		orchestrationService.onDidChangeOrchestration(() => {
@@ -350,6 +376,14 @@ const getReactAccessor = (accessor: ServicesAccessor) => {
 		IExternalAgentsService: accessor.get(IExternalAgentsService),
 		IAgentRuntimeRegistryService: accessor.get(IAgentRuntimeRegistryService),
 		IUnifiedMarketplaceService: accessor.get(IUnifiedMarketplaceService),
+		IVaderShellService: accessor.get(IVaderShellService),
+		IVaderReviewService: accessor.get(IVaderReviewService),
+		ITaskCopyService: accessor.get(ITaskCopyService),
+		IVaderUpdateService: accessor.get(IVaderUpdateService),
+		ICodebaseIndexMainService: accessor.get(ICodebaseIndexMainService),
+		IVaderUpdateCoordinator: accessor.get(IVaderUpdateCoordinator),
+		IVerificationService: accessor.get(IVerificationService),
+		IBrowserToolMainService: accessor.get(IBrowserToolMainService),
 
 	} as const
 	return reactAccessor
@@ -376,6 +410,27 @@ export const useAccessor = () => {
 
 
 // -- state of services --
+
+export const useShellState = () => {
+	const [s, ss] = useState(shellState)
+	useEffect(() => {
+		ss(shellState)
+		shellStateListeners.add(ss)
+		return () => { shellStateListeners.delete(ss) }
+	}, [ss])
+	return s
+}
+
+/** a number that changes whenever what the conversations have spent changes, so a list that shows costs re-reads them */
+export const useUsageTick = () => {
+	const [n, setN] = useState(0)
+	useEffect(() => {
+		const l = () => setN(x => x + 1)
+		usageListeners.add(l)
+		return () => { usageListeners.delete(l) }
+	}, [])
+	return n
+}
 
 export const useSettingsState = () => {
 	const [s, ss] = useState(settingsState)
@@ -625,6 +680,34 @@ export const useOrchestrationRunsState = () => {
 	return s
 }
 
+
+
+/** the state of the index of the open project, following the main process */
+export const useCodebaseIndexState = (root: string | undefined) => {
+	const accessor = useAccessor()
+	const service = accessor.get('ICodebaseIndexMainService')
+	const [state, setState] = useState<IndexState | undefined>()
+	useEffect(() => {
+		if (!root) { setState(undefined); return }
+		let live = true
+		void service.getState(root).then(st => { if (live) setState(st) }).catch(() => { })
+		const d = service.onDidChangeState(e => { if (e.root.toLowerCase() === root.toLowerCase()) setState(e.state) })
+		return () => { live = false; d.dispose() }
+	}, [service, root])
+	return { service, state }
+}
+
+/** the thread's own copy of the project and the question it waits on; the window follows the service as it changes */
+export const useTaskCopyState = (threadId: string) => {
+	const accessor = useAccessor()
+	const service = accessor.get('ITaskCopyService')
+	const [, bump] = useState(0)
+	useEffect(() => {
+		const d = service.onDidChange(() => bump(n => n + 1))
+		return () => d.dispose()
+	}, [service])
+	return { service, state: service.getState(threadId), question: service.getQuestion(threadId) }
+}
 
 
 export const useIsOptedOut = () => {

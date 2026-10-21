@@ -15,6 +15,11 @@
 // Needs network access to the npm registry. Run: node src/vs/workbench/contrib/vader/test/shippedAdvisoriesE2E.mjs
 
 import { execFileSync } from 'node:child_process';
+import nodePath from 'node:path';
+import nodeFs from 'node:fs';
+// npm is a .cmd file on Windows, which Node will not start without a shell: run its script with this node
+const npmCli = nodePath.join(nodePath.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
+const npmSync = (args, opts) => nodeFs.existsSync(npmCli) ? execFileSync(process.execPath, [npmCli, ...args], opts) : execFileSync('npm', args, opts);
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +49,7 @@ const auditOf = (dir) => {
 	const cwd = path.join(root, dir);
 	const args = ['audit', '--omit=dev', '--json', ...(dir === '.' ? [] : ['--package-lock-only'])];
 	try {
-		return JSON.parse(execFileSync('npm', args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
+		return JSON.parse(npmSync(args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
 	} catch (e) {
 		return JSON.parse(e.stdout || '{}'); // npm audit exits non-zero when it finds something
 	}
@@ -93,7 +98,7 @@ for (const top of ['build', 'test', 'extensions', 'remote']) { if (fs.existsSync
 const devFindings = [];
 for (const dir of allLockDirs) {
 	const cwd = path.join(root, dir);
-	let a; try { a = JSON.parse(execFileSync('npm', ['audit', '--json', '--package-lock-only'], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })); } catch (e) { a = JSON.parse(e.stdout || '{}'); }
+	let a; try { a = JSON.parse(npmSync(['audit', '--json', '--package-lock-only'], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })); } catch (e) { a = JSON.parse(e.stdout || '{}'); }
 	for (const [name, v] of Object.entries(a.vulnerabilities ?? {})) {
 		if (exceptions.some(x => x.package === name && (x.in ?? '.') === dir)) { continue; }
 		devFindings.push(`${dir}: ${v.severity} ${name} ${v.range}`);

@@ -1,0 +1,182 @@
+All releases ::: 所有版本
+Apache 2.0, and the open-source parts it is built on ::: Apache 2.0，以及它所基于的开源组件
+Built ::: 构建时间
+Built on the open-source VS Code workbench (Microsoft, MIT) and on Void by Glass Devtools, Inc. (Apache 2.0). It runs its agent on the Cline SDK (Apache 2.0). ::: 基于开源的 VS Code 工作台（Microsoft，MIT）和 Glass Devtools, Inc. 的 Void（Apache 2.0）构建，其智能体运行在 Cline SDK（Apache 2.0）之上。
+Check for new releases automatically ::: 自动检查新版本
+Check for updates ::: 检查更新
+Checked just now. Nothing is installed without your click. ::: 刚刚检查过。未经你点击不会安装任何内容。
+Checking… ::: 正在检查…
+Commit ::: 提交
+Help ::: 帮助
+Licence ::: 许可证
+Licences ::: 许可证
+Looking at the public list of releases… ::: 正在查看公开的版本列表…
+Looks at the public list of Vader releases and sends nothing about you. Off by default. ::: 查看 Vader 公开的版本列表，不会发送任何关于你的信息。默认关闭。
+Not checked yet in this session. Nothing is installed without your click. ::: 本次会话尚未检查。未经你点击不会安装任何内容。
+Report an issue ::: 报告问题
+Source code ::: 源代码
+Third-party notices ::: 第三方声明
+This build ::: 当前版本
+Updates ::: 更新
+Vader could not look for updates just now. ::: Vader 刚才无法检查更新。
+Vader {0} ::: Vader {0}
+Version ::: 版本
+What changed in this version ::: 此版本的更改内容
+development build ::: 开发版本
+not recorded ::: 未记录
+· built on VS Code ::: · 基于 VS Code 构建
+(version {0}) ::: （版本 {0}）
+, up to date ::: ，已是最新
+: Vader uses it as it is, nothing is downloaded. ::: ：Vader 直接使用它，不会下载任何内容。
+Add ::: 添加
+Any program that speaks the Agent Client Protocol on its standard input and output can be added. It runs with your user’s rights, so add only programs you trust. The list at agentclientprotocol.com shows what exists. ::: 任何通过标准输入输出使用 Agent Client Protocol 的程序都可以添加。它以你的用户权限运行，因此只添加你信任的程序。agentclientprotocol.com 上的列表展示了现有的程序。
+Arguments ::: 参数
+Arguments (e.g. --acp) ::: 参数
+Check for newer versions ::: 检查新版本
+Checking sign-in... ::: 正在检查登录状态...
+Checking... ::: 正在检查...
+Connect ::: 连接
+Connected agents ::: 已连接的智能体
+Could not read the agent list: {0} ::: 无法读取智能体列表：{0}
+Found on this computer ::: 在此电脑上找到
+In a terminal ::: 在终端中
+In the chat ::: 在对话中
+In use ::: 使用中
+Installed by Vader, version ::: 由 Vader 安装，版本
+It can continue a conversation after a restart. ::: 重启后可以继续之前的对话。
+Less ::: 收起
+More ::: 更多
+More about {0} ::: 关于 {0} 的更多信息
+Name ::: 名称
+Newer versions found for: {0}. ::: 发现更新版本：{0}。
+Not available for this computer ::: 此电脑不可用
+Not signed in ::: 未登录
+Open in a terminal ::: 在终端中打开
+Program ::: 程序
+Program (e.g. my-agent) ::: 程序
+Program not found ::: 未找到程序
+Programs from other companies that you already pay for, used inside Vader’s chat. You sign in with your own account in the vendor’s program. Vader never sees the token. The agent keeps its own tools and permission rules, and its usage is counted on your account. ::: 你已经付费订阅的其他公司的程序，可在 Vader 的对话中使用。你在厂商的程序中用自己的账号登录，Vader 从不接触令牌。智能体保留自己的工具和权限规则，用量计入你的账号。
+Ready ::: 就绪
+Sign out ::: 退出登录
+Sign-in: ::: 登录：
+Sign-in: {0}. ::: 登录：{0}。
+Signed in ::: 已登录
+Test connection ::: 测试连接
+Test failed: ::: 测试失败：
+The agents are up to date. ::: 智能体均为最新版本。
+Update to ::: 更新到
+Use my models ::: 使用我的模型
+Versions from the public agent registry ::: 来自公共智能体注册表的版本
+Website ::: 网站
+Works: ::: 可用：
+Your own agent ::: 你自己的智能体
+answered in ::: 响应用时
+is available ::: 可用
+the agent ::: 智能体
+All chats were deleted ::: 已删除所有对话
+Back to what a new install has. Chats stay. ::: 恢复为全新安装的状态。对话会保留。
+Back up and restore ::: 备份与恢复
+Back up... ::: 备份...
+Bring over the theme, keybindings and extensions ::: 迁移主题、快捷键和扩展
+Chats and agent tasks ::: 对话和智能体任务
+Chats imported ::: 已导入对话
+Chats, saved agents, your rules and settings. Restoring only adds what is not here yet. ::: 对话、已保存的智能体、你的规则和设置。恢复时只会添加这里还没有的内容。
+Clear ::: 清除
+Coming from another editor ::: 从其他编辑器迁移
+Data and backup ::: 数据与备份
+Delete all chats ::: 删除所有对话
+Delete chat ::: 删除对话
+Delete chats... ::: 删除对话...
+Editor settings, keyboard shortcuts and theme ::: 编辑器设置、键盘快捷键和主题
+Erases the keys from this computer. The providers keep their own copies. ::: 从此电脑清除密钥。提供商仍保留他们自己的副本。
+Every saved key was removed from this computer ::: 已从此电脑移除所有已保存的密钥
+Everything is stored on this computer. API keys and custom headers are left out of an export, so the file is safe to share. ::: 所有内容都存储在这台电脑上。导出时不包含 API 密钥和自定义请求头，因此文件可以放心分享。
+Everything of yours in one file ::: 你的所有内容集中在一个文件里
+Export ::: 导出
+Exported the settings, without keys ::: 已导出设置（不含密钥）
+Exported {0} chats ::: 已导出 {0} 个对话
+For a bug report ::: 用于问题报告
+Import ::: 导入
+Keep it ::: 保留
+Keyboard ::: 键盘
+Logs ::: 日志
+Nothing is changed in the other editor. Keys and chats are not copied. ::: 不会更改另一个编辑器。密钥和对话不会被复制。
+Open the logs folder ::: 打开日志文件夹
+Remove every saved key ::: 移除所有已保存的密钥
+Remove keys... ::: 移除密钥...
+Reset settings ::: 重置设置
+Reset settings... ::: 重置设置...
+Restore... ::: 恢复...
+Restored {0} chat{1}, {2} saved agent{3} and {4} rule{5}. Nothing that was here was changed. ::: 已恢复 {0} 个对话、{2} 个已保存的智能体和 {4} 条规则。这里原有的内容未作任何更改。
+Saved agents, rules and settings stay. ::: 已保存的智能体、规则和设置会保留。
+Saved {0}: {1} chat{2}, {3} saved agent{4}, your rules and settings, without keys ::: 已保存 {0}：{1} 个对话、{3} 个已保存的智能体、你的规则和设置（不含密钥）
+Settings ::: 设置
+Settings imported ::: 已导入设置
+Settings imported. Keys on this computer were kept. ::: 已导入设置。此电脑上的密钥已保留。
+Settings were reset ::: 设置已重置
+Show it again ::: 再次显示
+The editor itself ::: 编辑器本身
+The welcome screen ::: 欢迎界面
+Theme ::: 主题
+Without keys, safe to share in a bug report ::: 不含密钥，可放心用于问题报告
+{0} could not be read as {1}: {2} ::: 无法将 {0} 读取为 {1}：{2}
+{0} was not restored. {1} ::: 未能恢复 {0}。{1}
+A fast model works best here ::: 这里使用速度快的模型效果最好
+After you pause, a model suggests a change near the cursor, such as the same rename in the next place. Tab accepts, Esc dismisses. Each suggestion is a request to a model, at most 20 a minute; the code around the cursor and your last few edits are sent to it. ::: 你停顿后，模型会在光标附近建议一处修改，比如在下一个位置做同样的重命名。按 Tab 接受，按 Esc 忽略。每条建议都是对模型的一次请求，每分钟最多 20 次；光标周围的代码和你最近的几次编辑会发送给它。
+Edit here (Ctrl K) and applying changes ::: 就地编辑（Ctrl K）与应用更改
+Editor ::: 编辑器
+Faster and cheaper. Turn off to rewrite the whole file each time. ::: 更快更省。关闭后每次都会重写整个文件。
+Help that appears inside a file, and which model gives it. ::: 在文件内出现的帮助，以及由哪个模型提供。
+Include errors and warnings after an edit ::: 编辑后附带错误和警告
+Model for Ctrl K and applying ::: Ctrl K 与应用更改所用的模型
+Model for commit messages ::: 提交信息所用的模型
+Model for suggestions ::: 建议所用的模型
+Off lets applying use its own model ::: 关闭后应用更改使用它自己的模型
+Reset ::: 重置
+Reset Editor settings? ::: 重置编辑器设置？
+Reset these settings ::: 重置这些设置
+Rewrite only the lines that change ::: 只重写有变化的行
+Show Add to chat and Edit next to selected code ::: 在选中的代码旁显示“添加到对话”和“编辑”
+Source control ::: 源代码管理
+Suggest the next edit ::: 建议下一处编辑
+Suggest the next lines ::: 建议后续几行
+Suggestions while you type ::: 输入时的建议
+Suggestions, Ctrl K, applying and commit messages go back to how a new install has them. The models you chose, your keys and your chats are not touched. ::: 建议、Ctrl K、应用更改和提交信息会恢复为全新安装时的状态。你选择的模型、密钥和对话不会受到影响。
+Tab accepts, Esc dismisses. Off by default. It works with models that can fill in the middle of a file. ::: 按 Tab 接受，按 Esc 忽略。默认关闭。适用于能够补全文件中间内容的模型。
+The agent reads the editor’s problems for the file it just changed ::: 智能体会读取它刚修改的文件在编辑器中的问题
+The button next to the message box ::: 消息框旁边的按钮
+Use the chat model for applying changes ::: 使用对话模型来应用更改
+What the agent sees ::: 智能体能看到的内容
+Write the commit message with the chat model ::: 用对话模型撰写提交信息
+Bringing it over... ::: 正在迁移...
+Brought over from ::: 已迁移自
+Extensions list ::: 扩展列表
+From {0} ::: 来自 {0}
+Looking... ::: 正在查找...
+Not now ::: 以后再说
+Snippets ::: 代码片段
+Theme and keybindings ::: 主题和快捷键
+Vader can copy your theme, keybindings and extensions list. Keys and chats are not copied. ::: Vader 可以复制你的主题、快捷键和扩展列表。密钥和对话不会被复制。
+settings found ::: 项设置
+{0} settings found ::: 找到 {0} 项设置
+{0} was not found on this computer, or it has no settings to bring over. ::: 在此电脑上没有找到 {0}，或者它没有可迁移的设置。
+Browse extensions ::: 浏览扩展
+Editor extensions ::: 编辑器扩展
+Extensions guide ::: 扩展指南
+Extensions that Microsoft publishes only on its own Marketplace (for example Remote-SSH and the C/C++ pack) are not on Open VSX. The guide lists alternatives, or install a .vsix you trust. ::: 微软仅在自家应用市场发布的扩展（例如 Remote-SSH 和 C/C++ 扩展包）不在 Open VSX 上。指南列出了替代方案，或者安装你信任的 .vsix 文件。
+Install from VSIX... ::: 从 VSIX 安装...
+Marketplace ::: 应用市场
+Not available ::: 不可用
+Off by default: Open VSX does not sign extensions with the Microsoft certificate chain this check needs, so turning it on makes extensions from Open VSX fail to install. ::: 默认关闭：Open VSX 不使用此检查所需的微软证书链对扩展签名，因此开启后来自 Open VSX 的扩展将无法安装。
+Open VSX, the open extension registry ::: Open VSX，开放的扩展注册表
+Require signed extensions ::: 要求扩展已签名
+Safety ::: 安全
+Vader runs VS Code extensions: themes, languages, formatters, debuggers and more. ::: Vader 可运行 VS Code 扩展：主题、语言支持、格式化工具、调试器等。
+Where they come from ::: 扩展来源
+not configured ::: 未配置
+My models ::: 我的模型
+Your account with the vendor ::: 你在厂商处的账号
+Your own keys and local models ::: 你自己的密钥和本地模型
+Choose a model ::: 选择模型
+Model for {0} ::: {0} 所用的模型
+No model is set up for this yet ::: 尚未为此设置模型

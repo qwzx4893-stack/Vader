@@ -36,7 +36,7 @@ class VerificationService extends Disposable implements IVerificationService {
 		this._scmService = ProxyChannel.toService<IVaderSCMService>(mainProcessService.getChannel('vader-channel-scm'));
 	}
 
-	async gatherEvidence(opts?: { cwd?: string }): Promise<VerificationEvidence> {
+	async gatherEvidence(opts?: { cwd?: string; only?: string[]; keepOutput?: boolean }): Promise<VerificationEvidence> {
 		// Vader addition: `opts.cwd` (a git worktree's isolated checkout, for pre-merge
 		// verification - see orchestrationService.ts's _runWorktreeTask) overrides the main
 		// workspace root for both the diff stat and the check run. Falls back to the main
@@ -52,7 +52,7 @@ class VerificationService extends Disposable implements IVerificationService {
 			repoPath ? this._scmService.gitStat(repoPath).catch(() => '') : Promise.resolve(''),
 			// reuses run_verification's own project-command auto-detection rather than
 			// re-implementing it - see toolsService.ts's runVerificationChecksAt
-			repoPath ? this._toolsService.runVerificationChecksAt(URI.file(repoPath)) : Promise.resolve({ checks: [], detected: false }),
+			repoPath ? this._toolsService.runVerificationChecksAt(URI.file(repoPath), opts?.only) : Promise.resolve({ checks: [], detected: false }),
 		]);
 
 		const markers = this._markerService.read({ severities: MarkerSeverity.Warning | MarkerSeverity.Error });
@@ -61,7 +61,8 @@ class VerificationService extends Disposable implements IVerificationService {
 			.map(m => `${m.resource.fsPath}:${m.startLineNumber}: [${MarkerSeverity.toString(m.severity)}] ${m.message}`)
 			.join('\n');
 
-		return { gitDiffStat, diagnosticsSummary, checks, checksDetected: detected };
+		// the whole output is only for reading problems out of it; it is not kept in what the chat stores
+		return { gitDiffStat, diagnosticsSummary, checks: opts?.keepOutput ? checks : checks.map(({ output: _output, ...c }) => c), checksDetected: detected };
 	}
 
 	private _renderEvidence(evidence: VerificationEvidence): string {

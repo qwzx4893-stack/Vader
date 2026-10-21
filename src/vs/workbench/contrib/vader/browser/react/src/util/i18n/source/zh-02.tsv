@@ -1,0 +1,186 @@
+Back to the app ::: 返回应用
+Search settings ::: 搜索设置
+Settings pages ::: 设置页面
+Models ::: 模型
+Model router ::: 模型路由
+Agent ::: 智能体
+Permissions ::: 权限
+Usage and cost ::: 用量与费用
+Saved agents ::: 已保存的智能体
+Skills ::: 技能
+MCP servers ::: MCP 服务器
+Memory and instructions ::: 记忆与指令
+Workspace ::: 工作区
+Privacy and network ::: 隐私与网络
+Language ::: 语言
+About and updates ::: 关于与更新
+Language of the screens ::: 界面语言
+The language of Vader’s screens. The editor around them, and what you and the agent write, stay as they are. ::: Vader 界面所使用的语言。周围的编辑器，以及你和智能体所写的内容保持不变。
+Arabic is written from right to left ::: 阿拉伯语从右向左书写
+Choosing Arabic turns the screens around, so the first thing you read is on the right. Code, file names and paths stay left to right. ::: 选择阿拉伯语会将界面整体镜像，最先阅读的内容位于右侧。代码、文件名和路径仍保持从左到右。
+Decide what the agent may do on its own. Some rules are locked and apply in every mode. ::: 决定智能体可以自行执行哪些操作。部分规则已锁定，在所有模式下都生效。
+Mode ::: 模式
+Safe ::: 安全
+Asks before every change and every command. ::: 每次更改和每条命令之前都会询问。
+Balanced ::: 平衡
+Edits go through. Commands and sensitive files ask. ::: 编辑直接生效。命令和敏感文件需要确认。
+Autonomous ::: 自主
+Runs without asking, except what is locked. ::: 无需询问直接运行，已锁定的除外。
+Allowed in this project ::: 此项目中已允许
+Allow without asking, by kind ::: 按类型设置无需询问的操作
+on top of the mode ::: 在所选模式之上
+Edit files ::: 编辑文件
+edits are shown to you either way ::: 无论如何都会向你展示编辑内容
+Allow without asking: Edit files ::: 无需询问：编辑文件
+Run commands ::: 运行命令
+except the ones that always ask ::: 始终会询问的除外
+Allow without asking: Run commands ::: 无需询问：运行命令
+Use MCP tools ::: 使用 MCP 工具
+Allow without asking: Use MCP tools ::: 无需询问：使用 MCP 工具
+Accept the agent’s changes as they are made ::: 在智能体做出更改时自动接受
+no Accept button per file ::: 不再为每个文件显示“接受”按钮
+Fix the lint errors it causes ::: 修复它引入的 lint 错误
+Where the agent works ::: 智能体的工作位置
+Work in a copy of the project ::: 在项目副本中工作
+Agent mode edits a separate copy on its own branch, and your folder changes only when you merge it. Needs a git project; Vader offers to start git in one that is not. ::: 智能体模式会在独立分支上的一份副本中编辑，只有在你合并之后你的文件夹才会改变。需要 git 项目；如果不是，Vader 会提示初始化 git。
+Spending ::: 花费
+Today ::: 今天
+An estimate from list prices. ::: 按标价计算的估算值。
+Daily limit ::: 每日上限
+at the estimate a running task pauses and asks before it goes on ::: 达到估算值时，正在运行的任务会暂停并在继续前询问
+none ::: 无
+Daily limit in dollars ::: 每日上限（美元）
+✓ No daily limit ::: ✓ 没有每日上限
+Locked rules ::: 已锁定的规则
+cannot be turned off in any mode ::: 在任何模式下都无法关闭
+A private key or a stored login (SSH private keys, AWS credentials, GPG private keys, git credentials) ::: 私钥或已保存的登录凭据（SSH 私钥、AWS 凭据、GPG 私钥、git 凭据）
+deny ::: 拒绝
+Command looks like it would recursively delete a root, home, system or drive directory, or wipe a filesystem/disk ::: 该命令看起来会递归删除根目录、主目录、系统目录或整个磁盘，或清除文件系统/磁盘
+Command matches a known fork-bomb pattern ::: 该命令符合已知的 fork 炸弹模式
+Write/delete of an OS-critical system file ::: 写入或删除操作系统关键文件
++ Add my own rule ::: + 添加我自己的规则
+Rules that ask ::: 需要询问的规则
+you can turn each one off ::: 每一条都可以关闭
+This touches a file that commonly holds credentials or private keys (.env, SSH keys, cloud credentials, certificates) ::: 这会涉及通常保存凭据或私钥的文件（.env、SSH 密钥、云凭据、证书）
+This writes a file that can run code on its own later (editor tasks/settings, git hooks, .envrc, shell startup files, MCP/devcontainer config, workspace AI rules) ::: 这会写入一个之后可自行运行代码的文件（编辑器任务/设置、git 钩子、.envrc、shell 启动文件、MCP/devcontainer 配置、工作区 AI 规则）
+This reads a file that is outside the open project ::: 这会读取打开的项目之外的文件
+This opens an address on a site that is not on this project’s list ::: 这会打开一个不在此项目名单上的网站地址
+This installs a skill, extension or MCP server, which can run arbitrary code or change every future prompt ::: 这会安装技能、扩展或 MCP 服务器，它们可能运行任意代码或改变之后的每一条提示
+This command requests elevated (sudo/administrator) privileges ::: 此命令请求提升权限（sudo/管理员）
+This sets a Git option that names a program to run (hooks path, fsmonitor, ssh command, pager, credential helper...), which runs it later ::: 这会设置一个指定要运行程序的 Git 选项（钩子路径、fsmonitor、ssh 命令、分页器、凭据助手……），之后会运行该程序
+This is a force-push, which can overwrite remote history other people depend on ::: 这是强制推送，可能覆盖他人所依赖的远程历史
+This pipes a downloaded script directly into a shell, which is a common supply-chain risk ::: 这会把下载的脚本直接交给 shell 执行，是常见的供应链风险
+This prints the environment variables, or a variable that looks like a secret (key, token, password), which often hold API keys ::: 这会输出环境变量，或看起来像机密的变量（密钥、令牌、密码），它们常常包含 API 密钥
+My own rules ::: 我自己的规则
+Ask before deleting a build folder ::: 删除构建文件夹前先询问
+Remove ::: 移除
+{0} tokens in, {1} out ::: 输入 {0} 个 token，输出 {1} 个
+Model ::: 模型
+Tokens in / out ::: 输入 / 输出 Token
+Cost ::: 费用
+Where the number comes from ::: 数字来源
+Estimate ::: 估算
+Billed by provider ::: 提供商计费
+Free ::: 免费
+Free, runs here ::: 免费，本地运行
+Set a price ::: 设置价格
+No price known ::: 价格未知
+Pause a task when today’s estimate reaches ::: 当今日估算达到以下金额时暂停任务
+The limit counts the estimate. A provider that bills more than the list price can still spend more than this. ::: 上限按估算值计算。如果提供商的收费高于标价，实际花费仍可能超过此值。
+Enter a number, like 5 or 12.50. ::: 请输入数字，例如 5 或 12.50。
+Check against the provider ::: 与提供商核对
+Anthropic Console ::: Anthropic 控制台
+OpenRouter activity ::: OpenRouter 活动记录
+opens in your browser ::: 在浏览器中打开
+List prices are built into this version of Vader. ::: 此版本的 Vader 内置了标价。
+if you pay a contracted rate. ::: 如果你支付的是合同价。
+Use my own prices ::: 使用我自己的价格
+Discount on list prices ::: 标价折扣
+For a flat discount, such as 20% off. It changes the estimate only, never what you are charged. ::: 适用于固定折扣，例如八折。它只改变估算，不会改变你实际被收取的费用。
+Discount in percent ::: 折扣百分比
+Enter a percent from 0 to 100, like 20. ::: 请输入 0 到 100 之间的百分比，例如 20。
+Your own prices ::: 你自己的价格
+For a model Vader has no price for, or a contract. US dollars per million tokens. A model whose provider reports the charge does not need one. ::: 适用于 Vader 没有价格的模型，或合同价。单位为每百万 token 的美元。提供商会上报费用的模型不需要设置。
+Input ::: 输入
+Input price ::: 输入价格
+Output ::: 输出
+Output price ::: 输出价格
+Besides the model you chat with, Vader makes helper calls: handing work to a sub-agent, researching, driving a browser, summarising old messages and checking results. The router decides which model each one uses. ::: 除了你对话所用的模型，Vader 还会发起辅助调用：把工作交给子智能体、调研、操作浏览器、总结旧消息和检查结果。路由决定每一项使用哪个模型。
+Automatic ::: 自动
+Choose myself ::: 我自己选择
+Automatic picks the best model you have a key for, by what it can do. It never picks a provider you have not set up. ::: “自动”会根据能力，从你有密钥的模型中挑选最合适的，绝不会选择你尚未配置的提供商。
+Job ::: 任务
+What it is ::: 说明
+Model used now ::: 当前使用的模型
+Cost per 1M ::: 每百万费用
+Sub-agent work ::: 子智能体工作
+Tasks handed off to a helper agent ::: 交给辅助智能体的任务
+Research ::: 调研
+Read-only look-ups ::: 只读查询
+Browser ::: 浏览器
+Turns that drive a web page ::: 操作网页的回合
+Summaries ::: 摘要
+Shrinking old messages when the window fills ::: 窗口占满时压缩旧消息
+free, local ::: 免费，本地
+Independent check ::: 独立检查
+The second agent that reviews a result ::: 审查结果的第二个智能体
+How Automatic chooses ::: “自动”如何选择
+For sub-agents, research, the browser and the independent check it looks for a model that calls tools natively, can make several calls in one turn, and has a long context. For summaries it prefers the cheapest model, one that caches its prompt. It keeps your Chat model unless another one is clearly better for the job. ::: 对于子智能体、调研、浏览器和独立检查，它会寻找原生支持工具调用、能在一个回合内发起多次调用且上下文较长的模型。对于摘要，它优先选择最便宜且能缓存提示的模型。除非另一个模型明显更适合该任务，否则会保留你的对话模型。
+A saved agent is a named helper with its own instructions, its own model and its own limits. You can start a task as one, or let the main agent hand work to it. ::: 已保存的智能体是一个有名字的助手，拥有自己的指令、模型和限制。你可以以它的身份开始任务，也可以让主智能体把工作交给它。
+New agent ::: 新建智能体
+Use in this chat ::: 在此对话中使用
+Duplicate ::: 复制
+Delete ::: 删除
+What it does ::: 作用
+One sentence, shown in the list ::: 一句话，显示在列表中
+Instructions ::: 指令
+The model the task would use anyway ::: 任务本来就会使用的模型
+Folders it may touch ::: 允许操作的文件夹
+Folders and files it may change (empty: the whole project) ::: 允许修改的文件夹和文件（留空：整个项目）
+May ask to ::: 可以请求
+MCP servers it can use ::: 可使用的 MCP 服务器
+Any server that is on ::: 任何已开启的服务器
+Tools it may never call ::: 绝不允许调用的工具
++ Add a tool ::: + 添加工具
+Save ::: 保存
+Discard changes ::: 放弃更改
+What Vader sends over the network, and to whom. Nothing else is contacted at start-up. ::: Vader 通过网络发送什么、发送给谁。启动时不会联系任何其他地方。
+No analytics ::: 无数据分析
+no crash reporter, no account ::: 没有崩溃报告，无需账号
+Keys stay here ::: 密钥留在本地
+sent only to their provider ::: 仅发送给对应的提供商
+Your code and chats ::: 你的代码和对话
+leave only to the model you chose ::: 只会发送给你所选的模型
+Who Vader can contact ::: Vader 会联系谁
+Your model provider ::: 你的模型提供商
+Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else. ::: 仅在你对话或用你设置的密钥获取模型列表时。你的代码只发送给该提供商，不会去往其他地方。
+Extension registry ::: 扩展注册表
+When you look at extensions in Add-ons or the editor, or install one. ::: 在附加组件或编辑器中浏览扩展，或安装扩展时。
+Add-ons lists ::: 附加组件列表
+When you open Add-ons or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a repository’s public file list. Nothing from your project. ::: 在你打开附加组件或在其中搜索时，以及智能体搜索技能或服务器时。只会发送搜索词或代码仓库的公开文件列表，不涉及你项目中的任何内容。
+Release check ::: 版本检查
+Connected agents you add ::: 你添加的已连接智能体
+Only after you press Install, or send the agent a message. The vendor’s own program then talks to the vendor with your account. Vader does not see the sign-in. ::: 仅在你点击“安装”或向智能体发送消息之后。随后由厂商自己的程序用你的账号与厂商通信，Vader 看不到登录信息。
+Pages the agent opens ::: 智能体打开的页面
+Only when it uses its browser, and only sites it was told to visit. ::: 仅在它使用浏览器时，且只访问被要求访问的网站。
+Files the agent never reads ::: 智能体永远不读取的文件
+None in this project. List the files or folders the agent must never see, in the syntax of .gitignore: it then refuses to read, list, search or change them, and the project index does not hold them. ::: 此项目中没有。请用 .gitignore 的语法列出智能体绝不能看到的文件或文件夹：之后它会拒绝读取、列出、搜索或修改它们，项目索引中也不会包含它们。
+Create ::: 创建
+Search in the project ::: 在项目中搜索
+Keep an index of the project for search ::: 为项目建立搜索索引
+Lets the agent find code by what it does, not only by exact text. The index is made and kept on this computer; no file, no word of it is sent anywhere. Files that hold secrets (.env, keys) are never read. ::: 让智能体按功能而不仅是精确文本来查找代码。索引在这台电脑上生成并保存，任何文件、任何文字都不会发送出去。包含机密的文件（.env、密钥）绝不会被读取。
+Rebuild ::: 重建
+How this is verified ::: 如何验证
+Set to off by your organisation ::: 已被你的组织关闭
+Locked: Check for new releases automatically ::: 已锁定：自动检查新版本
+Ask the person who manages Vader for your team to change it. ::: 请联系为你的团队管理 Vader 的人来更改。
+Starting ::: 正在启动
+The index is made a moment after a folder is opened. ::: 打开文件夹后片刻，索引就会生成。
+Version {0} · built on VS Code {1} ::: 版本 {0} · 基于 VS Code {1} 构建
+Download ::: 下载
+Read what changed ::: 查看更改内容
+Later ::: 以后再说
+Open ::: 打开
+GitHub ::: GitHub
+Cancel ::: 取消
+Restart to finish the update ::: 重启以完成更新

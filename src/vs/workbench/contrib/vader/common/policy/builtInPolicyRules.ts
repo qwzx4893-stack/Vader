@@ -19,6 +19,25 @@ const WINDOWS_TARGET = String.raw`(?:[a-z]:[\\/]?\*?|\$home[\\/]?\*?|\$env:(?:us
 export const builtInPolicyRules: PolicyRule[] = [
 	// --- locked hard denies: catastrophic, essentially never a legitimate agent action ---
 	{
+		// Private keys and stored logins: never read, written or named in a command by an agent, in any mode (the broader rule below still asks about everything else that holds secrets).
+		id: 'vader.deny.credential-files',
+		description: 'Blocked: a private key or a stored login (SSH private keys, AWS credentials, GPG private keys, git credentials).',
+		effect: 'deny',
+		kinds: ['file-read', 'file-write', 'file-delete', 'terminal-command'],
+		terminalPathScope: 'any',
+		pathGlobs: [
+			'**/id_rsa', '**/id_ed25519', '**/id_ecdsa', '**/id_dsa',
+			'**/.aws/credentials',
+			'**/.gnupg/private-keys-v1.d/**', '**/.gnupg/secring.gpg',
+			'**/.git-credentials',
+			'**/.vault-token',
+		],
+		builtIn: true,
+		locked: true,
+		neverBypassAutonomous: true,
+		enabled: true,
+	},
+	{
 		id: 'vader.deny.destructive-fs',
 		description: 'Blocked: command looks like it would recursively delete a root, home, system or drive directory, or wipe a filesystem/disk.',
 		effect: 'deny',
@@ -191,6 +210,28 @@ export const builtInPolicyRules: PolicyRule[] = [
 		builtIn: true,
 		locked: false,
 		neverBypassAutonomous: true,
+		enabled: true,
+	},
+	{
+		id: 'vader.ask.outside-project-read',
+		description: 'This reads a file that is outside the open project.',
+		effect: 'ask',
+		kinds: ['file-read'],
+		outsideWorkspace: true,
+		builtIn: true,
+		locked: false,
+		neverBypassAutonomous: false,
+		enabled: true,
+	},
+	{
+		id: 'vader.ask.network-new-host',
+		description: 'This opens an address on a site that is not on this project\u2019s list.',
+		effect: 'ask',
+		kinds: ['network'],
+		unknownHostOnly: true,
+		builtIn: true,
+		locked: false,
+		neverBypassAutonomous: false,
 		enabled: true,
 	},
 	{

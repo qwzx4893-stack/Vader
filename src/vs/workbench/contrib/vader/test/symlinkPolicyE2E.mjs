@@ -60,10 +60,11 @@ try {
 if (linksWork) {
 	// the bug: the written path alone matches no secret rule
 	check('as written, docs/credentials matches no secret rule (the gap a symlink used to open)', verdict('file-read', [path.join(ws, 'docs', 'credentials')]) === 'allow');
-	check('a read of docs/credentials (docs -> ~/.aws) now asks', await gate('file-read', path.join(ws, 'docs', 'credentials')) === 'ask');
-	check('a read through a FILE link (notes.txt -> ~/.aws/credentials) now asks', await gate('file-read', path.join(ws, 'notes.txt')) === 'ask');
+	const stopped = (v) => v === 'ask' || v === 'deny'; // stored logins and private keys are refused outright (vader.deny.credential-files), other protected places ask
+	check('a read of docs/credentials (docs -> ~/.aws) now asks or is refused', stopped(await gate('file-read', path.join(ws, 'docs', 'credentials'))));
+	check('a read through a FILE link (notes.txt -> ~/.aws/credentials) now asks or is refused', stopped(await gate('file-read', path.join(ws, 'notes.txt'))));
 	check('writing a NEW file inside a linked directory (keys/authorized_keys -> ~/.ssh) now asks', await gate('file-write', path.join(ws, 'keys', 'authorized_keys')) === 'ask');
-	check('deleting through a link asks', await gate('file-delete', path.join(ws, 'keys', 'id_rsa')) === 'ask');
+	check('deleting through a link asks or is refused', stopped(await gate('file-delete', path.join(ws, 'keys', 'id_rsa'))));
 	check('an ordinary file in the workspace is still allowed', await gate('file-read', path.join(ws, 'src', 'app.js')) === 'allow');
 	check('a new ordinary file in the workspace is still allowed', await gate('file-write', path.join(ws, 'src', 'new.js')) === 'allow');
 	check('a path that does not exist at all (nothing to resolve) is judged as written', await gate('file-write', path.join(tmp, 'nowhere', 'x', 'y.txt')) === 'allow');
@@ -98,7 +99,7 @@ for (const p of ['/w/p/.vscode/tasks.json', '/w/p/.vscode/settings.json', '/w/p/
 for (const p of ['/w/p/src/index.ts', '/w/p/package.json', '/w/p/.vscode/extensions.json', '/w/p/README.md', '/w/p/.github/workflows/ci.yml'])
 	check(`writing ${p} does not ask`, !askWrite(p));
 for (const p of ['/home/me/.git-credentials', '/home/me/.config/gh/hosts.yml', '/home/me/.config/gcloud/credentials.db', '/home/me/.azure/accessTokens.json', '/home/me/.gnupg/private-keys-v1.d/x.key', '/home/me/.pgpass', '/home/me/.pypirc', '/w/p/infra/prod.tfvars', '/w/p/id_ecdsa', '/w/p/release.jks'])
-	check(`reading ${p} asks (credential file)`, verdict('file-read', [p]) === 'ask');
+	check(`reading ${p} asks or is refused (credential file; a private key or a stored login is refused outright, vader.deny.credential-files)`, ['ask', 'deny'].includes(verdict('file-read', [p])) && (!/\.git-credentials$|private-keys-v1\.d|id_ecdsa$/.test(p) || verdict('file-read', [p]) === 'deny'));
 for (const p of ['/proc/self/environ', '/proc/1234/environ', '/proc/1234/mem', '/proc/42/cmdline', '/home/me/.bash_history', '/home/me/.zsh_history', 'c:/Users/me/AppData/Roaming/Microsoft/Windows/PowerShell/PSReadLine/ConsoleHost_history.txt', '/home/me/.config/google-chrome/Default/Login Data', '/home/me/.mozilla/firefox/abc.default/logins.json', '/home/me/Library/Keychains/login.keychain-db'])
 	check(`reading ${p} asks (process environment, shell history or browser credential store)`, verdict('file-read', [p]) === 'ask');
 check('/proc/self/stat is an ordinary read', verdict('file-read', ['/proc/self/stat']) === 'allow');

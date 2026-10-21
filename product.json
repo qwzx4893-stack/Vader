@@ -117,7 +117,7 @@
 		"extensionUrlTemplate": "https://open-vsx.org/vscode/gallery/{publisher}/{name}/latest"
 	},
 	"vaderRelease": "0001",
-	"vaderVersion": "0.1.0",
+	"vaderVersion": "0.2.0",
 	"linkProtectionTrustedDomains": [
 		"https://github.com/qwzx4893-stack/Vader",
 		"https://ollama.com"

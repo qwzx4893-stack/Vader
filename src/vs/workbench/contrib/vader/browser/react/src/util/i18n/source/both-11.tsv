@@ -1,0 +1,163 @@
+GitHub topic ::: وسم GitHub ::: GitHub 话题
+Open Settings ::: فتح الإعدادات ::: 打开设置
+A skill ::: مهارة ::: 一个技能
+Could not {0} {1}: {2} ::: تعذّر {0} {1}: {2} ::: 无法{0} {1}：{2}
+Nothing installed matches "{0}". ::: لا شيء مثبّت يطابق "{0}". ::: 没有已安装的内容匹配“{0}”。
+Read it first: it changed at its source, so it stays off until you do ::: اقرأها أولاً: لقد تغيّرت عند مصدرها، لذا تبقى متوقفة حتى تفعل ::: 请先阅读：它在源头发生了变化，所以在你阅读之前保持关闭
+Trust {0} out of 100 ::: الثقة {0} من 100 ::: 信任度 {0}/100
+Turn off ::: إيقاف ::: 关闭
+Turn on ::: تشغيل ::: 开启
+a newer version is out ::: صدر إصدار أحدث ::: 有新版本
+asks for nothing special ::: لا يطلب شيئاً خاصاً ::: 没有特殊权限要求
+asks for {0} ::: يطلب {0} ::: 请求{0}
+needs review ::: تحتاج مراجعة ::: 需要审查
+{0} MB ::: {0} م.ب ::: {0} MB
+{0} skills ::: {0} مهارات ::: {0} 个技能
+{0} that changed at {1} source stay{2} switched off until you read {3} again. ::: {0} تغيّرت عند مصدرها وتبقى متوقفة حتى تقرأها مجدداً. ::: {0} 在源头发生了变化，在你再次阅读之前保持关闭。
+{0} {1} waiting. ::: {0} {1} بالانتظار. ::: {0} {1} 待处理。
+Read why before you install it. ::: اقرأ السبب قبل تثبيتها. ::: 安装前请先阅读原因。
+A container ::: حاوية ::: 一个容器
+A hosted server ::: خادم مستضاف ::: 托管服务器
+A program on this computer ::: برنامج على هذا الجهاز ::: 这台电脑上的程序
+A secret ::: سرّ ::: 一项机密
+Asked when you install, kept only in your mcp.json, given only to this server. ::: يُطلب عند التثبيت، ويُحفظ في mcp.json الخاص بك فقط، ويُعطى لهذا الخادم فقط. ::: 安装时询问，仅保存在你的 mcp.json 中，仅提供给此服务器。
+Asked when you install, saved only in your mcp.json on this computer, and given only to this server. ::: يُطلب عند التثبيت، ويُحفظ في mcp.json على هذا الجهاز فقط، ويُعطى لهذا الخادم فقط. ::: 安装时询问，仅保存在这台电脑上的 mcp.json 中，仅提供给此服务器。
+Asking the sources again for the latest numbers... ::: جارٍ سؤال المصادر مجدداً عن أحدث الأرقام... ::: 正在向各来源重新获取最新数据...
+Every tool it offers goes through the safety gate like any other, and a tool it adds later is switched off until you look at the new list. ::: تمر كل أداة يقدّمها عبر بوابة الأمان كأي أداة أخرى، والأداة التي يضيفها لاحقاً تبقى متوقفة حتى تطّلع على القائمة الجديدة. ::: 它提供的每个工具都和其他工具一样要经过安全关卡，它之后新增的工具在你查看新列表之前保持关闭。
+Found in {0}, which gives no description. What the skill says is under SKILL.md. ::: وُجدت في {0} الذي لا يقدّم وصفاً. وما تقوله المهارة موجود تحت SKILL.md. ::: 来自 {0}，该来源没有提供描述。技能本身的内容见 SKILL.md。
+Found in: {0}. ::: وُجدت في: {0}. ::: 来源：{0}。
+From here to a working chat ::: من هنا إلى محادثة تعمل ::: 从这里到可用的对话
+How it runs ::: كيف يعمل ::: 运行方式
+It asks you for ::: يطلب منك ::: 它会向你索取
+It is computed again whenever it is listed, and again for what is installed. It is a guide to what to read first, not a safety check: Vader still asks before the agent runs anything. ::: تُحسب مجدداً كلما عُرضت، ومجدداً للمثبّت منها. هي دليل لما يُقرأ أولاً، وليست فحص أمان: فما زال Vader يسأل قبل أن يشغّل الوكيل أي شيء. ::: 每次列出时都会重新计算，已安装的内容也会重新计算。它只是提示先读什么，并不是安全检查：智能体运行任何内容之前 Vader 仍会询问。
+It is hosted, so nothing runs on this computer. ::: إنه مستضاف، فلا يعمل شيء على هذا الجهاز. ::: 它是托管的，因此这台电脑上不会运行任何内容。
+It starts with {0}, which has to be on this computer. ::: يبدأ بـ {0}، الذي يجب أن يكون على هذا الجهاز. ::: 它通过 {0} 启动，该程序必须存在于这台电脑上。
+Needs Node.js first ::: يحتاج Node.js أولاً ::: 需要先安装 Node.js
+No build for this computer ::: لا يوجد إصدار لهذا الجهاز ::: 没有适用于这台电脑的版本
+Not read yet ::: لم تُقرأ بعد ::: 尚未阅读
+Notebook kernel ::: نواة دفتر ::: Notebook 内核
+Nothing to install ::: لا شيء لتثبيته ::: 无需安装
+Opens in the terminal ::: يُفتح في الطرفية ::: 在终端中打开
+Reading the skill from its source... ::: جارٍ قراءة المهارة من مصدرها... ::: 正在从源头读取技能...
+Run by Smithery, not on this computer ::: يشغّله Smithery، لا هذا الجهاز ::: 由 Smithery 运行，不在这台电脑上
+Run by someone else, not on this computer ::: يشغّله طرف آخر، لا هذا الجهاز ::: 由他人运行，不在这台电脑上
+Scored from what the listing says. ::: قُيِّمت بحسب ما تقوله القائمة. ::: 根据条目内容评分。
+Scored just now from what the sources say today. ::: قُيِّمت الآن بحسب ما تقوله المصادر اليوم. ::: 刚刚根据各来源今天的说法完成评分。
+See every reason ::: عرض كل الأسباب ::: 查看全部原因
+Started by Vader ::: يشغّله Vader ::: 由 Vader 启动
+Started with {0} ::: يُشغَّل بـ {0} ::: 通过 {0} 启动
+The agent ::: الوكيل ::: 智能体
+The text has not been fetched yet. ::: لم يُجلب النص بعد. ::: 尚未获取文本。
+This is the text the agent follows when a task matches. It is composed into the agent's instructions as it is, so read it before you switch the skill on. ::: هذا هو النص الذي يتبعه الوكيل عندما تطابق مهمة ما. ويُدمج في تعليمات الوكيل كما هو، لذا اقرأه قبل تشغيل المهارة. ::: 这是任务匹配时智能体所遵循的文本。它会原样合并到智能体的指令中，因此在开启技能之前请先阅读。
+This kind of add-on has no trust score. ::: هذا النوع من الإضافات ليس له درجة ثقة. ::: 此类附加组件没有信任评分。
+This listing does not say how the server runs. ::: لا تذكر هذه القائمة كيف يعمل الخادم. ::: 此条目没有说明服务器如何运行。
+This scores ::: درجة هذا ::: 此项评分为
+This source gives no description. ::: لا يقدّم هذا المصدر وصفاً. ::: 此来源没有提供描述。
+Vader sends nothing to a hosted service for it. What the program itself reaches out to is up to the program. ::: لا يرسل Vader شيئاً إلى خدمة مستضافة من أجله. وما يتصل به البرنامج نفسه أمر يخصّ البرنامج. ::: Vader 不会为它向任何托管服务发送内容。程序本身会联系哪些地方由程序自己决定。
+Verified publisher ::: ناشر موثّق ::: 已验证的发布者
+What the agent sends to its tools goes to that server over the network. ::: ما يرسله الوكيل إلى أدواته يذهب إلى ذلك الخادم عبر الشبكة. ::: 智能体发送给其工具的内容会通过网络发往那台服务器。
+Where it runs, and what leaves this computer ::: أين يعمل، وما الذي يغادر هذا الجهاز ::: 它在哪里运行，以及什么会离开这台电脑
+{0} secrets ::: {0} أسرار ::: {0} 项机密
+Could not add ::: تعذّرت إضافة ::: 无法添加
+No description ::: لا يوجد وصف ::: 无描述
+Nothing is installed yet. ::: لم يُثبَّت شيء بعد. ::: 尚未安装任何内容。
+Nothing matches "{0}". Searched every source that is turned on. ::: لا شيء يطابق "{0}". بُحث في كل مصدر مفعّل. ::: 没有匹配“{0}”的内容。已搜索所有开启的来源。
+One source ::: مصدر واحد ::: 一个来源
+could not be read just now: ::: تعذّرت قراءته الآن: ::: 刚才无法读取：
+{0} sources ::: {0} مصادر ::: {0} 个来源
+Completed Onboarding ::: اكتمل الترحيب ::: 欢迎引导已完成
+Explain this project: what it is, how it is laid out, and how the main parts fit together. ::: اشرح هذا المشروع: ما هو، وكيف يُنظَّم، وكيف تترابط أجزاؤه الرئيسية. ::: 讲解这个项目：它是什么、如何组织，以及主要部分如何协同工作。
+First task ::: المهمة الأولى ::: 第一个任务
+Found at localhost: ::: عُثر عليه في localhost: ::: 在 localhost 找到：
+Found on this computer, signed in: ::: موجود على هذا الجهاز، وتم تسجيل الدخول: ::: 在这台电脑上找到，已登录：
+Looking for Ollama and LM Studio... ::: جارٍ البحث عن Ollama وLM Studio... ::: 正在查找 Ollama 和 LM Studio...
+Network settings ::: إعدادات الشبكة ::: 网络设置
+No folder is open ::: لا يوجد مجلد مفتوح ::: 没有打开文件夹
+None is installed here yet. Install one from Add-ons, Agents, or in Settings, Connected agents, then come back. ::: لا يوجد أي منها مثبّت هنا بعد. ثبّت واحداً من الإضافات، الوكلاء، أو من الإعدادات، الوكلاء المرتبطون، ثم عُد. ::: 这里还没有安装任何一个。请从“附加组件 > 智能体”或“设置 > 已连接的智能体”中安装，然后再回来。
+Open Settings, Connected agents ::: افتح الإعدادات، الوكلاء المرتبطون ::: 打开“设置 > 已连接的智能体”
+Run a command ::: تشغيل أمر ::: 运行命令
+Run the tests of this project. If one fails, find out why and propose a fix. ::: شغّل اختبارات هذا المشروع. فإن فشل أحدها فاعرف السبب واقترح إصلاحاً. ::: 运行此项目的测试。如果有测试失败，找出原因并提出修复方案。
+Test again ::: اختبر مجدداً ::: 重新测试
+The key is only sent to {0}, to ask for its list of models. ::: يُرسل المفتاح إلى {0} فقط، لطلب قائمة نماذجه. ::: 密钥只会发送给 {0}，用于获取它的模型列表。
+Use it ::: استخدمه ::: 使用它
+Vader reads and edits the files of this folder and shows every change for you to accept or reject. ::: يقرأ Vader ملفات هذا المجلد ويعدّلها ويعرض كل تغيير لتقبله أو ترفضه. ::: Vader 会读取并编辑此文件夹中的文件，并展示每一处更改供你接受或拒绝。
+Vader works in your projects and asks before anything risky. First choose where its models come from. You can change this later in Settings. ::: يعمل Vader في مشاريعك ويسأل قبل أي شيء خطر. اختر أولاً من أين تأتي نماذجه. ويمكنك تغيير ذلك لاحقاً من الإعدادات. ::: Vader 在你的项目中工作，在执行有风险的操作之前会先询问。请先选择模型的来源。你之后可以在“设置”中更改。
+Without a folder this is a plain conversation. Open a folder to let the agent work in a project. ::: بدون مجلد تكون هذه محادثة عادية. افتح مجلداً ليعمل الوكيل في مشروع. ::: 没有文件夹时，这只是一次普通对话。打开文件夹后，智能体才能在项目中工作。
+Write an AGENTS.md for this project: how to build and test it, its conventions, and what to avoid. ::: اكتب AGENTS.md لهذا المشروع: كيفية بنائه واختباره، وأعرافه، وما يجب تجنّبه. ::: 为此项目编写 AGENTS.md：如何构建和测试、有哪些约定，以及要避免什么。
+Write tests for the file I have open, and run them. If no file is open, ask me which one. ::: اكتب اختبارات للملف المفتوح لديّ وشغّلها. وإن لم يكن هناك ملف مفتوح فاسألني أيّ ملف. ::: 为我当前打开的文件编写测试并运行。如果没有打开文件，请问我是哪一个。
+{0} did not answer as expected ::: لم يُجب {0} كما هو متوقع ::: {0} 没有按预期响应
+{0} does not list its models ::: {0} لا يعرض قائمة نماذجه ::: {0} 没有提供模型列表
+{0} is running with {1} model{2}. Nothing leaves your machine. ::: {0} يعمل بـ {1} نموذج. ولا شيء يغادر جهازك. ::: {0} 正在运行，共 {1} 个模型。任何内容都不会离开你的电脑。
+Kept off. Click to allow it ::: متوقف. انقر للسماح به ::: 保持关闭。点击以允许
+New: waiting for your answer ::: جديد: بانتظار ردّك ::: 新增：等待你的回答
+No server is set up ::: لم يُعدّ أي خادم ::: 尚未设置任何服务器
+None yet. ::: لا شيء بعد. ::: 暂无。
+Open the config file ::: فتح ملف الإعداد ::: 打开配置文件
+Servers from the official MCP registry are in Add-ons, with a trust score and the reasons for it. Adding one writes its entry to your MCP config file, after asking for any key it needs. You can also write an entry by hand. ::: خوادم سجل MCP الرسمي موجودة في الإضافات، مع درجة ثقة وأسبابها. وإضافة أحدها تكتب مدخله في ملف إعداد MCP لديك، بعد سؤالك عن أي مفتاح يحتاجه. ويمكنك أيضاً كتابة مدخل يدوياً. ::: 官方 MCP 注册表中的服务器在“附加组件”里，附有信任评分及其原因。添加时会在询问其所需的密钥后，把它的条目写入你的 MCP 配置文件。你也可以手动编写条目。
+Switch it on to see its tools. ::: شغّله لترى أدواته. ::: 开启后即可看到它的工具。
+The MCP config could not be read ::: تعذّرت قراءة إعداد MCP ::: 无法读取 MCP 配置
+The config file could not be opened: ::: تعذّر فتح ملف الإعداد: ::: 无法打开配置文件：
+A rules file for this project ::: ملف قواعد لهذا المشروع ::: 此项目的规则文件
+Clear project memory ::: مسح ذاكرة المشروع ::: 清除项目记忆
+None found. Put .vaderrules, AGENTS.md or CLAUDE.md at the root of the project. ::: لم يُعثر على شيء. ضع .vaderrules أو AGENTS.md أو CLAUDE.md في جذر المشروع. ::: 未找到。请把 .vaderrules、AGENTS.md 或 CLAUDE.md 放在项目根目录。
+Nothing yet. A saved agent keeps its own notes here. ::: لا شيء بعد. يحتفظ الوكيل المحفوظ بملاحظاته الخاصة هنا. ::: 暂无内容。已保存的智能体会把它自己的笔记保存在这里。
+Open a folder first. ::: افتح مجلداً أولاً. ::: 请先打开文件夹。
+The agent you started this chat as ::: الوكيل الذي بدأت هذه المحادثة بصفته ::: 你以其身份开始此对话的智能体
+deleted agent ::: وكيل محذوف ::: 已删除的智能体
+Any other OpenAI-compatible service can be added with the OpenAI-Compatible provider. ::: يمكن إضافة أي خدمة أخرى متوافقة مع OpenAI عبر مزوّد OpenAI-Compatible. ::: 其他任何兼容 OpenAI 的服务都可以通过 OpenAI-Compatible 提供商添加。
+No provider matches “{0}”. Any other OpenAI-compatible service can be added with the OpenAI-Compatible provider. ::: لا يوجد مزوّد يطابق «{0}». ويمكن إضافة أي خدمة أخرى متوافقة مع OpenAI عبر مزوّد OpenAI-Compatible. ::: 没有匹配“{0}”的提供商。其他任何兼容 OpenAI 的服务都可以通过 OpenAI-Compatible 提供商添加。
+This endpoint has no model catalogue here: add the models it serves by name. ::: ليس لهذه النقطة قائمة نماذج هنا: أضف النماذج التي تقدّمها بالاسم. ::: 此端点在这里没有模型目录：请按名称添加它提供的模型。
+This model is already in the list. ::: هذا النموذج موجود في القائمة بالفعل. ::: 此模型已在列表中。
+This provider publishes no list of models that Vader can ask for: add the model or deployment you use by name. ::: لا ينشر هذا المزوّد قائمة نماذج يمكن لـ Vader طلبها: أضف النموذج أو النشر الذي تستخدمه بالاسم. ::: 此提供商没有发布 Vader 可查询的模型列表：请按名称添加你使用的模型或部署。
+What Vader assumes about this model ::: ما يفترضه Vader عن هذا النموذج ::: Vader 对此模型的假设
+added by you ::: أضفته أنت ::: 由你添加
+found here ::: وُجد هنا ::: 在此处发现
+key ending {0} ::: مفتاح ينتهي بـ {0} ::: 密钥末尾为 {0}
+key saved ::: تم حفظ المفتاح ::: 密钥已保存
+"{0}" is not a valid regular expression. ::: "{0}" ليس تعبيراً نمطياً صالحاً. ::: “{0}”不是有效的正则表达式。
+A command ::: أمر ::: 一条命令
+Add rule ::: إضافة قاعدة ::: 添加规则
+Allow without asking: {0} ::: السماح دون سؤال: {0} ::: 无需询问：{0}
+An MCP tool ::: أداة MCP ::: 一个 MCP 工具
+Ask me ::: اسألني ::: 询问我
+Changing a file ::: تغيير ملف ::: 修改文件
+Command pattern, comma-separated ::: نمط الأمر، مفصول بفواصل ::: 命令模式，以逗号分隔
+Daily limit set to {0} ::: ضُبط الحد اليومي على {0} ::: 每日上限已设为 {0}
+Deleting a file ::: حذف ملف ::: 删除文件
+It applies to ::: ينطبق على ::: 适用于
+MCP tool ::: أداة MCP ::: MCP 工具
+No daily limit ::: بلا حد يومي ::: 没有每日上限
+Open a folder to keep approvals for it. ::: افتح مجلداً لحفظ الموافقات له. ::: 打开文件夹以保存对它的批准。
+Path pattern, comma-separated ::: نمط المسار، مفصول بفواصل ::: 路径模式，以逗号分隔
+Say what the rule is for, so the question it asks makes sense. ::: اذكر الغرض من القاعدة ليكون للسؤال الذي تطرحه معنى. ::: 请说明规则的用途，这样它提出的问题才有意义。
+Server name pattern, empty means every server ::: نمط اسم الخادم، والفارغ يعني كل خادم ::: 服务器名称模式，留空表示所有服务器
+Show all {0} locked rules ::: عرض كل القواعد المقفلة ({0}) ::: 显示全部 {0} 条锁定规则
+Show fewer ::: عرض أقل ::: 显示更少
+Shown when the rule fires ::: يظهر عند تفعيل القاعدة ::: 规则触发时显示
+Shown when the rule fires. ::: يظهر عند تفعيل القاعدة. ::: 规则触发时显示。
+What it is for ::: الغرض منها ::: 用途
+Write the command, or part of it, that the rule is about. ::: اكتب الأمر، أو جزءاً منه، الذي تخصّه القاعدة. ::: 写下规则所针对的命令，或其中一部分。
+Write the path or pattern that the rule is about. ::: اكتب المسار أو النمط الذي تخصّه القاعدة. ::: 写下规则所针对的路径或模式。
+Could not create it: {0} ::: تعذّر إنشاؤه: {0} ::: 无法创建：{0}
+Now on: a quiet check for a newer release every few hours, and the Check for updates button. ::: مفعّل الآن: فحص هادئ عن إصدار أحدث كل بضع ساعات، وزر «التحقق من التحديثات». ::: 现已开启：每隔几小时会悄悄检查一次新版本，同时保留“检查更新”按钮。
+the provider you configure, or localhost ::: المزوّد الذي تعدّه، أو localhost ::: 你配置的提供商，或 localhost
+the sites in question ::: المواقع المعنية ::: 相关网站
+the vendor of that agent ::: الشركة المصنّعة لذلك الوكيل ::: 该智能体的厂商
+{0} pattern{1}. The agent does not read, list, search or change those files, and the project index does not hold them. Files you attach to a message yourself are not stopped. ::: {0} نمط. لا يقرأ الوكيل تلك الملفات ولا يسردها ولا يبحث فيها ولا يغيّرها، ولا يحتويها فهرس المشروع. أما الملفات التي ترفقها أنت برسالة فلا تُمنع. ::: {0} 个模式。智能体不会读取、列出、搜索或修改这些文件，项目索引中也不包含它们。你自己附加到消息中的文件不受限制。
+Clear the search ::: مسح البحث ::: 清除搜索
+Models are fetched when you open the picker and cached for 10 minutes. ::: تُجلب النماذج عند فتح المحدّد وتُخزَّن مؤقتاً لمدة 10 دقائق. ::: 打开选择器时会获取模型，并缓存 10 分钟。
+Providers and keys ::: المزوّدون والمفاتيح ::: 提供商和密钥
+Search models ::: بحث في النماذج ::: 搜索模型
+Search {0} models ::: بحث في {0} نموذجاً ::: 搜索 {0} 个模型
+You can still send; only a model that is gone would fail. ::: لا يزال بإمكانك الإرسال؛ فلن يفشل إلا نموذج لم يعد موجوداً. ::: 你仍然可以发送；只有已不存在的模型才会失败。
+did not answer ::: لم يستجب ::: 没有响应
+saved list ::: قائمة محفوظة ::: 已保存的列表
+(Chat model) ::: (نموذج المحادثة) ::: （对话模型）
+Add a provider key on the Models page. Until then helper calls have nothing to run on. ::: أضف مفتاح مزوّد في صفحة النماذج. وإلى ذلك الحين لن يكون للاستدعاءات المساعدة ما تعمل عليه. ::: 请在“模型”页面添加提供商密钥。在此之前，辅助调用没有可运行的模型。
+Chat model ::: نموذج المحادثة ::: 对话模型
+No model is set up yet ::: لم يُعدّ نموذج بعد ::: 尚未设置模型
+no price known ::: السعر غير معروف ::: 价格未知
+(not set up) ::: (غير مُعدّ) ::: （未设置）
+Allow {0} again ::: السماح بـ {0} مجدداً ::: 再次允许 {0}
+Delete for good ::: حذف نهائياً ::: 永久删除
+Give the agent a name. ::: أعطِ الوكيل اسماً. ::: 请给智能体起个名字。

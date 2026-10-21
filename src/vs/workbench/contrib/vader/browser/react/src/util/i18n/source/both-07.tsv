@@ -1,0 +1,336 @@
+A skill changes every later prompt, so it always asks. It is stored switched off until you read it. ::: المهارة تغيّر كل طلب لاحق، لذا تسأل دائماً. وتُخزَّن متوقفة حتى تقرأها. ::: 技能会改变之后的每一条提示，因此一定会询问。它会以关闭状态保存，直到你阅读它。
+Allow this action? ::: السماح بهذا الإجراء؟ ::: 允许此操作？
+An extension or an MCP server can run code on this computer, so installing one always asks. ::: يمكن للامتداد أو خادم MCP تشغيل كود على هذا الجهاز، لذا يسأل التثبيت دائماً. ::: 扩展或 MCP 服务器可以在这台电脑上运行代码，因此安装它们一定会询问。
+Apply an edit to ::: تطبيق تعديل على ::: 对以下文件应用编辑
+Apply an edit? ::: تطبيق تعديل؟ ::: 应用编辑？
+Blocked: not allowed for this agent ::: محظور: غير مسموح لهذا الوكيل ::: 已阻止：此智能体不被允许
+Blocked: outside this agent’s folders ::: محظور: خارج مجلدات هذا الوكيل ::: 已阻止：超出此智能体的文件夹范围
+Blocked: {0} ::: محظور: {0} ::: 已阻止：{0}
+Call a web address? ::: استدعاء عنوان ويب؟ ::: 访问网址？
+Change a file? ::: تغيير ملف؟ ::: 修改文件？
+Install a package? ::: تثبيت حزمة؟ ::: 安装软件包？
+Install a skill ::: تثبيت مهارة ::: 安装技能
+Install something? ::: تثبيت شيء ما؟ ::: 安装内容？
+Install “{0}”? ::: تثبيت «{0}»؟ ::: 安装“{0}”？
+Open a terminal? ::: فتح طرفية؟ ::: 打开终端？
+Read a file outside this project? ::: قراءة ملف خارج هذا المشروع؟ ::: 读取此项目之外的文件？
+Reading a credential file ::: قراءة ملف بيانات اعتماد ::: 读取凭据文件
+Reading {0} ::: قراءة {0} ::: 读取 {0}
+Rewrite ::: إعادة كتابة ::: 重写
+That file is not inside this project. Only this once. ::: هذا الملف ليس داخل هذا المشروع. لمرة واحدة فقط. ::: 该文件不在此项目中。仅此一次。
+The agent wants to open ::: يريد الوكيل فتح ::: 智能体想要打开
+The agent was told why and is looking for another way. ::: أُخبر الوكيل بالسبب وهو يبحث عن طريقة أخرى. ::: 已告知智能体原因，它正在寻找其他办法。
+The whole command is shown. ::: الأمر معروض كاملاً. ::: 已显示完整命令。
+This mode ::: هذا الوضع ::: 此模式
+Use a tool from {0}? ::: استخدام أداة من {0}؟ ::: 使用来自 {0} 的工具？
+Your rule “{0}” always asks, even in this project. ::: قاعدتك «{0}» تسأل دائماً، حتى في هذا المشروع. ::: 你的规则“{0}”始终会询问，即使在此项目中。
+a command that would delete a system or home folder ::: أمر سيحذف مجلد النظام أو مجلد المستخدم ::: 会删除系统或主目录的命令
+a fork bomb ::: قنبلة معالجات (fork bomb) ::: fork 炸弹
+a server ::: خادم ::: 服务器
+a system file ::: ملف نظام ::: 系统文件
+is read-only ::: للقراءة فقط ::: 为只读
+this skill ::: هذه المهارة ::: 此技能
+{0} a file? ::: {0} ملفاً؟ ::: {0}文件？
+{0} is never allowed. This rule cannot be switched off in any mode. ::: {0} غير مسموح أبداً. ولا يمكن إيقاف هذه القاعدة في أي وضع. ::: 永远不允许{0}。此规则在任何模式下都无法关闭。
+{0} is not inside {1}. Only this once. ::: {0} ليس داخل {1}. لمرة واحدة فقط. ::: {0} 不在 {1} 内。仅此一次。
+{0} is not on this project’s list of sites. ::: {0} ليس في قائمة مواقع هذا المشروع. ::: {0} 不在此项目的网站名单中。
+{0} is not permitted to {1}. ::: {0} غير مسموح له بـ{1}. ::: 不允许 {0} {1}。
+{0} is read-only ::: {0} للقراءة فقط ::: {0} 为只读
+{0} was not run. Switch to Agent to allow changes. ::: لم يُشغَّل {0}. حوّل إلى وضع الوكيل للسماح بالتغييرات. ::: 未运行 {0}。请切换到智能体模式以允许更改。
+{0}. It always asks, even in Autonomous mode. ::: {0}. يسأل دائماً، حتى في الوضع الذاتي. ::: {0}。即使在自主模式下也始终会询问。
+{0}It can write files. ::: {0}يمكنه كتابة الملفات. ::: {0}它可以写入文件。
+{0}It stays open until it is closed. ::: {0}يبقى مفتوحاً حتى يُغلق. ::: {0}它会一直保持打开，直到被关闭。
+{0}This is never allowed, even in Autonomous mode. Ask for something narrower, or do it yourself. ::: {0}هذا غير مسموح أبداً، حتى في الوضع الذاتي. اطلب شيئاً أضيق نطاقاً، أو افعله بنفسك. ::: {0}这永远不被允许，即使在自主模式下也是如此。请提出范围更小的请求，或由你自己来做。
+Files and tool output ::: الملفات ومخرجات الأدوات ::: 文件和工具输出
+From {0}% Vader summarises the older messages and keeps the newest ones as they are. Old tool output is dropped first, from {1}% of the room. ::: ابتداءً من {0}% يلخّص Vader الرسائل الأقدم ويُبقي الأحدث كما هي. ويُسقَط مخرج الأدوات القديم أولاً، ابتداءً من {1}% من المساحة. ::: 从 {0}% 起，Vader 会总结较早的消息并保留最新的消息原样。旧的工具输出会最先被丢弃，从 {1}% 的空间开始。
+Images ::: الصور ::: 图片
+Old tool output is dropped from {0}%. Earlier steps are summarised from {1}%. ::: يُسقَط مخرج الأدوات القديم ابتداءً من {0}%. وتُلخَّص الخطوات الأقدم ابتداءً من {1}%. ::: 旧的工具输出从 {0}% 起被丢弃。较早的步骤从 {1}% 起被总结。
+Stopped between two steps ::: توقف بين خطوتين ::: 在两步之间停止
+Stopped while asking to run {0} ::: توقف أثناء طلب تشغيل {0} ::: 在请求运行 {0} 时停止
+Stopped while running {0} ::: توقف أثناء تشغيل {0} ::: 在运行 {0} 时停止
+Stopped while waiting for your answer ::: توقف أثناء انتظار إجابتك ::: 在等待你的回答时停止
+Stopped while writing an answer ::: توقف أثناء كتابة الإجابة ::: 在撰写回答时停止
+Stopped while {0} ::: توقف أثناء {0} ::: 在{0}时停止
+Summary of earlier steps ::: ملخص الخطوات السابقة ::: 之前步骤的摘要
+System and tools ::: النظام والأدوات ::: 系统和工具
+The chat is about {0} tokens. {1} reads {2}. Vader would have to cut the oldest {3}. ::: المحادثة نحو {0} رمز. و{1} يقرأ {2}. وسيضطر Vader إلى قص أقدم {3}. ::: 对话约有 {0} 个 Token。{1} 可读取 {2}。Vader 将不得不裁掉最早的 {3}。
+This chat is bigger than the model’s window ::: هذه المحادثة أكبر من نافذة النموذج ::: 此对话超出了模型的窗口
+Vader summarises the older messages before the next request, and keeps the newest ones as they are. Old tool output is dropped first. ::: يلخّص Vader الرسائل الأقدم قبل الطلب التالي ويُبقي الأحدث كما هي. ويُسقَط مخرج الأدوات القديم أولاً. ::: Vader 会在下一次请求前总结较早的消息，并保留最新的消息原样。旧的工具输出会最先被丢弃。
+clicking on a page ::: النقر في صفحة ::: 点击页面
+creating a file ::: إنشاء ملف ::: 创建文件
+deleting a file ::: حذف ملف ::: 删除文件
+editing a file ::: تعديل ملف ::: 编辑文件
+listing a folder ::: سرد محتويات مجلد ::: 列出文件夹
+loading a page ::: تحميل صفحة ::: 加载页面
+opening a terminal ::: فتح طرفية ::: 打开终端
+reading a file ::: قراءة ملف ::: 读取文件
+reading the folder tree ::: قراءة شجرة المجلدات ::: 读取文件夹树
+running a command ::: تشغيل أمر ::: 运行命令
+searching a file ::: البحث في ملف ::: 搜索文件
+searching for files ::: البحث عن ملفات ::: 查找文件
+searching the project ::: البحث في المشروع ::: 搜索项目
+taking a screenshot ::: التقاط لقطة شاشة ::: 截取屏幕截图
+typing on a page ::: الكتابة في صفحة ::: 在页面中输入
+using a tool ::: استخدام أداة ::: 使用工具
+writing a file ::: كتابة ملف ::: 写入文件
+{0}% of the room is used ::: استُخدم {0}% من المساحة ::: 已使用 {0}% 的空间
+{0}K characters ::: {0}K حرف ::: {0}K 个字符
+Check the result, read-only ::: فحص النتيجة، للقراءة فقط ::: 检查结果（只读）
+Clicked ::: نقر ::: 点击了
+Closed a tab ::: أُغلق تبويب ::: 关闭了标签页
+Closed terminal ::: أُغلقت طرفية ::: 关闭了终端
+Listed ::: سُرد ::: 列出了
+Merged ::: دُمج ::: 已合并
+Opened ::: فُتح ::: 打开了
+Opened a new tab ::: فُتح تبويب جديد ::: 打开了新标签页
+Ran ::: شُغّل ::: 运行了
+Read the console ::: قُرئت وحدة التحكم ::: 读取了控制台
+Read the network ::: قُرئت الشبكة ::: 读取了网络请求
+Read the page ::: قُرئت الصفحة ::: 读取了页面
+Reloaded ::: أُعيد التحميل ::: 重新加载了
+Rewrote ::: أُعيدت كتابة ::: 重写了
+Switched tab ::: بُدّل التبويب ::: 切换了标签页
+This task has not run a command. ::: لم تشغّل هذه المهمة أي أمر. ::: 此任务没有运行过命令。
+Took a screenshot ::: التُقطت لقطة شاشة ::: 截取了屏幕截图
+Typed ::: كُتب ::: 输入了
+dev server ::: خادم التطوير ::: 开发服务器
+failed, exit {0} ::: فشل، الخروج {0} ::: 失败，退出码 {0}
+finished, exit {0} ::: انتهى، الخروج {0} ::: 已结束，退出码 {0}
+kept open by the agent ::: يُبقيه الوكيل مفتوحاً ::: 由智能体保持打开
+running, kept open by the agent ::: قيد التشغيل، يُبقيه الوكيل مفتوحاً ::: 运行中，由智能体保持打开
+waiting for you to allow it ::: بانتظار سماحك ::: 等待你的允许
+you rejected the last command ::: رفضتَ الأمر الأخير ::: 你拒绝了上一条命令
+{0} failed ::: فشل {0} ::: {0} 项失败
+{0} ran ::: شُغّل {0} ::: {0} 项已运行
+{0} you rejected ::: رفضتَ {0} ::: 你拒绝了 {0} 项
+Mon ::: الاثنين ::: 周一
+Tue ::: الثلاثاء ::: 周二
+Wed ::: الأربعاء ::: 周三
+Thu ::: الخميس ::: 周四
+Fri ::: الجمعة ::: 周五
+Sat ::: السبت ::: 周六
+Sun ::: الأحد ::: 周日
+Jan ::: يناير ::: 1月
+Feb ::: فبراير ::: 2月
+Mar ::: مارس ::: 3月
+Apr ::: أبريل ::: 4月
+May ::: مايو ::: 5月
+Jun ::: يونيو ::: 6月
+Jul ::: يوليو ::: 7月
+Aug ::: أغسطس ::: 8月
+Sep ::: سبتمبر ::: 9月
+Oct ::: أكتوبر ::: 10月
+Nov ::: نوفمبر ::: 11月
+Dec ::: ديسمبر ::: 12月
+Agent mode works in a copy made with git. You can still use Chat here. ::: يعمل وضع الوكيل على نسخة تُنشأ بواسطة git. ويمكنك مع ذلك استخدام المحادثة هنا. ::: 智能体模式在由 git 创建的副本中工作。你仍然可以在这里使用对话。
+Agent task ::: مهمة الوكيل ::: 智能体任务
+Ask an agent to merge ::: اطلب من وكيل أن يدمج ::: 让智能体来合并
+Both changed {0}. ::: كلاهما غيّر {0}. ::: 双方都修改了 {0}。
+Commit them first ::: أودِعها أولاً ::: 先提交它们
+Could not make a copy of the project ::: تعذّر إنشاء نسخة من المشروع ::: 无法创建项目副本
+Discard this task? ::: تجاهل هذه المهمة؟ ::: 放弃此任务？
+Keep my version ::: الإبقاء على نسختي ::: 保留我的版本
+Keep the task’s version ::: الإبقاء على نسخة المهمة ::: 保留任务的版本
+Merged into {0} ::: دُمج في {0} ::: 已合并到 {0}
+Merging {0} into {1} ::: جارٍ دمج {0} في {1} ::: 正在将 {0} 合并到 {1}
+Show the git output ::: عرض مخرجات git ::: 显示 git 输出
+Start anyway ::: ابدأ على أي حال ::: 仍然开始
+Start git here ::: تهيئة git هنا ::: 在此处初始化 git
+Stash my changes and retry ::: احفظ تغييراتي مؤقتاً (stash) وأعد المحاولة ::: 暂存我的更改并重试
+The agent edits a copy of {0} on its own branch. Your folder does not change until you accept. ::: يعدّل الوكيل نسخة من {0} على فرع خاص به. لا يتغيّر مجلدك حتى تقبل. ::: 智能体在独立分支上编辑 {0} 的副本。在你接受之前，你的文件夹不会改变。
+The merge could not be completed and nothing was merged. Your folder is as it was. ::: تعذّر إكمال الدمج ولم يُدمج شيء. مجلدك كما كان. ::: 无法完成合并，没有合并任何内容。你的文件夹保持原样。
+The merge was undone. {0} is as it was before. ::: تم التراجع عن الدمج. {0} كما كان من قبل. ::: 合并已撤销。{0} 恢复到之前的状态。
+This folder is not a git project ::: هذا المجلد ليس مشروع git ::: 此文件夹不是 git 项目
+This task conflicts with {0} ::: تتعارض هذه المهمة مع {0} ::: 此任务与 {0} 冲突
+Use Chat ::: استخدام المحادثة ::: 使用对话
+Work in the folder instead ::: اعمل في المجلد بدلاً من ذلك ::: 改为在文件夹中工作
+You have uncommitted changes ::: لديك تغييرات غير مودَعة ::: 你有未提交的更改
+You review the result before it reaches ::: تراجع النتيجة قبل أن تصل إلى ::: 在结果到达以下位置之前由你审查
+git did not make the copy. ::: لم ينشئ git النسخة. ::: git 没有创建副本。
+git said: your local changes to {0} would be overwritten. This is not a conflict between tasks. ::: قال git: ستُستبدل تغييراتك المحلية في {0}. وهذا ليس تعارضاً بين مهام. ::: git 提示：你对 {0} 的本地更改将被覆盖。这不是任务之间的冲突。
+some files ::: بعض الملفات ::: 部分文件
+the current branch ::: الفرع الحالي ::: 当前分支
+{0} and its {1} changed file{2} will be deleted. Your folder is not touched. ::: سيُحذف {0} وملفاته المتغيّرة ({1}). ولا يُمَسّ مجلدك. ::: 将删除 {0} 及其 {1} 个有更改的文件。你的文件夹不受影响。
+{0} in {1} {2} changed. The task starts from the last commit, so it will not see {3}. ::: تغيّر {0} في {1} {2}. تبدأ المهمة من آخر إيداع، فلن ترى {3}. ::: {1} 中的 {0} {2} 已更改。任务从最近一次提交开始，因此看不到{3}。
+{0} more ::: {0} أخرى ::: 另外 {0} 个
+{0} was merged into {1} without conflicts. The copy was removed. ::: دُمج {0} في {1} دون تعارضات. وأُزيلت النسخة. ::: {0} 已无冲突地合并到 {1}。副本已删除。
+A newer release is on GitHub. ::: يوجد إصدار أحدث على GitHub. ::: GitHub 上有更新的版本。
+Do not wait ::: لا تنتظر ::: 不再等待
+GitHub answered {0}. ::: أجاب GitHub بـ {0}. ::: GitHub 返回了 {0}。
+Nothing is running. Vader closes, installs the new version and opens again. ::: لا شيء قيد التشغيل. يُغلق Vader ويثبّت الإصدار الجديد ثم يفتح مجدداً. ::: 当前没有运行中的任务。Vader 会关闭、安装新版本后重新打开。
+Open the release page ::: فتح صفحة الإصدار ::: 打开发布页面
+The connection was lost. ::: انقطع الاتصال. ::: 连接已断开。
+The disk is full. ::: القرص ممتلئ. ::: 磁盘已满。
+The download pointed somewhere other than GitHub, so Vader did not follow it. ::: كان التنزيل يشير إلى جهة غير GitHub، فلم يتبعه Vader. ::: 下载指向了 GitHub 以外的地方，因此 Vader 没有跟随。
+The download stopped at {0}. ::: توقف التنزيل عند {0}. ::: 下载在 {0} 处中断。
+The file that arrived does not match its checksum, so it was thrown away. ::: الملف الذي وصل لا يطابق المجموع الاختباري الخاص به، فتم التخلص منه. ::: 收到的文件与其校验和不匹配，已被丢弃。
+The file that arrived is not the size GitHub lists for it, so it was thrown away. ::: حجم الملف الذي وصل لا يطابق ما يذكره GitHub، فتم التخلص منه. ::: 收到的文件大小与 GitHub 列出的不一致，已被丢弃。
+Vader {0} is ready ::: Vader {0} جاهز ::: Vader {0} 已就绪
+Waiting for the tasks to finish. Vader restarts then. ::: بانتظار انتهاء المهام. ثم يعيد Vader التشغيل. ::: 正在等待任务完成，随后 Vader 会重启。
+The provider did not answer in time. Send the message again. ::: لم يستجب المزوّد في الوقت المناسب. أرسل الرسالة مجدداً. ::: 提供商没有及时响应。请重新发送消息。
+The provider has no model with this name. Pick another model in Settings > Models. ::: لا يملك المزوّد نموذجاً بهذا الاسم. اختر نموذجاً آخر في الإعدادات > النماذج. ::: 提供商没有这个名称的模型。请在“设置 > 模型”中选择其他模型。
+The provider is having problems right now (server error). Try again in a little while. ::: يواجه المزوّد مشكلات الآن (خطأ في الخادم). حاول مجدداً بعد قليل. ::: 提供商目前出现问题（服务器错误）。请稍后再试。
+The provider is limiting how many requests you can send. Wait a moment and send the message again. ::: يحدّ المزوّد من عدد الطلبات التي يمكنك إرسالها. انتظر قليلاً ثم أعد إرسال الرسالة. ::: 提供商正在限制你可发送的请求数量。请稍等片刻再重新发送消息。
+The provider refused the request as invalid. Its explanation is below. ::: رفض المزوّد الطلب باعتباره غير صالح. شرحه أدناه. ::: 提供商认为该请求无效而拒绝了它。说明见下方。
+The provider rejected your API key. Check the key in Settings > Main Providers (or Local Providers). ::: رفض المزوّد مفتاح API الخاص بك. تحقق من المفتاح في الإعدادات > المزوّدون الرئيسيون (أو المزوّدون المحليون). ::: 提供商拒绝了你的 API 密钥。请在“设置 > 主要提供商”（或本地提供商）中检查密钥。
+The provider sent an answer Vader could not read. Send the message again; if it keeps happening, try another model. ::: أرسل المزوّد إجابة لم يستطع Vader قراءتها. أعد إرسال الرسالة؛ وإن تكرر ذلك فجرّب نموذجاً آخر. ::: 提供商发回了 Vader 无法读取的回答。请重新发送消息；如果反复出现，请尝试其他模型。
+This conversation is longer than the model can take. Start a new chat, or pick a model with a larger context window. ::: هذه المحادثة أطول مما يستوعبه النموذج. ابدأ محادثة جديدة، أو اختر نموذجاً بنافذة سياق أكبر. ::: 此对话超出了模型能处理的长度。请新建对话，或选择上下文窗口更大的模型。
+This model cannot read images. Remove the image or pick a model with vision. ::: هذا النموذج لا يستطيع قراءة الصور. أزل الصورة أو اختر نموذجاً يدعم الرؤية. ::: 此模型无法读取图片。请移除图片，或选择支持视觉的模型。
+This model does not support tool use, so Agent mode cannot work with it. Switch to Chat mode or pick another model. ::: هذا النموذج لا يدعم استخدام الأدوات، لذا لا يعمل وضع الوكيل معه. حوّل إلى وضع المحادثة أو اختر نموذجاً آخر. ::: 此模型不支持工具调用，因此无法在智能体模式下使用。请切换到对话模式或选择其他模型。
+Vader could not reach the provider. Check your internet connection and the base URL of the provider in Settings. ::: تعذّر على Vader الوصول إلى المزوّد. تحقق من اتصالك بالإنترنت وعنوان المزوّد الأساسي في الإعدادات. ::: Vader 无法连接到提供商。请检查网络连接以及“设置”中该提供商的基础 URL。
+{0} Details: {1} ::: {0} التفاصيل: {1} ::: {0} 详情：{1}
+Checks failed ::: فشلت الفحوص ::: 检查未通过
+Could not merge ::: تعذّر الدمج ::: 无法合并
+Default agent ::: الوكيل الافتراضي ::: 默认智能体
+Merged cleanly ::: دُمج بنظافة ::: 已顺利合并
+Not merged ::: لم يُدمج ::: 未合并
+Waiting ::: بالانتظار ::: 等待中
+its own copy ::: نسخته الخاصة ::: 它自己的副本
+this task ::: هذه المهمة ::: 此任务
+under a minute ::: أقل من دقيقة ::: 不到一分钟
+waiting to start ::: بانتظار البدء ::: 等待开始
+your folder ::: مجلدك ::: 你的文件夹
+, {0} running ::: ، {0} قيد التشغيل ::: ，{0} 个运行中
+Delete {0}? ::: حذف {0}؟ ::: 删除 {0}？
+Everything in it is already here, so nothing would be added. ::: كل ما فيه موجود هنا بالفعل، فلن يُضاف شيء. ::: 其中的所有内容这里都已有，因此不会添加任何内容。
+It is not a Vader backup. ::: ليس نسخة احتياطية من Vader. ::: 这不是 Vader 备份。
+It is not a backup file: it is not readable as JSON. ::: ليس ملف نسخ احتياطي: لا يمكن قراءته بصيغة JSON. ::: 这不是备份文件：无法按 JSON 读取。
+It was made by a newer Vader than this one. Update Vader, then restore it. ::: أنشأه إصدار أحدث من Vader. حدّث Vader ثم استعده. ::: 它由比当前更新的 Vader 创建。请先更新 Vader，再恢复。
+Its version is not one this Vader knows. ::: إصداره ليس مما يعرفه هذا Vader. ::: 其版本不是此 Vader 所认识的版本。
+There is nothing in it to restore. ::: لا يوجد فيه ما يمكن استعادته. ::: 其中没有可恢复的内容。
+This cannot be undone. Saved agents, rules and settings stay. ::: لا يمكن التراجع عن هذا. يبقى الوكلاء المحفوظون والقواعد والإعدادات. ::: 此操作无法撤销。已保存的智能体、规则和设置会保留。
+Install it, or give the full path to it. ::: ثبّته أو أعطِ مساره الكامل. ::: 请安装它，或提供它的完整路径。
+Install {0}, or give the full path to it. ::: ثبّت {0} أو أعطِ مساره الكامل. ::: 请安装 {0}，或提供它的完整路径。
+It did not answer in time. The first start can take a moment while the package downloads, so trying again often works. ::: لم يستجب في الوقت المناسب. قد يستغرق التشغيل الأول لحظة أثناء تنزيل الحزمة، لذا كثيراً ما تنجح المحاولة مجدداً. ::: 它没有及时响应。第一次启动时需要下载软件包，可能要等一会儿，因此重试通常就能成功。
+It stopped when it was started. The error it gave is below. ::: توقف عند تشغيله. الخطأ الذي أعطاه أدناه. ::: 它在启动时就停止了。它给出的错误见下方。
+The first start can take a moment while the package downloads. ::: قد يستغرق التشغيل الأول لحظة أثناء تنزيل الحزمة. ::: 第一次启动时需要下载软件包，可能要等一会儿。
+The program that starts this server was not found. Install it, or give the full path to it. ::: لم يُعثر على البرنامج الذي يشغّل هذا الخادم. ثبّته أو أعطِ مساره الكامل. ::: 找不到用于启动此服务器的程序。请安装它，或提供它的完整路径。
+The server could not be reached. Check the address and the connection. ::: تعذّر الوصول إلى الخادم. تحقق من العنوان والاتصال. ::: 无法连接到服务器。请检查地址和网络连接。
+The service refused the key or token. Check it in the config file. ::: رفضت الخدمة المفتاح أو الرمز. تحقق منه في ملف الإعداد. ::: 服务拒绝了该密钥或令牌。请在配置文件中检查。
+This computer did not allow the program to run. Check that you may run it. ::: لم يسمح هذا الجهاز بتشغيل البرنامج. تحقق من أن لديك صلاحية تشغيله. ::: 这台电脑不允许该程序运行。请检查你是否有权限运行它。
+`{0}` was not found.{1} ::: لم يُعثر على `{0}`.{1} ::: 找不到 `{0}`。{1}
+a GitHub token ::: رمز GitHub ::: GitHub 令牌
+a Google API key ::: مفتاح Google API ::: Google API 密钥
+a Groq key ::: مفتاح Groq ::: Groq 密钥
+a Slack token ::: رمز Slack ::: Slack 令牌
+a Stripe key ::: مفتاح Stripe ::: Stripe 密钥
+a private key ::: مفتاح خاص ::: 私钥
+an AWS access key ::: مفتاح وصول AWS ::: AWS 访问密钥
+an Anthropic key ::: مفتاح Anthropic ::: Anthropic 密钥
+an OpenAI key ::: مفتاح OpenAI ::: OpenAI 密钥
+an OpenRouter key ::: مفتاح OpenRouter ::: OpenRouter 密钥
+an xAI key ::: مفتاح xAI ::: xAI 密钥
+Agent mode needs a model that supports tool calls. Switch to Chat mode or choose another model. ::: يحتاج وضع الوكيل إلى نموذج يدعم استدعاء الأدوات. حوّل إلى وضع المحادثة أو اختر نموذجاً آخر. ::: 智能体模式需要支持工具调用的模型。请切换到对话模式或选择其他模型。
+Choose another model ::: اختر نموذجاً آخر ::: 选择其他模型
+Could not reach {0} ::: تعذّر الوصول إلى {0} ::: 无法连接到 {0}
+Full error: ::: الخطأ كاملاً: ::: 完整错误：
+It is overloaded or down, not your key. Vader tried again before showing this. ::: الخدمة مثقلة أو متوقفة، والمشكلة ليست في مفتاحك. حاول Vader مجدداً قبل عرض هذا. ::: 它负载过高或已宕机，不是你的密钥问题。Vader 在显示此消息前已重试过。
+Its explanation is below. ::: شرحه أدناه. ::: 说明见下方。
+Nothing was sent. Check your connection or proxy, or choose a model on this computer instead. ::: لم يُرسل شيء. تحقق من اتصالك أو الوكيل (proxy)، أو اختر نموذجاً على هذا الجهاز بدلاً من ذلك. ::: 没有发送任何内容。请检查网络连接或代理，或改用这台电脑上的模型。
+Open settings ::: فتح الإعدادات ::: 打开设置
+Open the provider's list ::: افتح قائمة المزوّد ::: 打开提供商的列表
+Provider settings ::: إعدادات المزوّد ::: 提供商设置
+Remove the image or choose a model that sees. ::: أزل الصورة أو اختر نموذجاً يرى الصور. ::: 请移除图片，或选择支持识图的模型。
+Send again ::: أرسل مجدداً ::: 重新发送
+Send the message again; if it keeps happening, choose another model. ::: أعد إرسال الرسالة؛ وإن تكرر ذلك فاختر نموذجاً آخر. ::: 请重新发送消息；如果反复出现，请选择其他模型。
+Something went wrong ::: حدث خطأ ما ::: 出错了
+Start a new chat ::: ابدأ محادثة جديدة ::: 新建对话
+The chat no longer fits in the model's window ::: لم تعد المحادثة تتسع في نافذة النموذج ::: 对话已超出模型的窗口
+The conversation is longer than this model reads. Start a new chat, or choose a model with a larger window. ::: المحادثة أطول مما يقرؤه هذا النموذج. ابدأ محادثة جديدة، أو اختر نموذجاً بنافذة أكبر. ::: 对话长度超出了此模型的读取范围。请新建对话，或选择窗口更大的模型。
+The provider ::: المزوّد ::: 提供商
+The provider answered 402. Add credit on its site, or choose another model. The work so far is saved. ::: أجاب المزوّد 402. أضف رصيداً في موقعه، أو اختر نموذجاً آخر. والعمل حتى الآن محفوظ. ::: 提供商返回 402。请到其网站充值，或选择其他模型。目前的工作已保存。
+The provider answered {0}. The key may have been revoked or pasted with a space. Nothing was changed. ::: أجاب المزوّد {0}. ربما أُلغي المفتاح أو لُصق مع مسافة. ولم يتغيّر شيء. ::: 提供商返回 {0}。密钥可能已被撤销，或粘贴时带了空格。没有任何更改。
+The provider is slow, not down. Send the message again. ::: المزوّد بطيء وليس متوقفاً. أعد إرسال الرسالة. ::: 提供商响应较慢，并未宕机。请重新发送消息。
+The provider retired it or renamed it. Nothing was sent. ::: أوقفه المزوّد أو غيّر اسمه. ولم يُرسل شيء. ::: 提供商已停用它或改了名称。没有发送任何内容。
+This model cannot read images ::: هذا النموذج لا يستطيع قراءة الصور ::: 此模型无法读取图片
+This model cannot use tools ::: هذا النموذج لا يستطيع استخدام الأدوات ::: 此模型无法使用工具
+this one ::: هذا ::: 这个
+{0} did not answer in time ::: لم يستجب {0} في الوقت المناسب ::: {0} 没有及时响应
+{0} has no model called {1} ::: {0} ليس لديه نموذج باسم {1} ::: {0} 没有名为 {1} 的模型
+{0} is having trouble{1} ::: {0} يواجه مشكلة{1} ::: {0} 出现问题{1}
+{0} refused the request ::: {0} رفض الطلب ::: {0} 拒绝了请求
+{0} rejected your key ::: {0} رفض مفتاحك ::: {0} 拒绝了你的密钥
+{0} says your credit is used up ::: {0} يقول إن رصيدك قد نفد ::: {0} 提示你的额度已用完
+{0} sent an answer Vader could not read ::: أرسل {0} إجابة لم يستطع Vader قراءتها ::: {0} 发回了 Vader 无法读取的回答
+A key in a message goes to the model’s provider and is kept in this chat. Keys are checked before anything leaves this computer, in every mode, and cannot be sent by choice. To use a key, add it in Settings, Models, where it is stored on this computer only. ::: المفتاح الموجود في رسالة يذهب إلى مزوّد النموذج ويُحفظ في هذه المحادثة. تُفحص المفاتيح قبل أن يغادر أي شيء هذا الجهاز، في كل الأوضاع، ولا يمكن إرسالها بالاختيار. لاستخدام مفتاح أضفه في الإعدادات > النماذج، حيث يُخزَّن على هذا الجهاز فقط. ::: 消息中的密钥会发送给模型提供商，并保存在此对话中。在任何模式下，密钥都会在任何内容离开这台电脑之前被检查，且无法选择发送。要使用密钥，请在“设置 > 模型”中添加，它只会存储在这台电脑上。
+Allow this host here ::: السماح بهذا المضيف هنا ::: 在此处允许此主机
+Allow this, and let the agent open pages on this site in this project without asking ::: السماح بهذا، وترك الوكيل يفتح صفحات هذا الموقع في هذا المشروع دون سؤال ::: 允许此操作，并让智能体在此项目中无需询问即可打开此网站的页面
+Asks in every mode ::: يسأل في كل الأوضاع ::: 在所有模式下都会询问
+Change the rule ::: تغيير القاعدة ::: 更改规则
+Edit the message ::: تعديل الرسالة ::: 编辑消息
+Hide it ::: إخفاؤه ::: 隐藏
+Hide the reason ::: إخفاء السبب ::: 隐藏原因
+OK ::: حسناً ::: 好的
+Open agent settings ::: فتح إعدادات الوكيل ::: 打开智能体设置
+Open the rule ::: فتح القاعدة ::: 打开规则
+Read it first ::: اقرأه أولاً ::: 先阅读
+Stopped: a key was about to be sent ::: تم الإيقاف: كان على وشك إرسال مفتاح ::: 已停止：一个密钥即将被发送
+Stopped: keys were about to be sent ::: تم الإيقاف: كانت ستُرسل مفاتيح ::: 已停止：多个密钥即将被发送
+Switch to Agent ::: التحويل إلى الوكيل ::: 切换到智能体
+The message contained what looks like ::: احتوت الرسالة على ما يبدو أنه ::: 消息中包含看起来像是
+Why was this blocked ::: لماذا حُظر هذا ::: 为什么被阻止
+and did not send it. ::: ولم يُرسلها. ::: 并且没有发送。
+{0} KB ::: {0} ك.ب ::: {0} KB
+A provider is set up, but all its models are hidden from the picker. ::: تم إعداد مزوّد، لكن كل نماذجه مخفية من المحدّد. ::: 已设置提供商，但其所有模型都在选择器中被隐藏。
+A provider is set up, but it has no model yet. Add the one you use. ::: تم إعداد مزوّد، لكن لا يوجد له نموذج بعد. أضف النموذج الذي تستخدمه. ::: 已设置提供商，但还没有模型。请添加你使用的模型。
+Add a key ::: إضافة مفتاح ::: 添加密钥
+Add a model ::: إضافة نموذج ::: 添加模型
+Chat only ::: محادثة فقط ::: 仅对话
+Check again ::: تحقق مجدداً ::: 重新检查
+Choose a larger model ::: اختر نموذجاً أكبر ::: 选择更大的模型
+Clone a repository ::: استنساخ مستودع ::: 克隆仓库
+Continue the task from where you stopped. ::: تابع المهمة من حيث توقفت. ::: 从你停下的地方继续任务。
+Go on and cut ::: تابع واقطع ::: 继续并裁剪
+Go on anyway ::: تابع على أي حال ::: 仍然继续
+Going on is your decision, and it holds for the rest of the day. ::: المتابعة قرارك، وهو يسري لبقية اليوم. ::: 继续由你决定，且当天剩余时间内都有效。
+Hide ::: إخفاء ::: 隐藏
+It will not start another step. ::: لن يبدأ خطوة أخرى. ::: 它不会再开始新的步骤。
+No connection ::: لا يوجد اتصال ::: 没有网络连接
+Nothing it has done is lost. ::: ولا يضيع شيء مما أنجزه. ::: 它已完成的内容不会丢失。
+Open Models ::: فتح النماذج ::: 打开模型
+Open a folder ::: فتح مجلد ::: 打开文件夹
+Open a project ::: فتح مشروع ::: 打开项目
+Pasted text ::: نص ملصوق ::: 粘贴的文本
+Paused ::: متوقف مؤقتاً ::: 已暂停
+Paused: today's estimate reached {0} ::: متوقف مؤقتاً: بلغ تقدير اليوم {0} ::: 已暂停：今日估算已达 {0}
+Queued ::: في الانتظار ::: 已排队
+Recent ::: الأخيرة ::: 最近
+Remove this message ::: إزالة هذه الرسالة ::: 移除这条消息
+Review changes ::: مراجعة التغييرات ::: 审查更改
+Review what it did ::: راجع ما فعله ::: 查看它做了什么
+Send now ::: أرسل الآن ::: 立即发送
+Sent after the ones above it ::: تُرسل بعد التي فوقها ::: 在上面的消息之后发送
+Sent when the run ends ::: تُرسل عند انتهاء التشغيل ::: 运行结束后发送
+Show ::: إظهار ::: 显示
+Start a new chat with a summary ::: ابدأ محادثة جديدة بملخص ::: 带着摘要新建对话
+Stops the run and sends this now ::: يوقف التشغيل ويرسل هذا الآن ::: 停止运行并立即发送这条
+Summarise first ::: لخّص أولاً ::: 先总结
+Summarise now ::: لخّص الآن ::: 立即总结
+Summarising... ::: جارٍ التلخيص... ::: 正在总结...
+Switch a model on ::: تفعيل نموذج ::: 开启一个模型
+The model did not answer, so nothing was summarised. ::: لم يستجب النموذج، فلم يُلخَّص شيء. ::: 模型没有响应，因此没有生成摘要。
+The model did not answer, so the new chat was not started. ::: لم يستجب النموذج، فلم تبدأ المحادثة الجديدة. ::: 模型没有响应，因此没有新建对话。
+The older messages are summarised. ::: لُخّصت الرسائل الأقدم. ::: 较早的消息已被总结。
+There is too little to summarise yet. ::: لا يوجد ما يكفي للتلخيص بعد. ::: 目前内容太少，无法总结。
+Vader works inside a folder. Open one to start a task, or chat without a project. ::: يعمل Vader داخل مجلد. افتح مجلداً لبدء مهمة، أو حادث دون مشروع. ::: Vader 在文件夹中工作。请打开一个文件夹来开始任务，或在没有项目的情况下对话。
+You can read chats and review changes. Sending to a hosted model and the Add-ons lists need a connection. Models on this computer still work. ::: يمكنك قراءة المحادثات ومراجعة التغييرات. أما الإرسال إلى نموذج مستضاف وقوائم الإضافات فيحتاجان إلى اتصال. وتظل النماذج على هذا الجهاز تعمل. ::: 你可以查看对话并审查更改。发送到托管模型以及加载附加组件列表需要网络连接。这台电脑上的模型仍可使用。
+You stopped it. What it had done so far is kept ::: أوقفته أنت. ويبقى ما أنجزه حتى الآن ::: 你已停止它。到目前为止它完成的内容会保留
+Hide the git output ::: إخفاء مخرجات git ::: 隐藏 git 输出
+Merge into ::: دمج في ::: 合并到
+Merging ::: جارٍ الدمج ::: 正在合并
+Resolved ::: تمت المعالجة ::: 已解决
+Resolving ::: جارٍ المعالجة ::: 正在解决
+Undo the merge ::: التراجع عن الدمج ::: 撤销合并
+this project ::: هذا المشروع ::: 此项目
+Between checkpoint ::: بين نقطة الاستعادة ::: 检查点之间
+Checkpoints ::: نقاط الاستعادة ::: 检查点
+Compare {0} and {1} ::: مقارنة {0} و{1} ::: 比较 {0} 和 {1}
+Compare… ::: مقارنة… ::: 比较…
+Each step the agent finished, with its changes ::: كل خطوة أنهاها الوكيل مع تغييراتها ::: 智能体完成的每一步及其更改
+Go back ::: الرجوع ::: 返回
+Go back to checkpoint ::: الرجوع إلى نقطة الاستعادة ::: 回到检查点
+Go back to {0} ::: الرجوع إلى {0} ::: 回到 {0}
+Go back to… ::: الرجوع إلى… ::: 回到…
+Nothing changed in the files the checkpoints kept. ::: لم يتغيّر شيء في الملفات التي احتفظت بها نقاط الاستعادة. ::: 检查点保留的文件没有任何更改。
+Open {0} side by side ::: فتح {0} جنباً إلى جنب ::: 并排打开 {0}
+Wait for the run to end, or stop it ::: انتظر انتهاء التشغيل، أو أوقفه ::: 等待运行结束，或停止它

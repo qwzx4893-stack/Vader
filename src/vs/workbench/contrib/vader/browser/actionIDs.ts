@@ -32,3 +32,9 @@ export const VADER_OPEN_SETTINGS_ACTION_ID = 'workbench.action.openVaderSettings
 export const VADER_TOGGLE_ADDONS_ACTION_ID = 'workbench.action.toggleVaderAddons'
 
 export const VADER_OPEN_ADDONS_ACTION_ID = 'workbench.action.openVaderAddons'
+
+export const VADER_OPEN_SHELL_ACTION_ID = 'vader.openShell'
+
+export const VADER_SHELL_NEW_CHAT_ACTION_ID = 'vader.shell.newChat'
+
+export const VADER_SHELL_SEARCH_ACTION_ID = 'vader.shell.search'

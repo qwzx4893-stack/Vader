@@ -1,0 +1,229 @@
+% of ::: % من ::: % /
+(Current File) ::: (الملف الحالي) ::: （当前文件）
+(none listed) ::: (لا شيء مدرج) ::: （无）
+(none noted) ::: (لا شيء مذكور) ::: （无记录）
+(none stated) ::: (لا شيء مصرّح به) ::: （未说明）
+(part {0}) ::: (الجزء {0}) ::: （第 {0} 部分）
+(truncated after {0}k) ::: (قُطع بعد {0}k) ::: （在 {0}k 后截断）
+A message with images cannot wait for the run to end. Send it when the run is done, or stop the run first. ::: لا يمكن لرسالة فيها صور أن تنتظر انتهاء التشغيل. أرسلها عند انتهائه، أو أوقف التشغيل أولاً. ::: 带图片的消息无法等到运行结束。请在运行结束后发送，或先停止运行。
+A model on this computer is free ::: النموذج على هذا الجهاز مجاني ::: 这台电脑上的模型是免费的
+A new chat started with everything before this message. This chat is unchanged. ::: بدأت محادثة جديدة بكل ما قبل هذه الرسالة. وهذه المحادثة لم تتغيّر. ::: 已用此消息之前的全部内容新建了一个对话。当前对话保持不变。
+A new chat that starts with everything before this message. This chat stays as it is. ::: محادثة جديدة تبدأ بكل ما قبل هذه الرسالة. وتبقى هذه المحادثة كما هي. ::: 一个以此消息之前的全部内容开始的新对话。当前对话保持原样。
+Add a message for after this run ::: أضف رسالة لما بعد هذا التشغيل ::: 添加一条在此次运行结束后发送的消息
+Add context ::: إضافة سياق ::: 添加上下文
+Agent mode reads and edits the files of this project and shows every change for you to accept or reject. ::: يقرأ وضع الوكيل ملفات هذا المشروع ويعدّلها ويعرض كل تغيير لتقبله أو ترفضه. ::: 智能体模式会读取并编辑此项目的文件，并展示每一处更改供你接受或拒绝。
+Analyze screenshot ::: تحليل لقطة الشاشة ::: 分析截图
+Analyzed screenshot ::: حُلّلت لقطة الشاشة ::: 已分析截图
+Analyzing screenshot ::: جارٍ تحليل لقطة الشاشة ::: 正在分析截图
+Approve & Execute (switches to Agent mode) ::: الموافقة والتنفيذ (يحوّل إلى وضع الوكيل) ::: 批准并执行（切换到智能体模式）
+Ask about the project, or press / for commands ::: اسأل عن المشروع، أو اضغط / للأوامر ::: 询问有关项目的问题，或按 / 使用命令
+Ask anything, or press / for commands ::: اسأل أي شيء، أو اضغط / للأوامر ::: 随便问，或按 / 使用命令
+Asks before every change and command. ::: يسأل قبل كل تغيير وكل أمر. ::: 每次更改和每条命令之前都会询问。
+Auto-approve {0} ::: الموافقة التلقائية على {0} ::: 自动批准{0}
+Branch the chat ::: تفريع المحادثة ::: 从此处分支对话
+Branched here ::: تفرّع من هنا ::: 已在此处分支
+Check the changes made in this project. ::: افحص التغييرات التي أُجريت في هذا المشروع. ::: 检查此项目中所做的更改。
+Checking the changes with a second agent. It reads them and runs the project’s checks, and cannot change anything... ::: جارٍ فحص التغييرات بوكيل ثانٍ. يقرؤها ويشغّل فحوص المشروع، ولا يستطيع تغيير أي شيء... ::: 正在由第二个智能体检查更改。它会读取更改并运行项目的检查，且无法修改任何内容...
+Click in page ::: النقر في الصفحة ::: 在页面中点击
+Clicking in page ::: جارٍ النقر في الصفحة ::: 正在页面中点击
+Close browser page ::: إغلاق صفحة المتصفح ::: 关闭浏览器页面
+Closed browser page ::: أُغلقت صفحة المتصفح ::: 已关闭浏览器页面
+Closing browser page ::: جارٍ إغلاق صفحة المتصفح ::: 正在关闭浏览器页面
+Compact now ::: ضغط الآن ::: 立即压缩
+Copy inputs: {0} ::: نسخ المُدخلات: {0} ::: 复制输入：{0}
+Create agent ::: إنشاء وكيل ::: 创建智能体
+Created agent ::: أُنشئ وكيل ::: 已创建智能体
+Creating agent ::: جارٍ إنشاء وكيل ::: 正在创建智能体
+Delegate to subagent ::: الإسناد إلى وكيل فرعي ::: 委派给子智能体
+Delegated to subagent ::: أُسند إلى وكيل فرعي ::: 已委派给子智能体
+Delegating to subagent ::: جارٍ الإسناد إلى وكيل فرعي ::: 正在委派给子智能体
+Describe the task ::: صف المهمة ::: 描述任务
+Disabled {0} ::: عُطّل {0} ::: 已禁用 {0}
+Earlier context compacted ( ::: ضُغط السياق السابق ( ::: 较早的上下文已压缩（
+messages condensed) ::: رسالة مكثّفة) ::: 条消息已浓缩）
+Edit file ::: تعديل ملف ::: 编辑文件
+Edit your message... ::: عدّل رسالتك... ::: 编辑你的消息...
+Edited file ::: عُدّل ملف ::: 已编辑文件
+Editing file ::: جارٍ تعديل ملف ::: 正在编辑文件
+Edits in the project go through. Commands and sensitive files ask. ::: التعديلات في المشروع تُنفَّذ مباشرة. والأوامر والملفات الحساسة تسأل. ::: 对项目的编辑直接生效。命令和敏感文件需要确认。
+Error running tool ::: خطأ في تشغيل الأداة ::: 运行工具时出错
+Error while editing message: ::: خطأ أثناء تعديل الرسالة: ::: 编辑消息时出错：
+Error while sending message in chat: ::: خطأ أثناء إرسال الرسالة في المحادثة: ::: 在对话中发送消息时出错：
+Error while starting /init: ::: خطأ أثناء بدء /init: ::: 启动 /init 时出错：
+Explain how this project is laid out ::: اشرح كيف تُنظَّم بنية هذا المشروع ::: 说明这个项目是如何组织的
+Fetch skill instructions ::: جلب تعليمات المهارة ::: 获取技能说明
+Fetched skill instructions ::: جُلبت تعليمات المهارة ::: 已获取技能说明
+Fetching skill instructions ::: جارٍ جلب تعليمات المهارة ::: 正在获取技能说明
+Find and fix a failing test ::: ابحث عن اختبار فاشل وأصلحه ::: 找出并修复失败的测试
+In Chat mode it answers without reading or changing the project. ::: في وضع المحادثة يجيب دون قراءة المشروع أو تغييره. ::: 在对话模式下，它只回答问题，不读取也不修改项目。
+In Gather mode it reads the project and answers. It changes nothing. ::: في وضع الاستكشاف يقرأ المشروع ويجيب. ولا يغيّر شيئاً. ::: 在探索模式下，它读取项目并回答，不会改动任何内容。
+In Plan mode it reads the project and writes a plan. Nothing changes until you approve it. ::: في وضع التخطيط يقرأ المشروع ويكتب خطة. ولا يتغيّر شيء حتى توافق عليها. ::: 在计划模式下，它读取项目并撰写计划。在你批准之前不会有任何改动。
+Inspect folder ::: فحص مجلد ::: 查看文件夹
+Inspect folder tree ::: فحص شجرة المجلدات ::: 查看文件夹树
+Inspected folder ::: فُحص مجلد ::: 已查看文件夹
+Inspected folder tree ::: فُحصت شجرة المجلدات ::: 已查看文件夹树
+Inspecting folder ::: جارٍ فحص مجلد ::: 正在查看文件夹
+Inspecting folder tree ::: جارٍ فحص شجرة المجلدات ::: 正在查看文件夹树
+Install capability ::: تثبيت قدرة ::: 安装能力
+Install skill ::: تثبيت مهارة ::: 安装技能
+Installed capability ::: ثُبّتت قدرة ::: 已安装能力
+Installed skill ::: ثُبّتت مهارة ::: 已安装技能
+Installing capability ::: جارٍ تثبيت قدرة ::: 正在安装能力
+Installing skill ::: جارٍ تثبيت مهارة ::: 正在安装技能
+Invalid parameters ::: معاملات غير صالحة ::: 参数无效
+Kill terminal ::: إنهاء الطرفية ::: 终止终端
+Killed terminal ::: أُنهيت الطرفية ::: 已终止终端
+Killing terminal ::: جارٍ إنهاء الطرفية ::: 正在终止终端
+Lint errors ::: أخطاء الفحص (lint) ::: lint 错误
+List browser pages ::: سرد صفحات المتصفح ::: 列出浏览器页面
+Listed browser pages ::: سُردت صفحات المتصفح ::: 已列出浏览器页面
+Listing browser pages ::: جارٍ سرد صفحات المتصفح ::: 正在列出浏览器页面
+Look for a capability ::: البحث عن قدرة ::: 查找能力
+Looked for a capability ::: بُحث عن قدرة ::: 已查找能力
+Looking for a capability ::: جارٍ البحث عن قدرة ::: 正在查找能力
+MCP tool not found ::: أداة MCP غير موجودة ::: 未找到 MCP 工具
+MCP tools ::: أدوات MCP ::: MCP 工具
+Map the project ::: رسم خريطة المشروع ::: 梳理项目结构
+Mapped the project ::: رُسمت خريطة المشروع ::: 已梳理项目结构
+Mapping the project ::: جارٍ رسم خريطة المشروع ::: 正在梳理项目结构
+More thinking can give better answers, and costs more and takes longer. ::: التفكير الأكثر قد يعطي إجابات أفضل، لكنه يكلّف أكثر ويستغرق وقتاً أطول. ::: 思考得越多，回答可能越好，但费用更高、耗时更长。
+No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project. ::: لا يوجد مجلد مفتوح، فهذه محادثة عادية. افتح مجلداً ليعمل الوكيل في مشروع. ::: 没有打开文件夹，因此这只是一次普通对话。打开文件夹后，智能体才能在项目中工作。
+No lint errors found. ::: لم يُعثر على أخطاء فحص (lint). ::: 未发现 lint 错误。
+Not applied ::: لم يُطبَّق ::: 未应用
+Only search in {0} ::: البحث في {0} فقط ::: 仅在 {0} 中搜索
+Open a folder first: a note is kept for a project. ::: افتح مجلداً أولاً: تُحفظ الملاحظة لمشروع. ::: 请先打开文件夹：备注是保存在项目下的。
+Open browser page ::: فتح صفحة في المتصفح ::: 打开浏览器页面
+Open page in browser ::: فتح صفحة في المتصفح ::: 在浏览器中打开页面
+Open terminal ::: فتح طرفية ::: 打开终端
+Open the new chat ::: افتح المحادثة الجديدة ::: 打开新对话
+Opened browser page ::: فُتحت صفحة في المتصفح ::: 已打开浏览器页面
+Opened terminal ::: فُتحت طرفية ::: 已打开终端
+Opening browser page ::: جارٍ فتح صفحة في المتصفح ::: 正在打开浏览器页面
+Opening page in browser ::: جارٍ فتح صفحة في المتصفح ::: 正在浏览器中打开页面
+Opening terminal ::: جارٍ فتح طرفية ::: 正在打开终端
+Plain conversation, no tools. ::: محادثة عادية بلا أدوات. ::: 普通对话，不使用工具。
+Plan mode. It writes a plan and changes nothing until you approve it. ::: وضع التخطيط. يكتب خطة ولا يغيّر شيئاً حتى توافق عليها. ::: 计划模式。它会撰写计划，在你批准之前不会改动任何内容。
+Ran browser task ::: نُفّذت مهمة متصفح ::: 已运行浏览器任务
+Ran parallel tasks ::: نُفّذت مهام متوازية ::: 已运行并行任务
+Ran project checks ::: نُفّذت فحوص المشروع ::: 已运行项目检查
+Ran research task ::: نُفّذت مهمة بحث ::: 已运行调研任务
+Ran terminal ::: شُغّلت طرفية ::: 已运行终端
+Read browser console ::: قُرئت وحدة تحكم المتصفح ::: 已读取浏览器控制台
+Read file ::: قُرئ ملف ::: 已读取文件
+Read lint errors ::: قُرئت أخطاء الفحص (lint) ::: 已读取 lint 错误
+Read network log ::: قُرئ سجل الشبكة ::: 已读取网络日志
+Read page ::: قُرئت الصفحة ::: 已读取页面
+Read page errors ::: قُرئت أخطاء الصفحة ::: 已读取页面错误
+Read-only. Explores the project and answers. ::: للقراءة فقط. يستكشف المشروع ويجيب. ::: 只读。探索项目并回答。
+Reading browser console ::: جارٍ قراءة وحدة تحكم المتصفح ::: 正在读取浏览器控制台
+Reading file ::: جارٍ قراءة ملف ::: 正在读取文件
+Reading lint errors ::: جارٍ قراءة أخطاء الفحص (lint) ::: 正在读取 lint 错误
+Reading network log ::: جارٍ قراءة سجل الشبكة ::: 正在读取网络日志
+Reading page ::: جارٍ قراءة الصفحة ::: 正在读取页面
+Reading page errors ::: جارٍ قراءة أخطاء الصفحة ::: 正在读取页面错误
+Reads, edits and runs commands until the task is done. ::: يقرأ ويعدّل ويشغّل الأوامر حتى تنتهي المهمة. ::: 读取、编辑并运行命令，直到任务完成。
+Redo from here ::: إعادة من هنا ::: 从这里重做
+Reload page ::: إعادة تحميل الصفحة ::: 重新加载页面
+Reloaded page ::: أُعيد تحميل الصفحة ::: 已重新加载页面
+Reloading page ::: جارٍ إعادة تحميل الصفحة ::: 正在重新加载页面
+Results truncated ({0} remaining). ::: قُطعت النتائج (تبقّى {0}). ::: 结果已截断（还剩 {0}）。
+Results truncated. ::: قُطعت النتائج. ::: 结果已截断。
+Review it ::: راجعه ::: 去审查
+Rewrite the whole file ::: إعادة كتابة الملف بالكامل ::: 重写整个文件
+Run browser task ::: تشغيل مهمة متصفح ::: 运行浏览器任务
+Run parallel tasks ::: تشغيل مهام متوازية ::: 运行并行任务
+Run project checks ::: تشغيل فحوص المشروع ::: 运行项目检查
+Run research task ::: تشغيل مهمة بحث ::: 运行调研任务
+Run terminal ::: تشغيل طرفية ::: 运行终端
+Running browser task ::: جارٍ تنفيذ مهمة متصفح ::: 正在运行浏览器任务
+Running in {0} ::: يعمل في {0} ::: 正在 {0} 中运行
+Running parallel tasks ::: جارٍ تنفيذ مهام متوازية ::: 正在运行并行任务
+Running project checks ::: جارٍ تنفيذ فحوص المشروع ::: 正在运行项目检查
+Running research task ::: جارٍ تنفيذ مهمة بحث ::: 正在运行调研任务
+Running terminal ::: جارٍ تشغيل طرفية ::: 正在运行终端
+Runs without asking, except what is on the locked list. ::: يعمل دون سؤال، عدا ما في قائمة المقفل. ::: 无需询问直接运行，已锁定列表中的除外。
+Save to memory ::: حفظ في الذاكرة ::: 保存到记忆
+Saved for {0}. The agent reads it in this project from now on. You can change it in Settings, Memory. ::: حُفظت لـ {0}. يقرؤها الوكيل في هذا المشروع من الآن فصاعداً. ويمكنك تغييرها من الإعدادات، الذاكرة. ::: 已为 {0} 保存。从现在起，智能体会在此项目中读取它。你可以在“设置 > 记忆”中修改。
+Saved to memory ::: حُفظ في الذاكرة ::: 已保存到记忆
+Saving to memory ::: جارٍ الحفظ في الذاكرة ::: 正在保存到记忆
+Say what to plan, or press / for commands ::: قل ما الذي يجب التخطيط له، أو اضغط / للأوامر ::: 说明要计划什么，或按 / 使用命令
+Search SkillNet ::: البحث في SkillNet ::: 搜索 SkillNet
+Search by file name ::: البحث باسم الملف ::: 按文件名搜索
+Search in file ::: البحث في ملف ::: 在文件中搜索
+Search the MCP registry ::: البحث في سجل MCP ::: 搜索 MCP 注册表
+Search the project ::: البحث في المشروع ::: 搜索项目
+Searched SkillNet ::: بُحث في SkillNet ::: 已搜索 SkillNet
+Searched by file name ::: بُحث باسم الملف ::: 已按文件名搜索
+Searched in file ::: بُحث في ملف ::: 已在文件中搜索
+Searched the MCP registry ::: بُحث في سجل MCP ::: 已搜索 MCP 注册表
+Searched the project ::: بُحث في المشروع ::: 已搜索项目
+Searching SkillNet ::: جارٍ البحث في SkillNet ::: 正在搜索 SkillNet
+Searching by file name ::: جارٍ البحث باسم الملف ::: 正在按文件名搜索
+Searching in file ::: جارٍ البحث في ملف ::: 正在文件中搜索
+Searching the MCP registry ::: جارٍ البحث في سجل MCP ::: 正在搜索 MCP 注册表
+Searching the project ::: جارٍ البحث في المشروع ::: 正在搜索项目
+Show all {0} lines ::: عرض كل الأسطر ({0}) ::: 显示全部 {0} 行
+Show fewer lines ::: عرض أسطر أقل ::: 显示更少的行
+Show the change ::: عرض التغيير ::: 显示更改
+Start from one of these ::: ابدأ بواحدة من هذه ::: 从下面选一个开始
+Stay here ::: ابقَ هنا ::: 留在这里
+Summarising the earlier steps... ::: جارٍ تلخيص الخطوات السابقة... ::: 正在总结之前的步骤...
+Switch browser page ::: تبديل صفحة المتصفح ::: 切换浏览器页面
+Switched browser page ::: بُدّلت صفحة المتصفح ::: 已切换浏览器页面
+Switching browser page ::: جارٍ تبديل صفحة المتصفح ::: 正在切换浏览器页面
+Take screenshot ::: التقاط لقطة شاشة ::: 截取屏幕截图
+Taking screenshot ::: جارٍ التقاط لقطة شاشة ::: 正在截取屏幕截图
+Tell the agent what to change, or press / for commands ::: أخبر الوكيل بما يجب تغييره، أو اضغط / للأوامر ::: 告诉智能体要修改什么，或按 / 使用命令
+The amount the provider says it charged ::: المبلغ الذي يقول المزوّد إنه حاسب به ::: 提供商声称已收取的金额
+The check could not run: ::: تعذّر تشغيل الفحص: ::: 无法运行检查：
+The check found {0} blocker{1}. ::: وجد الفحص {0} من العوائق. ::: 检查发现 {0} 个阻塞问题。
+The check passed. ::: نجح الفحص. ::: 检查通过。
+The connected agent ::: الوكيل المرتبط ::: 已连接的智能体
+The earlier steps are summarised. ::: لُخّصت الخطوات السابقة. ::: 之前的步骤已被总结。
+There is no image on the clipboard. ::: لا توجد صورة في الحافظة. ::: 剪贴板中没有图片。
+There is nothing to attach from there right now. ::: لا يوجد ما يمكن إرفاقه من هناك الآن. ::: 目前那里没有可附加的内容。
+Thinking disabled ::: التفكير معطّل ::: 已关闭思考
+This model ::: هذا النموذج ::: 此模型
+To do ::: المهام المتبقية ::: 待办
+Took screenshot ::: التُقطت لقطة شاشة ::: 已截取屏幕截图
+Type in page ::: الكتابة في الصفحة ::: 在页面中输入
+Typed in page ::: كُتب في الصفحة ::: 已在页面中输入
+Typing in page ::: جارٍ الكتابة في الصفحة ::: 正在页面中输入
+Update the task list ::: تحديث قائمة المهام ::: 更新任务列表
+Updated the plan ::: حُدّثت الخطة ::: 已更新计划
+Updated the task list ::: حُدّثت قائمة المهام ::: 已更新任务列表
+Updating the task list ::: جارٍ تحديث قائمة المهام ::: 正在更新任务列表
+Used the skill ::: استُخدمت المهارة ::: 已使用技能
+Uses regex search ::: يستخدم البحث بالتعبيرات النمطية ::: 使用正则表达式搜索
+Verified the work ::: تم التحقق من العمل ::: 已验证工作成果
+Verify the work ::: التحقق من العمل ::: 验证工作成果
+Verifying the work ::: جارٍ التحقق من العمل ::: 正在验证工作成果
+Wait for a terminal ::: انتظار طرفية ::: 等待终端
+Waited for a terminal ::: انتُظرت طرفية ::: 已等待终端
+Waiting for a terminal ::: جارٍ انتظار طرفية ::: 正在等待终端
+Working on it ::: جارٍ العمل عليه ::: 正在处理
+Write file ::: كتابة ملف ::: 写入文件
+Write the note after /remember, then press Enter. ::: اكتب الملاحظة بعد /remember ثم اضغط Enter. ::: 在 /remember 之后输入备注，然后按 Enter。
+Writes a plan. Changes nothing until you approve it. ::: يكتب خطة. ولا يغيّر شيئاً حتى توافق عليها. ::: 撰写计划。在你批准之前不会改动任何内容。
+Writing file ::: جارٍ كتابة ملف ::: 正在写入文件
+Wrote file ::: كُتب ملف ::: 已写入文件
+because another thread is running ::: لأن محادثة أخرى قيد التشغيل ::: 因为另一个对话正在运行
+it could not be read ::: تعذّرت قراءته ::: 无法读取
+it is not a text file ::: ليس ملفاً نصياً ::: 它不是文本文件
+this chat ::: هذه المحادثة ::: 此对话
+when running ::: عند التشغيل ::: 运行时
+{0} answer(s) came from a model whose price Vader does not know, so they are not in this amount. Set a price in Settings, Spending. ::: جاءت {0} إجابة (إجابات) من نموذج لا يعرف Vader سعره، لذا ليست داخلة في هذا المبلغ. حدّد سعراً في الإعدادات، الإنفاق. ::: 有 {0} 条回答来自 Vader 不知道价格的模型，因此不包含在此金额中。请在“设置 > 花费”中设置价格。
+{0} was long, so only part of it is attached. ::: كان {0} طويلاً، لذا أُرفق جزء منه فقط. ::: {0} 太长，因此只附加了一部分。
+Waiting for you ::: بانتظارك ::: 等待你
+Explored ::: استُكشف ::: 已查看
+Thinking ::: يفكّر ::: 思考中
+Thought ::: فكّر ::: 已思考
+Working ::: يعمل ::: 工作中
+Stopped ::: متوقف ::: 已停止
+Finished ::: انتهى ::: 已完成
+Running ::: يعمل ::: 运行中
+Failed ::: فشل ::: 失败
+Rejected ::: مرفوض ::: 已拒绝
+Approve ::: موافقة ::: 批准
+Checkpoint ::: نقطة استعادة ::: 检查点
+Restore ::: استعادة ::: 恢复

@@ -54,7 +54,7 @@ const unreachableRegistrars = files.filter(f => !reached.has(f) && REGISTERS.tes
 check('every module that registers something is loaded by the application', unreachableRegistrars.length === 0,
 	unreachableRegistrars.map(f => path.relative(vaderDir, f)).join(', '));
 
-// zero importers anywhere in src (type-only importers count: they are real uses of the module)
+// zero importers anywhere in src (type-only importers count: they are real uses of the module; a worker started from its file path through asFileUri counts too)
 const corpus = [];
 (function walk(d) {
 	for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -63,7 +63,7 @@ const corpus = [];
 		else if (/\.(ts|tsx|mjs|js)$/.test(e.name) && !e.name.endsWith('.d.ts')) { corpus.push(p); }
 	}
 })(path.join(repo, 'src/vs'));
-const importLines = corpus.map(f => ({ f, t: fs.readFileSync(f, 'utf8').split('\n').filter(l => /^\s*(import|export)\b.*from\s|^\s*import\s*['"]|\bimport\(|require\(/.test(l) && !/^\s*\/\//.test(l)).join('\n') }));
+const importLines = corpus.map(f => ({ f, t: fs.readFileSync(f, 'utf8').split('\n').filter(l => /^\s*(import|export)\b.*from\s|^\s*import\s*['"]|\bimport\(|require\(|asFileUri\(/.test(l) && !/^\s*\/\//.test(l)).join('\n') }));
 const dead = files.filter(f => {
 	const base = path.basename(f).replace(/\.ts$/, '');
 	return !importLines.some(({ f: g, t }) => g !== f && new RegExp(`/${base}(\\.js)?['"]`).test(t));

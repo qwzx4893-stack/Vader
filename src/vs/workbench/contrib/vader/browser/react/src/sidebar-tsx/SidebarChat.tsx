@@ -6,14 +6,14 @@
 import React, { ButtonHTMLAttributes, FormEvent, FormHTMLAttributes, Fragment, KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 
-import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState } from '../util/services.js';
+import { useAccessor, useChatThreadsState, useChatThreadsStreamState, useSettingsState, useActiveURI, useCommandBarState, useFullChatThreadsStreamState, useTaskCopyState, usePolicyServiceState } from '../util/services.js';
 import { ScrollType } from '../../../../../../../editor/common/editorCommon.js';
 
 import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markdown/ChatMarkdownRender.js';
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { BlockCode, TextAreaFns, VaderCustomDropdownBox, VaderInputBox2, VaderSlider, VaderSwitch, VaderDiffEditor, VaderButtonBgDarken } from '../util/inputs.js';
+import { TextAreaFns, VaderCustomDropdownBox, VaderInputBox2, VaderSlider, VaderSwitch, VaderButtonBgDarken } from '../util/inputs.js';
 import { ModelDropdown, } from '../vader-settings-tsx/ModelDropdown.js';
 import { ExternalAgentChatPicker } from '../vader-settings-tsx/ExternalAgents.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
@@ -21,8 +21,7 @@ import { VADER_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
-import { WarningBox } from '../vader-settings-tsx/WarningBox.js';
-import { getModelCapabilities, getIsReasoningEnabledState } from '../../../../common/modelCapabilities.js';
+import { getModelCapabilities, getIsReasoningEnabledState, modelSupportsVision } from '../../../../common/modelCapabilities.js';
 import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
@@ -32,11 +31,35 @@ import { acceptAllBg, acceptBorder, buttonFontSize, buttonTextColor, rejectAllBg
 import { builtinToolNames, isABuiltinToolName, MAX_FILE_CHARS_PAGE, MAX_TERMINAL_INACTIVE_TIME } from '../../../../common/prompt/prompts.js';
 import { RawToolCallObj } from '../../../../common/sendLLMMessageTypes.js';
 import ErrorBoundary from './ErrorBoundary.js';
-import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/Settings.js';
+import { ToolApprovalTypeSwitch } from '../vader-settings-tsx/ToolApprovalTypeSwitch.js';
 
 import { persistentTerminalNameOfId } from '../../../terminalToolService.js';
 import { removeMCPToolNamePrefix } from '../../../../common/mcpServiceTypes.js';
 import { formatUsd, formatCost, formatTokens } from '../../../../common/usageAccounting.js';
+import { parseTaskList } from '../../../../common/taskList.js';
+import { projectNameOf } from '../../../../common/threadProjects.js';
+import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
+import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
+import { ChoiceMenu } from './ComposerMenus.js';
+import { CheckpointsButton } from './CheckpointsPanel.js';
+import { commandEndWords, foldOutput, lineCount } from '../../../../common/outputFold.js';
+import { FoldedOutput } from './FoldedOutput.js';
+import { explainBrowserError } from '../../../../common/browserErrorWords.js';
+import { explainEditError, rewriteMessage, TRY_AGAIN_MESSAGE } from '../../../../common/editErrorWords.js';
+import { checkDrop, DROP_TITLE, dropHint, dropNote, looksBinary, sizeWords } from '../../../../common/attachmentRules.js';
+import { ChatImage, checkImages, dataUrlOf, looksLikeImage, MAX_IMAGES } from '../../../../common/imageRules.js';
+import { chatImageOfFile, imagesOnClipboard } from './imageFiles.js';
+import { ImageChips, ImagesBlockedCard } from './ImageChips.js';
+import { SKILLS_FOOTNOTE } from '../../../../common/skillMatch.js'
+import { TaskCopyArea } from './TaskCopyCards.js';
+import { EditDiffLines, countsOfBlocks } from './EditDiffLines.js';
+import { McpToolChangedArea } from './McpToolChanged.js';
+import { TerminalWaitingCard } from './TerminalWaitingCard.js';
+import { peekContextSources, readContextSource } from './contextSourcesReader.js';
+import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
+import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
+import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
+import { INIT_PROMPT, noteLabel, parseSlash, slashMatches, SlashCommand } from '../../../../common/slashCommands.js';
 
 
 
@@ -249,6 +272,42 @@ const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) =>
 
 
 
+/** the thinking budget as one quiet chip in the footer; the slider (or switch) is in the small panel it opens, so the footer keeps one row */
+const ThinkingChip = ({ featureName }: { featureName: FeatureName }) => {
+	const settingsState = useSettingsState()
+	const [open, setOpen] = useState(false)
+	const ref = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away)
+		document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
+	const sel = settingsState.modelSelectionOfFeature[featureName]
+	if (!sel) return null
+	const { reasoningCapabilities } = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
+	const { canTurnOffReasoning, reasoningSlider } = reasoningCapabilities || {}
+	if (!canTurnOffReasoning && !reasoningSlider) return null
+	const options = settingsState.optionsOfModelSelection[featureName][sel.providerName]?.[sel.modelName]
+	const on = getIsReasoningEnabledState(featureName, sel.providerName, sel.modelName, options, settingsState.overridesOfModel)
+	const label = !on ? 'Off'
+		: reasoningSlider?.type === 'budget_slider' ? `${options?.reasoningBudget ?? reasoningSlider.default}`
+			: reasoningSlider?.type === 'effort_slider' ? (() => { const e = options?.reasoningEffort ?? reasoningSlider.default; return e.charAt(0).toUpperCase() + e.slice(1) })()
+				: 'On'
+	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
+		<button type='button' data-testid='vader-thinking' aria-expanded={open} aria-haspopup='dialog' onClick={() => setOpen(o => !o)}
+				className='flex items-center gap-1 h-7 px-1.5 text-[13px] text-vader-fg-3 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' title='How much the model thinks before it answers'>
+			<span>Thinking</span><span className='text-vader-fg-2'>{label}</span>
+		</button>
+		{open ? <div role='dialog' aria-label='Thinking' data-testid='vader-thinking-panel' className='motion-safe:animate-card-in absolute bottom-full right-0 mb-2 z-50 rounded-lg border border-vader-border-2 bg-vader-bg-1 px-3 py-2.5 shadow-lg flex flex-col gap-1.5' style={{ minWidth: 220 }}>
+			<ReasoningOptionSlider featureName={featureName} />
+			<div className='text-vader-fg-3 text-xs leading-relaxed'>More thinking can give better answers, and costs more and takes longer.</div>
+		</div> : null}
+	</div>
+}
+
 const nameOfChatMode = {
 	'normal': 'Chat',
 	'gather': 'Gather',
@@ -257,41 +316,103 @@ const nameOfChatMode = {
 }
 
 const detailOfChatMode = {
-	'normal': 'Normal chat',
-	'gather': 'Reads files, but can\'t edit',
-	'plan': 'Read-only research, ends in a structured plan you can approve into Agent mode',
-	'agent': 'Edits files and uses tools',
+	'normal': 'Plain conversation, no tools.',
+	'gather': 'Read-only. Explores the project and answers.',
+	'plan': 'Writes a plan. Changes nothing until you approve it.',
+	'agent': 'Reads, edits and runs commands until the task is done.',
+}
+
+/** what the empty box says, for the mode it is in (board R01) */
+const PLACEHOLDER_OF_MODE: Record<string, string> = {
+	'agent': 'Tell the agent what to change, or press / for commands',
+	'plan': 'Say what to plan, or press / for commands',
+	'gather': 'Ask about the project, or press / for commands',
+	'normal': 'Ask anything, or press / for commands',
 }
 
 
+// the order of the board: Agent, Plan, Gather, Chat, with Ctrl 1 to 4 (handled in the message box, see onKeyDown in SidebarChat)
+const CHAT_MODE_ORDER: ChatMode[] = ['agent', 'plan', 'gather', 'normal']
 const ChatModeDropdown = ({ className }: { className: string }) => {
 	const accessor = useAccessor()
-
 	const vaderSettingsService = accessor.get('IVaderSettingsService')
 	const settingsState = useSettingsState()
-
-	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'plan', 'agent'], [])
-
-	const onChangeOption = useCallback((newVal: ChatMode) => {
-		vaderSettingsService.setGlobalSetting('chatMode', newVal)
-	}, [vaderSettingsService])
-
-	return <VaderCustomDropdownBox
-		className={className}
-		options={options}
-		selectedOption={settingsState.globalSettings.chatMode}
-		onChangeOption={onChangeOption}
-		getOptionDisplayName={(val) => nameOfChatMode[val]}
-		getOptionDropdownName={(val) => nameOfChatMode[val]}
-		getOptionDropdownDetail={(val) => detailOfChatMode[val]}
-		getOptionsEqual={(a, b) => a === b}
-	/>
-
+	const rows = useMemo(() => CHAT_MODE_ORDER.map((m, i) => ({ value: m, name: nameOfChatMode[m], detail: detailOfChatMode[m], shortcut: `Ctrl ${i + 1}` })), [])
+	return <ChoiceMenu testId='vader-mode' label='Mode' className={className} rows={rows} value={settingsState.globalSettings.chatMode} onChange={(m) => vaderSettingsService.setGlobalSetting('chatMode', m)} />
 }
 
+// How much the agent asks before it acts (boards R06 and R08): Safe, Balanced or Autonomous. Some rules are locked in every mode.
+const PERMISSION_NAME = { safe: 'Safe', balanced: 'Balanced', autonomous: 'Autonomous' } as const
+const PERMISSION_DETAIL = {
+	safe: 'Asks before every change and command.',
+	balanced: 'Edits in the project go through. Commands and sensitive files ask.',
+	autonomous: 'Runs without asking, except what is on the locked list.',
+} as const
 
-
-
+/** how much of the model's window this conversation uses, as a ring and a percentage; a click opens what it is made of, and Compact now (board R06, "Context meter") */
+const ContextMeter = () => {
+	const accessor = useAccessor()
+	const chat = accessor.get('IChatThreadService')
+	const settingsState = useSettingsState()
+	const threadsState = useChatThreadsState()
+	const [open, setOpen] = useState(false)
+	const [busy, setBusy] = useState(false)
+	const [result, setResult] = useState<string | undefined>()
+	const ref = useRef<HTMLDivElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away)
+		document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
+	const sel = settingsState.modelSelectionOfFeature?.Chat
+	if (!sel) return null
+	const thread = threadsState.allThreads[threadsState.currentThreadId]
+	if (!thread || thread.messages.length === 0) return null
+	const caps = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
+	const windowTokens = caps.contextWindow
+	if (!windowTokens) return null
+	// the share of the room a request may use (the window less what is kept for the answer), as the banner and the real thresholds measure it
+	const bd = contextBreakdown(thread.messages as never, windowTokens, caps.reservedOutputTokenSpace)
+	const tokens = Math.round(bd.share * windowTokens)
+	const pct = Math.min(100, Math.round(100 * bd.share))
+	const r = 6.5, c = 2 * Math.PI * r
+	const color = pct >= 90 ? '#f06a6e' : pct >= 70 ? '#e2a93f' : '#8a8a91'
+	const compact = async () => {
+		setBusy(true); setResult(undefined)
+		try {
+			const res = await chat.compactThreadNow(thread.id)
+			setResult(res === 'done' ? 'The older messages are summarised.' : res === 'nothing' ? 'There is too little to summarise yet.' : 'The model did not answer, so nothing was summarised.')
+		} finally { setBusy(false) }
+	}
+	const widest = Math.max(1, ...bd.rows.map(x => x.tokens))
+	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
+		<button type='button' aria-expanded={open} aria-haspopup='dialog' className='flex items-center gap-1.5 text-xs text-vader-fg-3 hover:text-vader-fg-1 transition-colors duration-150' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter' onClick={() => setOpen(o => !o)}>
+			<svg width='16' height='16' viewBox='0 0 16 16' aria-hidden='true'><circle cx='8' cy='8' r={r} fill='none' stroke='rgba(255,255,255,.14)' strokeWidth='1.8' /><circle cx='8' cy='8' r={r} fill='none' stroke={color} strokeWidth='1.8' strokeLinecap='round' strokeDasharray={`${c * pct / 100} ${c}`} transform='rotate(-90 8 8)' /></svg>
+			{pct}%
+		</button>
+		{open ? <div role='dialog' aria-label='Context' data-testid='vader-context-panel' className='motion-safe:animate-card-in absolute bottom-full right-0 mb-2 z-50 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 shadow-lg flex flex-col gap-2' style={{ width: 300 }}>
+			<div className='flex items-baseline gap-2'>
+				<span className='font-semibold text-vader-fg-1 text-[13px]' data-testid='vader-context-panel-title'>{pct}% of {formatTokens(windowTokens)}</span>
+				<span className='flex-1' />
+				<button type='button' data-testid='vader-context-compact' disabled={busy} className='text-vader-fg-2 hover:text-vader-fg-1 text-[13px] disabled:opacity-50' onClick={() => { void compact() }}>{busy ? 'Summarising...' : 'Compact now'}</button>
+			</div>
+			<div className='h-1 rounded-full bg-vader-border-3 overflow-hidden flex'>
+				{bd.rows.map((row, k) => <div key={row.label} title={row.label} style={{ width: `${Math.min(100, 100 * row.tokens / windowTokens)}%`, background: ['#8a8a91', '#5b8def', '#b0b0b5', '#e2a93f'][k % 4] }} />)}
+			</div>
+			<div className='flex flex-col gap-1 pt-1' data-testid='vader-context-rows'>
+				{bd.rows.map(row => <div key={row.label} className='flex items-center gap-2 text-[13px] text-vader-fg-1'>
+					<span className='truncate'>{row.label}</span><span className='flex-1' />
+					<span className='text-vader-fg-2 tabular-nums' style={{ opacity: 0.6 + 0.4 * row.tokens / widest }}>{formatTokens(row.tokens)}</span>
+				</div>)}
+			</div>
+			<div className='text-vader-fg-3 text-xs leading-relaxed'>{contextMeterNote()}</div>
+			{result ? <div className='text-vader-fg-2 text-xs' role='status' data-testid='vader-context-panel-result'>{result}</div> : null}
+		</div> : null}
+	</div>
+}
 
 interface VaderChatAreaProps {
 	// Required
@@ -317,6 +438,11 @@ interface VaderChatAreaProps {
 	// onSelectionsChange?: (selections: any[]) => void;
 
 	onClickAnywhere?: () => void;
+	/** files were dropped on the box (the main message box only) */
+	onDropFiles?: (files: File[]) => void;
+	/** the main message box: shows the footer line under it and an "Add context" button */
+	onAddContext?: () => void;
+	showFooter?: boolean;
 	// Optional close button
 	onClose?: () => void;
 
@@ -338,11 +464,12 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 
 	const usage = chatThreadsService.getThreadUsage(threadId)
 	const today = chatThreadsService.getUsageToday()
+	const branch = useTaskCopyState(threadId).state?.branchName
 	const limit = settingsState.globalSettings.dailySpendLimitUsd
 	const pause = chatThreadsService.getPause(threadId)
 	const unpriced = (usage?.unpricedTurns ?? 0) > 0
 
-	return <div className='flex items-center gap-x-2 text-xs text-vader-fg-3 text-nowrap'>
+	return <div className='flex items-center flex-wrap gap-x-3.5 gap-y-0.5 px-1 text-[12px] text-vader-fg-3' data-testid='vader-run-controls'>
 		{pause ? <span className='text-yellow-600'>{pause.reason === 'budget' ? `Paused: today's estimate reached ${formatUsd(limit ?? 0)}` : 'Paused'}</span> : null}
 		{isStreaming ? (pause
 			? <button data-testid='vader-resume' className='underline hover:text-vader-fg-1' onClick={() => chatThreadsService.resumeRun(threadId)}>{pause.reason === 'budget' ? 'Go on anyway' : 'Resume'}</button>
@@ -350,7 +477,35 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 		{usage && usage.turns > 0 ? <span title='Tokens the providers reported for this chat'>{formatTokens(usage.inputTokens + usage.outputTokens)} tokens</span> : null}
 		{usage && usage.turns > 0 ? <span title={unpriced ? `${usage.unpricedTurns} answer(s) came from a model whose price Vader does not know, so they are not in this amount. Set a price in Settings, Spending.` : usage.costUsd === 0 ? 'A model on this computer is free' : (usage.billedCostUsd ?? 0) >= usage.costUsd - 1e-9 ? 'The amount the provider says it charged' : 'Worked out from list prices. Your provider\'s bill can differ (discounts, taxes, cache writes). See Settings, Spending.'}>{usage.costUsd === 0 && !unpriced ? 'free' : formatCost(usage.costUsd, usage.billedCostUsd)}{unpriced ? ' +' : ''} this chat</span> : null}
 		{today.costUsd > 0 ? <span title='Worked out from list prices unless the provider reported the charge'>{formatCost(today.costUsd, today.billedCostUsd)} today</span> : null}
+		<CheckpointsButton />
+		<span className='flex-1' />
+		{branch ? <span className='font-mono text-[12px] truncate max-w-[40%]' title='The branch this task works on' data-testid='vader-run-branch'>{branch}</span> : null}
 	</div>
+}
+
+/** The + at the left of the box: files and photos from this computer (the same as dropping them on the box), and the project's own things (a file, the terminal output, a page, the git changes). */
+const AttachButton = ({ onFiles, onAddContext }: { onFiles: (files: File[]) => void, onAddContext?: () => void }) => {
+	const [open, setOpen] = useState(false)
+	const box = useRef<HTMLSpanElement>(null)
+	const input = useRef<HTMLInputElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away); document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
+	return <span ref={box} className='relative inline-flex'>
+		<button type='button' data-testid='vader-attach' title='Add files, photos and context' aria-label='Add files, photos and context' aria-haspopup='menu' aria-expanded={open}
+			className='flex items-center justify-center h-7 w-7 text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' onClick={e => { e.stopPropagation(); setOpen(v => !v) }}>
+			<svg className='size-[16px] flex-none' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' aria-hidden='true'><path d='M12 5v14M5 12h14' /></svg>
+		</button>
+		<input ref={input} type='file' multiple data-testid='vader-attach-input' className='hidden' style={{ display: 'none' }} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ''; setOpen(false); if (files.length > 0) onFiles(files) }} />
+		{open ? <div role='menu' data-testid='vader-attach-menu' className='absolute left-0 bottom-9 z-50 flex flex-col p-1 rounded-lg border border-vader-border-2 bg-vader-bg-2 shadow-lg' style={{ width: 270, background: 'var(--g2)', border: '1px solid var(--ln2)', boxShadow: '0 8px 24px rgba(0,0,0,.45)' }}>
+			<button type='button' role='menuitem' data-testid='vader-attach-files' className='flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover text-left' onClick={e => { e.stopPropagation(); input.current?.click() }}>Files and photos from this computer</button>
+			{onAddContext ? <button type='button' role='menuitem' data-testid='vader-attach-context' className='flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover text-left' onClick={e => { e.stopPropagation(); setOpen(false); onAddContext() }}>Add context from the project</button> : null}
+		</div> : null}
+	</span>
 }
 
 export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
@@ -359,6 +514,9 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	onAbort,
 	onClose,
 	onClickAnywhere,
+	onAddContext,
+	onDropFiles,
+	showFooter,
 	divRef,
 	isStreaming = false,
 	isDisabled = false,
@@ -371,79 +529,113 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	featureName,
 	loadingIcon,
 }) => {
+	// in a narrow panel the footer keeps one row: "Add context" is then just the @
+	const footerRef = useRef<HTMLDivElement>(null)
+	const [narrow, setNarrow] = useState(false)
+	useEffect(() => {
+		const el = footerRef.current
+		if (!el || typeof ResizeObserver === 'undefined') return
+		const ro = new ResizeObserver(() => setNarrow(el.clientWidth < 470))
+		ro.observe(el)
+		return () => ro.disconnect()
+	}, [])
+	// files dragged over the box: the whole box says what will happen (board S03, "Dropping a file")
+	const [dragging, setDragging] = useState(false)
+	const dragDepth = useRef(0)
+	const hasFiles = (e: React.DragEvent) => !!onDropFiles && Array.from(e.dataTransfer?.types ?? []).includes('Files')
 	return (
-		<div
-			ref={divRef}
-			className={`
-				gap-x-1
-                flex flex-col p-2 relative input text-left shrink-0
-                rounded-md
-                bg-vader-bg-1
+		<div className='flex flex-col gap-1.5'
+			onDragEnter={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); dragDepth.current++; setDragging(true) }}
+			onDragOver={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation() }}
+			onDragLeave={(e) => { if (!hasFiles(e)) return; dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false) }}
+			onDrop={(e) => { if (!hasFiles(e)) return; e.preventDefault(); e.stopPropagation(); dragDepth.current = 0; setDragging(false); onDropFiles?.(Array.from(e.dataTransfer.files)) }}
+		>
+			<div
+				ref={divRef}
+				className={`
+					gap-y-3.5
+	                flex flex-col pt-3 px-3 pb-[9px] relative input text-left shrink-0
+	                rounded-[10px]
+	                bg-vader-bg-1
 				transition-all duration-200
-				border border-vader-border-3 focus-within:border-vader-border-1 hover:border-vader-border-1
-				max-h-[80vh] overflow-y-auto
+				border border-vader-border-2 focus-within:border-vader-border-1 hover:border-vader-border-1
+				max-h-[80vh]
                 ${className}
             `}
-			onClick={(e) => {
-				onClickAnywhere?.()
-			}}
-		>
-			{/* Selections section */}
-			{showSelections && selections && setSelections && (
-				<SelectedFiles
-					type='staging'
-					selections={selections}
-					setSelections={setSelections}
-					showProspectiveSelections={showProspectiveSelections}
-				/>
-			)}
+				onClick={(e) => {
+					onClickAnywhere?.()
+				}}
+			>
+				{dragging ? <div data-testid='vader-drop-zone' className='motion-safe:animate-card-in absolute inset-0 z-20 rounded-xl border border-dashed border-vader-border-1 bg-vader-bg-1 flex flex-col items-center justify-center gap-1 pointer-events-none'>
+					<svg width='16' height='16' viewBox='0 0 16 16' fill='none' aria-hidden='true' className='text-vader-fg-2'><path d='M8 2v8m0 0L5 7m3 3 3-3M3 13h10' stroke='currentColor' strokeWidth='1.3' strokeLinecap='round' strokeLinejoin='round' /></svg>
+					<div className='text-[13px] font-semibold text-vader-fg-1'>{DROP_TITLE}</div>
+					<div className='text-xs text-vader-fg-3'>{dropHint()}</div>
+				</div> : null}
 
-			{/* Input section */}
-			<div className="relative w-full">
-				{children}
-
-				{/* Close button (X) if onClose is provided */}
-				{onClose && (
-					<div className='absolute -top-1 -right-1 cursor-pointer z-1'>
-						<IconX
-							size={12}
-							className="stroke-[2] opacity-80 text-vader-fg-3 hover:brightness-95"
-							onClick={onClose}
-						/>
-					</div>
+				{/* Selections section */}
+				{showSelections && selections && setSelections && (
+					<SelectedFiles
+						type='staging'
+						selections={selections}
+						setSelections={setSelections}
+						showProspectiveSelections={showProspectiveSelections}
+					/>
 				)}
-			</div>
 
-			{/* Bottom row */}
-			<div className='flex flex-row justify-between items-end gap-1'>
-				{showModelDropdown && (
-					<div className='flex flex-col gap-y-1'>
-						<ReasoningOptionSlider featureName={featureName} />
+				{/* Input section */}
+				<div className="relative w-full">
+					{children}
 
-						{featureName === 'Chat' && <RunControls isStreaming={isStreaming} />}
-						<div className='flex items-center flex-wrap gap-x-2 gap-y-1 text-nowrap '>
-							{featureName === 'Chat' && <ChatModeDropdown className='text-xs text-vader-fg-3 bg-vader-bg-1 border border-vader-border-2 rounded py-0.5 px-1' />}
-							{featureName === 'Chat' && <ExternalAgentChatPicker className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />}
-							<ModelDropdown featureName={featureName} className='text-xs text-vader-fg-3 bg-vader-bg-1 rounded' />
+					{/* Close button (X) if onClose is provided */}
+					{onClose && (
+						<div className='absolute -top-1 -right-1 cursor-pointer z-1'>
+							<IconX
+								size={12}
+								className="stroke-[2] opacity-80 text-vader-fg-3 hover:brightness-95"
+								onClick={onClose}
+							/>
 						</div>
-					</div>
-				)}
-
-				<div className="flex items-center gap-2">
-
-					{isStreaming && loadingIcon}
-
-					{isStreaming ? (
-						<ButtonStop onClick={onAbort} />
-					) : (
-						<ButtonSubmit
-							onClick={onSubmit}
-							disabled={isDisabled}
-						/>
 					)}
 				</div>
 
+				{/* Bottom row */}
+				<div ref={footerRef} className='flex flex-row justify-between items-end gap-1'>
+					{showModelDropdown && (
+						<div className='flex flex-col gap-y-1'>
+							{/* the thinking budget lives in the chip */}
+
+<div className='flex items-center flex-wrap gap-x-1 gap-y-1 text-nowrap '>
+{featureName === 'Chat' && showFooter && onDropFiles ? <AttachButton onFiles={onDropFiles} onAddContext={onAddContext} /> : null}
+{featureName === 'Chat' && <ChatModeDropdown className='text-[13px] text-vader-fg-2' />}
+								{featureName === 'Chat' && <ExternalAgentChatPicker className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />}
+								<ModelDropdown featureName={featureName} className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />
+									{onAddContext ? <button type='button' data-testid='vader-add-context' title='Add context: a file, the terminal output, a page, the git changes' aria-label='Add context' className='flex items-center gap-1.5 h-7 px-1.5 text-[13px] text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' onClick={(e) => { e.stopPropagation(); onAddContext() }}><svg className='size-[15px] flex-none' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='4' /><path d='M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8' /></svg>{narrow ? null : 'Add context'}</button> : null}
+							</div>
+						</div>
+					)}
+
+					<div className="flex items-center gap-2">
+
+						{featureName === 'Chat' ? <ThinkingChip featureName={featureName} /> : null}
+
+						{showFooter ? <ContextMeter /> : null}
+
+						{isStreaming && loadingIcon}
+
+						{isStreaming ? (
+							<ButtonStop onClick={onAbort} />
+						) : (
+							<ButtonSubmit
+								onClick={onSubmit}
+								disabled={isDisabled}
+							/>
+						)}
+					</div>
+
+				</div>
 			</div>
+			{/* what this chat and today have cost, and Pause: under the box, like the interface boards */}
+{featureName === 'Chat' && showFooter ? <div className='pt-1.5'><RunControls isStreaming={isStreaming} /></div> : null}
 		</div>
 	);
 };
@@ -458,30 +650,30 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 	return <button
 		type='button'
 		data-testid='vader-send'
-		className={`rounded-full flex-shrink-0 flex-grow-0 flex items-center justify-center
-			${disabled ? 'bg-vscode-disabled-fg cursor-default' : 'bg-white cursor-pointer'}
+		aria-label='Send'
+		disabled={disabled}
+		className={`rounded-md w-7 h-7 flex-shrink-0 flex-grow-0 flex items-center justify-center transition-colors duration-150 ml-1.5
+			${disabled ? 'bg-vader-bg-2-hover text-vader-fg-4 cursor-default' : 'bg-vader-fg-1 text-black hover:opacity-90 cursor-pointer'}
 			${className}
 		`}
-		// data-tooltip-id='vader-tooltip'
-		// data-tooltip-content={'Send'}
-		// data-tooltip-place='left'
 		{...props}
 	>
-		<IconArrowUp size={DEFAULT_BUTTON_SIZE} className="stroke-[2] p-[2px]" />
+		<IconArrowUp size={16} className="stroke-[2]" />
 	</button>
 }
 
 export const ButtonStop = ({ className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => {
 	return <button
 		data-testid='vader-stop'
-		className={`rounded-full flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center
-			bg-white
+		aria-label='Stop'
+		className={`rounded-md w-7 h-7 flex-shrink-0 flex-grow-0 cursor-pointer flex items-center justify-center ml-1.5
+			bg-vader-fg-1 text-black hover:opacity-90 transition-opacity duration-150
 			${className}
 		`}
 		type='button'
 		{...props}
 	>
-		<IconSquare size={DEFAULT_BUTTON_SIZE} className="stroke-[3] p-[7px]" />
+		<IconSquare size={12} className="stroke-[3] fill-current" />
 	</button>
 }
 
@@ -524,13 +716,20 @@ const ScrollToBottomContainer = ({ children, className, style, scrollContainerRe
 	}, []);
 
 	return (
-		<div
-			ref={divRef}
-			onScroll={onScroll}
-			className={className}
-			style={style}
-		>
-			{children}
+		<div className='relative flex flex-col flex-1 min-h-0 w-full'>
+			<div
+				ref={divRef}
+				onScroll={onScroll}
+				className={className}
+				style={style}
+			>
+				{children}
+			</div>
+			{/* scrolled up to read: one way back to the newest message */}
+			{!isAtBottom ? <button type='button' data-testid='vader-jump-latest' aria-label='Jump to the newest message' onClick={() => { scrollToBottom(divRef); setIsAtBottom(true) }}
+				className='absolute left-1/2 bottom-3 -translate-x-1/2 flex items-center gap-1.5 h-8 px-3 rounded-full border border-vader-border-2 bg-vader-bg-1 text-[12.5px] text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover shadow-lg transition-colors duration-150'>
+				<svg width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d='M12 5v14M5 12l7 7 7-7' /></svg>Newest
+			</button> : null}
 		</div>
 	);
 };
@@ -679,6 +878,20 @@ export const SelectedFiles = (
 		return null
 	}
 
+	if (type === 'past') {
+		return <div className='flex flex-wrap items-center gap-x-3.5 gap-y-0.5 mt-1.5 font-mono text-[12px] text-vader-fg-2 select-none' data-testid='vader-user-files'>
+			{allSelections.map((selection, i) => <button key={i} type='button' className='underline decoration-dotted underline-offset-[3px] hover:text-vader-fg-1 transition-colors duration-150 cursor-pointer'
+				data-tooltip-id='vader-tooltip' data-tooltip-content={getRelative(selection.uri, accessor)} data-tooltip-place='top' data-tooltip-delay-show={1500}
+				onClick={e => {
+					e.stopPropagation()
+					if (selection.type === 'Folder') void accessor.get('ICommandService').executeCommand('revealInExplorer', selection.uri)
+					else vaderOpenFileFn(selection.uri, accessor, selection.type === 'CodeSelection' ? selection.range : undefined)
+				}}>
+				{getBasename(selection.uri.fsPath) + (selection.type === 'CodeSelection' ? ` (${selection.range[0]}-${selection.range[1]})` : '')}
+			</button>)}
+		</div>
+	}
+
 	return (
 		<div className='flex items-center flex-wrap text-left relative gap-x-0.5 gap-y-1 pb-0.5'>
 
@@ -749,7 +962,7 @@ export const SelectedFiles = (
 									vaderOpenFileFn(selection.uri, accessor, selection.range);
 								}
 								else if (selection.type === 'Folder') {
-									// TODO!!! reveal in tree
+									void accessor.get('ICommandService').executeCommand('revealInExplorer', selection.uri) // shows the folder in the Explorer
 								}
 							}}
 						>
@@ -845,7 +1058,7 @@ const ToolHeaderWrapper = ({
 	const isDesc1Clickable = !!desc1OnClick
 
 	const desc1HTML = <span
-		className={`text-vader-fg-4 text-xs italic truncate ml-2
+		className={`text-vader-fg-2 text-[12.5px] font-mono truncate ml-2
 			${isDesc1Clickable ? 'cursor-pointer hover:brightness-125 transition-all duration-150' : ''}
 		`}
 		onClick={desc1OnClick}
@@ -858,7 +1071,7 @@ const ToolHeaderWrapper = ({
 	>{desc1}</span>
 
 	return (<div className='' data-testid='vader-tool'>
-		<div className={`w-full border border-vader-border-3 rounded px-2 py-1 bg-vader-bg-3 overflow-hidden ${className}`}>
+		<div className={`w-full rounded px-1 py-0.5 overflow-hidden ${className}`}>
 			{/* header */}
 			<div className={`select-none flex items-center min-h-[24px]`}>
 				<div className={`flex items-center w-full gap-x-2 overflow-hidden justify-between ${isRejected ? 'line-through' : ''}`}>
@@ -927,8 +1140,8 @@ const ToolHeaderWrapper = ({
 			</div>
 			{/* children */}
 			{<div
-				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1' : 'max-h-0 opacity-0'}
-					text-vader-fg-4 rounded-sm overflow-x-auto
+				className={`overflow-hidden transition-all duration-200 ease-in-out ${isExpanded ? 'opacity-100 py-1 mt-1 rounded-md border border-vader-border-3 bg-vader-bg-3' : 'max-h-0 opacity-0'}
+					text-vader-fg-4 overflow-x-auto
 				  `}
 			//    bg-black bg-opacity-10 border border-vader-border-4 border-opacity-50
 			>
@@ -941,8 +1154,48 @@ const ToolHeaderWrapper = ({
 
 
 
+const SHOWN_DIFF_LINES = 16
+/** the change an edit made, as one block of the conversation: path, +n -n, Reject / Accept while they are open, and the lines; long ones show their first lines */
+const EditCard = ({ toolMessage, threadId, messageIdx, content }: Parameters<ResultWrapper<'edit_file' | 'rewrite_file'>>[0] & { content: string }) => {
+	const accessor = useAccessor()
+	const { params, name } = toolMessage
+	const rejected = toolMessage.type === 'rejected'
+	const [open, setOpen] = useState(true)
+	const [all, setAll] = useState(false)
+	let rel = params.uri.fsPath
+	try { rel = getRelative(params.uri, accessor) ?? rel } catch { /* no workspace: the whole path */ }
+	rel = rel.replace(/\\/g, '/').replace(/^\/+/, '')
+	const counts = name === 'edit_file' ? countsOfBlocks(content) : { added: content ? content.split('\n').length : 0, removed: 0 }
+	const applyBoxId = getApplyBoxId({ threadId, messageIdx, tokenIdx: 'N/A' })
+	const lines = content.split('\n').length
+	const tooLong = lines > SHOWN_DIFF_LINES && !all
+	return <div data-testid='vader-tool' data-kind='edit' className={`flex flex-col ${rejected ? 'opacity-70' : ''}`}>
+		<div className='flex items-center gap-2.5 h-[34px] border-t border-vader-border-3'>
+			<button type='button' aria-expanded={open} aria-label={open ? 'Hide the change' : 'Show the change'} data-testid='vader-edit-toggle' onClick={() => setOpen(o => !o)} className='flex items-center justify-center w-4 h-4 text-vader-fg-3 hover:text-vader-fg-1 flex-shrink-0'>
+				<ChevronRight className={`h-3 w-3 transition-transform duration-100 ${open ? 'rotate-90' : ''}`} />
+			</button>
+			<button type='button' data-testid='vader-edit-path' title={rel} onClick={() => vaderOpenFileFn(params.uri, accessor)} className={`flex-1 min-w-0 truncate text-left font-mono text-[12px] text-vader-fg-2 hover:text-vader-fg-1 ${rejected ? 'line-through' : ''}`}>{rel}</button>
+			<span className='text-[12.5px]' style={{ color: '#8fd7ac' }} data-testid='vader-edit-added'>+{counts.added}</span>
+			{counts.removed > 0 ? <span className='text-[12.5px]' style={{ color: '#f1a1a4' }} data-testid='vader-edit-removed'>{'\u2212'}{counts.removed}</span> : null}
+			{rejected ? <span className='text-vader-fg-3 text-xs'>Not applied</span> : <EditToolHeaderButtons applyBoxId={applyBoxId} uri={params.uri} codeStr={content} toolName={name} threadId={threadId} />}
+		</div>
+		{open ? <div className='overflow-x-auto border-b border-vader-border-3 select-text cursor-auto'>
+			<div style={tooLong ? { maxHeight: SHOWN_DIFF_LINES * 20 + 8, overflow: 'hidden' } : undefined}>
+				{name === 'edit_file' ? <EditDiffLines uri={params.uri} searchReplaceBlocks={content} /> : <EditToolChildren uri={params.uri} code={content} type='rewrite' />}
+			</div>
+			{lines > SHOWN_DIFF_LINES ? <button type='button' data-testid='vader-edit-more' onClick={() => setAll(a => !a)} className='w-full text-left px-3 py-1 text-xs text-vader-fg-3 hover:text-vader-fg-1'>{all ? 'Show fewer lines' : `Show all ${lines} lines`}</button> : null}
+		</div> : null}
+		{(toolMessage.type === 'success' || toolMessage.type === 'rejected') && (toolMessage.result?.lintErrors?.length ?? 0) > 0 ? <BottomChildren title='Lint errors'>
+			{toolMessage.result?.lintErrors?.map((error, i) => (
+				<div key={i} className='whitespace-nowrap'>Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}</div>
+			))}
+		</BottomChildren> : null}
+	</div>
+}
+
 const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<ResultWrapper<'edit_file' | 'rewrite_file'>>[0] & { content: string }) => {
 	const accessor = useAccessor()
+	const runningHere = !!useChatThreadsStreamState(threadId)?.isRunning
 	const isError = false
 	const isRejected = toolMessage.type === 'rejected'
 
@@ -957,6 +1210,7 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 
 
 	const editToolType = toolMessage.name === 'edit_file' ? 'diff' : 'rewrite'
+	if (toolMessage.type === 'success' || toolMessage.type === 'rejected') return <EditCard toolMessage={toolMessage} threadId={threadId} messageIdx={messageIdx} content={content} />
 	if (toolMessage.type === 'running_now' || toolMessage.type === 'tool_request') {
 		componentParams.children = <ToolChildrenWrapper className='bg-vader-bg-3'>
 			<EditToolChildren
@@ -967,22 +1221,8 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 		</ToolChildrenWrapper>
 		// JumpToFileButton removed in favor of FileLinkText
 	}
-	else if (toolMessage.type === 'success' || toolMessage.type === 'rejected' || toolMessage.type === 'tool_error') {
-		// add apply box
-		const applyBoxId = getApplyBoxId({
-			threadId: threadId,
-			messageIdx: messageIdx,
-			tokenIdx: 'N/A',
-		})
-		componentParams.desc2 = <EditToolHeaderButtons
-			applyBoxId={applyBoxId}
-			uri={params.uri}
-			codeStr={content}
-			toolName={name}
-			threadId={threadId}
-		/>
-
-		// add children
+	else if (toolMessage.type === 'tool_error') {
+		// the edit that was tried, folded, and what went wrong
 		componentParams.children = <ToolChildrenWrapper className='bg-vader-bg-3'>
 			<EditToolChildren
 				uri={params.uri}
@@ -990,24 +1230,25 @@ const EditTool = ({ toolMessage, threadId, messageIdx, content }: Parameters<Res
 				type={editToolType}
 			/>
 		</ToolChildrenWrapper>
-
-		if (toolMessage.type === 'success' || toolMessage.type === 'rejected') {
-			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Lint errors'>
-				{result?.lintErrors?.map((error, i) => (
-					<div key={i} className='whitespace-nowrap'>Lines {error.startLineNumber}-{error.endLineNumber}: {error.message}</div>
-				))}
-			</BottomChildren>
-		}
-		else if (toolMessage.type === 'tool_error') {
-			// error
-			const { result } = toolMessage
-			componentParams.bottomChildren = <BottomChildren title='Error'>
+		const { result } = toolMessage
+		// an edit that did not fit says which part did not and that nothing was written, with the two ways on (board S08); the real message is under it
+		const words = explainEditError(String(result ?? ''))
+		const fileName = getBasename(params.uri.fsPath)
+		componentParams.bottomChildren = <>
+			{words ? <div className='flex flex-col gap-2 px-3 py-2.5 mt-1 rounded-lg border border-vader-border-2 bg-vader-bg-1' data-testid='vader-edit-error'>
+				<span className='font-semibold text-vader-fg-1'>{words.title}</span>
+				<span className='text-vader-fg-2 leading-relaxed'>{words.text}</span>
+				{!runningHere && name === 'edit_file' ? <div className='flex gap-2'>
+					<button type='button' data-testid='vader-edit-again' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { void accessor.get('IAgentGatewayService').startTask({ userMessage: TRY_AGAIN_MESSAGE, threadId }) }}>Try again</button>
+					<button type='button' data-testid='vader-edit-rewrite' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => { void accessor.get('IAgentGatewayService').startTask({ userMessage: rewriteMessage(fileName), threadId }) }}>Rewrite the whole file</button>
+				</div> : null}
+			</div> : null}
+			<BottomChildren title='Error'>
 				<CodeChildren>
 					{result}
 				</CodeChildren>
 			</BottomChildren>
-		}
+		</>
 	}
 
 	return <ToolHeaderWrapper {...componentParams} />
@@ -1081,6 +1322,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	const [isFocused, setIsFocused] = useState(false)
 	const [isHovered, setIsHovered] = useState(false)
 	const [isDisabled, setIsDisabled] = useState(false)
+	const [branchedTo, setBranchedTo] = useState<string | undefined>()
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
 	const textAreaFnsRef = useRef<TextAreaFns | null>(null)
 	// initialize on first render, and when edit was just enabled
@@ -1127,8 +1369,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	let chatbubbleContents: React.ReactNode
 	if (mode === 'display') {
 		chatbubbleContents = <>
+			{chatMessage.images && chatMessage.images.length > 0 ? <div className='flex flex-wrap gap-1.5 pb-1.5' data-testid='vader-user-images'>{chatMessage.images.map(i => <img key={i.id} src={dataUrlOf(i)} alt={i.name} title={i.name} className='h-16 max-w-[120px] rounded-md object-cover border border-vader-border-3' />)}</div> : null}
+			<span data-testid='vader-user-text'>{chatMessage.displayContent}</span>
 			<SelectedFiles type='past' messageIdx={messageIdx} selections={chatMessage.selections || []} />
-			<span className='px-0.5' data-testid='vader-user-text'>{chatMessage.displayContent}</span>
 		</>
 	}
 	else if (mode === 'edit') {
@@ -1213,9 +1456,9 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	return <div
 		// align chatbubble accoridng to role
 		className={`
-        relative ml-auto
+        relative
         ${mode === 'edit' ? 'w-full max-w-full'
-				: mode === 'display' ? `self-end w-fit max-w-full whitespace-pre-wrap` : '' // user words should be pre
+				: mode === 'display' ? `self-stretch w-full max-w-full whitespace-pre-wrap` : '' // user words should be pre
 			}
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
@@ -1228,7 +1471,7 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 			className={`
             text-left rounded-lg max-w-full
             ${mode === 'edit' ? ''
-					: mode === 'display' ? 'p-2 flex flex-col bg-vader-bg-1 text-vader-fg-1 overflow-x-auto cursor-pointer' : ''
+						: mode === 'display' ? 'px-3.5 py-[11px] flex flex-col bg-vader-bg-1 text-vader-fg-1 text-[14px] leading-[1.65] overflow-x-auto cursor-pointer' : ''
 				}
         `}
 			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
@@ -1264,6 +1507,26 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		</div>
 
 
+
+		{/* the skills this message used and why (board S13): what was put in front of the model, nothing more */}
+		{mode === 'display' && (chatMessage.skillsUsed?.length ?? 0) > 0 ? <div className='flex flex-col gap-0.5 px-1 pt-1.5 text-xs text-vader-fg-3' data-testid='vader-skills-used' title={SKILLS_FOOTNOTE}>
+			{chatMessage.skillsUsed!.map(u => <div key={u.id} className='flex items-baseline gap-2'><span data-testid='vader-skill-used-line'>Used the skill <code className='font-mono text-vader-fg-1'>{u.name}</code></span>{u.reason ? <span className='flex-1 text-right truncate' data-testid='vader-skill-used-reason'>{u.reason}</span> : null}</div>)}
+		</div> : null}
+
+		{/* looking back: a copy of the chat from before this message, to try another way; the original stays as it is */}
+		{mode === 'display' && messageIdx !== undefined && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
+			<button data-testid='vader-copy-message' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
+			<button data-testid='vader-redo' className='hover:text-vader-fg-1' title='Send this message again from here: what came after it is replaced' onClick={() => { void agentGatewayService.reviseTask({ userMessage: chatMessage.displayContent ?? '', fromMessageIdx: messageIdx, threadId: chatThreadsService.state.currentThreadId }) }}>Redo from here</button>
+			{messageIdx > 0 ? <button data-testid='vader-branch' className='hover:text-vader-fg-1' title='A new chat that starts with everything before this message. This chat stays as it is.' onClick={() => { const id = chatThreadsService.branchThread(chatThreadsService.state.currentThreadId, messageIdx); if (id) setBranchedTo(id) }}>Branch the chat</button> : null}
+		</div> : null}
+		{branchedTo ? <div className='mt-2 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2' data-testid='vader-branched'>
+			<div className='font-semibold text-vader-fg-1'>Branched here</div>
+			<div className='text-vader-fg-2 leading-relaxed'>A new chat started with everything before this message. This chat is unchanged.</div>
+			<div className='flex gap-2'>
+				<button data-testid='vader-branched-open' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={() => { chatThreadsService.switchToThread(branchedTo); setBranchedTo(undefined) }}>Open the new chat</button>
+				<button data-testid='vader-branched-stay' className='px-2 py-1 text-vader-fg-2 hover:text-vader-fg-1 text-sm' onClick={() => setBranchedTo(undefined)}>Stay here</button>
+			</div>
+		</div> : null}
 	</div>
 
 }
@@ -1332,7 +1595,8 @@ prose-table:text-[13px]
 
 const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
 	return <div className='
-text-vader-fg-2
+text-vader-fg-1
+text-[14px]
 prose
 prose-sm
 break-words
@@ -1350,9 +1614,12 @@ prose-code:after:content-none
 prose-headings:prose-sm
 prose-headings:font-bold
 
-prose-p:leading-normal
-prose-ol:leading-normal
-prose-ul:leading-normal
+prose-p:leading-[1.7]
+prose-ol:leading-[1.7]
+prose-ul:leading-[1.7]
+prose-p:max-w-[64ch]
+prose-ol:max-w-[64ch]
+prose-ul:max-w-[64ch]
 
 max-w-none
 '
@@ -1398,7 +1665,7 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 
 		{/* assistant message */}
 		{chatMessage.displayContent &&
-			<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`} data-testid='vader-assistant-text'>
+			<div className={`group ${isCheckpointGhost ? 'opacity-50' : ''}`} data-testid='vader-assistant-text'>
 				<ProseWrapper>
 					<ChatMarkdownRender
 						string={chatMessage.displayContent || ''}
@@ -1407,6 +1674,9 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 						isLinkDetectionEnabled={true}
 					/>
 				</ProseWrapper>
+				{isCommitted ? <div className='flex items-center gap-3 pt-1 text-xs text-vader-fg-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200 select-none'>
+					<button type='button' data-testid='vader-copy-answer' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
+				</div> : null}
 			</div>
 		}
 	</>
@@ -1486,6 +1756,8 @@ const titleOfBuiltinToolName = {
 	'install_marketplace_capability': { done: 'Installed capability', proposed: 'Install capability', running: loadingTitleWrapper('Installing capability') },
 	'remember': { done: 'Saved to memory', proposed: 'Save to memory', running: loadingTitleWrapper('Saving to memory') },
 	'repo_map': { done: 'Mapped the project', proposed: 'Map the project', running: loadingTitleWrapper('Mapping the project') },
+	'codebase_search': { done: 'Searched the project', proposed: 'Search the project', running: loadingTitleWrapper('Searching the project') },
+	'await_terminal': { done: 'Waited for a terminal', proposed: 'Wait for a terminal', running: loadingTitleWrapper('Waiting for a terminal') },
 	'update_task_list': { done: 'Updated the task list', proposed: 'Update the task list', running: loadingTitleWrapper('Updating the task list') },
 	'delegate_parallel_tasks': { done: 'Ran parallel tasks', proposed: 'Run parallel tasks', running: loadingTitleWrapper('Running parallel tasks') },
 	'delegate_subagent_task': { done: 'Delegated to subagent', proposed: 'Delegate to subagent', running: loadingTitleWrapper('Delegating to subagent') },
@@ -1641,84 +1913,12 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 	}
 }
 
-const ToolRequestAcceptRejectButtons = ({ toolName }: { toolName: ToolName }) => {
-	const accessor = useAccessor()
-	const chatThreadsService = accessor.get('IChatThreadService')
-	const agentGatewayService = accessor.get('IAgentGatewayService')
-	const metricsService = accessor.get('IMetricsService')
-	const vaderSettingsService = accessor.get('IVaderSettingsService')
-	const vaderSettingsState = useSettingsState()
-
-	const onAccept = useCallback(() => {
-		try { // this doesn't need to be wrapped in try/catch anymore
-			const threadId = chatThreadsService.state.currentThreadId
-			agentGatewayService.approveToolRequest(threadId)
-			metricsService.capture('Tool Request Accepted', {})
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	// "Allow in this project": approves this call and stops asking about this exact command (or MCP tool) in this project. Not offered when the Policy Engine asked.
-	const canRemember = chatThreadsService.canRememberForProject(chatThreadsService.state.currentThreadId)
-	const onAcceptForProject = useCallback(() => {
-		try {
-			agentGatewayService.approveToolRequest(chatThreadsService.state.currentThreadId, { rememberForProject: true })
-			metricsService.capture('Tool Request Accepted For Project', {})
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	const onReject = useCallback(() => {
-		try {
-			const threadId = chatThreadsService.state.currentThreadId
-			agentGatewayService.rejectToolRequest(threadId)
-		} catch (e) { console.error('Error while approving message in chat:', e) }
-		metricsService.capture('Tool Request Rejected', {})
-	}, [chatThreadsService, agentGatewayService, metricsService])
-
-	const approveButton = (
-		<button
-			data-testid='vader-tool-approve'
-			onClick={onAccept}
-			className={`
-                px-2 py-1
-                bg-[var(--vscode-button-background)]
-                text-[var(--vscode-button-foreground)]
-                hover:bg-[var(--vscode-button-hoverBackground)]
-                rounded
-                text-sm font-medium
-            `}
-		>
-			Approve
-		</button>
-	)
-
-	const cancelButton = (
-		<button
-			data-testid='vader-tool-reject'
-			onClick={onReject}
-			className={`
-                px-2 py-1
-                bg-[var(--vscode-button-secondaryBackground)]
-                text-[var(--vscode-button-secondaryForeground)]
-                hover:bg-[var(--vscode-button-secondaryHoverBackground)]
-                rounded
-                text-sm font-medium
-            `}
-		>
-			Cancel
-		</button>
-	)
-
+/** the switch that makes a whole kind of action stop asking (Settings keeps the same one); not offered when the Policy Engine asked */
+const AutoApproveToggle = ({ toolName }: { toolName: ToolName }) => {
 	const approvalType = isABuiltinToolName(toolName) ? approvalTypeOfBuiltinToolName[toolName] : 'MCP tools'
-	const approvalToggle = approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
+	return approvalType ? <div key={approvalType} className="flex items-center ml-2 gap-x-1">
 		<ToolApprovalTypeSwitch size='xs' approvalType={approvalType} desc={`Auto-approve ${approvalType}`} />
 	</div> : null
-
-	return <div className="flex gap-2 mx-0.5 items-center">
-		{approveButton}
-		{canRemember ? <button data-testid='vader-tool-approve-project' onClick={onAcceptForProject} className='px-2 py-1 rounded text-sm border border-vader-border-1 text-vader-fg-1 hover:bg-vader-bg-2-hover' title='Approve this, and do not ask about this exact command in this project again'>Allow in this project</button> : null}
-		{cancelButton}
-		{approvalToggle}
-	</div>
 }
 
 export const ToolChildrenWrapper = ({ children, className }: { children: React.ReactNode, className?: string }) => {
@@ -1755,7 +1955,7 @@ export const ListableToolItem = ({ name, onClick, isSmall, className, showDot }:
 const EditToolChildren = ({ uri, code, type }: { uri: URI | undefined, code: string, type: 'diff' | 'rewrite' }) => {
 
 	const content = type === 'diff' ?
-		<VaderDiffEditor uri={uri} searchReplaceBlocks={code} />
+		<EditDiffLines uri={uri} searchReplaceBlocks={code} />
 		: <ChatMarkdownRender string={`\`\`\`\n${code}\n\`\`\``} codeURI={uri} chatMessageLocation={undefined} />
 
 	return <div className='!select-text cursor-auto'>
@@ -1918,10 +2118,16 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 			componentParams.info = persistentTerminalNameOfId(toolMessage.params.persistentTerminalId)
 		}
 
+		const fold = foldOutput(msg.trim())
+		// how it ended (exit code and seconds) and, when long, how many lines (board S14)
+		const end = type === 'run_command' ? commandEndWords((result as { resolveReason?: { type: string, exitCode?: number } }).resolveReason, toolMessage.durationMs) : { text: '', tone: 'plain' as const }
+		if (end.text || fold.folded) componentParams.desc2 = <span data-testid='vader-command-end'>
+			{end.text ? <span style={{ color: end.tone === 'ok' ? '#4cc38a' : end.tone === 'bad' ? '#f06a6e' : undefined }}>{end.text}</span> : null}
+			{end.text && fold.folded ? ' · ' : null}
+			{fold.folded ? lineCount(fold.total) : null}
+		</span>
 		componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
-			<div className='!select-text cursor-auto'>
-				<BlockCode initValue={`${msg.trim()}`} language='shellscript' />
-			</div>
+			<FoldedOutput full={msg.trim()} fold={fold} />
 		</ToolChildrenWrapper>
 	}
 	else if (toolMessage.type === 'tool_error') {
@@ -1943,13 +2149,17 @@ const CommandTool = ({ toolMessage, type, threadId }: { threadId: string } & ({
 		componentParams.desc1Info = fullCommand
 		componentParams.children = <ToolChildrenWrapper className='whitespace-pre-wrap break-all overflow-auto text-sm max-h-[40vh]'>
 			<div className='!select-text cursor-auto' data-testid='vader-command-full'>
-				<BlockCode initValue={fullCommand} language='shellscript' />
+				<pre className='m-0 px-2.5 py-2 rounded-md border border-vader-border-3 bg-vader-bg-3 text-vader-fg-1 whitespace-pre-wrap break-all' style={{ fontFamily: "'Cascadia Code','Cascadia Mono',Consolas,ui-monospace,monospace", fontSize: 12 }}>{fullCommand}</pre>
 			</div>
 		</ToolChildrenWrapper>
 	}
 
+	// a command that went quiet on a question: what it asked, and that the agent does not answer it (board S14)
+	const waitingFor = toolMessage.type === 'success' ? (toolMessage.result as { resolveReason?: { type: string, waitingFor?: { prompt: string, secret: boolean } } }).resolveReason?.waitingFor : undefined
+
 	return <>
 		<ToolHeaderWrapper {...componentParams} isOpen={(type === 'run_command' && toolMessage.type === 'running_now') || toolMessage.type === 'tool_request' ? true : undefined} />
+		{waitingFor ? <TerminalWaitingCard command={String((params as { command?: unknown } | undefined)?.command ?? '')} prompt={waitingFor} persistent={type === 'run_persistent_command'} onOpen={() => { void commandService.executeCommand('workbench.action.terminal.focus') }} /> : null}
 	</>
 }
 
@@ -2045,14 +2255,50 @@ const GenericToolWrapper = ({ toolMessage }: WrapperProps<ToolName>) => {
 		if (toolMessage.content) { componentParams.children = asCode(String(toolMessage.content)) }
 	}
 	else if (toolMessage.type === 'tool_error') {
-		componentParams.bottomChildren = <BottomChildren title='Error'>
-			<CodeChildren>{String(toolMessage.content ?? toolMessage.result ?? '')}</CodeChildren>
-		</BottomChildren>
+		const errorText = String(toolMessage.content ?? toolMessage.result ?? '')
+		// what the agent's browser said, in words (board S14); the real message is always under them
+		const words = toolMessage.name.startsWith('browser_') ? explainBrowserError(errorText) : null
+		componentParams.bottomChildren = <>
+			{words ? <div className='flex flex-col gap-1 px-3 py-2.5 mt-1 rounded-lg border border-vader-border-2 bg-vader-bg-1' data-testid='vader-browser-error'>
+				<span className='font-semibold text-vader-fg-1'>{words.title}</span>
+				<span className='text-vader-fg-2 leading-relaxed'>{words.text}</span>
+			</div> : null}
+			<BottomChildren title='Error'>
+				<CodeChildren>{errorText}</CodeChildren>
+			</BottomChildren>
+		</>
 	}
 	return <ToolHeaderWrapper {...componentParams} />
 }
 
+/** the mark of a step of the plan (board R01): done is a tick, the one being worked on turns, the rest wait as a ring */
+const TaskMark = ({ status }: { status: string }) => status === 'done'
+	? <svg width='14' height='14' viewBox='0 0 15 15' aria-label='Done'><path d='m3.4 7.7 2.5 2.4 5.2-5.4' fill='none' stroke='#8a8a91' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' /></svg>
+	: status === 'in_progress'
+		? <svg width='14' height='14' viewBox='0 0 14 14' aria-label='Working on it' className='motion-safe:animate-spin'><circle cx='7' cy='7' r='5' fill='none' stroke='rgba(255,255,255,.16)' strokeWidth='1.6' /><path d='M7 2a5 5 0 0 1 5 5' fill='none' stroke='#6ea0ff' strokeWidth='1.6' strokeLinecap='round' /></svg>
+		: <svg width='14' height='14' viewBox='0 0 14 14' aria-label='To do'><circle cx='7' cy='7' r='4.4' fill='none' stroke='#6f6f76' strokeWidth='1.3' /></svg>
+
+/** the agent's task list (board R01): "Plan 2 of 4" with each step marked; only the latest list is shown in full, an older one is a quiet line */
+const PlanCard = ({ toolMessage, messageIdx, threadId }: WrapperProps<'update_task_list'>) => {
+	const accessor = useAccessor()
+	const chatThreadsService = accessor.get('IChatThreadService')
+	if (toolMessage.type !== 'success') return <GenericToolWrapper toolMessage={toolMessage as never} messageIdx={messageIdx} threadId={threadId} />
+	const msgs = chatThreadsService.state.allThreads[threadId]?.messages ?? []
+	const isLatest = !msgs.slice(messageIdx + 1).some(m => m.role === 'tool' && m.name === 'update_task_list')
+	const { done, total } = toolMessage.result
+	if (!isLatest) return <ToolHeaderWrapper title='Updated the plan' desc1={`${done} of ${total}`} />
+	const tasks = parseTaskList(toolMessage.result.text)
+	return <div data-testid='vader-plan' className='flex flex-col gap-0.5'>
+		<div className='flex items-center gap-2.5 h-6'><span className='font-semibold text-vader-fg-1'>Plan</span><span className='text-vader-fg-3'>{done} of {total}</span></div>
+		{tasks.map((t, i) => <div key={i} data-status={t.status} className={`flex items-start gap-[9px] min-h-6 py-[3px] ${t.status === 'in_progress' ? 'text-vader-fg-1' : 'text-vader-fg-3'}`}>
+			<span className='w-3.5 h-[18px] shrink-0 flex items-center'><TaskMark status={t.status} /></span>
+			<span className='min-w-0 break-words'>{t.text}</span>
+		</div>)}
+	</div>
+}
+
 const builtinToolNameToComponent: Partial<{ [T in BuiltinToolName]: { resultWrapper: ResultWrapper<T>, } }> = {
+	'update_task_list': { resultWrapper: PlanCard },
 	'read_file': {
 		resultWrapper: ({ toolMessage }) => {
 			const accessor = useAccessor()
@@ -2586,6 +2832,32 @@ const builtinToolNameToComponent: Partial<{ [T in BuiltinToolName]: { resultWrap
 };
 
 
+// What the agent only looked at (reads, searches, folder listings) is folded into one line, "Explored 3 files, read 2, searched 1" (board R01); a click lists them.
+const READ_TOOLS = new Set(['read_file', 'read_lint_errors'])
+const SEARCH_TOOLS = new Set(['search_for_files', 'search_pathnames_only', 'search_in_file', 'codebase_search'])
+const LIST_TOOLS = new Set(['ls_dir', 'get_dir_tree', 'repo_map'])
+const isExploreMessage = (m: ChatMessage): m is ChatMessage & { role: 'tool' } => m.role === 'tool' && m.type === 'success' && (READ_TOOLS.has(m.name) || SEARCH_TOOLS.has(m.name) || LIST_TOOLS.has(m.name))
+const NOISY_TOOLS = new Set(['edit_file', 'rewrite_file', 'update_task_list'])
+const isQuietToolMessage = (m: ChatMessage) => m.role === 'tool' && m.type !== 'tool_request' && m.type !== 'invalid_params' && !(m.type === 'rejected' && m.gate) && !NOISY_TOOLS.has(m.name)
+/** "read 2, searched 1, listed 1 folder" */
+export const exploredWords = (names: readonly string[]): { headline: string, detail: string } => {
+	const read = names.filter(n => READ_TOOLS.has(n)).length, searched = names.filter(n => SEARCH_TOOLS.has(n)).length, listed = names.filter(n => LIST_TOOLS.has(n)).length
+	const detail = [read ? `read ${read}` : '', searched ? `searched ${searched}` : '', listed ? `listed ${listed} ${listed === 1 ? 'folder' : 'folders'}` : ''].filter(Boolean).join(', ')
+	return { headline: `Explored ${names.length} ${listed > 0 ? (names.length === 1 ? 'place' : 'places') : (names.length === 1 ? 'file' : 'files')}`, detail }
+}
+const ExploredGroup = ({ items }: { items: { message: ChatMessage & { role: 'tool' }, node: React.ReactNode }[] }) => {
+	const [open, setOpen] = useState(false)
+	const words = exploredWords(items.map(x => x.message.name))
+	return <div className='flex flex-col' data-testid='vader-explored'>
+		<button type='button' aria-expanded={open} data-testid='vader-explored-toggle' onClick={() => setOpen(o => !o)} className='flex items-center gap-1.5 h-[22px] text-left text-vader-fg-3 hover:text-vader-fg-2 transition-colors duration-150'>
+			<ChevronRight className={`h-3 w-3 flex-shrink-0 transition-transform duration-100 ${open ? 'rotate-90' : ''}`} />
+			<span>{words.headline}</span>
+			{words.detail ? <span className='ml-2 opacity-80'>{words.detail}</span> : null}
+		</button>
+		{open ? <div className='flex flex-col gap-0.5 pl-4' data-testid='vader-explored-list'>{items.map(x => x.node)}</div> : null}
+	</div>
+}
+
 const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIsRunning }: { message: CheckpointEntry, threadId: string; messageIdx: number, isCheckpointGhost: boolean, threadIsRunning: boolean }) => {
 	const accessor = useAccessor()
 	const chatThreadService = accessor.get('IChatThreadService')
@@ -2597,34 +2869,50 @@ const Checkpoint = ({ message, threadId, messageIdx, isCheckpointGhost, threadIs
 		return !!Object.keys(streamState).find((threadId2) => streamState[threadId2]?.isRunning)
 	}, [isRunning, streamState])
 
-	return <div
-		className={`flex items-center justify-center px-2 `}
-	>
-		<div
-			className={`
-                    text-xs
-                    text-vader-fg-3
-                    select-none
-                    ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}
-					${isDisabled ? 'cursor-default' : 'cursor-pointer'}
-                `}
-			style={{ position: 'relative', display: 'inline-block' }} // allow absolute icon
-			onClick={() => {
-				if (threadIsRunning) return
-				if (isDisabled) return
-				chatThreadService.jumpToCheckpointBeforeMessageIdx({
-					threadId,
-					messageIdx,
-					jumpToUserModified: messageIdx === (chatThreadService.state.allThreads[threadId]?.messages.length ?? 0) - 1
-				})
-			}}
+	const num = useMemo(() => {
+		const msgs = chatThreadService.state.allThreads[threadId]?.messages ?? []
+		let n = 0
+		for (let i = 0; i <= messageIdx && i < msgs.length; i++) if (msgs[i].role === 'checkpoint') n++
+		return n
+	}, [chatThreadService, threadId, messageIdx])
+	const [asking, setAsking] = useState(false)
+	const onAsk = () => {
+		if (threadIsRunning) return
+		if (isDisabled) return
+		setAsking(true)
+	}
+	const onRestore = () => {
+		setAsking(false)
+		chatThreadService.jumpToCheckpointBeforeMessageIdx({
+			threadId,
+			messageIdx,
+			jumpToUserModified: messageIdx === (chatThreadService.state.allThreads[threadId]?.messages.length ?? 0) - 1
+		})
+	}
+
+	return <div className={`flex flex-col gap-2 px-1 text-xs text-vader-fg-3 select-none ${isCheckpointGhost ? 'opacity-50' : 'opacity-100'}`} data-testid='vader-checkpoint'>
+		{asking ? <div className='rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2 text-[13px]' data-testid='vader-checkpoint-confirm' role='alertdialog'>
+			<div className='font-semibold text-vader-fg-1 text-sm'>Go back to checkpoint {num}?</div>
+			<div className='text-vader-fg-2 leading-relaxed'>Files return to how they were at this checkpoint. The messages after it stay visible but greyed out, and the next message continues from here.</div>
+			<div className='flex gap-2 justify-end'>
+				<button data-testid='vader-checkpoint-cancel' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={() => setAsking(false)}>Cancel</button>
+				<button data-testid='vader-checkpoint-go' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={onRestore}>Go back</button>
+			</div>
+		</div> : null}
+		<div className='flex items-center gap-3'>
+		<span className='flex-1 h-px bg-vader-border-3' />
+		<span>Checkpoint {num}</span>
+		<span
+			className={`underline underline-offset-[3px] text-vader-fg-2 ${isDisabled ? 'cursor-default opacity-60' : 'cursor-pointer hover:text-vader-fg-1'}`}
+			data-testid='vader-checkpoint-restore'
+			onClick={onAsk}
 			{...isDisabled ? {
 				'data-tooltip-id': 'vader-tooltip',
 				'data-tooltip-content': `Disabled ${isRunning ? 'when running' : 'because another thread is running'}`,
 				'data-tooltip-place': 'top',
 			} : {}}
-		>
-			Checkpoint
+		>Restore</span>
+		<span className='flex-1 h-px bg-vader-border-3' />
 		</div>
 	</div>
 }
@@ -2683,19 +2971,28 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 			: MCPToolWrapper as ResultWrapper<ToolName>
 
 		if (ToolResultWrapper)
-			return <>
-				<div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+			// something the person is asked to allow is one card: what it is and in which mode it asks, what exactly it does, and the buttons (boards R07, S02)
+			if (chatMessage.type === 'tool_request') {
+				return <GateCard toolName={chatMessage.name} params={chatMessage.params} mcpServerName={chatMessage.mcpServerName} gate={chatMessage.gate} isCheckpointGhost={isCheckpointGhost}
+					extra={chatMessage.gate ? null : <AutoApproveToggle toolName={chatMessage.name} />}>
 					<ToolResultWrapper
 						toolMessage={chatMessage}
 						messageIdx={messageIdx}
 						threadId={threadId}
 					/>
-				</div>
-				{chatMessage.type === 'tool_request' ?
-					<div className={`${isCheckpointGhost ? 'opacity-50 pointer-events-none' : ''}`}>
-						<ToolRequestAcceptRejectButtons toolName={chatMessage.name} />
-					</div> : null}
-			</>
+				</GateCard>
+			}
+			// something the gate refused is one card too: what did not run, and the rule, the scope or the mode that said so
+			if (chatMessage.type === 'rejected' && chatMessage.gate) {
+				return <BlockedCard toolName={chatMessage.name} params={chatMessage.params} mcpServerName={chatMessage.mcpServerName} gate={chatMessage.gate} isCheckpointGhost={isCheckpointGhost} />
+			}
+			return <div className={`${isCheckpointGhost ? 'opacity-50' : ''}`}>
+				<ToolResultWrapper
+					toolMessage={chatMessage}
+					messageIdx={messageIdx}
+					threadId={threadId}
+				/>
+			</div>
 		return null
 	}
 
@@ -2724,264 +3021,52 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 
 }
 
+/** the files this task has changed and not yet settled (they wait in the editor): one quiet row above the box with Reject all and Accept all, and the files under it when opened */
 const CommandBarInChat = () => {
 	const { stateOfURI: commandBarStateOfURI, sortedURIs: sortedCommandBarURIs } = useCommandBarState()
 	const numFilesChanged = sortedCommandBarURIs.length
 
 	const accessor = useAccessor()
 	const editCodeService = accessor.get('IEditCodeService')
-	const commandService = accessor.get('ICommandService')
-	const chatThreadsState = useChatThreadsState()
-	const commandBarState = useCommandBarState()
-	const chatThreadsStreamState = useChatThreadsStreamState(chatThreadsState.currentThreadId)
+	const [opened, setOpened] = useState(false)
 
-	// (
-	// 	<IconShell1
-	// 		Icon={CopyIcon}
-	// 		onClick={copyChatToClipboard}
-	// 		data-tooltip-id='vader-tooltip'
-	// 		data-tooltip-place='top'
-	// 		data-tooltip-content='Copy chat JSON'
-	// 	/>
-	// )
+	if (numFilesChanged === 0) return null // nothing changed: no bar, so the message box is not crowded by an empty one
 
-	const [fileDetailsOpenedState, setFileDetailsOpenedState] = useState<'auto-opened' | 'auto-closed' | 'user-opened' | 'user-closed'>('auto-closed');
-	const isFileDetailsOpened = fileDetailsOpenedState === 'auto-opened' || fileDetailsOpenedState === 'user-opened';
+	const settle = (uri: URI | undefined, behavior: 'accept' | 'reject') => {
+		const list = uri ? [uri] : sortedCommandBarURIs
+		list.forEach(u => { editCodeService.acceptOrRejectAllDiffAreas({ uri: u, removeCtrlKs: true, behavior, _addToHistory: true }) })
+	}
+	const writing = sortedCommandBarURIs.some(uri => commandBarStateOfURI[uri.fsPath]?.isStreaming)
+	const word = `${numFilesChanged} file${numFilesChanged === 1 ? '' : 's'} with changes`
 
-
-	useEffect(() => {
-		// close the file details if there are no files
-		// this converts 'user-closed' to 'auto-closed'
-		if (numFilesChanged === 0) {
-			setFileDetailsOpenedState('auto-closed')
-		}
-		// open the file details if it hasnt been closed
-		if (numFilesChanged > 0 && fileDetailsOpenedState !== 'user-closed') {
-			setFileDetailsOpenedState('auto-opened')
-		}
-	}, [fileDetailsOpenedState, setFileDetailsOpenedState, numFilesChanged])
-
-
-	const isFinishedMakingThreadChanges = (
-		// there are changed files
-		commandBarState.sortedURIs.length !== 0
-		// none of the files are streaming
-		&& commandBarState.sortedURIs.every(uri => !commandBarState.stateOfURI[uri.fsPath]?.isStreaming)
-	)
-
-	// ======== status of agent ========
-	// This icon answers the question "is the LLM doing work on this thread?"
-	// assume it is single threaded for now
-	// green = Running
-	// orange = Requires action
-	// dark = Done
-
-	const threadStatus = (
-		chatThreadsStreamState?.isRunning === 'awaiting_user' ? { title: 'Needs Approval', color: 'yellow', } as const
-			: chatThreadsStreamState?.isRunning ? { title: 'Running', color: 'orange', } as const
-				: { title: 'Done', color: 'dark', } as const
-	)
-
-
-	const threadStatusHTML = <StatusIndicator className='mx-1' indicatorColor={threadStatus.color} title={threadStatus.title} />
-
-
-	// ======== info about changes ========
-	// num files changed
-	// acceptall + rejectall
-	// popup info about each change (each with num changes + acceptall + rejectall of their own)
-
-	const numFilesChangedStr = numFilesChanged === 0 ? 'No files with changes'
-		: `${sortedCommandBarURIs.length} file${numFilesChanged === 1 ? '' : 's'} with changes`
-
-
-
-
-	const acceptRejectAllButtons = <div
-		// do this with opacity so that the height remains the same at all times
-		className={`flex items-center gap-0.5
-			${isFinishedMakingThreadChanges ? '' : 'opacity-0 pointer-events-none'}`
-		}
-	>
-		<IconShell1 // RejectAllButtonWrapper
-			// text="Reject All"
-			// className="text-xs"
-			Icon={X}
-			onClick={() => {
-				sortedCommandBarURIs.forEach(uri => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "reject",
-						_addToHistory: true,
-					});
-				});
-			}}
-			data-tooltip-id='vader-tooltip'
-			data-tooltip-place='top'
-			data-tooltip-content='Reject all'
-		/>
-
-		<IconShell1 // AcceptAllButtonWrapper
-			// text="Accept All"
-			// className="text-xs"
-			Icon={Check}
-			onClick={() => {
-				sortedCommandBarURIs.forEach(uri => {
-					editCodeService.acceptOrRejectAllDiffAreas({
-						uri,
-						removeCtrlKs: true,
-						behavior: "accept",
-						_addToHistory: true,
-					});
-				});
-			}}
-			data-tooltip-id='vader-tooltip'
-			data-tooltip-place='top'
-			data-tooltip-content='Accept all'
-		/>
-
-
-
+	return <div className='flex flex-col rounded-[10px] border border-vader-border-3 bg-vader-bg-1 overflow-hidden select-none' data-testid='vader-files-bar'>
+		<div className='flex items-center gap-2 h-8 pl-3 pr-1.5 text-[12.5px] text-vader-fg-2'>
+			<button type='button' aria-expanded={opened} data-testid='vader-files-toggle' onClick={() => setOpened(o => !o)} className='flex items-center gap-1.5 h-full hover:text-vader-fg-1 transition-colors duration-150'>
+				<ChevronRight className={`h-3 w-3 flex-shrink-0 transition-transform duration-100 ${opened ? 'rotate-90' : ''}`} />
+				<span>{word}</span>
+			</button>
+			<span className='flex-1' />
+			{writing ? <span className='text-vader-fg-3 text-xs pr-2' data-testid='vader-files-writing'>Writing</span> : <>
+				<button type='button' data-testid='vader-reject-all' onClick={() => settle(undefined, 'reject')} className='h-6 px-2 rounded-md text-vader-fg-2 hover:text-vader-fg-1 transition-colors duration-150'>Reject all</button>
+				<button type='button' data-testid='vader-accept-all' onClick={() => settle(undefined, 'accept')} className='h-6 px-2.5 rounded-md font-semibold bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 transition-opacity duration-150'>Accept all</button>
+			</>}
+		</div>
+		{opened ? <div className='flex flex-col border-t border-vader-border-3 py-1' data-testid='vader-files-list'>
+			{sortedCommandBarURIs.map((uri, i) => {
+				const { sortedDiffIds, isStreaming } = commandBarStateOfURI[uri.fsPath] ?? {}
+				const numDiffs = sortedDiffIds?.length || 0
+				return <div key={i} className='flex items-center gap-2 h-7 pl-3 pr-1.5 text-[12.5px]'>
+					<button type='button' className='font-mono text-[12px] text-vader-fg-2 hover:text-vader-fg-1 truncate text-left transition-colors duration-150' title={uri.fsPath} onClick={() => vaderOpenFileFn(uri, accessor)}>{getBasename(uri.fsPath)}</button>
+					<span className='text-vader-fg-3 text-xs whitespace-nowrap'>{numDiffs} change{numDiffs === 1 ? '' : 's'}</span>
+					<span className='flex-1' />
+					{isStreaming ? <span className='text-vader-fg-3 text-xs pr-2'>Writing</span> : <>
+						<button type='button' onClick={() => settle(uri, 'reject')} className='h-6 px-2 rounded-md text-vader-fg-2 hover:text-vader-fg-1 transition-colors duration-150'>Reject</button>
+						<button type='button' onClick={() => settle(uri, 'accept')} className='h-6 px-2 rounded-md text-vader-fg-1 border border-vader-border-2 hover:bg-vader-bg-2-hover transition-colors duration-150'>Accept</button>
+					</>}
+				</div>
+			})}
+		</div> : null}
 	</div>
-
-
-	// !select-text cursor-auto
-	const fileDetailsContent = <div className="px-2 gap-1 w-full overflow-y-auto">
-		{sortedCommandBarURIs.map((uri, i) => {
-			const basename = getBasename(uri.fsPath)
-
-			const { sortedDiffIds, isStreaming } = commandBarStateOfURI[uri.fsPath] ?? {}
-			const isFinishedMakingFileChanges = !isStreaming
-
-			const numDiffs = sortedDiffIds?.length || 0
-
-			const fileStatus = (isFinishedMakingFileChanges
-				? { title: 'Done', color: 'dark', } as const
-				: { title: 'Running', color: 'orange', } as const
-			)
-
-			const fileNameHTML = <div
-				className="flex items-center gap-1.5 text-vader-fg-3 hover:brightness-125 transition-all duration-200 cursor-pointer"
-				onClick={() => vaderOpenFileFn(uri, accessor)}
-			>
-				{/* <FileIcon size={14} className="text-vader-fg-3" /> */}
-				<span className="text-vader-fg-3">{basename}</span>
-			</div>
-
-
-
-
-			const detailsContent = <div className='flex px-4'>
-				<span className="text-vader-fg-3 opacity-80">{numDiffs} diff{numDiffs !== 1 ? 's' : ''}</span>
-			</div>
-
-			const acceptRejectButtons = <div
-				// do this with opacity so that the height remains the same at all times
-				className={`flex items-center gap-0.5
-					${isFinishedMakingFileChanges ? '' : 'opacity-0 pointer-events-none'}
-				`}
-			>
-				{/* <JumpToFileButton
-					uri={uri}
-					data-tooltip-id='vader-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Go to file'
-				/> */}
-				<IconShell1 // RejectAllButtonWrapper
-					Icon={X}
-					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "reject", _addToHistory: true, }); }}
-					data-tooltip-id='vader-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Reject file'
-
-				/>
-				<IconShell1 // AcceptAllButtonWrapper
-					Icon={Check}
-					onClick={() => { editCodeService.acceptOrRejectAllDiffAreas({ uri, removeCtrlKs: true, behavior: "accept", _addToHistory: true, }); }}
-					data-tooltip-id='vader-tooltip'
-					data-tooltip-place='top'
-					data-tooltip-content='Accept file'
-				/>
-
-			</div>
-
-			const fileStatusHTML = <StatusIndicator className='mx-1' indicatorColor={fileStatus.color} title={fileStatus.title} />
-
-			return (
-				// name, details
-				<div key={i} className="flex justify-between items-center">
-					<div className="flex items-center">
-						{fileNameHTML}
-						{detailsContent}
-					</div>
-					<div className="flex items-center gap-2">
-						{acceptRejectButtons}
-						{fileStatusHTML}
-					</div>
-				</div>
-			)
-		})}
-	</div>
-
-	const fileDetailsButton = (
-		<button
-			className={`flex items-center gap-1 rounded ${numFilesChanged === 0 ? 'cursor-pointer' : 'cursor-pointer hover:brightness-125 transition-all duration-200'}`}
-			onClick={() => isFileDetailsOpened ? setFileDetailsOpenedState('user-closed') : setFileDetailsOpenedState('user-opened')}
-			type='button'
-			disabled={numFilesChanged === 0}
-		>
-			<svg
-				className="transition-transform duration-200 size-3.5"
-				style={{
-					transform: isFileDetailsOpened ? 'rotate(0deg)' : 'rotate(180deg)',
-					transition: 'transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1)'
-				}}
-				xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="18 15 12 9 6 15"></polyline>
-			</svg>
-			{numFilesChangedStr}
-		</button>
-	)
-
-	return (
-		<>
-			{/* file details */}
-			<div className='px-2'>
-				<div
-					className={`
-						select-none
-						flex w-full rounded-t-lg bg-vader-bg-3
-						text-vader-fg-3 text-xs text-nowrap
-
-						overflow-hidden transition-all duration-200 ease-in-out
-						${isFileDetailsOpened ? 'max-h-24' : 'max-h-0'}
-					`}
-				>
-					{fileDetailsContent}
-				</div>
-			</div>
-			{/* main content */}
-			<div
-				className={`
-					select-none
-					flex w-full rounded-t-lg bg-vader-bg-3
-					text-vader-fg-3 text-xs text-nowrap
-					border-t border-l border-r border-zinc-300/10
-
-					px-2 py-1
-					justify-between
-				`}
-			>
-				<div className="flex gap-2 items-center">
-					{fileDetailsButton}
-				</div>
-				<div className="flex gap-2 items-center">
-					{acceptRejectAllButtons}
-					{threadStatusHTML}
-				</div>
-			</div>
-		</>
-	)
 }
 
 
@@ -3059,33 +3144,76 @@ export const SidebarChat = () => {
 	// state of current message
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
+	// long pasted texts are folded to one line each above the message box, and sent in full with the message
+	const [pastes, setPastes] = useState<Paste[]>([])
+	// images attached to the message: they go to the model that was chosen, and only to it (common/imageRules.ts)
+	const [images, setImages] = useState<ChatImage[]>([])
+	// a key found in the message that was about to be sent: it is not sent (board S02)
+	const [secretHits, setSecretHits] = useState<SecretHit[] | null>(null)
 
 	// a coding agent chosen for the chat brings its own model, so no model has to be configured
-	const isDisabled = instructionsAreEmpty || (!settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState))
+	const noModel = !settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState)
+	const isDisabled = (instructionsAreEmpty && pastes.length === 0 && images.length === 0) || noModel
+
+	// a message with images needs a model that reads them; a connected agent's own model is not known here, so it is not offered images
+	const chatModel = settingsState.modelSelectionOfFeature?.Chat
+	const modelSeesImages = !settingsState.globalSettings.externalAgentId && !!chatModel && modelSupportsVision(chatModel.providerName, chatModel.modelName)
+	const imagesBlocked = images.length > 0 && !modelSeesImages
 
 	const sidebarRef = useRef<HTMLDivElement>(null)
+	// in a narrow panel (the side bar of the editor) the columns keep less room around them
+	const [compact, setCompact] = useState(false)
+	const showingLanding = previousMessages.length === 0
+	useEffect(() => {
+		const el = sidebarRef.current
+		if (!el || typeof ResizeObserver === 'undefined') return
+		const measure = () => setCompact(el.clientWidth < 520)
+		measure()
+		const ro = new ResizeObserver(measure)
+		ro.observe(el)
+		return () => ro.disconnect()
+	}, [showingLanding])
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
-		if (isRunning) return
+		if (imagesBlocked && !_forceSubmit) return // the card above the box says why, and what to do
 
 		const threadId = chatThreadsService.state.currentThreadId
 
-		// send message to LLM
-		const userMessage = _forceSubmit || textAreaRef.current?.value || ''
+		// what is typed, then each long paste in a block, as one message
+		const typed = _forceSubmit || textAreaRef.current?.value || ''
+		const userMessage = _forceSubmit ? typed : [typed.trim() ? typed : '', ...pastes.map(p => attachmentBlock(p.title, p.text))].filter(Boolean).join('\n\n')
 
-		try {
-			await agentGatewayService.startTask({ userMessage, threadId })
-		} catch (e) {
-			console.error('Error while sending message in chat:', e)
+		// a key in the text never leaves this computer: it is taken out of the message, which is kept in the box so the person can go on from it
+		const hits = findSecrets(userMessage)
+		if (hits.length > 0) {
+			setSecretHits(hits)
+			if (!_forceSubmit) textAreaFnsRef.current?.setValue(redactSecrets(typed))
+			setPastes(ps => ps.map(p => ({ ...p, text: redactSecrets(p.text) })))
+			return
+		}
+		setSecretHits(null)
+
+		if (isRunning) {
+			// a run is going: the message waits for it to end (Send now stops the run and sends it at once); images do not wait in the queue
+			if (images.length > 0 && !_forceSubmit) { setSlashNote({ text: 'A message with images cannot wait for the run to end. Send it when the run is done, or stop the run first.', busy: false }); return }
+			if (!chatThreadsService.queueMessage(threadId, userMessage)) return
+		} else {
+			try {
+				await agentGatewayService.startTask({ userMessage, threadId, ...(images.length > 0 && !_forceSubmit ? { images } : {}) })
+			} catch (e) {
+				console.error('Error while sending message in chat:', e)
+			}
 		}
 
+		setPastes([])
+		setImages([])
 		setSelections([]) // clear staging
 		textAreaFnsRef.current?.setValue('')
 		textAreaRef.current?.focus() // focus input after submit
 
-	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, pastes, images, imagesBlocked, textAreaRef, textAreaFnsRef, setSelections, settingsState])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3120,7 +3248,6 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		chatThreadsService.clearThreadPlan(currentThread.id)
 	}, [chatThreadsService, currentThread])
 
-	const keybindingString = accessor.get('IKeybindingService').lookupKeybinding(VADER_CTRL_L_ACTION_ID)?.getLabel()
 
 	const threadId = currentThread.id
 	const currCheckpointIdx = chatThreadsState.allThreads[threadId]?.state?.currCheckpointIdx ?? undefined  // if not exist, treat like checkpoint is last message (infinity)
@@ -3144,21 +3271,36 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const previousMessagesHTML = useMemo(() => {
 		// const lastMessageIdx = previousMessages.findLastIndex(v => v.role !== 'checkpoint')
 		// tool request shows up as Editing... if in progress
-		return previousMessages.map((message, i) => {
-			return <ChatBubble
-				key={i}
-				currCheckpointIdx={currCheckpointIdx}
-				chatMessage={message}
-				messageIdx={i}
-				isCommitted={true}
-				chatIsRunning={isRunning}
-				threadId={threadId}
-				_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
-			/>
+		const bubble = (message: ChatMessage, i: number) => <ChatBubble
+			key={i}
+			currCheckpointIdx={currCheckpointIdx}
+			chatMessage={message}
+			messageIdx={i}
+			isCommitted={true}
+			chatIsRunning={isRunning}
+			threadId={threadId}
+			_scrollToBottom={() => scrollToBottom(scrollContainerRef)}
+		/>
+		// blocks: a message of its own, or a run of quiet tool rows (reads, searches, commands that ran, pages the agent opened) kept close together
+		const blocks: React.ReactNode[] = []
+		let run: React.ReactNode[] = []
+		let explored: { message: ChatMessage & { role: 'tool' }, i: number }[] = []
+		const flushExplored = () => {
+			if (explored.length === 1) run.push(bubble(explored[0].message, explored[0].i))
+			else if (explored.length > 1) run.push(<ExploredGroup key={'ex' + explored[0].i} items={explored.map(e => ({ message: e.message, node: bubble(e.message, e.i) }))} />)
+			explored = []
+		}
+		const flushRun = () => { flushExplored(); if (run.length > 0) blocks.push(<div key={'run' + blocks.length} className='flex flex-col gap-0.5' data-testid='vader-tool-run'>{run}</div>); run = [] }
+		previousMessages.forEach((message, i) => {
+			if (isExploreMessage(message)) { explored.push({ message, i }); return }
+			if (isQuietToolMessage(message)) { flushExplored(); run.push(bubble(message, i)); return }
+			flushRun(); blocks.push(bubble(message, i))
 		})
+		flushRun()
+		return blocks
 	}, [previousMessages, threadId, currCheckpointIdx, isRunning])
 
-	const streamingChatIdx = previousMessagesHTML.length
+	const streamingChatIdx = previousMessages.length
 	const currStreamingMessageHTML = reasoningSoFar || displayContentSoFar || isRunning ?
 		<ChatBubble
 			key={'curr-streaming-msg'}
@@ -3190,15 +3332,17 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const messagesHTML = <ScrollToBottomContainer
 		key={'messages' + chatThreadsState.currentThreadId} // force rerender on all children if id changes
 		scrollContainerRef={scrollContainerRef}
+		style={{ WebkitMaskImage: 'linear-gradient(to bottom, transparent 0, #000 40px)', maskImage: 'linear-gradient(to bottom, transparent 0, #000 40px)' }}
 		className={`
 			flex flex-col
-			px-4 py-4 space-y-4
-			w-full h-full
+			w-full flex-1 min-h-0
 			overflow-x-hidden
 			overflow-y-auto
-			${previousMessagesHTML.length === 0 && !displayContentSoFar ? 'hidden' : ''}
+			${previousMessages.length === 0 && !displayContentSoFar ? 'hidden' : ''}
 		`}
 	>
+		<div className='w-full mx-auto flex flex-col' data-testid='vader-messages' style={{ maxWidth: 760, padding: compact ? '12px 12px' : '16px 20px', minHeight: '100%' }}>
+		<div className='flex flex-col mt-auto' style={{ gap: 18 }}>
 		{/* previous messages */}
 		{previousMessagesHTML}
 		{currStreamingMessageHTML}
@@ -3212,9 +3356,13 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		</ProseWrapper> : null}
 
 
+		{/* the person stopped the run, or it finished and changed files */}
+		{!isRunning ? <ErrorBoundary><StoppedCard threadId={threadId} /></ErrorBoundary> : null}
+		{!isRunning && latestError === undefined ? <ErrorBoundary><FinishedCard threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary> : null}
+
 		{/* error message */}
 		{latestError === undefined ? null :
-			<div className='px-2 my-1'>
+			<div className='my-1'>
 				<ErrorDisplay
 					message={latestError.message}
 					fullError={latestError.fullError}
@@ -3222,7 +3370,6 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 					showDismiss={true}
 				/>
 
-				<WarningBox className='text-sm my-2 mx-4' onClick={() => { commandService.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }} text='Open settings' />
 			</div>
 		}
 
@@ -3235,21 +3382,130 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 					<VaderButtonBgDarken className='px-3 py-1 text-xs' onClick={onApprovePlan}>Approve &amp; Execute (switches to Agent mode)</VaderButtonBgDarken>
 					<VaderButtonBgDarken className='px-3 py-1 text-xs' onClick={onDiscardPlan}>Discard</VaderButtonBgDarken>
 				</div>
-			</div>
-			: null}
-	</ScrollToBottomContainer>
+				</div>
+				: null}
+		</div>
+		</div>
+		</ScrollToBottomContainer>
 
+
+	// commands: a line that begins with / offers them; each one calls the real service
+	const [typed, setTyped] = useState('')
+	const [slashIdx, setSlashIdx] = useState(0)
+	const [slashHidden, setSlashHidden] = useState(false)
+	const [slashNote, setSlashNote] = useState<{ text: string, busy: boolean } | undefined>()
+	const slashList = slashHidden ? undefined : slashMatches(typed)
+	const memoryService = accessor.get('IMemoryService')
+	const verificationService = accessor.get('IVerificationService')
+	const runSlash = useCallback(async (command: SlashCommand, arg: string) => {
+		const id = chatThreadsService.state.currentThreadId
+		const clear = () => { textAreaFnsRef.current?.setValue(''); setTyped(''); setInstructionsAreEmpty(true) }
+		const project = chatThreadsService.getCurrentProjectKey()
+		if (command.id === 'plan') {
+			vaderSettingsService.setGlobalSetting('chatMode', 'plan'); clear()
+			setSlashNote({ text: 'Plan mode. It writes a plan and changes nothing until you approve it.', busy: false })
+		}
+		else if (command.id === 'compact') {
+			clear(); setSlashNote({ text: 'Summarising the earlier steps...', busy: true })
+			const r = await chatThreadsService.compactThreadNow(id)
+			setSlashNote({ text: r === 'done' ? 'The earlier steps are summarised.' : r === 'nothing' ? 'There is too little to summarise yet.' : 'The model did not answer, so nothing was summarised.', busy: false })
+		}
+		else if (command.id === 'remember') {
+			if (!arg) { textAreaFnsRef.current?.setValue('/remember '); setTyped('/remember '); setSlashNote({ text: 'Write the note after /remember, then press Enter.', busy: false }); return }
+			if (!project) { setSlashNote({ text: 'Open a folder first: a note is kept for a project.', busy: false }); return }
+			memoryService.write({ scope: 'project', scopeKey: project, label: noteLabel(arg), content: arg, source: 'user_written' })
+			clear(); setSlashNote({ text: `Saved for ${projectNameOf(project)}. The agent reads it in this project from now on. You can change it in Settings, Memory.`, busy: false })
+		}
+		else if (command.id === 'init') {
+			clear(); vaderSettingsService.setGlobalSetting('chatMode', 'agent')
+			try { await agentGatewayService.startTask({ userMessage: INIT_PROMPT, threadId: id }) } catch (e) { console.error('Error while starting /init:', e) }
+		}
+		else if (command.id === 'review') {
+			const thread = chatThreadsService.state.allThreads[id]
+			const lastUser = [...(thread?.messages ?? [])].reverse().find(m => m.role === 'user')
+			const objective = lastUser && lastUser.role === 'user' && lastUser.displayContent ? lastUser.displayContent : 'Check the changes made in this project.'
+			clear(); setSlashNote({ text: 'Checking the changes with a second agent. It reads them and runs the project\u2019s checks, and cannot change anything...', busy: true })
+			try {
+				const { verdict } = await verificationService.runIndependentVerification({ objective })
+				const blockers = verdict.findings.filter(f => f.severity === 'blocker').length
+				setSlashNote({ text: `${verdict.passed ? 'The check passed.' : `The check found ${blockers} blocker${blockers === 1 ? '' : 's'}.`} ${verdict.summary}`.trim(), busy: false })
+			} catch (e) { setSlashNote({ text: 'The check could not run: ' + (e instanceof Error ? e.message : String(e)), busy: false }) }
+		}
+	}, [chatThreadsService, vaderSettingsService, agentGatewayService, memoryService, verificationService, textAreaFnsRef])
+	const pickSlash = useCallback((c: SlashCommand) => {
+		if (c.takesText) { textAreaFnsRef.current?.setValue('/' + c.id + ' '); setTyped('/' + c.id + ' '); setInstructionsAreEmpty(false); textAreaRef.current?.focus(); return }
+		void runSlash(c, '')
+	}, [runSlash, textAreaFnsRef, textAreaRef])
+
+	// files dropped on the box: text files are read and kept beside the message, like a long paste; what is not taken is said, with the reason
+	// images dropped, pasted or taken from the clipboard: opened, made smaller when large, and kept beside the message
+	const collectImages = useCallback(async (files: File[]) => {
+		const verdict = checkImages(files.map(f => ({ name: f.name, size: f.size, type: f.type })), images.length)
+		const refused = [...verdict.refused]
+		const taken: ChatImage[] = []
+		for (const i of verdict.accepted) {
+			try { taken.push(await chatImageOfFile(files[i], Math.random().toString(36).slice(2))) }
+			catch (e) { refused.push({ name: files[i].name, why: e instanceof Error ? e.message : 'it could not be read' }) }
+		}
+		if (taken.length > 0) setImages(list => [...list, ...taken].slice(0, MAX_IMAGES))
+		return { taken, refused }
+	}, [images.length])
+	const addImageFiles = useCallback(async (files: File[]) => {
+		const { taken, refused } = await collectImages(files)
+		const note = dropNote({ accepted: taken.map(t => ({ name: t.name, size: t.bytes })), refused })
+		setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [collectImages])
+
+	// files dropped on the box: images are kept as images, text files are read and kept beside the message like a long paste; what is not taken is said, with the reason
+	const onDropFiles = useCallback(async (all: File[]) => {
+		const pictures = all.filter(f => looksLikeImage({ name: f.name, type: f.type }))
+		const files = all.filter(f => !pictures.includes(f))
+		const fromImages = pictures.length > 0 ? await collectImages(pictures) : { taken: [] as ChatImage[], refused: [] as { name: string, why: string }[] }
+		const verdict = checkDrop(files.map(f => ({ name: f.name, size: f.size, type: f.type })), pastes.length)
+		const refused = [...fromImages.refused, ...verdict.refused]
+		const taken: Paste[] = []
+		for (const info of verdict.accepted) {
+			const file = files.find(f => f.name === info.name && f.size === info.size)
+			if (!file) continue
+			try {
+				const text = await file.text()
+				if (looksBinary(text)) { refused.push({ name: info.name, why: 'it is not a text file' }); continue }
+				taken.push({ id: Math.random().toString(36).slice(2), text, title: info.name, label: sizeWords(info.size) })
+			} catch { refused.push({ name: info.name, why: 'it could not be read' }) }
+		}
+		if (taken.length > 0) setPastes(ps => [...ps, ...taken])
+		const note = dropNote({ accepted: [...fromImages.taken.map(t => ({ name: t.name, size: t.bytes })), ...taken.map(t => ({ name: t.title ?? '', size: 0 }))], refused })
+		setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [pastes.length, collectImages])
 
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
+		setTyped(newStr); setSlashIdx(0); setSlashHidden(false)
 	}, [setInstructionsAreEmpty])
 	const onKeyDown = useCallback((e: KeyboardEvent<HTMLTextAreaElement>) => {
+		// Ctrl 1 to 4: Agent, Plan, Gather, Chat (what the Mode menu says)
+		if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && /^[1-4]$/.test(e.key)) {
+			e.preventDefault(); e.stopPropagation()
+			vaderSettingsService.setGlobalSetting('chatMode', CHAT_MODE_ORDER[Number(e.key) - 1])
+			return
+		}
+		if (slashList && slashList.length > 0 && !e.nativeEvent.isComposing) {
+			if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); setSlashIdx(i => (i + (e.key === 'ArrowDown' ? 1 : slashList.length - 1)) % slashList.length); return }
+			if (e.key === 'Escape') { e.preventDefault(); setSlashHidden(true); return }
+			if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
+				e.preventDefault()
+				const whole = parseSlash(typed)
+				if (whole) void runSlash(whole.command, whole.arg)
+				else pickSlash(slashList[Math.min(slashIdx, slashList.length - 1)])
+				return
+			}
+		}
 		if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
 			onSubmit()
 		} else if (e.key === 'Escape' && isRunning) {
 			onAbort()
 		}
-	}, [onSubmit, onAbort, isRunning])
+	}, [onSubmit, onAbort, isRunning, slashList, slashIdx, typed, runSlash, pickSlash, vaderSettingsService])
 
 	const inputChatArea = <VaderChatArea
 		featureName='Chat'
@@ -3262,11 +3518,21 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		selections={selections}
 		setSelections={setSelections}
 		onClickAnywhere={() => { textAreaRef.current?.focus() }}
+		showFooter
+		onDropFiles={(files) => { void onDropFiles(files) }}
+		onAddContext={() => { const t = textAreaRef.current; if (t) { t.focus(); try { document.execCommand('insertText', false, '@') } catch { /* the @ menu opens when typing it */ } } }}
 	>
+		<ImageChips images={images} onRemove={id => setImages(list => list.filter(i => i.id !== id))} />
+		<PastedChips pastes={pastes} onRemove={id => setPastes(ps => ps.filter(p => p.id !== id))} />
 		<VaderInputBox2
 			enableAtToMention
-			className={`min-h-[81px] px-0.5 py-0.5`}
-			placeholder={`@ to mention, ${keybindingString ? `${keybindingString} to add a selection. ` : ''}Enter instructions...`}
+				className={`min-h-[22px] px-0.5 py-0 bg-transparent text-[14px] leading-[1.5]`}
+			testId='vader-input'
+placeholder={isRunning ? 'Add a message for after this run' : previousMessages.length === 0 && settingsState.globalSettings.chatMode === 'agent' ? 'Describe the task' : PLACEHOLDER_OF_MODE[settingsState.globalSettings.chatMode] ?? PLACEHOLDER_OF_MODE.agent}
+			onPasteFiles={(files) => { const pics = files.filter(f => looksLikeImage({ name: f.name, type: f.type })); if (pics.length === 0) return false; void addImageFiles(pics); return true }}
+			extraSources={() => peekContextSources(accessor)}
+			onPickExtra={(id: ContextSourceId) => { if (id === 'image') { void imagesOnClipboard().then(files => { if (files.length === 0) { setSlashNote({ text: 'There is no image on the clipboard.', busy: false }); return } void addImageFiles(files) }); return } void readContextSource(accessor, id).then(r => { if (!r) { setSlashNote({ text: 'There is nothing to attach from there right now.', busy: false }); return } setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text: r.text, title: r.title }]); if (r.cut) setSlashNote({ text: `${r.title} was long, so only part of it is attached.`, busy: false }) }) }}
+			onPasteText={(text) => { if (!shouldFoldPaste(text)) return false; setPastes(ps => [...ps, { id: Math.random().toString(36).slice(2), text }]); return true }}
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
@@ -3281,15 +3547,19 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 	const isLandingPage = previousMessages.length === 0
 
 
-	const initiallySuggestedPromptsHTML = <div className='flex flex-col gap-2 w-full text-nowrap text-vader-fg-3 select-none'>
-		{[
-			'Summarize my codebase',
-			'How do types work in Rust?',
-			'Create a .vaderrules file for me'
-		].map((text, index) => (
+	// what to start from: with a project open these are about the project; without one, plain questions
+	const [chatOnly, setChatOnly] = useState(false)
+	const hasProject = !!chatThreadsService.getCurrentProjectKey()
+	const initiallySuggestedPromptsHTML = <div className='flex flex-col w-full text-nowrap select-none'>
+		{(hasProject ? [
+			'Add a rules file for this project',
+			'Explain how this project is laid out',
+			'Find and fix a failing test',
+		] : []).map((text, index) => (
 			<div
 				key={index}
-				className='py-1 px-2 rounded text-sm bg-zinc-700/5 hover:bg-zinc-700/10 dark:bg-zinc-300/5 dark:hover:bg-zinc-300/10 cursor-pointer opacity-80 hover:opacity-100'
+				data-testid='vader-suggestion'
+				className='flex items-center h-9 px-1 border-t border-vader-border-3 rounded-sm text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover cursor-pointer transition-colors duration-150'
 				onClick={() => onSubmit(text)}
 			>
 				{text}
@@ -3299,41 +3569,86 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 
 
 
-	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId}>
-		<div className='px-4'>
+	const aboveComposer = <div className='flex flex-col gap-2'>
+		<ErrorBoundary><NoModelCard /></ErrorBoundary>
+		{imagesBlocked ? <ErrorBoundary><ImagesBlockedCard modelName={settingsState.globalSettings.externalAgentId ? 'The connected agent' : (chatModel?.modelName ?? 'This model')} count={images.length} onChoose={() => { (document.querySelector('[data-testid="vader-picker-button"]') as HTMLElement | null)?.click() }} onRemove={() => setImages([])} /></ErrorBoundary> : null}
+		{!isLandingPage ? <ErrorBoundary><OfflineBanner /></ErrorBoundary> : null}
+		{slashNote ? <ErrorBoundary><SlashNote text={slashNote.text} busy={slashNote.busy} onDismiss={() => setSlashNote(undefined)} /></ErrorBoundary> : null}
+		{slashList && slashList.length > 0 ? <ErrorBoundary><SlashMenu commands={slashList} index={Math.min(slashIdx, slashList.length - 1)} onPick={pickSlash} onHover={setSlashIdx} /></ErrorBoundary> : null}
+		{secretHits ? <ErrorBoundary><SecretBlockedCard hits={secretHits} onEdit={() => { setSecretHits(null); textAreaRef.current?.focus() }} onDismiss={() => setSecretHits(null)} /></ErrorBoundary> : null}
+		{isRunning ? <ErrorBoundary><PausedCard threadId={threadId} /></ErrorBoundary> : null}
+		<ErrorBoundary><TaskCopyArea threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
+		<ErrorBoundary><McpToolChangedArea /></ErrorBoundary>
+		<ErrorBoundary><ContextBanner threadId={threadId} isRunning={!!isRunning} /></ErrorBoundary>
+		<ErrorBoundary><QueueList threadId={threadId} queued={currentThread.queued ?? []} /></ErrorBoundary>
+	</div>
+	const hint = isLandingPage && instructionsAreEmpty && pastes.length === 0 && !isRunning ?<div className='px-3 pt-1.5 text-xs text-vader-fg-3 select-none' data-testid='vader-composer-hint'>Enter sends, Shift Enter adds a line.</div> : null
+
+	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId} className='flex-none' style={{ padding: compact ? '0 10px 10px' : '0 20px 14px' }}>
+		<div className='w-full mx-auto flex flex-col gap-2' style={{ maxWidth: 720 }}>
 			<CommandBarInChat />
-		</div>
-		<div className='px-2 pb-2'>
+			{aboveComposer}
 			{inputChatArea}
+			{hint}
 		</div>
 	</div>
 
-	const landingPageInput = <div>
-		<div className='pt-8'>
-			{inputChatArea}
-		</div>
-	</div>
+	// a new chat (board R21): what this is, the message box, and where to pick up
+	const projectKey = chatThreadsService.getCurrentProjectKey()
+	const projectName = projectKey ? projectNameOf(projectKey) : undefined
+	const recent = useMemo(() => {
+		const groups = chatThreadsService.listProjectGroups()
+		const group = groups.find(g => g.key === projectKey) ?? groups[0]
+		return (group?.threadIds ?? []).slice(0, 3).map(id => {
+			const t = chatThreadsState.allThreads[id]
+			const first = t?.messages.find(m => m.role === 'user')
+			const title = first && first.role === 'user' ? (first.displayContent || '').replace(/\s+/g, ' ').trim() : ''
+			return { id, title: title || 'New chat', status: chatThreadsService.getThreadStatus(id) }
+		}).filter(r => r.id !== threadId)
+	}, [chatThreadsService, chatThreadsState, projectKey, threadId])
 
+	// what this chat will do in this project, in the mode it is in
+	const landingMode = settingsState.globalSettings.chatMode
+	const landingText = !hasProject ? 'No folder is open, so this is a plain conversation. Open a folder to let the agent work in a project.'
+		: landingMode === 'agent' ? (settingsState.globalSettings.taskCopies ? 'In Agent mode it works in its own copy of the project, so nothing in your folder changes until you accept.' : 'Agent mode reads and edits the files of this project and shows every change for you to accept or reject.')
+			: landingMode === 'plan' ? 'In Plan mode it reads the project and writes a plan. Nothing changes until you approve it.'
+				: landingMode === 'gather' ? 'In Gather mode it reads the project and answers. It changes nothing.'
+					: 'In Chat mode it answers without reading or changing the project.'
 	const landingPageContent = <div
 		ref={sidebarRef}
-		className='w-full h-full max-h-full flex flex-col overflow-auto px-4'
+		className='w-full h-full max-h-full flex flex-col overflow-auto px-4 items-center justify-center'
+		data-testid='vader-landing'
 	>
-		<ErrorBoundary>
-			{landingPageInput}
-		</ErrorBoundary>
+		<div className='w-full flex flex-col gap-4 py-8' style={{ maxWidth: 560 }}>
+			<ErrorBoundary>
+				<div className='flex flex-col gap-1.5'>
+					<h2 className='text-xl font-semibold text-vader-fg-1' data-testid='vader-landing-title'>{projectName ? `New chat in ${projectName}` : 'New chat'}</h2>
+					<p className='text-vader-fg-3 leading-relaxed' data-testid='vader-landing-text'>{landingText}</p>
+				</div>
+				<OfflineBanner />
+				{aboveComposer}
+				{inputChatArea}
+				{hint}
+			</ErrorBoundary>
 
-		{Object.keys(chatThreadsState.allThreads).length > 1 ? // show if there are threads
+			{!hasProject && !chatOnly ? <ErrorBoundary><NoProjectCard onChatOnly={() => setChatOnly(true)} /></ErrorBoundary> : null}
+
 			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-vader-fg-3 text-root select-none pointer-events-none'>Previous Threads</div>
-				<PastThreadsList />
+				{recent.length > 0 ? <div className='flex flex-col mt-2' data-testid='vader-landing-recent'>
+					<div className='text-vader-fg-3 text-xs pb-1'>Pick up where you left off</div>
+					{recent.map(r => <button key={r.id} className='flex items-center gap-2.5 h-9 border-t border-vader-border-3 text-left text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-sm px-1' onClick={() => chatThreadsService.switchToThread(r.id)}>
+						<span className='shrink-0 w-3.5 flex justify-center'>{r.status === 'needs_you' ? <span className='w-2 h-2 rounded-full bg-yellow-500' /> : r.status === 'running' ? <IconLoading className='text-vader-fg-3' /> : r.status === 'review' ? <span className='w-2.5 h-2.5 rounded-full border border-vader-fg-3' /> : null}</span>
+						<span className='truncate flex-1'>{r.title}</span>
+						<span className='text-vader-fg-3 text-xs shrink-0'>{r.status === 'review' ? 'Review it' : r.status === 'needs_you' ? 'Needs you' : ''}</span>
+					</button>)}
+				</div> : !hasProject ? null : <div className='flex flex-col gap-2 mt-2'>
+					<div className='text-vader-fg-3 text-xs'>Start from one of these</div>
+					{initiallySuggestedPromptsHTML}
+				</div>}
 			</ErrorBoundary>
-			:
-			<ErrorBoundary>
-				<div className='pt-8 mb-2 text-vader-fg-3 text-root select-none pointer-events-none'>Suggestions</div>
-				{initiallySuggestedPromptsHTML}
-			</ErrorBoundary>
-		}
+		</div>
 	</div>
+
 
 
 	// const threadPageContent = <div>

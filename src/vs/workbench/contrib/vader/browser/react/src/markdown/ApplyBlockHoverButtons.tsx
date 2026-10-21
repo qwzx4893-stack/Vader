@@ -489,16 +489,10 @@ export const EditToolAcceptRejectButtonsHTML = ({
 		if (isRunning === 'LLM' || isRunning === 'tool') return null
 
 		return <>
-			<IconShell1
-				Icon={X}
-				onClick={onReject}
-				{...tooltipPropsForApplyBlock({ tooltipName: 'Remove' })}
-			/>
-			<IconShell1
-				Icon={Check}
-				onClick={onAccept}
-				{...tooltipPropsForApplyBlock({ tooltipName: 'Keep' })}
-			/>
+			<button type='button' data-testid='vader-edit-reject' onClick={onReject} {...tooltipPropsForApplyBlock({ tooltipName: 'Remove this change' })}
+				className='h-6 px-2 rounded-md text-[13px] text-vader-fg-2 hover:text-vader-fg-1 transition-colors duration-150'>Reject</button>
+			<button type='button' data-testid='vader-edit-accept' onClick={onAccept} {...tooltipPropsForApplyBlock({ tooltipName: 'Keep this change' })}
+				className='h-6 px-2.5 rounded-md text-[13px] font-semibold bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 transition-opacity duration-150'>Accept</button>
 		</>
 	}
 

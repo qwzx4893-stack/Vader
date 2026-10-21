@@ -44,6 +44,7 @@ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js
 import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
+import { IVaderShellService } from './vaderShellService.js';
 
 // compare against search.contribution.ts and debug.contribution.ts, scm.contribution.ts (source control)
 
@@ -63,6 +64,7 @@ class SidebarViewPane extends ViewPane {
 		@IOpenerService openerService: IOpenerService,
 		@ITelemetryService telemetryService: ITelemetryService,
 		@IHoverService hoverService: IHoverService,
+		@IVaderShellService private readonly shellService: IVaderShellService,
 		// @ICodeEditorService private readonly editorService: ICodeEditorService,
 		// @IContextKeyService private readonly editorContextKeyService: IContextKeyService,
 	) {
@@ -72,17 +74,29 @@ class SidebarViewPane extends ViewPane {
 
 
 
+	private _unmountChat: (() => void) | undefined
+
 	protected override renderBody(parent: HTMLElement): void {
 		super.renderBody(parent);
 		// parent.style.overflow = 'auto'
 		parent.style.userSelect = 'text'
 
-		// gets set immediately
-		this.instantiationService.invokeFunction(accessor => {
-			// mount react
-			const disposeFn: (() => void) | undefined = mountSidebar(parent, accessor)?.dispose;
-			this._register(toDisposable(() => disposeFn?.()))
-		});
+		// The chat is mounted only while the editor layout is shown. In the Vader window the same conversation is shown there, and one chat on
+		// screen means one text box to type in (the window covers this view, so nothing is lost by not drawing it).
+		const sync = () => {
+			if (this.shellService.state.mode === 'editor') {
+				if (this._unmountChat) { return }
+				this.instantiationService.invokeFunction(accessor => {
+					this._unmountChat = mountSidebar(parent, accessor)?.dispose; // gets set immediately
+				})
+			} else if (this._unmountChat) {
+				this._unmountChat()
+				this._unmountChat = undefined
+			}
+		}
+		sync()
+		this._register(this.shellService.onDidChange(sync))
+		this._register(toDisposable(() => { this._unmountChat?.(); this._unmountChat = undefined }))
 	}
 
 	protected override layoutBody(height: number, width: number): void {

@@ -119,7 +119,9 @@ export function addTurnToThreadUsage(prev: ThreadUsage | undefined, usage: Token
 
 // ---- per day
 
-export type DayTotals = { readonly costUsd: number; readonly billedCostUsd?: number; readonly inputTokens: number; readonly outputTokens: number; readonly unpricedTurns: number };
+/** what one model used in one day; kept so Settings can say which model the money went to */
+export type ModelDayTotals = { readonly providerName: string; readonly modelName: string; readonly isLocal: boolean; readonly turns: number; readonly costUsd: number; readonly billedCostUsd: number; readonly inputTokens: number; readonly outputTokens: number; readonly unpricedTurns: number };
+export type DayTotals = { readonly costUsd: number; readonly billedCostUsd?: number; readonly inputTokens: number; readonly outputTokens: number; readonly unpricedTurns: number; readonly models?: { readonly [key: string]: ModelDayTotals | undefined } };
 export type UsageLedger = { readonly [day: string]: DayTotals | undefined };
 
 const LEDGER_KEEP_DAYS = 62;
@@ -130,9 +132,16 @@ export function dayKey(date: Date): string {
 	return `${date.getFullYear()}-${p(date.getMonth() + 1)}-${p(date.getDate())}`;
 }
 
-export function addToLedger(ledger: UsageLedger, day: string, usage: TokenUsage | undefined, cost: number | undefined, source?: CostSource): UsageLedger {
+export function addToLedger(ledger: UsageLedger, day: string, usage: TokenUsage | undefined, cost: number | undefined, source?: CostSource, model?: { providerName: string; modelName: string; isLocal: boolean }): UsageLedger {
 	const d = ledger[day] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 };
+	let models = d.models;
+	if (model && usage) {
+		const key = `${model.providerName}/${model.modelName}`;
+		const m = models?.[key] ?? { providerName: model.providerName, modelName: model.modelName, isLocal: model.isLocal, turns: 0, costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 };
+		models = { ...models, [key]: { ...m, turns: m.turns + 1, costUsd: m.costUsd + (cost ?? 0), billedCostUsd: m.billedCostUsd + (source === 'billed' ? cost ?? 0 : 0), inputTokens: m.inputTokens + usage.inputTokens, outputTokens: m.outputTokens + usage.outputTokens, unpricedTurns: m.unpricedTurns + (cost === undefined ? 1 : 0) } };
+	}
 	const next: DayTotals = {
+		...(models ? { models } : {}),
 		costUsd: d.costUsd + (usage ? cost ?? 0 : 0),
 		billedCostUsd: (d.billedCostUsd ?? 0) + (usage && source === 'billed' ? cost ?? 0 : 0),
 		inputTokens: d.inputTokens + (usage?.inputTokens ?? 0),
@@ -145,6 +154,18 @@ export function addToLedger(ledger: UsageLedger, day: string, usage: TokenUsage 
 	return merged;
 }
 
+function parseModelTotals(raw: unknown): { [key: string]: ModelDayTotals } | undefined {
+	if (!raw || typeof raw !== 'object') return undefined;
+	const out: { [key: string]: ModelDayTotals } = {};
+	for (const [key, v] of Object.entries(raw as Record<string, unknown>)) {
+		const m = v as Partial<ModelDayTotals> | null;
+		if (m && typeof m.providerName === 'string' && typeof m.modelName === 'string' && finiteNonNegative(m.costUsd) && finiteNonNegative(m.inputTokens) && finiteNonNegative(m.outputTokens)) {
+			out[key] = { providerName: m.providerName, modelName: m.modelName, isLocal: m.isLocal === true, turns: finiteNonNegative(m.turns) ? m.turns : 0, costUsd: m.costUsd, billedCostUsd: finiteNonNegative(m.billedCostUsd) ? m.billedCostUsd : 0, inputTokens: m.inputTokens, outputTokens: m.outputTokens, unpricedTurns: finiteNonNegative(m.unpricedTurns) ? m.unpricedTurns : 0 };
+		}
+	}
+	return Object.keys(out).length ? out : undefined;
+}
+
 /** reads a ledger back from storage; anything that is not shaped like one is dropped rather than trusted */
 export function parseLedger(raw: unknown): UsageLedger {
 	if (!raw || typeof raw !== 'object') return {};
@@ -152,7 +173,8 @@ export function parseLedger(raw: unknown): UsageLedger {
 	for (const [day, v] of Object.entries(raw as Record<string, unknown>)) {
 		const t = v as Partial<DayTotals> | null;
 		if (/^\d{4}-\d{2}-\d{2}$/.test(day) && t && finiteNonNegative(t.costUsd) && finiteNonNegative(t.inputTokens) && finiteNonNegative(t.outputTokens)) {
-			out[day] = { costUsd: t.costUsd, ...(finiteNonNegative(t.billedCostUsd) ? { billedCostUsd: t.billedCostUsd } : {}), inputTokens: t.inputTokens, outputTokens: t.outputTokens, unpricedTurns: finiteNonNegative(t.unpricedTurns) ? t.unpricedTurns : 0 };
+			const models = parseModelTotals(t.models);
+			out[day] = { costUsd: t.costUsd, ...(finiteNonNegative(t.billedCostUsd) ? { billedCostUsd: t.billedCostUsd } : {}), inputTokens: t.inputTokens, outputTokens: t.outputTokens, unpricedTurns: finiteNonNegative(t.unpricedTurns) ? t.unpricedTurns : 0, ...(models ? { models } : {}) };
 		}
 	}
 	return out;
@@ -198,4 +220,41 @@ export const PROVIDER_USAGE_PAGES: { readonly [providerName: string]: { label: s
 
 export function formatTokens(n: number): string {
 	return n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)}M` : n >= 1000 ? `${Math.round(n / 1000)}K` : String(n);
+}
+
+// ---- the last days, for Settings > Usage and cost
+
+/** the last `days` local days ending today, oldest first, with what was spent on each (0 when nothing was) */
+export function lastDays(ledger: UsageLedger, days: number, now: Date): { day: string; costUsd: number; inputTokens: number; outputTokens: number }[] {
+	const out: { day: string; costUsd: number; inputTokens: number; outputTokens: number }[] = [];
+	for (let i = days - 1; i >= 0; i--) {
+		const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() - i);
+		const key = dayKey(d);
+		const t = ledger[key];
+		out.push({ day: key, costUsd: t?.costUsd ?? 0, inputTokens: t?.inputTokens ?? 0, outputTokens: t?.outputTokens ?? 0 });
+	}
+	return out;
+}
+
+export type ModelRow = {
+	readonly key: string; readonly providerName: string; readonly modelName: string; readonly inputTokens: number; readonly outputTokens: number; readonly costUsd: number; readonly turns: number;
+	/** where the number comes from; 'unpriced' when some turns of a cloud model had no price, so the money is not complete */
+	readonly source: CostSource;
+};
+
+/** what each model used over the last `days` days, the most expensive first; sources follow the rules at the top of this file */
+export function modelRows(ledger: UsageLedger, days: number, now: Date): ModelRow[] {
+	const rows = new Map<string, { providerName: string; modelName: string; isLocal: boolean; inputTokens: number; outputTokens: number; costUsd: number; billedCostUsd: number; unpricedTurns: number; turns: number }>();
+	for (const { day } of lastDays(ledger, days, now)) {
+		for (const [key, m] of Object.entries(ledger[day]?.models ?? {})) {
+			if (!m) continue;
+			const r = rows.get(key) ?? { providerName: m.providerName, modelName: m.modelName, isLocal: m.isLocal, inputTokens: 0, outputTokens: 0, costUsd: 0, billedCostUsd: 0, unpricedTurns: 0, turns: 0 };
+			r.inputTokens += m.inputTokens; r.outputTokens += m.outputTokens; r.costUsd += m.costUsd; r.billedCostUsd += m.billedCostUsd; r.unpricedTurns += m.unpricedTurns; r.turns += m.turns;
+			rows.set(key, r);
+		}
+	}
+	return [...rows.entries()].map(([key, r]): ModelRow => ({
+		key, providerName: r.providerName, modelName: r.modelName, inputTokens: r.inputTokens, outputTokens: r.outputTokens, costUsd: r.costUsd, turns: r.turns,
+		source: r.isLocal ? 'free' : r.unpricedTurns >= r.turns ? 'unpriced' : r.billedCostUsd >= r.costUsd - 1e-9 && r.costUsd > 0 ? 'billed' : 'estimate',
+	})).sort((a, b) => b.costUsd - a.costUsd || b.inputTokens + b.outputTokens - (a.inputTokens + a.outputTokens));
 }

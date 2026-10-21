@@ -31,6 +31,13 @@ module.exports = {
 					},
 				},
 			}),
+			// what appears in the conversation settles in rather than jumping in; used as `motion-safe:animate-card-in`, so it is off when the person asks for less motion
+			keyframes: {
+				'card-in': { from: { opacity: '0', transform: 'translateY(4px)' }, to: { opacity: '1', transform: 'none' } },
+			},
+			animation: {
+				'card-in': 'card-in 180ms cubic-bezier(0.2, 0.7, 0.2, 1) both',
+			},
 			fontSize: {
 				xs: '10px',
 				sm: '11px',

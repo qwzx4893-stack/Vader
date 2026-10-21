@@ -27,6 +27,10 @@ import { baseName } from '../common/externalAgents/externalAgentProtocol.js';
 import { IExternalAgentsService } from './externalAgents/externalAgentsService.js';
 import { IAgentRuntimeRegistryService } from './agentRuntime/agentRuntimeRegistryService.js';
 import { VaderAgentModel } from './agentRuntime/vaderAgentModel.js';
+import { ITaskCopyService } from './taskCopyService.js'
+import { ISkillService } from '../common/skills/skillService.js'
+import { selectSkills, toUsed } from '../common/skillMatch.js';
+import { EDITING_TOOLS } from '../common/taskCopyModel.js';
 import { buildClineTools } from './agentRuntime/clineToolAdapter.js';
 import { createClineAgentRuntime } from './agentRuntime/clineRuntimeAdapter.js';
 import { getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -52,21 +56,32 @@ import { IConvertToLLMMessageService } from './convertToLLMMessageService.js';
 import { deepClone } from '../../../../base/common/objects.js';
 import { IWorkspaceContextService } from '../../../../platform/workspace/common/workspace.js';
 import { IDirectoryStrService } from '../common/directoryStrService.js';
-import { IFileService } from '../../../../platform/files/common/files.js';
+import { IFileService, IFileStat } from '../../../../platform/files/common/files.js';
+import { VSBuffer } from '../../../../base/common/buffer.js';
+import { FileAction, FileOps, MAX_KEPT_FILE_BYTES, MAX_KEPT_FOLDER_FILES, redoActions, undoActions } from '../common/checkpointFileOps.js';
 import { IMCPService } from '../common/mcpService.js';
 import { RawMCPToolCall } from '../common/mcpServiceTypes.js';
 import { IPolicyService } from '../common/policy/policyService.js';
 import { policyRequestOfToolCall } from '../common/policy/toolPolicyRequest.js';
+import { GateInfo } from '../common/gateModel.js';
+import { ChatImage, imageChars } from '../common/imageRules.js';
 import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 import { addToLedger, addTurnToThreadUsage, budgetState, priceTurn, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
 import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
 import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
-import { ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
+import { enqueue, QueuedMessage, queueIsFull, removeQueued, RunSnapshot, shouldSendQueued, StoppedRun, stoppedWhile, takeNext } from '../common/runStateModel.js';
+import { ApprovalKind, ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
 import { composeReviewComment, ReviewComment } from '../common/reviewComment.js';
 import { localProviderNames } from '../common/vaderSettingsTypes.js';
 
 const USAGE_LEDGER_STORAGE_KEY = 'vader.usageLedger'
+/** localhost and the private networks: the pages of a project being developed on this computer are never "new sites" */
+const isThisComputer = (host: string): boolean => {
+	const h = host.toLowerCase().replace(/^\[|\]$/g, '')
+	return h === 'localhost' || h.endsWith('.localhost') || h === '::1' || h === '0.0.0.0' || /^127\./.test(h) || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+}
+
 const PROJECT_APPROVALS_STORAGE_KEY = 'vader.projectApprovals'
 
 
@@ -215,6 +230,19 @@ export type ThreadType = {
 	// if any. undefined/null on old, pre-Vader threads and on threads never assigned one -
 	// both mean "no agent, use default Chat behavior".
 	agentId?: string | null;
+
+	// Vader addition: the name the person gave this conversation (Rename). Without one the conversation is named by the first thing said in it.
+	customTitle?: string;
+
+	// Vader addition: the model that answered the last time this thread ran, so All agents and the chat's header can say which model did the work of
+	// each task and not the one that is chosen now.
+	model?: { providerName: string; modelName: string };
+
+	// Vader addition: set when the person stopped a run, cleared by the next message. The chat says what it was doing when it stopped.
+	stopped?: StoppedRun;
+
+	// Vader addition: messages the person wrote while a run was going. They are sent, in order, when the run ends on its own (not after a stop or an error), or at once with "Send now".
+	queued?: QueuedMessage[];
 
 	// Vader addition: the conversation this thread has with an external coding agent (Settings > Coding Agents): the agent's own id of it, so that a
 	// restart of the app or of the agent's process can pick the conversation up again. Absent on every thread that never used one.
@@ -451,11 +479,27 @@ export interface IChatThreadService {
 	abortRunning(threadId: string): Promise<void>;
 	dismissStreamError(threadId: string): void;
 
+	// looking back through a chat (Vader addition)
+	renameThread(threadId: string, title: string): void;
+	/** a new conversation that starts with the messages before `messageIdx`; its id (not switched to), or undefined when there is nothing to copy */
+	branchThread(threadId: string, messageIdx: number): string | undefined;
+
+	// messages that wait for the run to end, and a conversation that is getting full (Vader addition)
+	/** false when the message was empty or five already wait */
+	queueMessage(threadId: string, text: string): boolean;
+	removeQueuedMessage(threadId: string, id: string): void;
+	/** stops the run that is going and sends this waiting message at once */
+	sendQueuedMessageNow(threadId: string, id: string): Promise<void>;
+	/** summarises the older messages now, instead of waiting for the threshold: 'nothing' when there is too little to summarise, 'failed' when the model did not answer */
+	compactThreadNow(threadId: string): Promise<'done' | 'nothing' | 'failed'>;
+	/** a new chat that starts from the summary of this one; false when the summary could not be made */
+	startNewChatWithSummary(threadId: string): Promise<boolean>;
+
 	// call to edit a message
 	editUserMessageAndStreamResponse({ userMessage, messageIdx, threadId }: { userMessage: string, messageIdx: number, threadId: string }): Promise<void>;
 
 	// call to add a message
-	addUserMessageAndStreamResponse({ userMessage, threadId }: { userMessage: string, threadId: string }): Promise<void>;
+	addUserMessageAndStreamResponse({ userMessage, threadId, images }: { userMessage: string, threadId: string, images?: ChatImage[] }): Promise<void>;
 
 	// approve/reject
 	/** rememberForProject: also stop asking about this exact command (or MCP tool) in this project; never offered when the Policy Engine itself asked */
@@ -469,6 +513,8 @@ export interface IChatThreadService {
 	getThreadStatus(threadId: string): ThreadStatus;
 	getThreadUsage(threadId: string): ThreadUsage | undefined;
 	getUsageToday(): DayTotals;
+	/** what was used on each of the last days, and by which model (Settings > Usage and cost) */
+	getUsageLedger(): UsageLedger;
 	readonly onDidChangeUsage: Event<void>;
 
 	// pause: the run holds at its next step (the next request or the next tool call) until resumed
@@ -478,7 +524,7 @@ export interface IChatThreadService {
 
 	// "Allow in this project"
 	canRememberForProject(threadId: string): boolean;
-	listProjectApprovals(projectKey: string | null): { key: string; kind: 'command' | 'mcp'; label: string; addedAt: number }[];
+	listProjectApprovals(projectKey: string | null): { key: string; kind: ApprovalKind; label: string; addedAt: number }[];
 	revokeProjectApproval(projectKey: string, key: string): void;
 	readonly onDidChangeProjectApprovals: Event<void>;
 
@@ -536,6 +582,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IExternalAgentMainService private readonly _externalAgentMain: IExternalAgentMainService,
 		@IExternalAgentsService private readonly _externalAgents: IExternalAgentsService,
 		@IDialogService private readonly _dialogService: IDialogService,
+		@ITaskCopyService private readonly _taskCopyService: ITaskCopyService,
+		@ISkillService private readonly _skillService: ISkillService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -746,6 +794,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 
 		const modelSelectionOptions = modelSelection ? this._settingsService.state.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName] : undefined
+		// remember which model this thread ran with (a hidden helper thread is not listed anywhere, so it is not marked)
+		if (modelSelection && thread && !thread.isSubagentThread && !thread.isVerificationThread && (thread.model?.providerName !== modelSelection.providerName || thread.model?.modelName !== modelSelection.modelName)) {
+			this._patchThread(threadId, { model: { providerName: modelSelection.providerName, modelName: modelSelection.modelName } })
+		}
 		return { modelSelection, modelSelectionOptions }
 	}
 
@@ -832,7 +884,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (hard.kind !== 'ok') {
 			this._updateLatestTool(threadId, hard.kind === 'invalid_params'
 				? { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName }
-				: { role: 'tool', type: 'rejected', result: null, name: toolName, params: hard.toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
+				: { role: 'tool', type: 'rejected', result: null, name: toolName, params: hard.toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content, gate: hard.gate })
 			this._setStreamState(threadId, undefined)
 			this._addUserCheckpoint({ threadId })
 			return
@@ -929,6 +981,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	getThreadUsage(threadId: string): ThreadUsage | undefined { return this.state.allThreads[threadId]?.usage }
 
+	getUsageLedger(): UsageLedger { return this._ledger }
+
 	getUsageToday(): DayTotals {
 		return this._ledger[dayKey(new Date())] ?? { costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 }
 	}
@@ -948,7 +1002,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._storeAllThreads(newThreads)
 			this._setState({ allThreads: newThreads }, true)
 		}
-		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost, source)
+		this._ledger = addToLedger(this._ledger, dayKey(new Date()), usage, cost, source, { providerName: modelSelection.providerName, modelName: modelSelection.modelName, isLocal })
 		this._storageService.store(USAGE_LEDGER_STORAGE_KEY, JSON.stringify(this._ledger), StorageScope.APPLICATION, StorageTarget.USER)
 		this._onDidChangeUsage.fire()
 	}
@@ -1033,6 +1087,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			return typeof command === 'string' ? { kind: 'command', command } : null
 		}
 		if (!isABuiltinToolName(toolName)) return mcpServerName ? { kind: 'mcp', server: mcpServerName, tool: toolName } : null
+		if (toolName === 'browser_navigate') { // a site, not a page: the host is what the project's list holds
+			const url = (params as { url?: unknown } | null)?.url
+			try { return typeof url === 'string' ? { kind: 'host', host: new URL(url).hostname } : null } catch { return null }
+		}
 		return null
 	}
 
@@ -1044,7 +1102,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	canRememberForProject(threadId: string): boolean {
 		const last = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'tool' && m.type === 'tool_request')
 		if (!last || last.role !== 'tool' || last.type !== 'tool_request') return false
-		if (last.content.startsWith('(Vader policy requires approval')) return false // the Policy Engine asked: nothing may turn that off
+		// the Policy Engine asked: nothing may turn that off, except the question about a site that is new to the project, whose answer is the project's list of sites
+		if (last.content.startsWith('(Vader policy requires approval') && last.gate?.ruleId !== 'vader.ask.network-new-host') return false
 		return !!this._projectKeyOfThread(threadId) && !!this._subjectOfToolCall(last.name, last.params, last.mcpServerName)
 	}
 
@@ -1078,6 +1137,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 		this._bumpToolQueueEpoch(threadId) // tool calls of this turn that are still waiting for their turn must not start
+		const wasRunning = this.streamState[threadId]?.isRunning !== undefined
+		const snapshot = this._snapshotOfRun(threadId)
 		this._releasePause(threadId, 'aborted')
 
 		// add assistant message
@@ -1109,6 +1170,105 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 		this._setStreamState(threadId, undefined)
+		if (wasRunning) this._patchThread(threadId, { stopped: { at: Date.now(), doing: stoppedWhile(snapshot) } })
+	}
+
+	/** what the run is doing right now, for the words after a stop */
+	private _snapshotOfRun(threadId: string): RunSnapshot {
+		const st = this.streamState[threadId]
+		if (st?.isRunning === 'LLM') return { phase: 'writing' }
+		if (st?.isRunning === 'tool') {
+			const params = st.toolInfo.toolParams as { command?: unknown } | undefined
+			return { phase: 'tool', toolName: st.toolInfo.toolName, command: typeof params?.command === 'string' ? params.command : undefined }
+		}
+		if (st?.isRunning === 'awaiting_user') {
+			const last = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'tool')
+			const params = last && last.role === 'tool' ? ((last as { params?: unknown }).params as { command?: unknown } | undefined) : undefined
+			return { phase: 'awaiting_approval', command: typeof params?.command === 'string' ? params.command : undefined }
+		}
+		return { phase: 'idle' }
+	}
+
+	/** a change to one field of a thread, stored and announced */
+	private _patchThread(threadId: string, patch: Partial<ThreadType>) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		const newThreads = { ...this.state.allThreads, [threadId]: { ...thread, ...patch } }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads }, true)
+	}
+
+	// ---------- looking back through a chat ----------
+
+	renameThread(threadId: string, title: string): void {
+		const t = title.replace(/\s+/g, ' ').trim().slice(0, 120)
+		this._patchThread(threadId, { customTitle: t || undefined })
+	}
+
+	branchThread(threadId: string, messageIdx: number): string | undefined {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return undefined
+		const copied = thread.messages.slice(0, Math.max(0, messageIdx))
+		if (copied.length === 0) return undefined
+		const fresh = newThreadObject(this._currentWorkspaceFolders())
+		const branch: ThreadType = { ...fresh, projectFolders: thread.projectFolders, messages: copied, customTitle: thread.customTitle ? `${thread.customTitle} (branch)` : undefined }
+		const newThreads = { ...this.state.allThreads, [branch.id]: branch }
+		this._storeAllThreads(newThreads)
+		this._setState({ allThreads: newThreads }, true)
+		return branch.id
+	}
+
+	// ---------- messages that wait ----------
+
+	queueMessage(threadId: string, text: string): boolean {
+		const thread = this.state.allThreads[threadId]
+		if (!thread || !text.trim() || queueIsFull(thread.queued)) return false
+		this._patchThread(threadId, { queued: enqueue(thread.queued, text, generateUuid()) })
+		return true
+	}
+
+	removeQueuedMessage(threadId: string, id: string): void {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return
+		this._patchThread(threadId, { queued: removeQueued(thread.queued, id) })
+	}
+
+	async sendQueuedMessageNow(threadId: string, id: string): Promise<void> {
+		const thread = this.state.allThreads[threadId]
+		const message = thread?.queued?.find(m => m.id === id)
+		if (!thread || !message) return
+		this._patchThread(threadId, { queued: removeQueued(thread.queued, id) })
+		// sending a message while a run is going already stops that run first (see _addUserMessageAndStreamResponse)
+		await this.addUserMessageAndStreamResponse({ userMessage: message.text, threadId })
+	}
+
+	/** called when a run's promise has settled: the next waiting message goes out after a run that finished on its own */
+	private _afterRun(threadId: string, threw: boolean) {
+		const thread = this.state.allThreads[threadId]
+		if (!thread?.queued?.length) return
+		const end = threw || this.streamState[threadId]?.error ? 'error' : thread.stopped ? 'stopped' : 'finished'
+		if (!shouldSendQueued(end, thread.queued.length) || this.streamState[threadId]?.isRunning !== undefined) return
+		const { next, rest } = takeNext(thread.queued)
+		if (!next) return
+		this._patchThread(threadId, { queued: rest })
+		void this.addUserMessageAndStreamResponse({ userMessage: next.text, threadId })
+	}
+
+	async compactThreadNow(threadId: string): Promise<'done' | 'nothing' | 'failed'> {
+		const { modelSelection } = this._currentModelSelectionProps(threadId)
+		return this._maybeCompactThread(threadId, modelSelection, true)
+	}
+
+	async startNewChatWithSummary(threadId: string): Promise<boolean> {
+		const result = await this.compactThreadNow(threadId)
+		if (result === 'failed') return false
+		const summary = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'compacted_summary')
+		this.openNewThread()
+		const fresh = this.state.currentThreadId
+		if (summary && summary.role === 'compacted_summary' && fresh !== threadId) {
+			this._addMessageToThread(fresh, { role: 'compacted_summary', originalMessageCount: summary.originalMessageCount, compactedAt: new Date().toISOString(), summary: summary.summary })
+		}
+		return true
 	}
 
 
@@ -1141,7 +1301,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		onValidated?: (toolParams: ToolCallParams<ToolName>) => void,
 	): Promise<
 		| { kind: 'invalid_params', content: string }
-		| { kind: 'rejected', toolParams: ToolCallParams<ToolName>, content: string }
+		| { kind: 'rejected', toolParams: ToolCallParams<ToolName>, content: string, gate: GateInfo }
 		| { kind: 'ok', toolParams: ToolCallParams<ToolName>, policyVerdict: ReturnType<IPolicyService['evaluate']> | { kind: 'allow' } }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
@@ -1174,7 +1334,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 						: !isBuiltInTool && runningAgent.mcpServerNames && mcpServerName && !runningAgent.mcpServerNames.includes(mcpServerName) ? `Agent "${runningAgent.name}" is not permitted to use MCP server "${mcpServerName}".`
 							: null
 			if (blockedReason) {
-				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${blockedReason}` }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${blockedReason}`, gate: { by: 'agent-scope', effect: 'deny', reason: blockedReason } }
 			}
 		}
 
@@ -1188,7 +1348,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const blockedInReadonlyMode = !isBuiltInTool || READONLY_MODE_BLOCKED_BUILTIN_TOOLS.has(toolName as BuiltinToolName)
 			if (blockedInReadonlyMode) {
 				const modeLabel = isVerificationThread ? 'Verification' : isResearchThread ? 'Research' : currentChatMode === 'plan' ? 'Plan' : 'Gather'
-				return { kind: 'rejected', toolParams, content: `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}` }
+				const readOnlyContent = `Blocked: ${modeLabel} is read-only - this tool could modify the project or run something with side effects.${isVerificationThread ? ' An independent verifier must never be able to change what it is checking.' : isResearchThread ? ' A research delegation must never be able to make changes.' : ' Switch to Agent mode to actually make this change.'}`
+				return { kind: 'rejected', toolParams, content: readOnlyContent, gate: { by: 'read-only', effect: 'deny', reason: readOnlyContent } }
 			}
 		}
 
@@ -1196,7 +1357,11 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// model was told, and regardless of the user's auto-approve settings. A 'deny'
 		// verdict blocks the call outright (no approval prompt to bypass); an 'ask'
 		// verdict forces an approval prompt even if this tool category is auto-approved.
-		let policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined)
+		const projectKeyOfThisThread = this._projectKeyOfThread(threadId)
+		let policyReq = policyRequestOfToolCall(toolName, toolParams, isBuiltInTool, mcpServerName, runningAgentId ?? undefined, {
+			workspaceRoots: this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath),
+			isKnownHost: (host) => isThisComputer(host) || isApproved(this._projectApprovals, projectKeyOfThisThread, { kind: 'host', host }),
+		})
 		// A path can reach a protected file through a symbolic link (`docs/credentials` where `docs` links to ~/.aws), so the rules and the
 		// agent scope see the path as written AND where it really points (realPaths.ts).
 		const realpathOf = (u: URI) => this._fileService.realpath(u)
@@ -1205,12 +1370,12 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const roots = this._workspaceContextService.getWorkspace().folders.map(f => f.uri.fsPath)
 			const scopeVerdict = agentScopeVerdict(runningAgent, policyReq.filePaths, await withResolvedPaths(realpathOf, roots))
 			if (scopeVerdict.kind === 'deny') {
-				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${scopeVerdict.reason}` }
+				return { kind: 'rejected', toolParams, content: `Blocked by agent scope: ${scopeVerdict.reason}`, gate: { by: 'agent-scope', effect: 'deny', reason: scopeVerdict.reason } }
 			}
 		}
 		const policyVerdict = policyReq ? this._policyService.evaluate(policyReq) : { kind: 'allow' as const }
 		if (policyVerdict.kind === 'deny') {
-			return { kind: 'rejected', toolParams, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}` }
+			return { kind: 'rejected', toolParams, content: `Blocked by Vader policy (${policyVerdict.ruleId}): ${policyVerdict.reason}`, gate: { by: 'policy', effect: 'deny', ruleId: policyVerdict.ruleId, reason: policyVerdict.reason } }
 		}
 		return { kind: 'ok', toolParams, policyVerdict }
 	}
@@ -1231,8 +1396,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		const hard = await this._hardRulesCheck(threadId, toolName, mcpServerName, unvalidatedToolParams, (validated) => {
 			// once validated, add checkpoint for edit
-			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['edit_file']).uri }) }
-			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: (validated as BuiltinToolCallParams['rewrite_file']).uri }) }
+			// (the checkpoint is of the file the edit will really change: in the task's own copy when there is one)
+			const copyUri = (uri: URI) => this._taskCopyService.remapToolParams(threadId, toolName, { uri }).uri
+			if (toolName === 'edit_file') { this._addToolEditCheckpoint({ threadId, uri: copyUri((validated as BuiltinToolCallParams['edit_file']).uri) }) }
+			if (toolName === 'rewrite_file') { this._addToolEditCheckpoint({ threadId, uri: copyUri((validated as BuiltinToolCallParams['rewrite_file']).uri) }) }
 		})
 		if (hard.kind === 'invalid_params') {
 			this._addMessageToThread(threadId, { role: 'tool', type: 'invalid_params', rawParams: unvalidatedToolParams, result: null, name: toolName, content: hard.content, id: toolId, mcpServerName })
@@ -1240,7 +1407,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		const toolParams = hard.toolParams
 		if (hard.kind === 'rejected') {
-			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content })
+			this._addMessageToThread(threadId, { role: 'tool', type: 'rejected', result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, content: hard.content, gate: hard.gate })
 			return { kind: 'rejected', validatedParams: toolParams }
 		}
 		const policyVerdict = hard.policyVerdict
@@ -1258,7 +1425,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const autoApprove = !policyForcesAsk && approvalType ? (isSubagentThread || this._settingsService.state.globalSettings.autoApprove[approvalType] || this._isApprovedForProject(threadId, toolName, toolParams, mcpServerName)) : false
 			// add a tool_request because we use it for UI if a tool is loading (this should be improved in the future)
 			const requestContent = policyForcesAsk ? `(Vader policy requires approval: ${policyVerdict.reason})` : '(Awaiting user permission...)'
-			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+			const gate: GateInfo | undefined = policyVerdict.kind === 'ask' ? { by: 'policy', effect: 'ask', ruleId: policyVerdict.ruleId, reason: policyVerdict.reason } : undefined
+			this._addMessageToThread(threadId, { role: 'tool', type: 'tool_request', content: requestContent, result: null, name: toolName, params: toolParams, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, ...(gate ? { gate } : {}) })
 			if (!autoApprove) {
 				return { kind: 'needs_approval', validatedParams: toolParams }
 			}
@@ -1282,6 +1450,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	): Promise<{ resultStr: string, isError: boolean } | { interrupted: true }> => {
 
 		const isBuiltInTool = isABuiltinToolName(toolName)
+		const startedAt = Date.now() // how long the call took, kept with the result (a command says it in its header)
 		let toolResult: ToolResult<ToolName>
 		let toolResultStr: string
 
@@ -1298,7 +1467,13 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setStreamState(threadId, { isRunning: 'tool', interrupt: interruptorPromise, toolInfo: { toolName, toolParams, id: toolId, content: 'interrupted...', rawParams: unvalidatedToolParams, mcpServerName } })
 
 			if (isBuiltInTool) {
-				const { result, interruptTool } = await this._toolsService.callTool[toolName](toolParams as any)
+				// In a task's own copy every path (and the folder a command runs in) is the copy's; the gate above saw the paths as the model wrote them.
+				// Commands and tests read the copy from disk, so what the agent changed in an open editor is written first.
+				const inCopy = !!this._taskCopyService.copyOf(threadId)
+				if (inCopy && (toolName === 'run_command' || toolName === 'run_persistent_command' || toolName === 'run_verification')) { await this._taskCopyService.saveOpenFiles(threadId) }
+				const callParams = this._taskCopyService.remapToolParams(threadId, toolName, toolParams as object)
+				if (toolName === 'create_file_or_folder' || toolName === 'delete_file_or_folder') { await this._recordFileOps(threadId, toolName, callParams as { uri: URI, isFolder?: boolean }) }
+				const { result, interruptTool } = await this._toolsService.callTool[toolName](callParams as any)
 				const interruptor = () => { interrupted = true; interruptTool?.() }
 				resolveInterruptor(interruptor)
 
@@ -1345,7 +1520,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 
 		// 5. add to history and keep going
-		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName })
+		this._updateLatestTool(threadId, { role: 'tool', type: 'success', params: toolParams, result: toolResult, name: toolName, content: toolResultStr, id: toolId, rawParams: unvalidatedToolParams, mcpServerName, durationMs: Date.now() - startedAt })
+		// a step that can change files updates the count on the task's copy
+		if (EDITING_TOOLS.has(toolName) && this._taskCopyService.copyOf(threadId)) { void this._taskCopyService.afterRun(threadId, { keepIfEmpty: true }) }
 		return { resultStr: toolResultStr, isError: false }
 	}
 
@@ -1444,7 +1621,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	/** Characters a message adds to the request the model receives (what contextBudget measures), not what is shown in the chat. */
 	private _sizeOfMessageForRequest(m: ChatMessage): SizedMessage {
-		if (m.role === 'user') return { role: 'user', size: m.content.length }
+		if (m.role === 'user') return { role: 'user', size: m.content.length + (m.images ?? []).reduce((n, i) => n + imageChars(i.width, i.height), 0) }
 		if (m.role === 'assistant') return { role: 'assistant', size: m.displayContent.length }
 		if (m.role === 'tool') {
 			if (m.outputPruned) return { role: 'tool', size: prunedOutputNote(m.name, m.content.length).length }
@@ -1513,10 +1690,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		})
 	}
 
-	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null): Promise<void> {
-		if (!modelSelection) return
+	private async _maybeCompactThread(threadId: string, modelSelection: ModelSelection | null, force = false): Promise<'done' | 'nothing' | 'failed'> {
+		if (!modelSelection) return 'nothing'
 		let thread = this.state.allThreads[threadId]
-		if (!thread) return
+		if (!thread) return 'nothing'
 
 		const { overridesOfModel } = this._settingsService.state
 		const { contextWindow, reservedOutputTokenSpace } = getModelCapabilities(modelSelection.providerName, modelSelection.modelName, overridesOfModel)
@@ -1531,18 +1708,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			this._setState({ allThreads: prunedThreads })
 			thread = prunedThread
 		}
-		if (!plan.summarise) return // plenty of room left - the common case, checked cheaply every turn
+		if (!plan.summarise && !force) return 'nothing' // plenty of room left - the common case, checked cheaply every turn
 
 		// step 2: a structured summary of the older messages
 		const lastSummaryIdx = findLastIdx(thread.messages, m => m.role === 'compacted_summary') ?? -1
 		const compactableRange = thread.messages.slice(lastSummaryIdx + 1)
-		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+		if (compactableRange.length <= ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP + ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return 'nothing'
 
 		const toCompact = compactableRange.slice(0, compactableRange.length - ChatThreadService.COMPACTION_TAIL_MESSAGES_TO_KEEP)
-		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return
+		if (toCompact.length < ChatThreadService.COMPACTION_MIN_MESSAGES_TO_COMPACT) return 'nothing'
 
 		const conversationText = toCompact.map(m => this._renderMessageForCompaction(m)).filter(Boolean).join('\n\n')
-		if (!conversationText.trim()) return
+		if (!conversationText.trim()) return 'nothing'
 
 		// Vader addition: route the summarization call itself through the Model Router's
 		// 'summarization' category (favors cheap/configured models - see
@@ -1558,7 +1735,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			// summarization call itself fails, do nothing this round. Vader's original
 			// per-message truncation (prepareMessages, convertToLLMMessageService.ts) is
 			// still the final safety net if the raw context genuinely overflows.
-			return
+			return 'failed'
 		}
 
 		const summary = this._parseCompactionTags(summaryText)
@@ -1586,6 +1763,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		}
 		this._storeAllThreads(newThreads)
 		this._setState({ allThreads: newThreads })
+		return 'done'
 	}
 
 	// Vader addition: Plan Mode's plan capture. Parses a <vader_plan> block (see
@@ -1697,6 +1875,15 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		const chatMode = (isVerificationThread || isResearchThread) ? 'gather' : globalChatMode
 		const agentId = this.state.allThreads[threadId]?.agentId
 
+		// In Agent mode the agent works in its own copy of the project (common/taskCopyModel.ts): made here, before its first step, after asking what must be asked.
+		// The hidden threads Vader starts for itself (sub-agents, verification, research) are not given one: parallel tasks have their own, and the others do not write.
+		if (chatMode === 'agent' && !thisThread?.isSubagentThread && !isVerificationThread && !isResearchThread) {
+			const lastUser = findLast(this.state.allThreads[threadId]?.messages ?? [], m => m.role === 'user')
+			this._setStreamState(threadId, { isRunning: 'idle', interrupt: Promise.resolve(() => this._taskCopyService.answerQuestion(threadId, 'cancel')) })
+			const prepared = await this._taskCopyService.prepareForTask(threadId, lastUser?.role === 'user' ? lastUser.displayContent : '')
+			if (prepared === 'cancel') { this._setStreamState(threadId, undefined); return }
+		}
+
 		const mcpTools = this._mcpService.getMCPTools()
 		const tools = buildClineTools({
 			chatMode,
@@ -1707,9 +1894,10 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 		const model = new VaderAgentModel(this._llmMessageService, this._convertToLLMMessagesService, {
 			getThreadMessages: () => this.state.allThreads[threadId]?.messages ?? [],
-			maybeCompactThread: () => this._maybeCompactThread(threadId, modelSelection),
+			maybeCompactThread: async () => { await this._maybeCompactThread(threadId, modelSelection) },
 			chatMode,
 			agentId,
+			getCopy: () => this._taskCopyService.copyOf(threadId),
 			modelSelection,
 			modelSelectionOptions,
 			overridesOfModel: this._settingsService.state.overridesOfModel,
@@ -1848,6 +2036,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		} catch (error) {
 			unsubscribe()
 			throw error // handled by _runChatAgent, which surfaces it as a per-task stream error
+		} finally {
+			// the count of changed files on the task's copy is brought up to date; a copy where nothing changed is removed (unless a step is still waiting for a yes)
+			if (this._taskCopyService.getState(threadId)) { void this._taskCopyService.afterRun(threadId, { keepIfEmpty: this._currentIsRunning(threadId) === 'awaiting_user' }) }
 		}
 	}
 
@@ -2053,6 +2244,59 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		})
 	}
 	// call this right after LLM edits a file
+	// A file the agent makes or deletes is kept with a checkpoint taken just before, so that going back can remove it or bring it back (common/checkpointFileOps.ts). A deleted file is
+	// kept with its text, up to a size; a bigger one is deleted without that safety net.
+	private async _recordFileOps(threadId: string, toolName: 'create_file_or_folder' | 'delete_file_or_folder', params: { uri: URI, isFolder?: boolean }): Promise<void> {
+		try {
+			const ops: FileOps = { created: [], createdFolders: [], deleted: [] }
+			const uri = params.uri
+			if (toolName === 'create_file_or_folder') {
+				if (await this._fileService.exists(uri)) return // nothing new is made
+				if (params.isFolder) ops.createdFolders.push(uri.fsPath); else ops.created.push(uri.fsPath)
+			} else {
+				const stat = await this._fileService.resolve(uri, { resolveMetadata: true }).catch(() => undefined)
+				if (!stat) return
+				const keep = async (s: IFileStat, budget: { files: number }): Promise<void> => {
+					if (s.isDirectory) {
+						const dir = await this._fileService.resolve(s.resource, { resolveMetadata: true }).catch(() => undefined)
+						for (const c of dir?.children ?? []) { if (budget.files > 0) await keep(c, budget) }
+					} else if (s.isFile && budget.files > 0 && (s.size ?? 0) <= MAX_KEPT_FILE_BYTES) {
+						const content = (await this._fileService.readFile(s.resource)).value.toString()
+						ops.deleted.push({ fsPath: s.resource.fsPath, content })
+						budget.files--
+					}
+				}
+				await keep(stat, { files: MAX_KEPT_FOLDER_FILES })
+			}
+			if (ops.created.length + ops.createdFolders.length + ops.deleted.length === 0) return
+			this._addCheckpoint(threadId, { role: 'checkpoint', type: 'tool_edit', vaderFileSnapshotOfURI: {}, userModifications: { vaderFileSnapshotOfURI: {} }, fileOps: ops })
+		} catch { /* the file could not be looked at: the tool runs, and going back will not cover it */ }
+	}
+
+	private async _applyFileActions(actions: readonly FileAction[]): Promise<void> {
+		for (const a of actions) {
+			const uri = URI.file(a.fsPath)
+			try {
+				if (a.kind === 'delete') { if (await this._fileService.exists(uri)) await this._fileService.del(uri, { useTrash: true }).catch(() => this._fileService.del(uri)) }
+				else if (a.kind === 'write') { await this._fileService.writeFile(uri, VSBuffer.fromString(a.content)) }
+				else if (a.kind === 'make-folder') { await this._fileService.createFolder(uri) }
+				else if (a.kind === 'remove-folder-if-empty') {
+					const dir = await this._fileService.resolve(uri).catch(() => undefined)
+					if (dir && dir.isDirectory && (dir.children?.length ?? 0) === 0) await this._fileService.del(uri)
+				}
+			} catch { /* one file that cannot be changed does not stop the others */ }
+		}
+	}
+
+	private _fileOpsBetween(thread: { messages: readonly ChatMessage[] }, loIdx: number, hiIdx: number): FileOps[] {
+		const out: FileOps[] = []
+		for (let k = Math.max(0, loIdx); k <= hiIdx && k < thread.messages.length; k++) {
+			const m = thread.messages[k]
+			if (m.role === 'checkpoint' && m.fileOps) out.push(m.fileOps)
+		}
+		return out
+	}
+
 	private _addToolEditCheckpoint({ threadId, uri, }: { threadId: string, uri: URI }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return
@@ -2216,6 +2460,8 @@ A B C D E F G H I J
 We need to apply latest change for anything that happened between from+1 and to.
 We only need to do it for files that were edited since `from`, ie files between from+1...to.
 */
+		// going forward again: files made are made again (empty; the edit checkpoints below put their text back) and files deleted are deleted again, before the edits are applied
+		if (toIdx > fromIdx) { void this._applyFileActions(redoActions(this._fileOpsBetween(thread, fromIdx + 1, toIdx))) }
 		if (toIdx > fromIdx) {
 			const { lastIdxOfURI } = this._getCheckpointsBetween({ threadId, loIdx: fromIdx + 1, hiIdx: toIdx })
 			for (const fsPath in lastIdxOfURI) {
@@ -2233,6 +2479,8 @@ We only need to do it for files that were edited since `from`, ie files between 
 			}
 		}
 
+		// files the agent made or deleted between the two checkpoints: undone after the edits are put back, so a file made and then edited is not made again by its own snapshot
+		if (toIdx < fromIdx) { void this._applyFileActions(undoActions(this._fileOpsBetween(thread, toIdx + 1, fromIdx))) }
 		this._setThreadState(threadId, { currCheckpointIdx: toIdx })
 	}
 
@@ -2272,8 +2520,10 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		p.then(() => {
 			if (threadId !== this.state.currentThreadId) notify({ error: null })
+			this._afterRun(threadId, false)
 		}).catch((e) => {
 			if (threadId !== this.state.currentThreadId) notify({ error: getErrorMessage(e) })
+			this._afterRun(threadId, true)
 			throw e
 		})
 	}
@@ -2283,7 +2533,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	private async _addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, images?: ChatImage[] }) {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return // should never happen
 
@@ -2303,8 +2553,11 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
 		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
-		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
+		// the skills this task uses: the ones it names or fits (the others are only listed to the model), kept with the message so the chat can say so
+		const usedSkills = selectSkills(this._skillService.listActive().map(s => ({ id: s.id, name: s.name, description: s.description })), instructions).used.map(toUsed)
+		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState, ...(images && images.length > 0 ? { images } : {}), ...(usedSkills.length > 0 ? { skillsUsed: usedSkills } : {}) }
 		this._addMessageToThread(threadId, userHistoryElt)
+		if (this.state.allThreads[threadId]?.stopped) this._patchThread(threadId, { stopped: undefined })
 
 		this._setThreadState(threadId, { currCheckpointIdx: null }) // no longer at a checkpoint because started streaming
 
@@ -2320,7 +2573,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 
 
-	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string }) {
+	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, images?: ChatImage[] }) {
 		const thread = this.state.allThreads[threadId];
 		if (!thread) return
 
@@ -2343,7 +2596,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		}
 
 		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId });
+		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images });
 
 	}
 
@@ -2358,6 +2611,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 		// get prev and curr selections before clearing the message
 		const currSelns = thread.messages[messageIdx].state.stagingSelections || [] // staging selections for the edited message
+		const keptImages = (thread.messages[messageIdx] as { images?: ChatImage[] }).images // what was sent with it goes again
 
 		// clear messages up to the index
 		const slicedMessages = thread.messages.slice(0, messageIdx)
@@ -2372,7 +2626,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		})
 
 		// re-add the message and stream it
-		this._addUserMessageAndStreamResponse({ userMessage, _chatSelections: currSelns, threadId })
+		this._addUserMessageAndStreamResponse({ userMessage, _chatSelections: currSelns, threadId, images: keptImages })
 	}
 
 	// ---------- the rest ----------

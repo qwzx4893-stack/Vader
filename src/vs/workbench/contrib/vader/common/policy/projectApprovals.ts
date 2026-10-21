@@ -14,9 +14,12 @@
 
 export type ApprovalSubject =
 	| { readonly kind: 'command'; readonly command: string }
-	| { readonly kind: 'mcp'; readonly server: string; readonly tool: string };
+	| { readonly kind: 'mcp'; readonly server: string; readonly tool: string }
+	/** a site the agent's browser may open in this project without asking again (the host only, not a page) */
+	| { readonly kind: 'host'; readonly host: string };
 
-export type StoredApproval = { readonly kind: 'command' | 'mcp'; readonly label: string; readonly addedAt: number };
+export type ApprovalKind = 'command' | 'mcp' | 'host';
+export type StoredApproval = { readonly kind: ApprovalKind; readonly label: string; readonly addedAt: number };
 export type ProjectApprovalState = { readonly version: 1; readonly projects: { readonly [projectKey: string]: { readonly [approvalKey: string]: StoredApproval } | undefined } };
 
 export const MAX_APPROVALS_PER_PROJECT = 200;
@@ -24,6 +27,10 @@ export const MAX_COMMAND_LENGTH = 2000;
 
 /** the key a subject is remembered under, or null when it must never be remembered (empty, several lines, too long) */
 export function approvalKeyOf(subject: ApprovalSubject): string | null {
+	if (subject.kind === 'host') {
+		const host = subject.host.trim().toLowerCase();
+		return host && host.length <= 253 && !/[\s/]/.test(host) ? `host\u0000${host}` : null;
+	}
 	if (subject.kind === 'mcp') {
 		const server = subject.server.trim();
 		const tool = subject.tool.trim();
@@ -35,7 +42,7 @@ export function approvalKeyOf(subject: ApprovalSubject): string | null {
 }
 
 export function labelOf(subject: ApprovalSubject): string {
-	return subject.kind === 'mcp' ? `${subject.server}: ${subject.tool}` : subject.command.replace(/[ \t]+/g, ' ').trim();
+	return subject.kind === 'host' ? subject.host.trim().toLowerCase() : subject.kind === 'mcp' ? `${subject.server}: ${subject.tool}` : subject.command.replace(/[ \t]+/g, ' ').trim();
 }
 
 export function parseApprovalState(raw: unknown): ProjectApprovalState {
@@ -48,7 +55,7 @@ export function parseApprovalState(raw: unknown): ProjectApprovalState {
 				const clean: { [key: string]: StoredApproval } = {};
 				for (const [key, e] of Object.entries(entries as Record<string, unknown>)) {
 					const v = e as Partial<StoredApproval> | null;
-					if (v && (v.kind === 'command' || v.kind === 'mcp') && typeof v.label === 'string' && typeof v.addedAt === 'number' && key.startsWith(`${v.kind}\u0000`)) clean[key] = { kind: v.kind, label: v.label, addedAt: v.addedAt };
+					if (v && (v.kind === 'command' || v.kind === 'mcp' || v.kind === 'host') && typeof v.label === 'string' && typeof v.addedAt === 'number' && key.startsWith(`${v.kind}\u0000`)) clean[key] = { kind: v.kind, label: v.label, addedAt: v.addedAt };
 				}
 				if (Object.keys(clean).length) out[project] = clean;
 			}
@@ -85,7 +92,7 @@ export function withoutApproval(state: ProjectApprovalState, projectKey: string,
 	return { version: 1, projects };
 }
 
-export function listApprovals(state: ProjectApprovalState, projectKey: string | null): { key: string; kind: 'command' | 'mcp'; label: string; addedAt: number }[] {
+export function listApprovals(state: ProjectApprovalState, projectKey: string | null): { key: string; kind: ApprovalKind; label: string; addedAt: number }[] {
 	if (!projectKey) return [];
 	return Object.entries(state.projects[projectKey] ?? {}).map(([key, v]) => ({ key, kind: v!.kind, label: v!.label, addedAt: v!.addedAt })).sort((a, b) => b.addedAt - a.addedAt);
 }

@@ -20,10 +20,18 @@ import './quickEditActions.js'
 
 // register Autocomplete
 import './autocompleteService.js'
+import './nextEditService.js'
 
 // settings pane
 import './vaderSettingsPane.js'
 import './vaderAddonsPane.js'
+import './vaderShellService.js'
+import './vaderReviewService.js'
+import '../common/codebaseIndex/codebaseIndexService.js'
+import './codebaseIndexContribution.js'
+import './taskCopyService.js'
+import './vaderUpdateCoordinator.js'
+import './vaderShellPane.js'
 import './trustMonitor.js'
 
 // register css

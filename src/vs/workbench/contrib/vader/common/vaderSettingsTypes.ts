@@ -157,6 +157,12 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
 }
 
+/** the page where a person gets a key for a provider (the link of its help text); undefined for one that has no key page, such as a model on this computer */
+export const keyPageOfProvider = (providerName: ProviderName): string | undefined => {
+	const m = /\[(?:API Key here|Bedrock API key)\]\((https:\/\/[^)\s]+)\)/.exec(subTextMdOfProviderName(providerName))
+	return m?.[1]
+}
+
 type DisplayInfo = {
 	title: string;
 	placeholder: string;
@@ -517,6 +523,10 @@ export const isFeatureNameDisabled = (featureName: FeatureName, settingsState: V
 export type ChatMode = 'agent' | 'gather' | 'normal' | 'plan'
 
 
+/** the language of Vader's own screens (Settings, Language): English, Arabic (the screens are laid out right to left) or Chinese */
+export type UiLanguage = 'en' | 'ar' | 'zh'
+export const uiLanguages: readonly UiLanguage[] = ['en', 'ar', 'zh']
+
 export type GlobalSettings = {
 	autoRefreshModels: boolean;
 	aiInstructions: string;
@@ -544,6 +554,13 @@ export type GlobalSettings = {
 	modelPriceOverrides: { [modelName: string]: { input: number, output: number, cache_read?: number, cache_write?: number } };
 	/** ids of the Add-ons sources the person turned off (common/marketplace/addonSources.ts); all others are on, including ones added later */
 	addonSourcesOff: string[];
+	/** Agent mode works in a copy of the project (a git worktree on its own branch) that the person merges when they accept; off: it edits the folder directly (common/taskCopyModel.ts) */
+	taskCopies: boolean;
+	/** keep an index of the open project on this computer, so that the agent can find code by what it does (common/codebaseIndex/); nothing leaves the computer */
+	codebaseIndex: boolean;
+	/** suggest the next edit, not only the next characters: a change somewhere near the cursor, drawn in the editor, that Tab accepts (common/nextEdit/); asks a model after a pause, so it costs requests */
+	nextEdit: boolean;
+	uiLanguage: UiLanguage;
 }
 
 export const defaultGlobalSettings: GlobalSettings = {
@@ -567,6 +584,10 @@ export const defaultGlobalSettings: GlobalSettings = {
 	priceDiscountPercent: 0,
 	modelPriceOverrides: {},
 	addonSourcesOff: [],
+	taskCopies: true,
+	codebaseIndex: true,
+	nextEdit: false,
+	uiLanguage: 'en',
 }
 
 export type GlobalSettingName = keyof GlobalSettings
@@ -620,4 +641,8 @@ export interface MCPUserStateOfName {
 
 export interface MCPUserState {
 	isOn: boolean;
+	/** the tools the person has seen and allowed (common/mcpToolReview.ts); a tool the server adds later waits for an answer. Absent: never looked at. */
+	approvedTools?: string[];
+	/** tools the person keeps off */
+	offTools?: string[];
 }

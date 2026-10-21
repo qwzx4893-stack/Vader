@@ -1,0 +1,186 @@
+Back to the app ::: العودة إلى التطبيق
+Search settings ::: بحث في الإعدادات
+Settings pages ::: صفحات الإعدادات
+Models ::: النماذج
+Model router ::: موجّه النماذج
+Agent ::: الوكيل
+Permissions ::: الأذونات
+Usage and cost ::: الاستخدام والتكلفة
+Saved agents ::: الوكلاء المحفوظون
+Skills ::: المهارات
+MCP servers ::: خوادم MCP
+Memory and instructions ::: الذاكرة والتعليمات
+Workspace ::: مساحة العمل
+Privacy and network ::: الخصوصية والشبكة
+Language ::: اللغة
+About and updates ::: حول التطبيق والتحديثات
+Language of the screens ::: لغة الشاشات
+The language of Vader’s screens. The editor around them, and what you and the agent write, stay as they are. ::: لغة شاشات Vader. أما المحرر المحيط بها وما تكتبه أنت والوكيل فيبقى كما هو.
+Arabic is written from right to left ::: العربية تُكتب من اليمين إلى اليسار
+Choosing Arabic turns the screens around, so the first thing you read is on the right. Code, file names and paths stay left to right. ::: اختيار العربية يعكس اتجاه الشاشات، فيكون أول ما تقرؤه على اليمين. أما الكود وأسماء الملفات والمسارات فتبقى من اليسار إلى اليمين.
+Decide what the agent may do on its own. Some rules are locked and apply in every mode. ::: حدّد ما يجوز للوكيل فعله بمفرده. بعض القواعد مقفلة وتسري في كل الأوضاع.
+Mode ::: الوضع
+Safe ::: آمن
+Asks before every change and every command. ::: يسأل قبل كل تغيير وكل أمر.
+Balanced ::: متوازن
+Edits go through. Commands and sensitive files ask. ::: التعديلات تُنفَّذ مباشرة. الأوامر والملفات الحساسة تطلب إذنك.
+Autonomous ::: ذاتي
+Runs without asking, except what is locked. ::: يعمل دون أن يسأل، عدا ما هو مقفل.
+Allowed in this project ::: المسموح في هذا المشروع
+Allow without asking, by kind ::: السماح دون سؤال، حسب النوع
+on top of the mode ::: فوق الوضع المختار
+Edit files ::: تعديل الملفات
+edits are shown to you either way ::: تُعرض لك التعديلات في الحالتين
+Allow without asking: Edit files ::: السماح دون سؤال: تعديل الملفات
+Run commands ::: تشغيل الأوامر
+except the ones that always ask ::: عدا التي تسأل دائماً
+Allow without asking: Run commands ::: السماح دون سؤال: تشغيل الأوامر
+Use MCP tools ::: استخدام أدوات MCP
+Allow without asking: Use MCP tools ::: السماح دون سؤال: استخدام أدوات MCP
+Accept the agent’s changes as they are made ::: قبول تغييرات الوكيل فور إجرائها
+no Accept button per file ::: بلا زر قبول لكل ملف
+Fix the lint errors it causes ::: إصلاح أخطاء الفحص (lint) التي يسببها
+Where the agent works ::: أين يعمل الوكيل
+Work in a copy of the project ::: العمل في نسخة من المشروع
+Agent mode edits a separate copy on its own branch, and your folder changes only when you merge it. Needs a git project; Vader offers to start git in one that is not. ::: يعدّل وضع الوكيل نسخة منفصلة على فرع خاص به، ولا يتغيّر مجلدك إلا عند دمجها. يتطلب مشروع git؛ ويعرض Vader تهيئة git في المشروع الذي لا يحتويه.
+Spending ::: الإنفاق
+Today ::: اليوم
+An estimate from list prices. ::: تقدير من الأسعار المعلنة.
+Daily limit ::: الحد اليومي
+at the estimate a running task pauses and asks before it goes on ::: عند بلوغ التقدير تتوقف المهمة الجارية وتسأل قبل المتابعة
+none ::: لا يوجد
+Daily limit in dollars ::: الحد اليومي بالدولار
+✓ No daily limit ::: ✓ بلا حد يومي
+Locked rules ::: القواعد المقفلة
+cannot be turned off in any mode ::: لا يمكن إيقافها في أي وضع
+A private key or a stored login (SSH private keys, AWS credentials, GPG private keys, git credentials) ::: مفتاح خاص أو تسجيل دخول محفوظ (مفاتيح SSH الخاصة، بيانات AWS، مفاتيح GPG الخاصة، بيانات git)
+deny ::: رفض
+Command looks like it would recursively delete a root, home, system or drive directory, or wipe a filesystem/disk ::: يبدو أن الأمر سيحذف تكرارياً مجلداً جذرياً أو مجلد المستخدم أو النظام أو قرصاً كاملاً، أو سيمسح نظام ملفات أو قرصاً
+Command matches a known fork-bomb pattern ::: الأمر يطابق نمطاً معروفاً لقنبلة المعالجات (fork bomb)
+Write/delete of an OS-critical system file ::: كتابة أو حذف ملف نظام حرج
++ Add my own rule ::: + إضافة قاعدة خاصة بي
+Rules that ask ::: القواعد التي تسأل
+you can turn each one off ::: يمكنك إيقاف كل واحدة
+This touches a file that commonly holds credentials or private keys (.env, SSH keys, cloud credentials, certificates) ::: هذا يمس ملفاً يحتوي عادةً على بيانات اعتماد أو مفاتيح خاصة (.env، مفاتيح SSH، بيانات السحابة، الشهادات)
+This writes a file that can run code on its own later (editor tasks/settings, git hooks, .envrc, shell startup files, MCP/devcontainer config, workspace AI rules) ::: هذا يكتب ملفاً قادراً على تشغيل كود من تلقاء نفسه لاحقاً (مهام المحرر وإعداداته، خطافات git، .envrc، ملفات بدء الصدفة، إعدادات MCP وdevcontainer، قواعد الذكاء الاصطناعي لمساحة العمل)
+This reads a file that is outside the open project ::: هذا يقرأ ملفاً خارج المشروع المفتوح
+This opens an address on a site that is not on this project’s list ::: هذا يفتح عنواناً في موقع ليس في قائمة هذا المشروع
+This installs a skill, extension or MCP server, which can run arbitrary code or change every future prompt ::: هذا يثبّت مهارة أو امتداداً أو خادم MCP، وقد ينفّذ كوداً عشوائياً أو يغيّر كل طلب لاحق
+This command requests elevated (sudo/administrator) privileges ::: هذا الأمر يطلب صلاحيات مرتفعة (sudo أو مسؤول)
+This sets a Git option that names a program to run (hooks path, fsmonitor, ssh command, pager, credential helper...), which runs it later ::: هذا يضبط خياراً في Git يحدد برنامجاً للتشغيل (مسار الخطافات، fsmonitor، أمر ssh، عارض الصفحات، مساعد بيانات الاعتماد...) وسيشغّله لاحقاً
+This is a force-push, which can overwrite remote history other people depend on ::: هذا دفع قسري (force-push) قد يستبدل سجلاً بعيداً يعتمد عليه آخرون
+This pipes a downloaded script directly into a shell, which is a common supply-chain risk ::: هذا يمرّر سكربتاً منزَّلاً مباشرة إلى الصدفة، وهو خطر شائع في سلسلة التوريد
+This prints the environment variables, or a variable that looks like a secret (key, token, password), which often hold API keys ::: هذا يطبع متغيرات البيئة أو متغيراً يبدو سرياً (مفتاح أو رمز أو كلمة مرور)، وكثيراً ما تحتوي على مفاتيح API
+My own rules ::: قواعدي الخاصة
+Ask before deleting a build folder ::: السؤال قبل حذف مجلد البناء
+Remove ::: إزالة
+{0} tokens in, {1} out ::: {0} رمز مُدخل، {1} مُخرج
+Model ::: النموذج
+Tokens in / out ::: الرموز المُدخلة / المُخرجة
+Cost ::: التكلفة
+Where the number comes from ::: مصدر الرقم
+Estimate ::: تقدير
+Billed by provider ::: تحاسب به الجهة المزوّدة
+Free ::: مجاني
+Free, runs here ::: مجاني، يعمل هنا
+Set a price ::: تحديد سعر
+No price known ::: السعر غير معروف
+Pause a task when today’s estimate reaches ::: إيقاف المهمة مؤقتاً عندما يبلغ تقدير اليوم
+The limit counts the estimate. A provider that bills more than the list price can still spend more than this. ::: يُحتسب الحد على التقدير. وقد تنفق جهة تحاسب بأكثر من السعر المعلن أكثر من هذا.
+Enter a number, like 5 or 12.50. ::: أدخل رقماً، مثل 5 أو 12.50.
+Check against the provider ::: التحقق لدى الجهة المزوّدة
+Anthropic Console ::: وحدة تحكم Anthropic
+OpenRouter activity ::: نشاط OpenRouter
+opens in your browser ::: يُفتح في متصفحك
+List prices are built into this version of Vader. ::: الأسعار المعلنة مضمّنة في هذا الإصدار من Vader.
+if you pay a contracted rate. ::: إذا كنت تدفع سعراً متعاقداً عليه.
+Use my own prices ::: استخدام أسعاري الخاصة
+Discount on list prices ::: خصم على الأسعار المعلنة
+For a flat discount, such as 20% off. It changes the estimate only, never what you are charged. ::: لخصم ثابت، مثل 20%. يغيّر التقدير فقط، ولا يغيّر ما يُحاسَب عليه فعلاً.
+Discount in percent ::: الخصم بالنسبة المئوية
+Enter a percent from 0 to 100, like 20. ::: أدخل نسبة من 0 إلى 100، مثل 20.
+Your own prices ::: أسعارك الخاصة
+For a model Vader has no price for, or a contract. US dollars per million tokens. A model whose provider reports the charge does not need one. ::: لنموذج لا يعرف Vader سعره، أو لسعر متعاقد عليه. بالدولار الأمريكي لكل مليون رمز. النموذج الذي تُبلغ جهته المزوّدة عن الرسوم لا يحتاج إلى سعر.
+Input ::: المُدخل
+Input price ::: سعر المُدخل
+Output ::: المُخرج
+Output price ::: سعر المُخرج
+Besides the model you chat with, Vader makes helper calls: handing work to a sub-agent, researching, driving a browser, summarising old messages and checking results. The router decides which model each one uses. ::: إلى جانب النموذج الذي تحادثه، يجري Vader استدعاءات مساعدة: إسناد عمل إلى وكيل فرعي، والبحث، وقيادة المتصفح، وتلخيص الرسائل القديمة، ومراجعة النتائج. ويقرّر الموجّه أي نموذج يستخدمه كل منها.
+Automatic ::: تلقائي
+Choose myself ::: أختار بنفسي
+Automatic picks the best model you have a key for, by what it can do. It never picks a provider you have not set up. ::: يختار الوضع التلقائي أفضل نموذج لديك مفتاح له بحسب قدراته. ولا يختار أبداً جهة مزوّدة لم تُعدّها.
+Job ::: المهمة
+What it is ::: ما هي
+Model used now ::: النموذج المستخدم الآن
+Cost per 1M ::: التكلفة لكل مليون
+Sub-agent work ::: عمل الوكلاء الفرعيين
+Tasks handed off to a helper agent ::: مهام تُسند إلى وكيل مساعد
+Research ::: البحث
+Read-only look-ups ::: عمليات بحث للقراءة فقط
+Browser ::: المتصفح
+Turns that drive a web page ::: أدوار تقود صفحة ويب
+Summaries ::: الملخصات
+Shrinking old messages when the window fills ::: تقليص الرسائل القديمة عند امتلاء النافذة
+free, local ::: مجاني، محلي
+Independent check ::: مراجعة مستقلة
+The second agent that reviews a result ::: الوكيل الثاني الذي يراجع النتيجة
+How Automatic chooses ::: كيف يختار الوضع التلقائي
+For sub-agents, research, the browser and the independent check it looks for a model that calls tools natively, can make several calls in one turn, and has a long context. For summaries it prefers the cheapest model, one that caches its prompt. It keeps your Chat model unless another one is clearly better for the job. ::: للوكلاء الفرعيين والبحث والمتصفح والمراجعة المستقلة يبحث عن نموذج يستدعي الأدوات أصلاً، ويستطيع إجراء عدة استدعاءات في دور واحد، وله سياق طويل. وللملخصات يفضّل الأرخص، الذي يخزّن طلبه مؤقتاً. ويُبقي نموذج محادثتك ما لم يكن غيره أفضل بوضوح لهذه المهمة.
+A saved agent is a named helper with its own instructions, its own model and its own limits. You can start a task as one, or let the main agent hand work to it. ::: الوكيل المحفوظ مساعد باسم له تعليماته ونموذجه وحدوده الخاصة. يمكنك بدء مهمة بصفته، أو ترك الوكيل الرئيسي يُسند إليه العمل.
+New agent ::: وكيل جديد
+Use in this chat ::: استخدامه في هذه المحادثة
+Duplicate ::: تكرار
+Delete ::: حذف
+What it does ::: ماذا يفعل
+One sentence, shown in the list ::: جملة واحدة، تظهر في القائمة
+Instructions ::: التعليمات
+The model the task would use anyway ::: النموذج الذي كانت المهمة ستستخدمه على أي حال
+Folders it may touch ::: المجلدات التي يجوز له لمسها
+Folders and files it may change (empty: the whole project) ::: المجلدات والملفات التي يجوز له تغييرها (فارغ: المشروع كله)
+May ask to ::: قد يطلب
+MCP servers it can use ::: خوادم MCP التي يمكنه استخدامها
+Any server that is on ::: أي خادم مفعّل
+Tools it may never call ::: أدوات لا يجوز له استدعاؤها أبداً
++ Add a tool ::: + إضافة أداة
+Save ::: حفظ
+Discard changes ::: تجاهل التغييرات
+What Vader sends over the network, and to whom. Nothing else is contacted at start-up. ::: ما يرسله Vader عبر الشبكة وإلى من. لا يُتصل بأي جهة أخرى عند بدء التشغيل.
+No analytics ::: بلا تحليلات
+no crash reporter, no account ::: بلا مُبلِّغ أعطال ولا حساب
+Keys stay here ::: المفاتيح تبقى هنا
+sent only to their provider ::: تُرسل إلى جهتها المزوّدة فقط
+Your code and chats ::: كودك ومحادثاتك
+leave only to the model you chose ::: تغادر فقط إلى النموذج الذي اخترته
+Who Vader can contact ::: من يمكن لـ Vader الاتصال به
+Your model provider ::: مزوّد نموذجك
+Only when you chat or fetch the model list with a key you set. Your code goes to that provider and nowhere else. ::: فقط عند المحادثة أو جلب قائمة النماذج بمفتاح أعددته. يذهب كودك إلى ذلك المزوّد ولا يذهب إلى مكان آخر.
+Extension registry ::: سجل الامتدادات
+When you look at extensions in Add-ons or the editor, or install one. ::: عند تصفّح الامتدادات في الإضافات أو المحرر، أو عند تثبيت أحدها.
+Add-ons lists ::: قوائم الإضافات
+When you open Add-ons or search there, and when the agent searches for a skill or a server. Only the search words are sent, or a repository’s public file list. Nothing from your project. ::: عند فتح الإضافات أو البحث فيها، وعندما يبحث الوكيل عن مهارة أو خادم. تُرسل كلمات البحث فقط، أو قائمة الملفات العامة لمستودع. لا شيء من مشروعك.
+Release check ::: التحقق من الإصدارات
+Connected agents you add ::: الوكلاء المرتبطون الذين تضيفهم
+Only after you press Install, or send the agent a message. The vendor’s own program then talks to the vendor with your account. Vader does not see the sign-in. ::: فقط بعد أن تضغط «تثبيت» أو ترسل رسالة إلى الوكيل. عندها يتحدث برنامج الشركة نفسها مع الشركة بحسابك. ولا يرى Vader تسجيل الدخول.
+Pages the agent opens ::: الصفحات التي يفتحها الوكيل
+Only when it uses its browser, and only sites it was told to visit. ::: فقط عندما يستخدم متصفحه، ولا يزور إلا المواقع التي طُلب منه زيارتها.
+Files the agent never reads ::: ملفات لا يقرؤها الوكيل أبداً
+None in this project. List the files or folders the agent must never see, in the syntax of .gitignore: it then refuses to read, list, search or change them, and the project index does not hold them. ::: لا شيء في هذا المشروع. اكتب الملفات أو المجلدات التي يجب ألا يراها الوكيل أبداً بصيغة .gitignore: عندها يرفض قراءتها أو سردها أو البحث فيها أو تغييرها، ولا يحتويها فهرس المشروع.
+Create ::: إنشاء
+Search in the project ::: البحث في المشروع
+Keep an index of the project for search ::: الاحتفاظ بفهرس للمشروع من أجل البحث
+Lets the agent find code by what it does, not only by exact text. The index is made and kept on this computer; no file, no word of it is sent anywhere. Files that hold secrets (.env, keys) are never read. ::: يتيح للوكيل العثور على الكود بحسب وظيفته وليس بالنص الحرفي فقط. يُبنى الفهرس ويُحفظ على هذا الجهاز؛ ولا يُرسل أي ملف ولا أي كلمة منه إلى أي مكان. والملفات التي تحوي أسراراً (.env والمفاتيح) لا تُقرأ أبداً.
+Rebuild ::: إعادة البناء
+How this is verified ::: كيف يُتحقق من هذا
+Set to off by your organisation ::: عطّلته مؤسستك
+Locked: Check for new releases automatically ::: مقفل: التحقق من الإصدارات الجديدة تلقائياً
+Ask the person who manages Vader for your team to change it. ::: اطلب من الشخص الذي يدير Vader لفريقك تغييره.
+Starting ::: جارٍ البدء
+The index is made a moment after a folder is opened. ::: يُبنى الفهرس بعد لحظة من فتح المجلد.
+Version {0} · built on VS Code {1} ::: الإصدار {0} · مبني على VS Code {1}
+Download ::: تنزيل
+Read what changed ::: اقرأ ما الذي تغيّر
+Later ::: لاحقاً
+Open ::: فتح
+GitHub ::: GitHub
+Cancel ::: إلغاء
+Restart to finish the update ::: أعد التشغيل لإكمال التحديث

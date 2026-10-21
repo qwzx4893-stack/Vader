@@ -164,6 +164,8 @@ import { IBrowserToolMainService } from '../../workbench/contrib/vader/common/br
 import { BrowserToolMainService } from '../../workbench/contrib/vader/electron-main/browserToolMainService.js';
 import { IGitWorktreeMainService } from '../../workbench/contrib/vader/common/worktree/gitWorktreeTypes.js';
 import { GitWorktreeMainService } from '../../workbench/contrib/vader/electron-main/gitWorktreeMainService.js';
+import { ICodebaseIndexMainService } from '../../workbench/contrib/vader/common/codebaseIndex/codebaseIndexTypes.js';
+import { CodebaseIndexMainService } from '../../workbench/contrib/vader/electron-main/codebaseIndexMainService.js';
 import { IVisionMainService } from '../../workbench/contrib/vader/common/vision/visionQueryTypes.js';
 import { VisionMainService } from '../../workbench/contrib/vader/electron-main/visionMainService.js';
 import { IExternalAgentMainService } from '../../workbench/contrib/vader/common/externalAgents/externalAgentTypes.js';
@@ -1329,6 +1331,7 @@ export class CodeApplication extends Disposable {
 		services.set(IDiscoveryMainService, new SyncDescriptor(DiscoveryMainService, undefined, false));
 		services.set(IBrowserToolMainService, new SyncDescriptor(BrowserToolMainService, undefined, false));
 		services.set(IGitWorktreeMainService, new SyncDescriptor(GitWorktreeMainService, undefined, false));
+		services.set(ICodebaseIndexMainService, new SyncDescriptor(CodebaseIndexMainService, undefined, false));
 		services.set(IVisionMainService, new SyncDescriptor(VisionMainService, undefined, false));
 		services.set(IExternalAgentMainService, new SyncDescriptor(ExternalAgentMainService, undefined, false));
 
@@ -1525,6 +1528,8 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const gitWorktreeChannel = ProxyChannel.fromService(accessor.get(IGitWorktreeMainService), disposables);
 		mainProcessElectronServer.registerChannel('vader-channel-worktree', gitWorktreeChannel);
+		const codebaseIndexChannel = ProxyChannel.fromService(accessor.get(ICodebaseIndexMainService), disposables);
+		mainProcessElectronServer.registerChannel('vader-channel-codebaseIndex', codebaseIndexChannel);
 
 		// Vader added this
 		const visionChannel = ProxyChannel.fromService(accessor.get(IVisionMainService), disposables);

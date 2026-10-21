@@ -1,0 +1,185 @@
+A blocked skill is never given to the agent and cannot be switched on. ::: المهارة المحظورة لا تُعطى للوكيل أبداً ولا يمكن تفعيلها.
+Needs you ::: تحتاجك
+Double-click to rename ::: انقر مرتين لإعادة التسمية
+Open in editor ::: فتح في المحرر
+Send this message again from here: what came after it is replaced ::: أرسل هذه الرسالة مجدداً من هنا: يُستبدل كل ما جاء بعدها
+Hide the change ::: إخفاء التغيير
+Run a command? ::: تشغيل أمر؟
+Asks in {0} mode ::: يسأل في الوضع {0}
+In {0}. It can write files. ::: في {0}. يمكنه كتابة الملفات.
+Allow this, and do not ask about this exact one in this project again ::: السماح بهذا، وعدم السؤال عن هذا الأمر نفسه في هذا المشروع مجدداً
+Allow in this project ::: السماح في هذا المشروع
+The agent edits a copy of this project on its own branch. Your folder does not change until you accept. ::: يعدّل الوكيل نسخة من هذا المشروع على فرع خاص به. لا يتغيّر مجلدك حتى تقبل.
+Add context: a file, the terminal output, a page, the git changes ::: إضافة سياق: ملف أو مخرجات الطرفية أو صفحة أو تغييرات git
+How much the model thinks before it answers ::: مقدار تفكير النموذج قبل أن يجيب
+Tokens the providers reported for this chat ::: الرموز التي أبلغ عنها المزوّدون لهذه المحادثة
+Worked out from list prices. Your provider's bill can differ (discounts, taxes, cache writes). See Settings, Spending. ::: محسوب من الأسعار المعلنة. قد تختلف فاتورة مزوّدك (خصومات أو ضرائب أو كتابات الذاكرة المؤقتة). راجع الإعدادات، الإنفاق.
+≈ {0} this chat ::: ≈ {0} لهذه المحادثة
+Worked out from list prices unless the provider reported the charge ::: محسوب من الأسعار المعلنة ما لم يُبلغ المزوّد عن الرسوم
+≈ {0} today ::: ≈ {0} اليوم
+The branch this task works on ::: الفرع الذي تعمل عليه هذه المهمة
+Jump to the newest message ::: الانتقال إلى أحدث رسالة
+Ready to review ::: جاهز للمراجعة
+Filter by task or branch ::: تصفية حسب المهمة أو الفرع
+no changes ::: بلا تغييرات
+done ::: تم
+Waiting for you ::: بانتظارك
+Skills, MCP servers, extensions and agents ::: المهارات وخوادم MCP والامتدادات والوكلاء
+Settings: where add-ons come from, and the ones you have ::: الإعدادات: مصدر الإضافات وما لديك منها
+Search skills, MCP servers, extensions and agents ::: ابحث في المهارات وخوادم MCP والامتدادات والوكلاء
+80 to 100 high trust ::: من 80 إلى 100 ثقة عالية
+50 to 79 read first ::: من 50 إلى 79 اقرأ أولاً
+under 50 risky ::: أقل من 50 محفوف بالمخاطر
+live from GitHub, skills.sh and the sources you added ::: مباشر من GitHub وskills.sh والمصادر التي أضفتها
+live from the MCP Registry, Smithery, npm and GitHub ::: مباشر من سجل MCP وSmithery وnpm وGitHub
+live from Open VSX and the editor tooling ::: مباشر من Open VSX وأدوات المحرر
+live from Open VSX ::: مباشر من Open VSX
+Most trusted skills ::: المهارات الأكثر موثوقية
+MCP servers ::: خوادم MCP
+Extensions for the editor ::: امتدادات للمحرر
+Language servers, debuggers and formatters ::: خوادم اللغة وأدوات التنقيح والمنسّقات
+Agents you can connect ::: وكلاء يمكنك ربطهم
+they work inside Vader’s chat ::: يعملون داخل محادثة Vader
+See all skills ::: عرض كل المهارات
+See all servers ::: عرض كل الخوادم
+See all extensions ::: عرض كل الامتدادات
+See all agents ::: عرض كل الوكلاء
+See all ::: عرض الكل
+Documents and files ::: المستندات والملفات
+Coding and review ::: البرمجة والمراجعة
+Testing and QA ::: الاختبار وضمان الجودة
+DevOps and cloud ::: DevOps والسحابة
+Data and analytics ::: البيانات والتحليلات
+Design and UI ::: التصميم وواجهة المستخدم
+Writing and content ::: الكتابة والمحتوى
+Research and web ::: البحث والويب
+Productivity and automation ::: الإنتاجية والأتمتة
+Agents and prompts ::: الوكلاء والتعليمات
+Security ::: الأمان
+Search the official MCP Registry ::: ابحث في سجل MCP الرسمي
+Search extensions on Open VSX ::: ابحث عن الامتدادات في Open VSX
+Search skills ::: ابحث في المهارات
+Search agents ::: ابحث في الوكلاء
+Code and Git ::: الكود وGit
+Browser and testing ::: المتصفح والاختبار
+Databases ::: قواعد البيانات
+Docs and knowledge ::: المستندات والمعرفة
+Cloud and DevOps ::: السحابة وDevOps
+Chat and tickets ::: المحادثة والتذاكر
+Search and web ::: البحث والويب
+Files and storage ::: الملفات والتخزين
+Design and media ::: التصميم والوسائط
+Data and finance ::: البيانات والمالية
+Memory and AI ::: الذاكرة والذكاء الاصطناعي
+Programming languages ::: لغات البرمجة
+Linters ::: أدوات الفحص (Linters)
+Formatters ::: المنسّقات
+Debuggers ::: أدوات التنقيح
+Testing ::: الاختبار
+Source control ::: التحكم في المصدر
+Themes ::: السمات
+Snippets ::: المقتطفات
+Machine learning ::: تعلّم الآلة
+Data science and notebooks ::: علم البيانات والدفاتر
+Keymaps ::: اختصارات المفاتيح
+What it asks for ::: ما الذي يطلبه
+The terminal ::: الطرفية
+Runs commands such as npm install, each one asked first. ::: يشغّل أوامر مثل npm install، ويُسأل عن كل منها أولاً.
+The network ::: الشبكة
+Not asked ::: لا يطلبها
+Asks for it ::: يطلبها
+Fetches pages, documentation and packages. ::: يجلب الصفحات والتوثيق والحزم.
+Reads and writes files in the open project. ::: يقرأ الملفات ويكتبها في المشروع المفتوح.
+The first lines of SKILL.md ::: الأسطر الأولى من SKILL.md
+Read all of it ::: اقرأه كاملاً
+Install, switched off ::: تثبيت وهو متوقف
+Install it and switch it on. You can still read it afterwards. ::: ثبّته وشغّله. ويمكنك قراءته بعد ذلك.
+Install and switch on ::: تثبيت وتشغيل
+It is stored switched off. Read it, then switch it on when you are ready. ::: يُخزَّن متوقفاً. اقرأه، ثم شغّله حين تكون مستعداً.
+Nothing here gives a reason to hold back. ::: لا شيء هنا يدعو إلى التردد.
+Published by {0}, a known organisation ::: نشره {0}، وهو جهة معروفة
+Published by {0}, not on the known list ::: نشره {0}، وليس ضمن القائمة المعروفة
+Found in ::: وُجد في
+More in {0} ::: المزيد في {0}
+What it gives the agent ::: ما يمنحه للوكيل
+Before you add it ::: قبل أن تضيفه
+Nothing to install first ::: لا شيء يُثبَّت أولاً
+The listing names no runtime. ::: لا تذكر القائمة بيئة تشغيل.
+No secrets ::: بلا أسرار
+It asks for nothing to sign in with. A server that does is shown here with each secret named before it is added. ::: لا يطلب شيئاً لتسجيل الدخول. والخادم الذي يطلب يُعرض هنا مع تسمية كل سرّ قبل إضافته.
+Where it is saved ::: أين يُحفظ
+One entry in your mcp.json, which you can open and edit. Removing it removes the entry. ::: مدخل واحد في ملف mcp.json لديك، يمكنك فتحه وتعديله. وإزالته تزيل المدخل.
+No signature to check ::: لا توجد توقيعات للتحقق منها
+A server runs on your computer or talks to a service. Adding one asks you first, and its tools go through the safety gate like any other. ::: يعمل الخادم على جهازك أو يتحدث إلى خدمة. وإضافته تسألك أولاً، وتمر أدواته عبر بوابة الأمان كأي أداة أخرى.
+installs ::: عمليات تثبيت
+version ::: الإصدار
+last updated ::: آخر تحديث
+An extension runs code inside the editor ::: الامتداد يشغّل كوداً داخل المحرر
+Installed and updated by the editor, like any other extension. ::: يثبّته المحرر ويحدّثه كأي امتداد آخر.
+The publisher proved it owns its domain ::: أثبت الناشر أنه يملك نطاقه
+Runs code inside the editor ::: يشغّل كوداً داخل المحرر
+{0} (verified) ::: {0} (موثّق)
+An agent you connect runs with your own account for it. Its usage and cost are not counted by Vader; they appear in that product’s own usage page. ::: يعمل الوكيل الذي تربطه بحسابك الخاص لديه. ولا يحتسب Vader استخدامه وتكلفته؛ بل يظهران في صفحة استخدام ذلك المنتج نفسه.
+Set up {0} ::: إعداد {0}
+Works inside Vader's chat (Agent Client Protocol) ::: يعمل داخل محادثة Vader (Agent Client Protocol)
+Install it here: Vader downloads the vendor’s own program. ::: ثبّته هنا: ينزّل Vader برنامج الشركة نفسها.
+Sign in: {0} Vader never sees your password or token. ::: تسجيل الدخول: {0} لا يرى Vader كلمة مرورك ولا رمزك أبداً.
+Open Settings, Connected agents, and choose it for the chat. ::: افتح الإعدادات، الوكلاء المرتبطون، واختره للمحادثة.
+Plan, limits and cost ::: الخطة والحدود والتكلفة
+Inside Vader’s chat (Agent Client Protocol) ::: داخل محادثة Vader (Agent Client Protocol)
+Ready, version {0} ::: جاهز، الإصدار {0}
+Counted by the vendor on your plan, not by Vader ::: تحتسبه الشركة على خطتك، لا Vader
+Other agents you can connect ::: وكلاء آخرون يمكنك ربطهم
+Back to Add-ons ::: العودة إلى الإضافات
+{0} · Agent Client Protocol registry · v{1} ::: {0} · سجل Agent Client Protocol · v{1}
+Running the checks ::: جارٍ تشغيل الفحوص
+Independent check not run ::: لم تُجرَ المراجعة المستقلة
+Open the pull request page for this branch ::: فتح صفحة طلب الدمج لهذا الفرع
+The agent is using this page ::: الوكيل يستخدم هذه الصفحة
+It can click and type here. It cannot reach pages outside the sites it was told to visit. ::: يستطيع النقر والكتابة هنا. ولا يستطيع الوصول إلى صفحات خارج المواقع التي طُلب منه زيارتها.
+Pages the agent opened ::: الصفحات التي فتحها الوكيل
+What it did here ::: ما فعله هنا
+Reload the page ::: إعادة تحميل الصفحة
+Open in my browser ::: فتح في متصفحي
+Terminals of this task ::: طرفيات هذه المهمة
+running, kept open by the agent ::: قيد التشغيل، يُبقيها الوكيل مفتوحة
+Commands this task ran ::: الأوامر التي شغّلتها هذه المهمة
+The agent started this terminal. Anything you type here runs as you, not as the agent. ::: بدأ الوكيل هذه الطرفية. وكل ما تكتبه هنا يُنفَّذ بصفتك أنت لا بصفة الوكيل.
+Opened page in browser ::: فُتحت صفحة في المتصفح
+Clicked in page ::: نُقر في الصفحة
+New chat in {0} ::: محادثة جديدة في {0}
+In Agent mode it works in its own copy of the project, so nothing in your folder changes until you accept. ::: في وضع الوكيل يعمل على نسخته الخاصة من المشروع، فلا يتغيّر شيء في مجلدك حتى تقبل.
+Enter sends, Shift Enter adds a line. ::: Enter يرسل، وShift Enter يضيف سطراً.
+Pick up where you left off ::: تابع من حيث توقفت
+Chat, no changes to files ::: محادثة، بلا تغييرات في الملفات
+{0} limits this key for now ::: {0} يحدّ هذا المفتاح حالياً
+Show the full error ::: عرض الخطأ كاملاً
+Hide the full error ::: إخفاء الخطأ كاملاً
+Run started {0} ::: بدأ التشغيل {0}
+Each task works in its own copy of the project. Finished work is merged one by one. ::: تعمل كل مهمة على نسختها الخاصة من المشروع. ويُدمج العمل المنتهي واحداً تلو الآخر.
+Conflict in {0} ::: تعارض في {0}
+Let an agent merge them ::: دع وكيلاً يدمجهما
+Keep the current version ::: الإبقاء على النسخة الحالية
+Keep this task’s version ::: الإبقاء على نسخة هذه المهمة
+Open the file ::: فتح الملف
+Wait for the task to finish ::: انتظر انتهاء المهمة
+It will not start another step. Nothing it has done is lost. ::: لن يبدأ خطوة أخرى. ولا يضيع شيء مما أنجزه.
+You stopped it. What it had done so far is kept. ::: أوقفته أنت. ويبقى ما أنجزه حتى الآن.
+Continue the task ::: متابعة المهمة
+Switch to plan mode ::: التحويل إلى وضع التخطيط
+Check the changes with a second agent ::: مراجعة التغييرات بوكيل ثانٍ
+Summarise the earlier steps now ::: تلخيص الخطوات السابقة الآن
+Save a note for this project ::: حفظ ملاحظة لهذا المشروع
+Write an AGENTS.md for this project ::: كتابة AGENTS.md لهذا المشروع
+files ::: ملفات
+folders ::: مجلدات
+Welcome to Vader ::: مرحباً بك في Vader
+A model with my own key ::: نموذج بمفتاحي الخاص
+Pick a model next ::: اختر نموذجاً بعد ذلك
+A connected agent I already pay for ::: وكيل مرتبط أدفع اشتراكه بالفعل
+A model on this computer ::: نموذج على هذا الجهاز
+Ollama or LM Studio. Nothing leaves your machine. ::: Ollama أو LM Studio. لا شيء يغادر جهازك.
+Before you choose ::: قبل أن تختار
+Your key stays on this computer ::: مفتاحك يبقى على هذا الجهاز
+Stored encrypted. It is only sent to the provider you choose. ::: يُخزَّن مشفّراً. ولا يُرسل إلا إلى المزوّد الذي تختاره.
+Your code goes to one place ::: كودك يذهب إلى جهة واحدة

@@ -11,6 +11,11 @@ export const LEVEL_WORD = { high: 'High trust', medium: 'Read first', low: 'Risk
 // it finds inside className attributes, not ones kept in a constant, and a rewritten name is the one the stylesheet defines.
 export const TrustMeter = ({ score, large }: { score: TrustScore, large?: boolean }) => {
 	const level = trustLevelOf(score.score)
+	if (!large) {
+		return <div className={`sc ${level === 'high' ? 'hi' : level === 'medium' ? 'md' : 'lo'}`} style={{ width: 66 }} data-testid='vader-trust-meter' title={`${LEVEL_WORD[level]}: ${score.score} out of 100`} aria-label={`Trust ${score.score} percent, ${LEVEL_WORD[level]}`}>
+			<b>{score.score}%</b><span className='bar' style={{ width: 46 }}><i style={{ width: `${score.score}%` }} /></span><span className='lv'>{LEVEL_WORD[level]}</span>
+		</div>
+	}
 	return <div className={`flex flex-col items-end gap-1 shrink-0 ${large ? 'w-24' : 'w-20'}`} title={`${LEVEL_WORD[level]}: ${score.score} out of 100`} aria-label={`Trust ${score.score} percent, ${LEVEL_WORD[level]}`}>
 		<span className={`font-semibold tabular-nums leading-none ${level === 'high' ? 'text-green-500' : level === 'medium' ? 'text-yellow-500' : 'text-red-500'} ${large ? 'text-3xl' : 'text-root'}`}>{score.score}%</span>
 		<div className={`rounded-full bg-black/10 dark:bg-white/10 overflow-hidden ${large ? 'h-1.5 w-16' : 'h-1 w-12'}`}>
