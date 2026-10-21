@@ -94,7 +94,15 @@ export class PageTranslator {
 			}
 			this._schedule()
 		})
-		this._observer.observe(_root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRIBUTES })
+	}
+
+	private _observing = false
+	/** English is the page as written: nothing is watched then, so the screen costs nothing extra */
+	private _watch(on: boolean) {
+		if (on === this._observing) { return }
+		this._observing = on
+		if (on) { this._observer.observe(this._root, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ATTRIBUTES }) }
+		else { this._observer.disconnect(); this._queued.clear() }
 	}
 
 	get language() { return this._lang }
@@ -105,6 +113,7 @@ export class PageTranslator {
 		if (lang === 'en') { this._root.removeAttribute('lang') } else { this._root.setAttribute('lang', lang === 'zh' ? 'zh-CN' : lang) }
 		this._root.setAttribute('data-vader-language', lang)
 		this._walk(this._root)
+		this._watch(lang !== 'en')
 	}
 
 	dispose() { this._observer.disconnect(); this._queued.clear() }
@@ -112,12 +121,13 @@ export class PageTranslator {
 	private _schedule() {
 		if (this._scheduled) { return }
 		this._scheduled = true
-		queueMicrotask(() => {
+		// a short wait gathers what React changes in a burst (a streaming answer writes many times a second) into one pass
+		setTimeout(() => {
 			this._scheduled = false
 			const nodes = [...this._queued]
 			this._queued = new Set()
 			for (const n of nodes) { if (this._root.contains(n)) { this._walk(n) } }
-		})
+		}, 30)
 	}
 
 	private _skipped(el: Element | null): boolean { return !!el && !!el.closest(SKIP) }

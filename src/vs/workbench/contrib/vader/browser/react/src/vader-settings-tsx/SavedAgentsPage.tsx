@@ -4,6 +4,7 @@
 
 import React, { useEffect, useState } from 'react'
 import { useAccessor, useAgentsServiceState, useMCPServiceState, useSettingsState } from '../util/services.js'
+import { Dropdown } from './Dropdown.js'
 import { ProviderLogo } from '../util/ProviderLogo.js'
 import { PermanentAgentDefinition } from '../../../../common/agents/agentsServiceTypes.js'
 import { ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js'
@@ -92,12 +93,11 @@ export const SavedAgentsPage = () => {
 				<Field label='Instructions'><textarea className='ta' data-testid='vader-saved-instructions' rows={5} style={{ resize: 'vertical', userSelect: 'text' }} value={draft.instructions} onChange={e => set({ instructions: e.target.value })} /></Field>
 				<div className='r' style={{ gap: 14, alignItems: 'flex-end' }}>
 					<Field label='Model' width='50%'>
-						<span className='fld r' style={{ gap: 8 }}>{draft.model ? <ProviderLogo providerName={draft.model.providerName as ProviderName} size={14} /> : null}
-							<select className='fl' data-testid='vader-saved-model' aria-label='Model' value={key(draft.model)} style={{ background: 'transparent', color: 'var(--t1)', border: 0, outline: 0, minWidth: 0 }} onChange={e => { const v = e.target.value; if (!v) { set({ model: null }); return } const i = v.indexOf('/'); set({ model: { providerName: v.slice(0, i) as ProviderName, modelName: v.slice(i + 1) } }) }}>
-								<option value='' style={{ background: '#19191c' }}>The model the task would use anyway</option>
-								{draft.model && !configured.some(c => key(c) === key(draft.model)) ? <option value={key(draft.model)} style={{ background: '#19191c' }}>{draft.model.modelName} (not set up)</option> : null}
-								{configured.map(c => <option key={key(c)} value={key(c)} style={{ background: '#19191c' }}>{c.modelName}</option>)}
-							</select></span>
+						<Dropdown testId='vader-saved-model' label='Model' width='100%' value={key(draft.model)}
+							options={[{ value: '', label: 'The model the task would use anyway' },
+								...(draft.model && !configured.some(c => key(c) === key(draft.model)) ? [{ value: key(draft.model), label: `${draft.model.modelName} (not set up)` }] : []),
+								...configured.map(c => ({ value: key(c), label: c.modelName, mark: <ProviderLogo providerName={c.providerName as ProviderName} size={14} /> }))]}
+							onChange={v => { if (!v) { set({ model: null }); return } const i = v.indexOf('/'); set({ model: { providerName: v.slice(0, i) as ProviderName, modelName: v.slice(i + 1) } }) }} />
 					</Field>
 					<Field label='Folders it may touch'><input className='fld mo' data-testid='vader-saved-folders' placeholder='Folders and files it may change (empty: the whole project)' value={draft.folders} onChange={e => set({ folders: e.target.value })} /></Field>
 				</div>

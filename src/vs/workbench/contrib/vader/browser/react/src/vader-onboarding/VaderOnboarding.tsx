@@ -25,6 +25,7 @@ import '../styles.css'
 import '../vader-shell-tsx/shell.css'
 import { WindowStrip } from '../vader-shell-tsx/WindowStrip.js'
 import { Icon } from '../vader-shell-tsx/icons.js'
+import { Dropdown } from '../vader-settings-tsx/Dropdown.js'
 import { LANGUAGE_NAMES } from '../util/i18n/translator.js'
 
 const STEP_KEY = 'vader.onboardingStep'
@@ -198,11 +199,9 @@ const Pages = () => {
 						</button>
 						{choice === 'key' ? <div className='c' style={{ gap: 12, paddingLeft: 28 }}>
 							<div className='r' style={{ gap: 12, alignItems: 'flex-end' }}>
-								<label className='c' style={{ gap: 5, width: 170 }}><span className='hint'>Provider</span>
-									<span className='fld r' style={{ gap: 8 }}><ProviderLogo providerName={provider} size={14} />
-										<select data-testid='vader-onboarding-provider' className='fl' style={{ background: 'transparent', color: 'var(--t1)', border: 0, outline: 0 }} value={provider} onChange={e => { setProvider(e.target.value as CloudListedProviderName); setAsked(false) }}>
-											{providersInOrder().map(p => <option key={p} value={p} style={{ background: '#19191c' }}>{displayInfoOfProviderName(p).title}</option>)}
-										</select></span></label>
+								<div className='c' style={{ gap: 5, width: 190 }}><span className='hint'>Provider</span>
+									<Dropdown testId='vader-onboarding-provider' label='Provider' width='100%' value={provider} onChange={v => { setProvider(v as CloudListedProviderName); setAsked(false) }}
+										options={providersInOrder().map(p => ({ value: p, label: displayInfoOfProviderName(p).title, mark: <ProviderLogo providerName={p} size={14} /> }))} /></div>
 								<div className='c fl' style={{ gap: 5 }}><label className='c' style={{ gap: 5 }}><span className='hint'>API key</span>
 									<input data-testid='vader-onboarding-key' className='fld mo' style={failed ? { borderColor: '#f06a6e' } : undefined} placeholder='Paste your key' value={key} onChange={e => { setKey(e.target.value); setAsked(false) }} onKeyDown={e => { if (e.key === 'Enter') test() }} autoComplete='off' spellCheck={false} /></label>
 									{keyPageOfProvider(provider) ? <button className='tx' data-testid='vader-onboarding-get-key' style={{ alignSelf: 'flex-start', height: 'auto', padding: 0, fontSize: 12, color: 'var(--t2)', textDecoration: 'underline' }} onClick={() => { void opener.open(URI.parse(keyPageOfProvider(provider)!)) }}>Get your key</button> : null}
@@ -256,11 +255,10 @@ const Pages = () => {
 				</div>
 				</div>
 				<div className='r' style={{ height: 70, flex: 'none', paddingBottom: 6, gap: 10 }}>
-					<label className='r t2' style={{ gap: 7 }}><Icon k='globe' small />
-						<select data-testid='vader-onboarding-language' data-i18n-skip aria-label='Language' value={settingsState.globalSettings.uiLanguage ?? 'en'} onChange={e => { void settings.setGlobalSetting('uiLanguage', e.target.value as UiLanguage) }} style={{ background: 'transparent', color: 'var(--t2)', border: 0, outline: 0, cursor: 'pointer' }}>
-							{uiLanguages.map(l => <option key={l} value={l} style={{ background: '#19191c' }}>{LANGUAGE_NAMES[l]}</option>)}
-						</select>
-					</label>
+					<span className='r t2' style={{ gap: 7 }} data-i18n-skip><Icon k='globe' small />
+						<Dropdown testId='vader-onboarding-language' label='Language' width={150} value={settingsState.globalSettings.uiLanguage ?? 'en'} onChange={v => { void settings.setGlobalSetting('uiLanguage', v as UiLanguage) }}
+							options={uiLanguages.map(l => ({ value: l, label: LANGUAGE_NAMES[l] }))} />
+					</span>
 					<span className='fl' />
 					<button className='tx' data-testid='vader-welcome-continue' onClick={() => setStep(2)}>Skip for now</button>
 				</div>

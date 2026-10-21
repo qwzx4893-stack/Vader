@@ -9,6 +9,7 @@ import { toolApprovalTypes, ToolApprovalType } from '../../../../common/toolsSer
 import { PolicyRequestKind, UserPolicyRuleInput } from '../../../../common/policy/policyService.js'
 import { validateUserPattern } from '../../../../common/helpers/safeRegex.js'
 import { parseMoney } from '../../../../common/settingsInput.js'
+import { Dropdown } from './Dropdown.js'
 import { Group, LockMark, Line, NumberBox, PageHead, Switch, Note } from './ui.js'
 
 // Permissions (board R08): how much the agent may do on its own, the commands allowed in this project, what is allowed without asking by kind, the daily limit,
@@ -135,8 +136,8 @@ export const PermissionsPage = ({ goto }: { goto: (page: 'usage') => void }) => 
 			{custom.map((r, i) => <Line key={r.id} first={i === 0} testId='vader-perm-custom' title={r.description} detail={`${r.effect === 'deny' ? 'Refuses' : 'Asks'} for ${r.kinds.join(', ')}`} right={<button className='tx' onClick={() => policy.removeCustomRule(r.id)}>Remove</button>} />)}
 			{adding ? <div className='c' style={{ gap: 12, padding: '14px 0', borderTop: '1px solid var(--ln)' }} data-testid='vader-perm-new-rule'>
 				<div className='r' style={{ gap: 12 }}>
-					<label className='c' style={{ gap: 5, width: 170 }}><span className='hint'>It applies to</span><select className='fld' data-testid='vader-perm-new-kind' value={kind} onChange={e => setKind(e.target.value as PolicyRequestKind)} style={{ background: 'transparent', color: 'var(--t1)' }}>{KINDS.map(k => <option key={k} value={k} style={{ background: '#19191c' }}>{k === 'file-write' ? 'Changing a file' : k === 'file-delete' ? 'Deleting a file' : k === 'terminal-command' ? 'A command' : 'An MCP tool'}</option>)}</select></label>
-					<label className='c' style={{ gap: 5, width: 130 }}><span className='hint'>Then</span><select className='fld' data-testid='vader-perm-new-effect' value={effect} onChange={e => setEffect(e.target.value as 'deny' | 'ask')} style={{ background: 'transparent', color: 'var(--t1)' }}><option value='ask' style={{ background: '#19191c' }}>Ask me</option><option value='deny' style={{ background: '#19191c' }}>Refuse</option></select></label>
+					<div className='c' style={{ gap: 5, width: 170 }}><span className='hint'>It applies to</span><Dropdown testId='vader-perm-new-kind' label='It applies to' width='100%' value={kind} onChange={v => setKind(v as PolicyRequestKind)} options={KINDS.map(k => ({ value: k, label: k === 'file-write' ? 'Changing a file' : k === 'file-delete' ? 'Deleting a file' : k === 'terminal-command' ? 'A command' : 'An MCP tool' }))} /></div>
+					<div className='c' style={{ gap: 5, width: 130 }}><span className='hint'>Then</span><Dropdown testId='vader-perm-new-effect' label='Then' width='100%' value={effect} onChange={v => setEffect(v as 'deny' | 'ask')} options={[{ value: 'ask', label: 'Ask me' }, { value: 'deny', label: 'Refuse' }]} /></div>
 					<label className='c fl' style={{ gap: 5 }}><span className='hint'>{kind === 'terminal-command' ? 'Command pattern, comma-separated' : kind === 'mcp-tool' ? 'Server name pattern, empty means every server' : 'Path pattern, comma-separated'}</span><input className='fld mo' data-testid='vader-perm-new-pattern' placeholder={kind === 'terminal-command' ? 'rm -rf' : kind === 'mcp-tool' ? '' : '**/.env*'} value={pattern} onChange={e => setPattern(e.target.value)} /></label>
 				</div>
 				<label className='c' style={{ gap: 5 }}><span className='hint'>What it is for</span><input className='fld' data-testid='vader-perm-new-what' placeholder='Shown when the rule fires' value={what} onChange={e => setWhat(e.target.value)} /></label>

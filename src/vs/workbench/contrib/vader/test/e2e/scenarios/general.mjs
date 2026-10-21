@@ -119,7 +119,7 @@ export const generalScenarios = [
 			const visible = async (id) => t.page.locator(TID(id)).waitFor({ state: 'visible', timeout: 8_000 }).then(() => true, () => false);
 			await t.ui.runCommand(t.page, 'Vader: Open Settings');
 			await t.page.locator(TID('vader-settings-page')).waitFor({ state: 'visible', timeout: 20_000 });
-			for (const tab of ['models', 'router', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
+			for (const tab of ['models', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
 				t.check(`the "${tab}" page is in the sidebar`, (await t.page.locator(TID(`vader-settings-nav-${tab}`)).count()) === 1);
 			}
 

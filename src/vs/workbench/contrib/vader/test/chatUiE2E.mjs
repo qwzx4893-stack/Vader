@@ -863,7 +863,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 // ===================================================================== the Mode and Permissions menus (board R06)
 {
 	const { page, errors } = await newPage();
-	check('the footer names the mode and the permission in force', (await page.locator(TID('vader-mode')).innerText()) === 'Agent' && (await page.locator(TID('vader-permissions')).innerText()) === 'Balanced');
+	check('the footer names the mode, and the permission mode is chosen in Settings, not in the box', (await page.locator(TID('vader-mode')).innerText()) === 'Agent' && (await page.locator(TID('vader-permissions')).count()) === 0);
 	await page.locator(TID('vader-mode')).click();
 	await page.waitForSelector(TID('vader-mode-menu'));
 	const rows = (await page.locator(TID('vader-mode-option')).allInnerTexts()).map(flat);
@@ -873,18 +873,17 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.keyboard.press('ArrowDown');
 	await page.keyboard.press('Enter');
 	check('the arrows and Enter choose a mode', (await log(page)).includes('global:chatMode="plan"') && (await page.locator(TID('vader-mode-menu')).count()) === 0);
-	await page.locator(TID('vader-permissions')).click();
-	await page.waitForSelector(TID('vader-permissions-menu'));
-	const prow = (await page.locator(TID('vader-permissions-option')).allInnerTexts()).map(flat);
-	check('the Permissions menu has Safe, Balanced and Autonomous, with what each asks, and the chosen one checked', prow.length === 3 && prow[0].startsWith('Safe Asks before every change and command.') && prow[2].startsWith('Autonomous Runs without asking, except what is on the locked list.') && (await page.locator(`${TID('vader-permissions-option')}[aria-selected="true"]`).getAttribute('data-value')) === 'balanced');
-	check('it says what no choice here can change', (await page.locator(TID('vader-permissions-footer')).innerText()).includes('Locked rules apply in every mode'));
-	await page.waitForTimeout(260);
-	await shot(page, '18-permissions-menu');
-	await page.locator(`${TID('vader-permissions-option')}[data-value="safe"]`).click();
-	check('a click chooses a permission', (await log(page)).includes('mode:safe'));
-	await page.locator(TID('vader-permissions')).click();
+	await page.locator(TID('vader-attach')).click();
+	await page.waitForSelector(TID('vader-attach-menu'));
+	check('the + at the left opens files and photos from this computer, and the project context', (await page.locator(TID('vader-attach-files')).count()) === 1 && (await page.locator(TID('vader-attach-context')).count()) === 1);
+	await page.waitForTimeout(200);
+	await shot(page, '18-attach-menu');
 	await page.keyboard.press('Escape');
-	check('Escape puts a menu away', (await page.locator(TID('vader-permissions-menu')).count()) === 0);
+	check('Escape puts the menu away', (await page.locator(TID('vader-attach-menu')).count()) === 0);
+	await page.locator(TID('vader-attach')).click();
+	await page.locator(TID('vader-attach-input')).setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('a note to keep beside the message') });
+	await page.waitForSelector(TID('vader-paste-chip'), { timeout: 10000 }).catch(() => { });
+	check('a file chosen there is kept beside the message, like one dropped on the box', (await page.locator(TID('vader-paste-chip')).count()) >= 1 || (await page.locator('text=notes.txt').count()) >= 1);
 	await page.locator(INPUT).click();
 	await page.keyboard.press('Control+3');
 	await page.keyboard.press('Control+4');

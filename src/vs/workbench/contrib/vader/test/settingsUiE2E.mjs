@@ -64,6 +64,8 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
 const TID = (id) => `[data-testid="${id}"]`;
+const choose = async (page, testid, value) => { await page.locator(TID(testid)).click(); await page.locator(`${TID(testid + '-list')} [data-value="${value}"]`).click(); };
+const optionsOf = async (page, testid) => { await page.locator(TID(testid)).click(); const t = await page.locator(`${TID(testid + '-list')} [role=option]`).allInnerTexts(); await page.keyboard.press('Escape'); return t; };
 const flat = (s) => s.replace(/\s+/g, ' ').trim();
 
 async function newPage(setup, page0) {
@@ -100,7 +102,7 @@ async function layoutProblems(page) {
 	const { page, errors } = await newPage();
 	const nav = page.locator('nav[aria-label="Settings pages"]');
 	check('the pages are in three groups named Models, Agent, Workspace', (await nav.locator('.vader-nvh').allInnerTexts()).join('|') === 'Models|Agent|Workspace');
-	check('the pages are the ones of the boards, in order', (await nav.locator('button').allInnerTexts()).join('|') === 'Models|Model router|Connected agents|Permissions|Usage and cost|Saved agents|Skills|MCP servers|Memory and instructions|Editor extensions|Editor|Privacy and network|Language|Data and backup|About and updates');
+	check('the pages are the ones of the boards, in order', (await nav.locator('button').allInnerTexts()).join('|') === 'Models|Connected agents|Permissions|Usage and cost|Saved agents|Skills|MCP servers|Memory and instructions|Editor extensions|Editor|Privacy and network|Language|Data and backup|About and updates');
 	check('it opens on Models and says which page is current', (await page.locator(`${TID('vader-settings-nav-models')}[aria-current=page]`).count()) === 1);
 	check('there is a way back to the app', (await page.locator(TID('vader-settings-close')).innerText()).includes('Back to the app'));
 	await page.locator(TID('vader-settings-close')).click();
@@ -227,39 +229,12 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
-// ===================================================================== Model router
-{
-	const { page, errors } = await newPage(undefined, 'router');
-	check('five jobs are listed, each with what it is', (await page.locator(TID('vader-router-job')).count()) === 5 && (await page.locator(TID('vader-router-job')).first().innerText()).includes('Tasks handed off to a helper agent'));
-	check('the mode in use is chosen', (await page.locator(`${TID('vader-router-mode-manual')}[aria-checked=true]`).count()) === 1);
-	check('in Choose myself a job uses the Chat model unless another is picked', (await page.locator(TID('vader-router-select')).first().inputValue()) === '(Chat model)');
-	await page.locator(TID('vader-router-select')).nth(4).selectOption('openAI/gpt-5');
-	check('picking a model for a job sets it in the router', (await log(page)).includes('override:verification=gpt-5'));
-	check('and the table shows its price per million tokens', (await page.locator(`${TID('vader-router-job')}[data-category=verification] ${TID('vader-router-cost')}`).innerText()) === '$1.25 / $10');
-	await page.locator(TID('vader-router-select')).nth(4).selectOption('(Chat model)');
-	check('going back to the Chat model clears the choice', (await log(page)).includes('override:verification=null'));
-	await page.locator(TID('vader-router-mode-auto')).click();
-	check('Automatic is set in the router, and the page says what it does', (await log(page)).includes('router:auto') && (await page.locator(TID('vader-router-explain')).innerText()).includes('It never picks a provider you have not set up'));
-	const used = await page.locator(TID('vader-router-model')).allInnerTexts();
-	check('in Automatic the table shows the model each job uses right now', used.map(flat).join('|') === 'claude-sonnet-4-5|gpt-5|claude-sonnet-4-5|qwen2.5-coder:7b|gpt-5', used.map(flat).join('|'));
-	check('a local model is free and says so', (await page.locator(`${TID('vader-router-job')}[data-category=summarization] ${TID('vader-router-cost')}`).innerText()) === 'free, local');
-	check('in Automatic there is nothing to change by mistake', (await page.locator(TID('vader-router-select')).count()) === 0);
-	await shot(page, '03-router');
-	check('no layout problem and no error', (await layoutProblems(page)).length === 0 && errors.length === 0, (await layoutProblems(page)).concat(errors).join('; '));
-	await page.close();
-}
-{
-	const { page } = await newPage(() => { window.__noModels = true; }, 'router');
-	check('with no model set up the router says so and shows no table', (await page.locator(TID('vader-router-none')).innerText()).includes('No model is set up yet') && (await page.locator(TID('vader-router-job')).count()) === 0);
-	await page.close();
-}
-
 // ===================================================================== Saved agents
 {
 	const { page, errors } = await newPage(undefined, 'saved');
 	const rows = (await page.locator(TID('vader-saved-item')).allInnerTexts()).map(flat);
 	check('the saved agents are listed with what they do and what limits them', rows.length === 2 && rows[0].includes('Reviewer') && rows[0].includes('only src') && rows[1].includes('Release notes') && rows[1].includes('read only'), rows.join(' | '));
-	check('the first one is open in the form with its real values', (await page.locator(TID('vader-saved-name')).inputValue()) === 'Reviewer' && (await page.locator(TID('vader-saved-folders')).inputValue()) === 'src/**' && (await page.locator(TID('vader-saved-model')).inputValue()) === 'anthropic/claude-sonnet-4-5');
+	check('the first one is open in the form with its real values', (await page.locator(TID('vader-saved-name')).inputValue()) === 'Reviewer' && (await page.locator(TID('vader-saved-folders')).inputValue()) === 'src/**' && (await page.locator(TID('vader-saved-model')).getAttribute('data-value')) === 'anthropic/claude-sonnet-4-5');
 	check('what it may ask to do shows as ticks: not edit, yes commands', (await page.locator(`${TID('vader-saved-allow-edits')}[aria-checked=false]`).count()) === 1 && (await page.locator(`${TID('vader-saved-allow-terminal')}[aria-checked=true]`).count()) === 1);
 	check('its MCP servers and the tool it may never call are shown', (await page.locator(`${TID('vader-saved-mcp')}[aria-checked=true]`).innerText()) === 'GitHub' && (await page.locator(TID('vader-saved-denied')).innerText()) === 'create_pull_request');
 	check('nothing to save until something changes', await page.locator(TID('vader-saved-save')).isDisabled());
@@ -304,8 +279,8 @@ async function layoutProblems(page) {
 	check('suggestions are off by default and the model choice is hidden while they are off', (await page.locator(`${TID('vader-editor-autocomplete')}[aria-checked=false]`).count()) === 1 && (await page.locator(TID('vader-editor-model-autocomplete')).count()) === 0);
 	await page.locator(TID('vader-editor-autocomplete')).click();
 	check('turning them on writes the real setting and shows the model for them', (await log(page)).includes('global:enableAutocomplete=true') && (await page.locator(TID('vader-editor-model-autocomplete')).count()) === 1);
-	check('only models that can fill in the middle are offered for suggestions', (await page.locator(`${TID('vader-editor-model-autocomplete')} option`).allInnerTexts()).filter(t => t !== 'Choose a model').join('|') === 'codestral-latest');
-	await page.locator(TID('vader-editor-model-autocomplete')).selectOption('mistral/codestral-latest');
+	check('only models that can fill in the middle are offered for suggestions', (await optionsOf(page, 'vader-editor-model-autocomplete')).filter(t => t !== 'Choose a model').join('|') === 'codestral-latest');
+	await choose(page, 'vader-editor-model-autocomplete', 'mistral/codestral-latest');
 	check('choosing one sets the model of that feature', (await log(page)).includes('select:Autocomplete=codestral-latest'));
 	check('the next edit is off by default and has its own switch that says it costs requests', (await page.locator(`${TID('vader-editor-next-edit')}[aria-checked=false]`).count()) === 1 && (await page.locator('[data-testid=vader-settings-editor]').innerText()).includes('at most 20 a minute'));
 	await page.locator(TID('vader-editor-next-edit')).click();
@@ -602,14 +577,14 @@ async function layoutProblems(page) {
 // ===================================================================== Models
 {
 	const { page, errors } = await newPage(undefined, 'models');
-	check('the chat model is the one that is set', (await page.locator(TID('vader-models-chat')).inputValue()) === 'anthropic/claude-sonnet-4-5');
-	check('suggestions are Off until a model is chosen for them', (await page.locator(TID('vader-models-autocomplete')).inputValue()) === '');
-	await page.locator(TID('vader-models-autocomplete')).selectOption('mistral/codestral-latest');
+	check('the chat model is the one that is set', (await page.locator(TID('vader-models-chat')).getAttribute('data-value')) === 'anthropic/claude-sonnet-4-5');
+	check('suggestions are Off until a model is chosen for them', (await page.locator(TID('vader-models-autocomplete')).getAttribute('data-value')) === '');
+	await choose(page, 'vader-models-autocomplete', 'mistral/codestral-latest');
 	check('choosing a model for suggestions sets it and turns them on', (await log(page)).includes('select:Autocomplete=codestral-latest') && (await log(page)).includes('global:enableAutocomplete=true'));
-	check('applying edits follows the chat unless another model is chosen', (await page.locator(TID('vader-models-apply')).inputValue()) === '');
-	await page.locator(TID('vader-models-apply')).selectOption('openAI/gpt-5');
+	check('applying edits follows the chat unless another model is chosen', (await page.locator(TID('vader-models-apply')).getAttribute('data-value')) === '');
+	await choose(page, 'vader-models-apply', 'openAI/gpt-5');
 	check('choosing a model for applying sets it and stops following the chat', (await log(page)).includes('select:Apply=gpt-5') && (await log(page)).includes('global:syncApplyToChat=false'));
-	await page.locator(TID('vader-models-apply')).selectOption('');
+	await choose(page, 'vader-models-apply', '');
 	check('and Same as chat brings the switch back', (await log(page)).includes('global:syncApplyToChat=true'));
 
 	const local = page.locator(`${TID('vader-provider-row')}[data-provider=ollama]`);
@@ -638,15 +613,7 @@ async function layoutProblems(page) {
 	check('every model has its own switch and its context size', (await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] .vader-mo`).count()) >= 1);
 	await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] ${TID('vader-provider-model-switch')}`).click();
 	check('a switch hides the model from the picker', (await log(page)).includes('togglemodel:openRouter:openai/gpt-5') && (await or.locator(TID('vader-provider-picker-count')).innerText()) === 'Shown in the picker: 2 of 4');
-	await or.locator(TID('vader-provider-add-open')).click();
-	await or.locator(TID('vader-provider-add-input')).fill('openai/gpt-5');
-	await or.locator(TID('vader-provider-add')).click();
-	check('adding a model that is already there is refused', (await or.locator(TID('vader-provider-add-problem')).innerText()).includes('already in the list'));
-	await or.locator(TID('vader-provider-add-input')).fill('mistralai/devstral');
-	await or.locator(TID('vader-provider-add')).click();
-	check('a new model is added by name and can be deleted', (await log(page)).includes('addmodel:openRouter:mistralai/devstral') && (await or.locator(`${TID('vader-provider-model')}[data-model="mistralai/devstral"] ${TID('vader-provider-model-delete')}`).count()) === 1);
-	await or.locator(`${TID('vader-provider-model')}[data-model="mistralai/devstral"] ${TID('vader-provider-model-delete')}`).click();
-	check('deleting a model written by hand removes it', (await log(page)).includes('deletemodel:openRouter:mistralai/devstral'));
+	check('a provider that publishes its models has no way to add one by name: the list comes from the provider', (await or.locator(TID('vader-provider-add-open')).count()) === 0);
 	await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] ${TID('vader-provider-model-defaults')}`).click();
 	check('Defaults opens what Vader assumes about the model', (await page.locator(TID('vader-overrides-dialog')).count()) === 1);
 	await page.locator(TID('vader-overrides-switch')).click();
@@ -871,7 +838,7 @@ async function layoutProblems(page) {
 {
 	const { page } = await newPage();
 	await page.setViewportSize({ width: 1440, height: 900 });
-	for (const id of ['models', 'router', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
+	for (const id of ['models', 'agents', 'permissions', 'usage', 'saved', 'skills', 'mcp', 'memory', 'extensions', 'editor', 'privacy', 'data', 'about']) {
 		await page.locator(TID(`vader-settings-nav-${id}`)).click();
 		await page.waitForTimeout(320);
 		await shot(page, `qa-${id}`);

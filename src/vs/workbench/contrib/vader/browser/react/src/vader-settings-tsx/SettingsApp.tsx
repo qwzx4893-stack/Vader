@@ -9,7 +9,6 @@ import { VADER_TOGGLE_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { Icon } from '../vader-shell-tsx/icons.js'
 import { PermissionsPage } from './PermissionsPage.js'
 import { UsagePage } from './UsagePage.js'
-import { RouterPage } from './RouterPage.js'
 import { SavedAgentsPage } from './SavedAgentsPage.js'
 import { EditorPage } from './EditorPage.js'
 import { PrivacyPage } from './PrivacyPage.js'
@@ -30,12 +29,11 @@ import { projectNameOf } from '../../../../common/threadProjects.js'
 // Vader's Settings in the shape of the interface boards (R08 to R30): a column on the left with a way back to the app, a search, and the pages in three groups
 // (Models, Agent, Workspace); the page on the right. Opening Settings from elsewhere can name the page (the event below), and the search filters the pages.
 
-export type SettingsPage = 'models' | 'router' | 'agents' | 'permissions' | 'usage' | 'saved' | 'skills' | 'mcp' | 'memory' | 'extensions' | 'editor' | 'privacy' | 'language' | 'data' | 'about'
+export type SettingsPage = 'models' | 'agents' | 'permissions' | 'usage' | 'saved' | 'skills' | 'mcp' | 'memory' | 'extensions' | 'editor' | 'privacy' | 'language' | 'data' | 'about'
 
 const GROUPS: { title: string, items: { id: SettingsPage, label: string, words: string }[] }[] = [
 	{ title: 'Models', items: [
 		{ id: 'models', label: 'Models', words: 'model provider key api openai anthropic gemini openrouter ollama lm studio local autocomplete apply commit endpoint' },
-		{ id: 'router', label: 'Model router', words: 'router sub-agent research browser summaries independent check helper' },
 		{ id: 'agents', label: 'Connected agents', words: 'coding agent codex copilot cursor opencode claude acp terminal' },
 	] },
 	{ title: 'Agent', items: [
@@ -87,7 +85,6 @@ export const Settings = () => {
 	const body = (() => {
 		if (page === 'permissions') return <PermissionsPage goto={setPage} />
 		if (page === 'usage') return <UsagePage />
-		if (page === 'router') return <RouterPage />
 		if (page === 'saved') return <SavedAgentsPage />
 		if (page === 'editor') return <EditorPage />
 		if (page === 'privacy') return <PrivacyPage />

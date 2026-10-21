@@ -491,6 +491,31 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 	</div>
 }
 
+/** The + at the left of the box: files and photos from this computer (the same as dropping them on the box), and the project's own things (a file, the terminal output, a page, the git changes). */
+const AttachButton = ({ onFiles, onAddContext }: { onFiles: (files: File[]) => void, onAddContext?: () => void }) => {
+	const [open, setOpen] = useState(false)
+	const box = useRef<HTMLSpanElement>(null)
+	const input = useRef<HTMLInputElement>(null)
+	useEffect(() => {
+		if (!open) return
+		const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false) }
+		const esc = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') setOpen(false) }
+		document.addEventListener('mousedown', away); document.addEventListener('keydown', esc)
+		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
+	}, [open])
+	return <span ref={box} className='relative inline-flex'>
+		<button type='button' data-testid='vader-attach' title='Add files, photos and context' aria-label='Add files, photos and context' aria-haspopup='menu' aria-expanded={open}
+			className='flex items-center justify-center h-7 w-7 text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' onClick={e => { e.stopPropagation(); setOpen(v => !v) }}>
+			<svg className='size-[16px] flex-none' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' aria-hidden='true'><path d='M12 5v14M5 12h14' /></svg>
+		</button>
+		<input ref={input} type='file' multiple data-testid='vader-attach-input' className='hidden' style={{ display: 'none' }} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ''; setOpen(false); if (files.length > 0) onFiles(files) }} />
+		{open ? <div role='menu' data-testid='vader-attach-menu' className='absolute left-0 bottom-9 z-50 flex flex-col p-1 rounded-lg border border-vader-border-2 bg-vader-bg-2 shadow-lg' style={{ width: 270, background: 'var(--g2)', border: '1px solid var(--ln2)', boxShadow: '0 8px 24px rgba(0,0,0,.45)' }}>
+			<button type='button' role='menuitem' data-testid='vader-attach-files' className='flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover text-left' onClick={e => { e.stopPropagation(); input.current?.click() }}>Files and photos from this computer</button>
+			{onAddContext ? <button type='button' role='menuitem' data-testid='vader-attach-context' className='flex items-center gap-2 h-8 px-2 rounded-md text-[13px] text-vader-fg-1 hover:bg-vader-bg-2-hover text-left' onClick={e => { e.stopPropagation(); setOpen(false); onAddContext() }}>Add context from the project</button> : null}
+		</div> : null}
+	</span>
+}
+
 export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 	children,
 	onSubmit,
@@ -588,10 +613,10 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 							{/* the thinking budget lives in the chip */}
 
 <div className='flex items-center flex-wrap gap-x-1 gap-y-1 text-nowrap '>
+{featureName === 'Chat' && showFooter && onDropFiles ? <AttachButton onFiles={onDropFiles} onAddContext={onAddContext} /> : null}
 {featureName === 'Chat' && <ChatModeDropdown className='text-[13px] text-vader-fg-2' />}
 								{featureName === 'Chat' && <ExternalAgentChatPicker className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />}
 								<ModelDropdown featureName={featureName} className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />
-{featureName === 'Chat' && showFooter ? <PermissionDropdown className='text-[13px] text-vader-fg-2' /> : null}
 									{onAddContext ? <button type='button' data-testid='vader-add-context' title='Add context: a file, the terminal output, a page, the git changes' aria-label='Add context' className='flex items-center gap-1.5 h-7 px-1.5 text-[13px] text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' onClick={(e) => { e.stopPropagation(); onAddContext() }}><svg className='size-[15px] flex-none' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.4' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><circle cx='12' cy='12' r='4' /><path d='M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8' /></svg>{narrow ? null : 'Add context'}</button> : null}
 							</div>
 						</div>

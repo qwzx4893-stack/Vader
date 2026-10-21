@@ -120,7 +120,8 @@ const ProviderBody = ({ p, onOverrides }: { p: ProviderName, onOverrides: (t: Ov
 				</div>
 			})}
 			{!expand && !query.trim() && visible.length > rows.length ? <button className='tx' style={{ alignSelf: 'flex-start', padding: 0 }} data-testid='vader-provider-show-all' onClick={() => setExpand(true)}>Show all {visible.length}</button> : null}
-			{adding ? <div className='r' style={{ gap: 8, paddingTop: 8 }}>
+			{/* a provider that publishes its models gives them as they are, live: a name is added by hand only where there is no list to read */}
+			{listed || isLocal ? null : adding ? <div className='r' style={{ gap: 8, paddingTop: 8 }}>
 				<input className='fld fl mo' autoFocus data-testid='vader-provider-add-input' aria-label='Model name' placeholder='Model Name' value={newName} onChange={e => { setNewName(e.target.value); setAddProblem(undefined) }} onKeyDown={e => { if (e.key === 'Enter') addModel(); if (e.key === 'Escape') setAdding(false) }} />
 				<button className='pb' data-testid='vader-provider-add' disabled={!newName.trim()} onClick={addModel}>Add</button><button className='tx' onClick={() => { setAdding(false); setAddProblem(undefined) }}>Cancel</button>
 			</div> : <button className='tx' style={{ alignSelf: 'flex-start', padding: 0, marginTop: 6 }} data-testid='vader-provider-add-open' onClick={() => setAdding(true)}>+ Add a model by name</button>}

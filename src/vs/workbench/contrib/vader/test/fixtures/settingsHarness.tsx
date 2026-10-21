@@ -227,6 +227,18 @@ const coordSvc: any = {
 
 w.__accessor = { get: (name: string) => ({ IProductService: product, ICodebaseIndexMainService: indexSvc, IVaderUpdateService: updateSvc, IVaderUpdateCoordinator: coordSvc, IConfigurationService: config, INotificationService: { ...notifications, warn: (m: string) => w.__log.push(`warn:${m}`) }, IEnvironmentService: env, INativeHostService: nativeHost, IExtensionTransferService: transfer, IPolicyService: policy, IVaderSettingsService: settingsSvc, IChatThreadService: chat, ICommandService: commands, IOpenerService: opener, IModelRouterService: router, IAgentsService: agentsSvc, IRefreshModelService: refreshSvc, IExternalAgentsService: agentsExt, IMCPService: mcpSvc, IMemoryService: memorySvc, IFileService: fileSvc, IWorkspaceContextService: workspaceSvc, IVaderShellService: shellSvc, ISkillService: skillSvc, IStorageService: storageSvc } as any)[name] }
 
+// the preview (test/uiPreview.mjs) is a clean install: nothing saved, nothing installed, no model listed until a key is given
+if (process.env.VADER_PREVIEW) {
+	setAgents([])
+	w.__mcp = { state: { mcpServerOfName: {} } }
+	w.__settings.mcpUserStateOfName = {}
+	setMem({ project: [], agent: [] })
+	w.__skills = []
+	for (const p of ['openRouter', 'anthropic', 'ollama']) { P[p].models = []; P[p]._didFillInProviderSettings = false }
+	P.ollama.endpoint = 'http://localhost:11434'
+	w.__agents = { ...w.__agents, probes: {}, statuses: Object.fromEntries(['codex', 'opencode', 'cursor', 'copilot', 'mistral-vibe', 'grok-build', 'kimi', 'antigravity', 'claude-code', 'freebuff'].map(id => [id, { id, state: 'not-installed' }])) }
+	w.__answers = {}
+}
 installLanguage(document.getElementById('root')!)
 w.__settings = { ...w.__settings, globalSettings: { ...w.__settings.globalSettings, uiLanguage: w.__lang } }
 createRoot(document.getElementById('root')!).render(<Settings />)
