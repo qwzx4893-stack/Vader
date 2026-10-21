@@ -92,12 +92,14 @@ export async function runShellGroup() {
 
 		await page.locator(TID('vader-shell-thread'), { hasText: 'say hello from the window' }).first().click().catch(() => { });
 		await page.locator(TID('vader-shell-open-editor')).click();
-		await sleep(1200);
-		check('Open in editor goes to the editor layout, with the chat in its sidebar', !(await page.locator(TID('vader-shell')).first().isVisible().catch(() => false)) && (await page.locator('.monaco-workbench .part.editor').first().isVisible().catch(() => false)));
-		await shot('9-editor');
-		await ui.runCommand(page, 'Vader: Open the Vader window').catch(() => { });
-		await sleep(1000);
-		check('the title bar button brings the window back', await page.locator(TID('vader-shell')).first().isVisible().catch(() => false));
+		await sleep(800);
+		check('Open in editor opens the files page of the window (not the classic editor layout)', await page.locator(TID('vader-files')).isVisible().catch(() => false) && await page.locator(TID('vader-files-back')).isVisible().catch(() => false));
+		await page.locator(`${TID('vader-files-file')}[data-path$="notes.txt"]`).first().click().catch(() => { });
+		check('a file of the project shows its code', await page.locator(TID('vader-files-code')).waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false));
+		await shot('9-files');
+		await page.locator(TID('vader-files-back')).click().catch(() => { });
+		await sleep(500);
+		check('Back returns to the conversation', await page.locator(TID('vader-shell-conversation')).isVisible().catch(() => false));
 	} catch (e) {
 		rec.status = 'fail'; rec.error = String(e?.stack ?? e).slice(0, 600); console.log(`  FAIL: ${String(e?.message ?? e).slice(0, 300)}`);
 	} finally {

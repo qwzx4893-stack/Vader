@@ -98,7 +98,7 @@ export const ConversationPage = () => {
 				{TABS.map(t => <button key={t.id} role='tab' aria-selected={shell.tab === t.id} data-testid={`vader-shell-tab-${t.id}`} className={shell.tab === t.id ? 'tx t1' : 'tx'} style={shell.tab === t.id ? { background: 'var(--g3)' } : undefined} onClick={() => shellService.setTab(t.id)}>{t.label}</button>)}
 			</div> : cur && cur.messageCount > 0 ? <span className='hint tr narrow-hide'>Chat, no changes to files</span> : null}
 			{!isTask && cur && cur.messageCount > 0 && mode !== 'agent' ? <button className='tx t1' data-testid='vader-shell-turn-into-task' onClick={() => settings.setGlobalSetting('chatMode', 'agent')}>Turn into agent task</button> : null}
-			<button className='tx' data-testid='vader-shell-open-editor' onClick={() => shellService.openEditor()}><span className='narrow-hide'>Open in editor</span><span className='narrow-only'>Editor</span></button>
+			<button className='tx' data-testid='vader-shell-open-editor' onClick={() => shellService.openFile()}><span className='narrow-hide'>Open in editor</span><span className='narrow-only'>Editor</span></button>
 			{cur && (cur.status === 'running' || cur.status === 'paused') ? <button className='tx' data-testid='vader-shell-pause' onClick={() => pause ? chat.resumeRun(cur.id) : chat.pauseRun(cur.id)}>{pause ? 'Resume' : 'Pause'}</button> : null}
 			{cur && cur.messageCount > 0 ? <span style={{ position: 'relative' }}>
 				<button className='ic' aria-label='More about this chat' aria-expanded={menu} data-testid='vader-shell-more' onClick={() => setMenu(m => !m)}><Icon k='more' /></button>
