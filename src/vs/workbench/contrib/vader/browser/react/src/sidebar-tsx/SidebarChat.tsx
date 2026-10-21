@@ -348,14 +348,6 @@ const PERMISSION_DETAIL = {
 	balanced: 'Edits in the project go through. Commands and sensitive files ask.',
 	autonomous: 'Runs without asking, except what is on the locked list.',
 } as const
-const PermissionDropdown = ({ className }: { className: string }) => {
-	const accessor = useAccessor()
-	const policyService = accessor.get('IPolicyService')
-	const policy = usePolicyServiceState()
-	const rows = useMemo(() => (['safe', 'balanced', 'autonomous'] as const).map(m => ({ value: m, name: PERMISSION_NAME[m], detail: PERMISSION_DETAIL[m] })), [])
-	return <ChoiceMenu testId='vader-permissions' label='Permissions' className={className} rows={rows} value={policy.mode} onChange={(m) => policyService.setMode(m)}
-		footer='Locked rules apply in every mode: credentials, system files, and files that run code later.' />
-}
 
 /** how much of the model's window this conversation uses, as a ring and a percentage; a click opens what it is made of, and Compact now (board R06, "Context meter") */
 const ContextMeter = () => {

@@ -1,5 +1,5 @@
 // The language of the screens in a test page: the same translator the app mounts (util/i18n), asked for a language by the test (window.__setLang('ar')).
-import { auditMissingTexts, missingTexts, startPageTranslator } from '../../browser/react/src2/util/i18n/translator'
+import { auditMissingTexts, missingTexts, startPageTranslator } from '../../browser/react/src2/util/i18n/translator.js'
 
 export const installLanguage = (root: HTMLElement) => {
 	const w = window as unknown as { __lang?: string, __setLang?: (l: string) => void, __i18nMissing?: Set<string> }
@@ -11,5 +11,5 @@ export const installLanguage = (root: HTMLElement) => {
 	auditMissingTexts(true)
 	const listeners = new Set<() => void>()
 	w.__setLang = (l: string) => { w.__lang = l; if (process.env.VADER_PREVIEW) { try { localStorage.setItem('vaderPreviewLanguage', l) } catch { /* private window */ } } listeners.forEach(f => f()) }
-	startPageTranslator(root, { language: () => (w.__lang ?? 'en') as 'en' | 'ar' | 'zh', onDidChange: f => { listeners.add(f); return { dispose: () => { listeners.delete(f) } } } })
+	startPageTranslator(root, { language: () => (w.__lang ?? 'en') as 'en' | 'ar' | 'zh', onDidChange: (f: () => void) => { listeners.add(f); return { dispose: () => { listeners.delete(f) } } } })
 }

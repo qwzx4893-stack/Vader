@@ -32,7 +32,7 @@
 // Run: node src/vs/workbench/contrib/vader/test/dependencyReachabilityE2E.mjs
 
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
 let passed = 0, failed = 0;
@@ -48,7 +48,7 @@ const smokeTestPath = path.join(__dirname, 'clineRuntimeSmoke.mjs');
 async function main() {
 	console.log('=== Dependency reachability: vulnerable @cline/llms optional providers, under real usage ===');
 
-	const child = spawn(process.execPath, ['--import', loaderPath, smokeTestPath], { cwd: path.join(__dirname, '..', '..', '..', '..', '..', '..'), stdio: ['ignore', 'pipe', 'pipe'] });
+	const child = spawn(process.execPath, ['--import', pathToFileURL(loaderPath).href, smokeTestPath], { cwd: path.join(__dirname, '..', '..', '..', '..', '..', '..'), stdio: ['ignore', 'pipe', 'pipe'] });
 	let stdout = '', stderr = '';
 	child.stdout.on('data', d => { stdout += d; });
 	child.stderr.on('data', d => { stderr += d; });

@@ -18,7 +18,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const repo = path.resolve(here, '../../../../../..');
 const require = createRequire(path.join(repo, 'package.json'));
 const esbuild = require('esbuild');
-const root = path.join(here, '..');
+const root = path.join(here, '..').split(path.sep).join('/'); // forward slashes: the template strings below are import paths for esbuild
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-extagent-'));
 // the service keeps installed agents under the home folder: a throw-away one
 process.env.HOME = path.join(tmp, 'home'); process.env.USERPROFILE = path.join(tmp, 'home');
