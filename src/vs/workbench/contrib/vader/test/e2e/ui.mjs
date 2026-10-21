@@ -57,11 +57,13 @@ export async function focusChat(page) {
 }
 
 export async function newThread(page, attempt = 0) {
-	// "+" in the chat header (aria-label "New Chat (Ctrl+Shift+L)"). Different ways of triggering it, tried in turn by the
-	// caller until the thread is actually empty (a mouse click sometimes lands without taking effect right after a run).
-	const btn = page.locator('[aria-label^="New Chat"]').first();
-	if (attempt === 0 && await btn.count()) { await btn.click(); }
-	else if (attempt === 1 && await btn.count()) { await btn.evaluate(e => e.click()); }
+	// the "New chat" button of the left navigation (or the "New Chat" button of an older header), then the shortcut, then the command.
+	// Different ways of triggering it, tried in turn by the caller until the thread is actually empty (a mouse click sometimes lands
+	// without taking effect right after a run). Nothing here waits longer than a few seconds for a button that is not there.
+	const btn = page.locator('[data-testid="vader-shell-new-chat"], [aria-label^="New Chat"]').first();
+	const there = (await btn.count()) > 0;
+	if (attempt === 0 && there) { await btn.click({ timeout: 5000 }).catch(() => { }); }
+	else if (attempt === 1 && there) { await btn.evaluate(e => e.click()).catch(() => { }); }
 	else if (attempt === 2) { await focusChat(page); await page.keyboard.press('Control+Shift+L'); }
 	else { await runCommand(page, 'Vader: New Chat').catch(() => { }); }
 	await sleep(600);
@@ -139,12 +141,14 @@ export async function toastTexts(page) {
 	return page.evaluate(() => [...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(e => e.textContent.trim()));
 }
 
-/** Switch the chat mode dropdown (Normal chat / Gather / Plan / Agent). */
+/** The chat modes by the name a scenario uses and by the value the menu carries. */
+const MODE_VALUE = { 'Normal chat': 'normal', 'Chat': 'normal', 'Gather': 'gather', 'Plan': 'plan', 'Agent': 'agent' };
+
+/** Switch the chat mode menu in the message box (Chat / Gather / Plan / Agent). */
 export async function setMode(page, mode) {
-	const current = page.locator('span.vader-truncate.vader-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first();
-	await current.click();
+	await page.locator(TID('vader-mode')).first().click({ timeout: 5000 });
 	await sleep(300);
-	await page.locator('span').filter({ hasText: new RegExp(`^${mode}$`) }).last().click();
+	await page.locator(`${TID('vader-mode-option')}[data-value="${MODE_VALUE[mode] ?? mode.toLowerCase()}"]`).first().click({ timeout: 5000 });
 	await sleep(400);
 }
 
@@ -165,6 +169,6 @@ export async function runUntilIdle(page, { timeout = 90_000, approveEach = true 
 }
 
 export async function getMode(page) {
-	const t = await page.locator('span.vader-truncate.vader-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first().textContent().catch(() => null);
+	const t = await page.locator(TID('vader-mode')).first().textContent({ timeout: 3000 }).catch(() => null);
 	return t?.trim() ?? null;
 }

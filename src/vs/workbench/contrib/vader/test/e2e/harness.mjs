@@ -78,8 +78,14 @@ export async function runGroup(group) {
 		if (await ui.isOnboarding(page)) { await ui.completeOnboarding(page, { baseURL: group.baseURL ?? server.url, apiKey: group.apiKey, model: group.model }); }
 		await sleep(800);
 
+		// a group whose scenarios fail one after the other without a single passing check is broken as a whole (a changed screen, not
+		// ninety separate faults): stop it, so that the run reports it in minutes instead of waiting out every timeout
+		let streak = 0;
 		for (const s of selected) {
+			if (streak >= 6) { results.push({ group: group.name, name: s.name, status: 'fail', checks: [], error: `not run: the ${streak} scenarios before it failed without one passing check`, ms: 0 }); log(`SKIP-FAIL: ${s.name} - not run, ${streak} failures in a row`); continue; }
 			await runScenario({ group, s, server, ws, app });
+			const last = results[results.length - 1];
+			streak = last.status === 'fail' && !last.checks.some(c => c.ok) ? streak + 1 : 0;
 		}
 	} catch (e) {
 		log(`FAIL: group "${group.name}" could not start - ${String(e).slice(0, 600)}`);
