@@ -7,7 +7,7 @@
 
 import { sleep } from './app.mjs';
 
-export const CHAT_INPUT = 'textarea[placeholder^="@ to mention"]';
+export const CHAT_INPUT = 'textarea[data-testid="vader-input"]'; // the placeholder changes with the mode and the state of the chat; the test id does not
 const TID = (id) => `[data-testid="${id}"]`;
 
 export async function isOnboarding(page) {
