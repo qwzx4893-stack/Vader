@@ -747,6 +747,8 @@ async function layoutProblems(page) {
 {
 	const { page } = await newPage(() => { window.__workspaceFolders = []; }, 'memory');
 	await page.waitForSelector(TID('vader-memory-layer'));
+	// the folders arrive from the workspace service after the first paint: wait for the sentence instead of reading the page at once (a slow runner failed here)
+	await page.waitForFunction(sel => document.querySelector(sel)?.innerText.includes('Open a folder first.'), TID('vader-settings-memory'), { timeout: 10000 }).catch(() => { });
 	check('with no folder open it says to open one', (await page.locator(TID('vader-settings-memory')).innerText()).includes('Open a folder first.'));
 	await page.close();
 }
