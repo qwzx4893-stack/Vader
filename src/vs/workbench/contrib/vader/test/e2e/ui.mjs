@@ -7,7 +7,7 @@
 
 import { sleep } from './app.mjs';
 
-export const CHAT_INPUT = 'textarea[placeholder^="@ to mention"]';
+export const CHAT_INPUT = 'textarea[data-testid="vader-input"]'; // the placeholder changes with the mode and the state of the chat; the test id does not
 const TID = (id) => `[data-testid="${id}"]`;
 
 export async function isOnboarding(page) {
@@ -22,13 +22,27 @@ export async function isOnboarding(page) {
 }
 
 /** First-run flow, exactly as a new user sees it: Models (skipped here) -> Project -> First task (skipped) -> the IDE; then the provider is set up in the Settings page. */
-export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model }) {
+export async function completeOnboarding(page, { baseURL, apiKey = 'sk-test-key', model, taskCopies }) {
 	await page.locator(TID('vader-welcome-continue')).click({ timeout: 30_000 });
 	await page.locator(TID('vader-onboarding-continue')).click({ timeout: 15_000 });
 	await page.locator(TID('vader-import-done')).click({ timeout: 15_000 });
 	await sleep(1200); // the welcome overlay fades out
 	await configureOpenAICompatible(page, { baseURL, apiKey, model });
+	// Agent mode works in a copy of the project on its own branch and the folder changes only when the person merges; the scenarios look at the files
+	// in the folder, so they ask for the agent to edit it directly (the copy has its own scenario)
+	if (taskCopies !== true) { await setTaskCopies(page, false); }
 	await page.waitForSelector(CHAT_INPUT, { timeout: 30_000 });
+}
+
+/** Settings > Permissions > "Work in a copy of the project". */
+export async function setTaskCopies(page, on) {
+	await runCommand(page, 'Vader: Open Settings');
+	await page.locator(TID('vader-settings-nav-permissions')).click({ timeout: 20_000 });
+	const sw = page.locator(TID('vader-perm-taskcopies'));
+	await sw.waitFor({ state: 'visible', timeout: 10_000 });
+	if ((await sw.getAttribute('aria-checked')) !== String(on)) { await sw.click(); await sleep(300); }
+	await page.locator(TID('vader-settings-close')).click();
+	await sleep(300);
 }
 
 /** In the Settings page: point the OpenAI-Compatible provider at `baseURL` and add one model (this is how a user adds their first provider). */
@@ -57,11 +71,13 @@ export async function focusChat(page) {
 }
 
 export async function newThread(page, attempt = 0) {
-	// "+" in the chat header (aria-label "New Chat (Ctrl+Shift+L)"). Different ways of triggering it, tried in turn by the
-	// caller until the thread is actually empty (a mouse click sometimes lands without taking effect right after a run).
-	const btn = page.locator('[aria-label^="New Chat"]').first();
-	if (attempt === 0 && await btn.count()) { await btn.click(); }
-	else if (attempt === 1 && await btn.count()) { await btn.evaluate(e => e.click()); }
+	// the "New chat" button of the left navigation (or the "New Chat" button of an older header), then the shortcut, then the command.
+	// Different ways of triggering it, tried in turn by the caller until the thread is actually empty (a mouse click sometimes lands
+	// without taking effect right after a run). Nothing here waits longer than a few seconds for a button that is not there.
+	const btn = page.locator('[data-testid="vader-shell-new-chat"], [aria-label^="New Chat"]').first();
+	const there = (await btn.count()) > 0;
+	if (attempt === 0 && there) { await btn.click({ timeout: 5000 }).catch(() => { }); }
+	else if (attempt === 1 && there) { await btn.evaluate(e => e.click()).catch(() => { }); }
 	else if (attempt === 2) { await focusChat(page); await page.keyboard.press('Control+Shift+L'); }
 	else { await runCommand(page, 'Vader: New Chat').catch(() => { }); }
 	await sleep(600);
@@ -96,14 +112,18 @@ export async function reject(page) { await page.locator(TID('vader-tool-reject')
 
 /** Everything in the chat, in on-screen order. */
 export async function transcript(page) {
+	// reads and searches that follow one another are folded into one line ("Explored 2 files"): open each fold, so that its calls are in the list
+	const opened = await page.locator(TID('vader-explored-toggle')).evaluateAll(els => els.filter(e => e.getAttribute('aria-expanded') === 'false').map(e => e.click()).length).catch(() => 0);
+	if (opened) { await sleep(200); }
 	return page.evaluate(() => {
-		const sel = '[data-testid="vader-user-text"],[data-testid="vader-assistant-text"],[data-testid="vader-tool"],[data-testid="vader-error"]';
+		const sel = '[data-testid="vader-user-text"],[data-testid="vader-assistant-text"],[data-testid="vader-tool"],[data-testid="vader-plan"],[data-testid="vader-error"]';
 		return [...document.querySelectorAll(sel)].map(e => ({ kind: e.getAttribute('data-testid').replace('vader-', ''), text: (e.innerText || e.textContent || '').trim() }));
 	});
 }
 
 export const assistantTexts = async (page) => (await transcript(page)).filter(m => m.kind === 'assistant-text').map(m => m.text);
-export const toolHeaders = async (page) => (await transcript(page)).filter(m => m.kind === 'tool').map(m => m.text);
+// the list of tasks the agent keeps is drawn as a card of its own ("Plan 1 of 3"), not as a tool line
+export const toolHeaders = async (page) => (await transcript(page)).filter(m => m.kind === 'tool' || m.kind === 'plan').map(m => m.text);
 export const errorTexts = async (page) => (await transcript(page)).filter(m => m.kind === 'error').map(m => m.text);
 
 export async function waitForText(page, text, { timeout = 30_000, scope = 'body' } = {}) {
@@ -139,12 +159,14 @@ export async function toastTexts(page) {
 	return page.evaluate(() => [...document.querySelectorAll('.notifications-toasts .notification-list-item-message')].map(e => e.textContent.trim()));
 }
 
-/** Switch the chat mode dropdown (Normal chat / Gather / Plan / Agent). */
+/** The chat modes by the name a scenario uses and by the value the menu carries. */
+const MODE_VALUE = { 'Normal chat': 'normal', 'Chat': 'normal', 'Gather': 'gather', 'Plan': 'plan', 'Agent': 'agent' };
+
+/** Switch the chat mode menu in the message box (Chat / Gather / Plan / Agent). */
 export async function setMode(page, mode) {
-	const current = page.locator('span.vader-truncate.vader-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first();
-	await current.click();
+	await page.locator(TID('vader-mode')).first().click({ timeout: 5000 });
 	await sleep(300);
-	await page.locator('span').filter({ hasText: new RegExp(`^${mode}$`) }).last().click();
+	await page.locator(`${TID('vader-mode-option')}[data-value="${MODE_VALUE[mode] ?? mode.toLowerCase()}"]`).first().click({ timeout: 5000 });
 	await sleep(400);
 }
 
@@ -165,6 +187,6 @@ export async function runUntilIdle(page, { timeout = 90_000, approveEach = true 
 }
 
 export async function getMode(page) {
-	const t = await page.locator('span.vader-truncate.vader-mr-1').filter({ hasText: /^(Normal chat|Gather|Plan|Agent)$/ }).first().textContent().catch(() => null);
+	const t = await page.locator(TID('vader-mode')).first().textContent({ timeout: 3000 }).catch(() => null);
 	return t?.trim() ?? null;
 }

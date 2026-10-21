@@ -62,7 +62,7 @@ export const SearchPalette = () => {
 			['All agents', () => shellService.show('agents')],
 			['Open Add-ons', () => { void commands.executeCommand(VADER_OPEN_ADDONS_ACTION_ID) }],
 			['Open Settings', () => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }],
-			['Open in editor', () => shellService.openEditor()],
+			['Open in editor', () => shellService.openFile()],
 		] as [string, () => void][]).filter(([title]) => !query || title.toLowerCase().includes(query)).map(([title, run]) => ({ kind: 'command' as const, id: title, title, run }))
 		return [...chats, ...files.map(f => ({ kind: 'file' as const, ...f })), ...(query ? cmds : cmds.slice(0, 3))]
 	}, [data.groups, query, files, chat, shellService, commands])
@@ -72,7 +72,7 @@ export const SearchPalette = () => {
 	const choose = (e: Entry) => {
 		close()
 		if (e.kind === 'chat') { chat.switchToThread(e.id); shellService.show('conversation') }
-		else if (e.kind === 'file') { void commands.executeCommand('vscode.open', URI.file(e.path)); shellService.openEditor() }
+		else if (e.kind === 'file') { shellService.openFile(e.path) }
 		else e.run()
 	}
 

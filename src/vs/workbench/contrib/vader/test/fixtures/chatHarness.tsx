@@ -75,7 +75,7 @@ const commands: any = { async executeCommand(id: string, ...a: any[]) { log(`com
 const keybinding: any = { lookupKeybinding: () => ({ getLabel: () => 'Ctrl+L' }) }
 const metrics: any = { capture() { } }
 const language: any = { guessLanguageIdByFilepathOrFirstLine: () => 'typescript' }
-const shell: any = { state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false }, setTab(t: string) { log(`shell:tab:${t}`) }, show() { log('shell:show') }, openEditor() { log('shell:editor') } }
+const shell: any = { state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false }, setTab(t: string) { log(`shell:tab:${t}`) }, show() { log('shell:show') }, openFile(p?: string) { log(`shell:file:${p ?? ''}`) }, openEditor() { log('shell:editor') } }
 w.__shell = shell
 const empty: any = new Proxy({}, { get: () => () => undefined })
 const fileUris = ['/src/app.js', '/src/app.test.js', '/src/server/limiter.ts'].map(x => URI.file('/work/vader-app' + x))

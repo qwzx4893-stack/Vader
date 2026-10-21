@@ -135,7 +135,18 @@ async function layoutProblems(page) {
 	await page.locator(TID('vader-shell-tab-review')).click();
 	check('the Review tab opens', (await page.locator(TID('vader-shell-conversation')).getAttribute('data-tab')) === 'review');
 	await page.locator(TID('vader-shell-open-editor')).click();
-	check('"Open in editor" leaves the window for the editor layout', (await log(page)).includes('editor'));
+	check('"Open in editor" opens the files page of the window, and does not leave for the classic editor layout', await page.locator(TID('vader-files')).isVisible() && !(await log(page)).includes('editor'));
+	check('the window\'s own sidebar gives way to the files, with Back at the top left', (await page.locator(TID('vader-shell-nav')).count()) === 0 && await page.locator(TID('vader-files-back')).isVisible());
+	check('it lists the folders and files of the project, without .git and node_modules', (await page.locator(TID('vader-files-tree')).innerText()).replace(/\s+/g, ' ').trim() === 'src README.md');
+	check('nothing is chosen yet', await page.locator(TID('vader-files-empty')).isVisible());
+	await page.locator(TID('vader-files-dir')).click();
+	check('a folder opens in place and shows its files', await page.locator(`${TID('vader-files-file')}[data-path$="app.ts"]`).isVisible());
+	await page.locator(`${TID('vader-files-file')}[data-path$="README.md"]`).click();
+	check('a file shows its code on the right, with the line numbers', await page.locator(TID('vader-files-code')).waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false) && (await page.locator(TID('vader-files-code')).innerText()).includes('second line') && (await page.locator(TID('vader-files-path')).innerText()) === 'README.md');
+	check('the chosen file is marked in the list', (await page.locator(`${TID('vader-files-file')}[data-path$="README.md"]`).getAttribute('aria-current')) === 'true');
+	await shot(page, '22-files');
+	await page.locator(TID('vader-files-back')).click();
+	check('Back returns to the conversation', await page.locator(TID('vader-shell-conversation')).isVisible() && (await page.locator(TID('vader-shell-nav')).count()) === 1);
 	await page.close();
 }
 
@@ -186,7 +197,7 @@ async function layoutProblems(page) {
 	await page.locator(TID('vader-parallel-stop')).click();
 	check('Stop all stops the run', (await log(page)).includes('cancel-run:run1'));
 	await page.locator(TID('vader-parallel-open-file')).click();
-	check('Open the file opens it', (await log(page)).some(l => /vscode\.open/.test(l)));
+	check('Open the file shows it on the files page', (await log(page)).some(l => /^files:.+/.test(l)));
 	await shot(page, '09-parallel-run');
 	await page.close();
 }

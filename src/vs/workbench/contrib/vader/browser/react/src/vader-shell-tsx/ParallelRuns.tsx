@@ -66,7 +66,7 @@ export const ParallelRuns = () => {
 						<span className='t2' style={{ lineHeight: 1.6 }}>{w.text}</span>
 						<span className='r' style={{ gap: 8, flexWrap: 'wrap' }}>
 							{choices.map((c, i) => <button key={c.id} className={i === 0 ? 'pb' : 'gb'} disabled={busy !== undefined} data-testid={`vader-parallel-${c.id}`} onClick={() => { void resolve(run.id, t.id, c.id) }}>{busy === t.id + c.id ? 'Working...' : c.label}</button>)}
-							{w.files.length > 0 && t.repoPath ? <button className='tx' data-testid='vader-parallel-open-file' onClick={() => { void commands.executeCommand('vscode.open', URI.file(t.repoPath + '/' + w.files[0])) }}>Open the file</button> : null}
+							{w.files.length > 0 && t.repoPath ? <button className='tx' data-testid='vader-parallel-open-file' onClick={() => { accessor.get('IVaderShellService').openFile(t.repoPath + '/' + w.files[0]) }}>Open the file</button> : null}
 						</span>
 						{problem[t.id] ? <span className='t2' style={{ color: '#f06a6e' }} role='alert' data-testid='vader-parallel-problem'>{problem[t.id]}</span> : null}
 					</div>

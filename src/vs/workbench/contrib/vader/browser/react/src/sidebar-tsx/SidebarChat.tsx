@@ -778,6 +778,10 @@ export const vaderOpenFileFn = (
 	accessor: ReturnType<typeof useAccessor>,
 	range?: [number, number]
 ) => {
+	// in the Vader window a file is looked at on its files page (the classic editor layout is not shown from there)
+	const shellService = accessor.get('IVaderShellService')
+	if (shellService.state.mode === 'window') { shellService.openFile(uri.fsPath); return }
+
 	const commandService = accessor.get('ICommandService')
 	const editorService = accessor.get('ICodeEditorService')
 

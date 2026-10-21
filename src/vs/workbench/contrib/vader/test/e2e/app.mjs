@@ -79,6 +79,9 @@ export async function launchApp(opts) {
 	}
 	if (!page) { throw new Error('no workbench window appeared'); }
 	await page.waitForSelector('.monaco-workbench .part', { timeout: 60_000 });
+	// a click or a fill on something that is not on the screen fails after 12 seconds, not after Playwright's default 30: the longest
+	// things a scenario waits for have their own timeouts (waitForIdle, waitForApproval, waitFor)
+	page.setDefaultTimeout(12_000);
 
 	const problems = [];
 	page.on('pageerror', e => problems.push(`pageerror: ${String(e).slice(0, 400)}`));

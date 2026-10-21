@@ -11,6 +11,7 @@ import { ShellStrip } from './ShellStrip.js'
 import { ConversationPage } from './ConversationPage.js'
 import { AgentsPage } from './AgentsPage.js'
 import { AddonsPage } from './AddonsPage.js'
+import { FilesPage } from './FilesPage.js'
 import { SearchPalette } from './SearchPalette.js'
 
 // The Vader window: the sidebar on the left, and on the right one page: a conversation (with its review, browser and terminals), all agents, or Add-ons.
@@ -22,9 +23,9 @@ export const Shell = () => {
 	return <div className='shell' data-testid='vader-shell' data-page={shell.page}>
 		<ShellStrip navOpen={navOpen} onToggleNav={() => setNavOpen(o => !o)} />
 		<div className='r fl' style={{ alignItems: 'stretch' }}>
-			{navOpen ? <Nav /> : null}
+			{navOpen && shell.page !== 'files' ? <Nav /> : null}
 			<div className='main-sheet fl' data-testid='vader-shell-main'>
-				<div key={shell.page} className='pg c' style={{ flex: 1, minHeight: 0, minWidth: 0, height: '100%' }}>{shell.page === 'conversation' ? <ConversationPage /> : shell.page === 'agents' ? <AgentsPage /> : <AddonsPage />}</div>
+				<div key={shell.page} className='pg c' style={{ flex: 1, minHeight: 0, minWidth: 0, height: '100%' }}>{shell.page === 'conversation' ? <ConversationPage /> : shell.page === 'agents' ? <AgentsPage /> : shell.page === 'files' ? <FilesPage /> : <AddonsPage />}</div>
 			</div>
 		</div>
 		{shell.searchOpen ? <SearchPalette /> : null}

@@ -94,7 +94,7 @@ export const autocompleteScenarios = [
 			await t.page.locator('[data-testid="vader-editor-autocomplete"]').click();
 			await t.sleep(800);
 			t.check('autocomplete is switched on in settings', (await t.page.locator('[data-testid="vader-editor-autocomplete"]').getAttribute('aria-checked')) === 'true');
-			t.check('and a model that can fill in the middle is chosen for it', await t.waitFor(async () => /codestral|fim/i.test(await t.page.locator('[data-testid="vader-editor-model-autocomplete"]').evaluate(e => e.value).catch(() => '')), 10_000));
+			t.check('and a model that can fill in the middle is chosen for it', await t.waitFor(async () => /codestral|fim/i.test(await t.page.locator('[data-testid="vader-editor-model-autocomplete"]').evaluate(e => e.getAttribute('data-value') ?? e.value).catch(() => '')), 10_000));
 			await t.page.locator('[data-testid="vader-settings-close"]').click(); // close the Settings page
 			t.useFim(({ prompt, suffix }) => '  return a + b;');
 			await t.ui.openFile(t.page, 'app.js');

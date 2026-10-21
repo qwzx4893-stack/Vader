@@ -49,7 +49,7 @@ export const MemoryPage = () => {
 	const records = tab === 'project' ? mem.project : mem.agent
 	const agentNameOf = (id: string) => agents.getAgent(id)?.name ?? 'deleted agent'
 
-	const openFile = (uri: URI) => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID); shell.openEditor(); void commands.executeCommand('vscode.open', uri) }
+	const openFile = (uri: URI) => { void commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID); shell.openFile(uri.fsPath) }
 
 	return <div data-testid='vader-settings-memory'>
 		<PageHead title='Memory and instructions' desc='What the agent is told before it starts, and what it chose to remember along the way. You can read and remove all of it.' />

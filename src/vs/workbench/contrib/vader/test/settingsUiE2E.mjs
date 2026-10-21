@@ -318,7 +318,7 @@ async function layoutProblems(page) {
 	check('a project with no .vaderignore says so, and offers to create one', (await page.locator(TID('vader-privacy-ignore-detail')).innerText()).includes('None in this project') && (await page.locator(TID('vader-privacy-ignore-create')).count()) === 1);
 	await page.locator(TID('vader-privacy-ignore-create')).click();
 	await page.waitForSelector(TID('vader-privacy-ignore-open'));
-	check('Create writes the file with its explanation and opens it', (await log(page)).includes('create:.vaderignore') && (await log(page)).some(x => x.startsWith('command:vscode.open')) && (await page.locator(TID('vader-privacy-ignore-detail')).innerText()).startsWith('0 patterns.'));
+	check('Create writes the file with its explanation and opens it', (await log(page)).includes('create:.vaderignore') && (await log(page)).some(x => x.startsWith('shell:file:')) && (await page.locator(TID('vader-privacy-ignore-detail')).innerText()).startsWith('0 patterns.'));
 	check('the release check says it is off until the person turns it on', contacts.find(c => c.startsWith('Release check')).includes('Only when you press'));
 	await page.locator(TID('vader-settings-privacy-autocheck')).click();
 	check('turning the automatic check on is the real setting, and the list changes its wording', (await log(page)).includes('global:autoCheckUpdates=true') && (await page.locator(TID('vader-privacy-contact')).nth(3).innerText()).includes('Now on'));
@@ -729,7 +729,7 @@ async function layoutProblems(page) {
 	check('Save writes the instructions and says when they apply', (await log(page)).includes('global:aiInstructions="Reply in the language I write in."') && (await page.locator(TID('vader-memory-saved')).innerText()).includes('next message'));
 	await page.locator(TID('vader-memory-layer-action')).nth(1).click();
 	const l = await log(page);
-	check('Open on a rules file leaves Settings, goes to the editor and opens that file', l.some(x => /^command:.*Settings/i.test(x)) && l.includes('shell:editor') && l.some(x => x.startsWith('command:vscode.open')), l.join(','));
+	check('Open on a rules file leaves Settings and shows that file on the files page', l.some(x => /^command:.*Settings/i.test(x)) && l.some(x => x.startsWith('shell:file:')), l.join(','));
 	await page.locator(TID('vader-memory-disable-system')).click();
 	check('sending only your instructions is its own switch, with an honest note', (await log(page)).includes('global:disableSystemMessage=true') && (await page.locator(TID('vader-settings-memory')).innerText()).includes('safety rules that block dangerous actions still apply'));
 	check('the project memory is listed with counts on the tabs', (await page.locator(TID('vader-memory-record')).count()) === 2 && (await page.locator(TID('vader-memory-tab-project')).innerText()).includes('2') && (await page.locator(TID('vader-memory-tab-agent')).innerText()).includes('1'));

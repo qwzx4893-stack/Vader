@@ -72,9 +72,10 @@ w.__chat = {
 w.__log = [] as string[]
 w.__settings = { modelSelectionOfFeature: { Chat: { providerName: 'anthropic', modelName: 'Sonnet 4.5' } }, globalSettings: { chatMode: 'agent', dailySpendLimitUsd: 5 } }
 const shell: any = {
-	state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false },
+	state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false, file: null },
 	show(page = this.state.page, tab = page === 'conversation' ? this.state.tab : 'conversation') { this.state = { ...this.state, mode: 'window', page, tab, searchOpen: false }; notify() },
 	openEditor() { this.state = { ...this.state, mode: 'editor' }; w.__log.push('editor'); notify() },
+	openFile(path?: string | null) { this.state = { ...this.state, mode: 'window', page: 'files', tab: 'conversation', searchOpen: false, file: path === undefined ? this.state.file : path }; w.__log.push(`files:${path ?? ''}`); notify() },
 	setTab(tab: string) { this.state = { ...this.state, page: 'conversation', tab }; notify() },
 	setSearchOpen(open: boolean) { this.state = { ...this.state, searchOpen: open }; notify() },
 }
@@ -130,6 +131,15 @@ const reviewSvc: any = {
 	async openPullRequestPage() { w.__log.push('pr'); return true },
 }
 const workspaceSvc: any = { getWorkspace: () => ({ folders: [{ uri: { fsPath: ROOT } }] }) }
+// ---- the files of the project, for the files page ("Open in editor")
+const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
+const treeOf: { [dir: string]: [string, boolean][] } = { [norm(ROOT)]: [['src', true], ['README.md', false], ['.git', true], ['node_modules', true]], [norm(ROOT) + '/src']: [['app.ts', false]] }
+const textOf: { [file: string]: string } = { [norm(ROOT + '/README.md')]: 'first line\nsecond line\n', [norm(ROOT + '/src/app.ts')]: 'export const answer = 42\n' }
+const fileSvc: any = {
+	async resolve(uri: any) { return { children: (treeOf[norm(uri.fsPath)] ?? []).map(([name, isDirectory]) => ({ name, isDirectory, resource: { fsPath: uri.fsPath.replace(/[\\/]$/, '') + '/' + name } })) } },
+	async stat(uri: any) { return { size: (textOf[norm(uri.fsPath)] ?? '').length } },
+	async readFile(uri: any) { return { value: { buffer: new TextEncoder().encode(textOf[norm(uri.fsPath)] ?? '') } } },
+}
 // ---- what the agent did in its browser and its terminals
 if (!process.env.VADER_PREVIEW) allThreads['t-wait'].messages.splice(2, 0,
 	tool('browser_navigate', 'success', { url: 'http://localhost:5173/', pageId: null }),
@@ -170,7 +180,7 @@ const orchSvc: any = {
 w.__opened = [] as string[]
 const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 w.__accessor = {
-	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, ITaskCopyService: copySvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
+	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, ITaskCopyService: copySvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IFileService: fileSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
 }
 Date.now = () => NOW
 

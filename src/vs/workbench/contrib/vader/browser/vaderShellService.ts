@@ -34,7 +34,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 
 export type ShellMode = 'window' | 'editor';
 /** the pages of the window; the conversation also has tabs (conversation, review, browser, terminal) */
-export type ShellPage = 'conversation' | 'agents' | 'addons';
+export type ShellPage = 'conversation' | 'agents' | 'addons' | 'files';
 export type ConversationTab = 'conversation' | 'review' | 'browser' | 'terminal';
 
 export type ShellState = {
@@ -43,6 +43,8 @@ export type ShellState = {
 	readonly tab: ConversationTab;
 	/** a search palette over chats, files and commands is open */
 	readonly searchOpen: boolean;
+	/** the file shown on the files page ("Open in editor"), by its path */
+	readonly file: string | null;
 };
 
 export interface IVaderShellService {
@@ -54,6 +56,8 @@ export interface IVaderShellService {
 	show(page?: ShellPage, tab?: ConversationTab): void;
 	/** leave the window for the classic editor layout */
 	openEditor(): void;
+	/** the files page of the window ("Open in editor"): the project's files, and this one chosen when a path is given */
+	openFile(path?: string | null): void;
 	setTab(tab: ConversationTab): void;
 	setSearchOpen(open: boolean): void;
 	/** whether the person asked for the window to be the way Vader opens */
@@ -72,7 +76,7 @@ class VaderShellService extends Disposable implements IVaderShellService {
 
 	constructor(@IConfigurationService private readonly _configurationService: IConfigurationService) {
 		super();
-		this._state = { mode: this.isWindowFirst() ? 'window' : 'editor', page: 'conversation', tab: 'conversation', searchOpen: false };
+		this._state = { mode: this.isWindowFirst() ? 'window' : 'editor', page: 'conversation', tab: 'conversation', searchOpen: false, file: null };
 	}
 
 	get state(): ShellState { return this._state; }
@@ -83,7 +87,7 @@ class VaderShellService extends Disposable implements IVaderShellService {
 
 	private _set(next: Partial<ShellState>): void {
 		const merged = { ...this._state, ...next };
-		if (merged.mode === this._state.mode && merged.page === this._state.page && merged.tab === this._state.tab && merged.searchOpen === this._state.searchOpen) { return; }
+		if (merged.mode === this._state.mode && merged.page === this._state.page && merged.tab === this._state.tab && merged.searchOpen === this._state.searchOpen && merged.file === this._state.file) { return; }
 		this._state = merged;
 		this._onDidChange.fire();
 	}
@@ -94,6 +98,10 @@ class VaderShellService extends Disposable implements IVaderShellService {
 
 	openEditor(): void {
 		this._set({ mode: 'editor', searchOpen: false });
+	}
+
+	openFile(path?: string | null): void {
+		this._set({ mode: 'window', page: 'files', tab: 'conversation', searchOpen: false, file: path === undefined ? this._state.file : path });
 	}
 
 	setTab(tab: ConversationTab): void {

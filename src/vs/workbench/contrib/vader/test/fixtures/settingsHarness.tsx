@@ -183,7 +183,7 @@ const fileSvc: any = {
 	async resolve(uri: any) { const n = String(uri.path ?? uri).split('/').pop(); if (n === 'AGENTS.md' || n === '.vaderrules') return { isFile: true, size: n === 'AGENTS.md' ? 1229 : 480 }; throw new Error('not found') } }
 w.__workspaceFolders = w.__workspaceFolders ?? [{ name: 'vader-app', uri: { scheme: 'file', authority: '', path: '/work/vader-app', toString() { return 'file://' + this.path }, fsPath: 'C:\\work\\vader-app', with(c: any) { return { ...this, ...c } } } }]
 const workspaceSvc: any = { getWorkspace: () => ({ folders: w.__workspaceFolders }) }
-const shellSvc: any = { openEditor() { w.__log.push('shell:editor') } }
+const shellSvc: any = { state: { mode: 'window' }, openEditor() { w.__log.push('shell:editor') }, openFile(p: string) { w.__log.push(`shell:file:${p}`) } }
 w.__skills = w.__skillsOverride ?? [
 	{ id: 's1', name: 'frontend-design', description: 'Design guidance for building interfaces', category: 'development', source: { repositoryUrl: 'https://github.com/anthropics/skills' }, instructions: 'Make deliberate typographic choices.', requestedCapabilities: { fs: false, terminal: false, network: false, mcp: false }, trustState: 'trusted', pinned: false, enabled: true, installedAt: Date.now() - 3 * 86400000, updatedAt: 0 },
 	{ id: 's2', name: 'log-triage', description: 'Read logs and group the errors', category: 'devops', source: { repositoryUrl: 'https://github.com/someone/ops' }, instructions: 'Run the terminal command tail -n 200 and fetch with curl https://example.com. Use the filesystem to read files.', requestedCapabilities: { fs: true, terminal: true, network: true, mcp: false }, trustState: 'review_required', pinned: false, enabled: false, installedAt: Date.now() - 86400000, updatedAt: 0 },

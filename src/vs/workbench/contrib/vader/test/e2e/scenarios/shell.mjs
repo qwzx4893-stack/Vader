@@ -24,7 +24,7 @@ export async function runShellGroup() {
 	const rec = { group: name, name: title, status: 'pass', checks: [], ms: 0 };
 	const t0 = Date.now();
 	const check = (n, ok, detail = '') => { rec.checks.push({ name: n, ok: !!ok, detail: String(detail).slice(0, 300) }); console.log(`  ${ok ? 'PASS' : 'FAIL'}: ${n}${!ok && detail ? ` - ${String(detail).slice(0, 300)}` : ''}`); if (!ok) { rec.status = 'fail'; } };
-	const server = await createModelServer({ modelIds: ['gpt-4o'], responder: () => ({ text: 'The window answers from the test model.' }) });
+	const server = await createModelServer({ modelIds: ['gpt-4o'], responder: (() => { let n = 0; return () => (++n === 2 ? { toolCalls: [{ name: 'read_file', args: { uri: path.join(ws, 'notes.txt') } }] } : { text: 'The window answers from the test model.' }); })() });
 	const ws = makeWorkspace(name);
 	const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-window-'));
 	const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-e2e-window-ext-'));
@@ -50,7 +50,11 @@ export async function runShellGroup() {
 		await ui.waitForIdle(page);
 		check('the model answered inside the window', (await ui.assistantTexts(page)).some(x => x.includes('The window answers from the test model.')));
 		check('the conversation is in the sidebar under its project', await page.locator(`${TID('vader-shell-thread')}`, { hasText: 'say hello from the window' }).first().isVisible().catch(() => false));
-		check('the conversation page has its tabs', (await page.locator(TID('vader-shell-tab-review')).count()) === 1 && (await page.locator(TID('vader-shell-tab-browser')).count()) === 1 && (await page.locator(TID('vader-shell-tab-terminal')).count()) === 1);
+		check('a chat without tools says it changed no files and has no tabs (board R03)', (await page.getByText('Chat, no changes to files').first().isVisible().catch(() => false)) && (await page.locator(TID('vader-shell-tab-review')).count()) === 0);
+		// a conversation in which the agent used a tool is an agent task: it gets the Review, Browser and Terminal tabs
+		await ui.sendMessage(page, 'now read notes.txt');
+		await ui.waitForIdle(page);
+		check('after the agent used a tool the conversation page has its tabs', (await page.locator(TID('vader-shell-tab-review')).count()) === 1 && (await page.locator(TID('vader-shell-tab-browser')).count()) === 1 && (await page.locator(TID('vader-shell-tab-terminal')).count()) === 1);
 		await shot('3-conversation');
 
 		await page.locator(TID('vader-shell-tab-terminal')).click();
@@ -88,12 +92,14 @@ export async function runShellGroup() {
 
 		await page.locator(TID('vader-shell-thread'), { hasText: 'say hello from the window' }).first().click().catch(() => { });
 		await page.locator(TID('vader-shell-open-editor')).click();
-		await sleep(1200);
-		check('Open in editor goes to the editor layout, with the chat in its sidebar', !(await page.locator(TID('vader-shell')).first().isVisible().catch(() => false)) && (await page.locator('.monaco-workbench .part.editor').first().isVisible().catch(() => false)));
-		await shot('9-editor');
-		await ui.runCommand(page, 'Vader: Open the Vader window').catch(() => { });
-		await sleep(1000);
-		check('the title bar button brings the window back', await page.locator(TID('vader-shell')).first().isVisible().catch(() => false));
+		await sleep(800);
+		check('Open in editor opens the files page of the window (not the classic editor layout)', await page.locator(TID('vader-files')).isVisible().catch(() => false) && await page.locator(TID('vader-files-back')).isVisible().catch(() => false));
+		await page.locator(`${TID('vader-files-file')}[data-path$="notes.txt"]`).first().click().catch(() => { });
+		check('a file of the project shows its code', await page.locator(TID('vader-files-code')).waitFor({ state: 'visible', timeout: 8000 }).then(() => true, () => false));
+		await shot('9-files');
+		await page.locator(TID('vader-files-back')).click().catch(() => { });
+		await sleep(500);
+		check('Back returns to the conversation', await page.locator(TID('vader-shell-conversation')).isVisible().catch(() => false));
 	} catch (e) {
 		rec.status = 'fail'; rec.error = String(e?.stack ?? e).slice(0, 600); console.log(`  FAIL: ${String(e?.message ?? e).slice(0, 300)}`);
 	} finally {

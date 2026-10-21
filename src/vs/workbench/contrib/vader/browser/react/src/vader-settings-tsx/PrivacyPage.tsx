@@ -30,7 +30,7 @@ const IgnoreList = ({ root }: { root: string }) => {
 		} catch { setState(undefined) }
 	}, [files, root])
 	useEffect(() => { void look() }, [look])
-	const open = () => { void commands.executeCommand('vscode.open', uri) }
+	const open = () => { const shell = accessor.get('IVaderShellService'); if (shell.state.mode === 'window') { shell.openFile(uri.fsPath) } else { void commands.executeCommand('vscode.open', uri) } }
 	const create = async () => {
 		setProblem(undefined)
 		try { await files.createFile(uri, VSBuffer.fromString(AGENT_IGNORE_TEMPLATE)); await look(); open() }
