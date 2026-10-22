@@ -10,19 +10,21 @@ import { isMacintosh, isWindows } from '../../../../base/common/platform.js';
 import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../platform/actions/common/actions.js';
 import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js';
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
+import { setVaderWindowLayer } from './vaderWindowLayers.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { mountVaderSettings } from './react/out/vader-settings-tsx/index.js'
+import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 
 
 // Vader's settings are a full-window page that opens over the editor (below the title bar), not a tab in the editor area:
 // the React settings page: a column on the left with "Back to the app", a search and the pages, and the page on the right (interface boards R08 to R30).
 // It stays mounted once opened, so reopening is instant and nothing typed is lost. Esc or "Back to the app" hides it.
 
-class VaderSettingsOverlay {
+export class VaderSettingsOverlay extends Disposable {
 	private root: HTMLElement | undefined
 	private previouslyFocused: Element | null = null
 
-	constructor(private readonly instantiationService: IInstantiationService) { }
+	constructor(private readonly instantiationService: IInstantiationService) { super() }
 
 	get isOpen(): boolean { return !!this.root && this.root.style.display !== 'none' }
 
@@ -38,12 +40,15 @@ class VaderSettingsOverlay {
 		this.previouslyFocused = win.document.activeElement
 		this.position()
 		root.style.display = 'flex'
+		setVaderWindowLayer(workbench as HTMLElement, 'settings', true)
 		root.focus()
 	}
 
 	close(): void {
 		if (!this.root || !this.isOpen) { return }
 		this.root.style.display = 'none'
+		const workbench = this.root.closest<HTMLElement>('.monaco-workbench')
+		if (workbench) setVaderWindowLayer(workbench, 'settings', false)
 		const prev = this.previouslyFocused as HTMLElement | null
 		this.previouslyFocused = null
 		prev?.focus?.()
@@ -74,13 +79,27 @@ class VaderSettingsOverlay {
 		body.className = 'vader-settings-overlay-body'
 		root.append(body)
 		workbench.appendChild(root)
-		this.root = root
+		const resources = new DisposableStore()
+		resources.add(toDisposable(() => root.remove()))
+		const resize = () => { if (this.isOpen) this.position() }
+		doc.defaultView?.addEventListener('resize', resize)
+		resources.add(toDisposable(() => doc.defaultView?.removeEventListener('resize', resize)))
+		try {
+			const mounted = this.instantiationService.invokeFunction(accessor => mountVaderSettings(body, accessor))
+			if (!mounted) throw new Error('Vader Settings could not be mounted')
+			resources.add(mounted)
+			this.root = root
+			this._register(resources)
+		} catch (error) {
+			resources.dispose()
+			throw error
+		}
+	}
 
-		doc.defaultView?.addEventListener('resize', () => { if (this.isOpen) { this.position() } })
-
-		this.instantiationService.invokeFunction(accessor => {
-			mountVaderSettings(body, accessor) // lives as long as the window
-		})
+	override dispose(): void {
+		this.close()
+		super.dispose()
+		this.root = undefined
 	}
 }
 

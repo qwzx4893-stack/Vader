@@ -9,6 +9,7 @@ import { redactSettingsForExport, mergeImportedSettings } from '../../../../comm
 import { providerNames } from '../../../../common/vaderSettingsTypes.js'
 import { transferEditorTypes } from '../../../extensionTransferTypes.js'
 import { EditorSwitchButton } from './EditorSwitch.js'
+import { VADER_TOGGLE_SETTINGS_ACTION_ID } from '../../../actionIDs.js'
 import { Ask, Group, Line, PageHead, Note } from './ui.js'
 import { Backup, BACKUP_TEXT, BACKUP_TITLE, backupFileName, BackupRule, buildBackup, deleteChatsWords, parseBackup, planRestore, RestorePlan, restoreWords } from '../../../../common/backupModel.js'
 
@@ -33,6 +34,11 @@ export const DataPage = () => {
 	const commands = accessor.get('ICommandService')
 	const environment = accessor.get('IEnvironmentService')
 	const nativeHost = accessor.get('INativeHostService')
+	const openEditorSetting = async (id: string) => {
+		await commands.executeCommand(VADER_TOGGLE_SETTINGS_ACTION_ID)
+		accessor.get('IVaderShellService').openEditor()
+		await commands.executeCommand(id)
+	}
 	useSettingsState()
 	const settingsFile = useRef<HTMLInputElement>(null)
 	const chatsFile = useRef<HTMLInputElement>(null)
@@ -142,8 +148,8 @@ export const DataPage = () => {
 
 		<Group title='The editor itself'>
 			<Line first title='Editor settings, keyboard shortcuts and theme' right={<span className='r' style={{ gap: 8 }}>
-				<button className='gb' onClick={() => { void commands.executeCommand('workbench.action.openSettings') }}>Settings</button>
-				<button className='gb' onClick={() => { void commands.executeCommand('workbench.action.openGlobalKeybindings') }}>Keyboard</button>
+				<button className='gb' onClick={() => { void openEditorSetting('workbench.action.openSettings') }}>Settings</button>
+				<button className='gb' onClick={() => { void openEditorSetting('workbench.action.openGlobalKeybindings') }}>Keyboard</button>
 				<button className='gb' onClick={() => { void commands.executeCommand('workbench.action.selectTheme') }}>Theme</button></span>} />
 			<Line title='Logs' detail='For a bug report' right={<button className='gb' data-testid='vader-data-logs' onClick={() => { void nativeHost.showItemInFolder(environment.logsHome.fsPath) }}>Open the logs folder</button>} />
 			<Line title='The welcome screen' right={<button className='gb' data-testid='vader-data-welcome' onClick={() => settings.setGlobalSetting('isOnboardingComplete', false)}>Show it again</button>} />

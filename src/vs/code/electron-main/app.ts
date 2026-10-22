@@ -157,7 +157,7 @@ import { VaderMainUpdateService } from '../../workbench/contrib/vader/electron-m
 import { LLMMessageChannel } from '../../workbench/contrib/vader/electron-main/sendLLMMessageChannel.js';
 import { VaderSCMService } from '../../workbench/contrib/vader/electron-main/vaderSCMMainService.js';
 import { IVaderSCMService } from '../../workbench/contrib/vader/common/vaderSCMTypes.js';
-import { MCPChannel } from '../../workbench/contrib/vader/electron-main/mcpChannel.js';
+import { MCPChannel, registerMCPShutdown } from '../../workbench/contrib/vader/electron-main/mcpChannel.js';
 import { IDiscoveryMainService } from '../../workbench/contrib/vader/common/discovery/discoveryServiceTypes.js';
 import { DiscoveryMainService } from '../../workbench/contrib/vader/electron-main/discoveryMainService.js';
 import { IBrowserToolMainService } from '../../workbench/contrib/vader/common/browser/browserToolServiceTypes.js';
@@ -1516,6 +1516,7 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('vader-channel-mcp', mcpChannel);
+		registerMCPShutdown(mcpChannel, this.lifecycleMainService, disposables, error => this.logService.error(error));
 
 		// Vader added this
 		const discoveryChannel = ProxyChannel.fromService(accessor.get(IDiscoveryMainService), disposables);

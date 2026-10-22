@@ -1190,6 +1190,7 @@ export class FileService extends Disposable implements IFileService {
 				}
 			} catch (error) {
 				this.logService.error(error);
+				if (!watchDisposed) this._onDidWatchError.fire(error instanceof Error ? error : new Error(String(error)));
 			}
 		})();
 

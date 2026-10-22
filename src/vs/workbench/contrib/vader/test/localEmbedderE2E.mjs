@@ -71,9 +71,9 @@ check('with the files, the model is found', E.modelIsInstalled(resources('a')) =
 }
 {
 	const r1 = resources('nr'); fs.writeFileSync(path.join(r1, 'models', MODEL, 'NOT_READY'), '');
-	check('a worker that reports it could not load the model gives no embedder', (await E.createLocalEmbedder({ embeddingDir: r1, workerPath: worker, cores: 4 })) === undefined);
+	check('a worker that cannot load reports a startup error', await E.createLocalEmbedder({ embeddingDir: r1, workerPath: worker, cores: 4 }).then(() => false, e => /could not|ready|load/i.test(e.message)));
 	const r2 = resources('ds'); fs.writeFileSync(path.join(r2, 'models', MODEL, 'DIES_AT_START'), '');
-	check('a worker that dies while starting gives no embedder', (await E.createLocalEmbedder({ embeddingDir: r2, workerPath: worker, cores: 4 })) === undefined);
+	check('a worker that dies while starting reports the failure', await E.createLocalEmbedder({ embeddingDir: r2, workerPath: worker, cores: 4 }).then(() => false, e => /stopped|exit/i.test(e.message)));
 }
 {
 	// the document prefix from the manifest goes in front of every document
@@ -95,7 +95,28 @@ check('with the files, the model is found', E.modelIsInstalled(resources('a')) =
 	check('questions that are in flight are not cut off by the idle timer', (await slow).length === 2 && starts() === 2);
 	e.dispose();
 }
-check('a worker file that does not exist gives no embedder instead of an error', (await E.createLocalEmbedder({ embeddingDir: resources('c'), workerPath: path.join(tmp, 'nope.mjs'), cores: 4 })) === undefined);
+check('a missing packaged worker reports the module error instead of claiming the model is absent', await E.createLocalEmbedder({ embeddingDir: resources('c'), workerPath: path.join(tmp, 'nope.mjs'), cores: 4 }).then(() => false, e => /Cannot find module/.test(e.message)));
+{
+	const r = resources('startup-hang'); fs.writeFileSync(path.join(r, 'models', MODEL, 'HANG_AT_START'), '');
+	check('a silent worker startup is bounded and rejected', await E.createLocalEmbedder({ embeddingDir: r, workerPath: worker, cores: 4, startupMs: 100 }).then(() => false, e => /time/i.test(e.message)));
+}
+{
+	const e = await E.createLocalEmbedder({ embeddingDir: resources('request-hang'), workerPath: worker, cores: 4, requestMs: 100 });
+	check('a silent embedding request is bounded and rejected', await e.embedDocs(['HANG']).then(() => false, e => /time/i.test(e.message)));
+	check('after a request timeout a new worker can answer', (await e.embedDocs(['recovered']))[0][0] === 9);
+	e.dispose();
+}
+{
+	const r = resources('restart-disposal');
+	const e = await E.createLocalEmbedder({ embeddingDir: r, workerPath: worker, cores: 4, idleMs: 20, startupMs: 1000 });
+	await new Promise(resolve => setTimeout(resolve, 150)); // expire the deliberately short idle policy
+	fs.writeFileSync(path.join(r, 'models', MODEL, 'HANG_AT_START'), '');
+	const waiting = e.embedDocs(['pending']).then(() => false, () => true);
+	await new Promise(resolve => setTimeout(resolve, 30));
+	e.dispose();
+	check('disposal during an idle restart rejects the pending request', await waiting);
+	check('a disposed restarted embedder cannot accept further work', await e.embedDocs(['late']).then(() => false, () => true));
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 clearInterval(keepAlive);

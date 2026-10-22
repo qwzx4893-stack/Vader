@@ -45,7 +45,7 @@ const m1 = model();
 {
 	const ix = new CodebaseIndexer(project, store, async () => m1, opts);
 	await ix.sync();
-	const ready = await until(() => ix.state.meaning?.ready >= 5 || false, 8000) || true;
+	check('the initial embedding queue becomes ready', await until(() => (ix.state.meaning?.ready ?? 0) >= 5, 8000));
 	await until(async () => (await ix.search('zzz')).stale === false && m1.docTexts >= 5);
 	const r = await ix.search('how do we stop too many hits');
 	check('a question in other words finds the code by what it means', r.results[0]?.file === 'src/guard.ts', JSON.stringify(r.results.map(x => x.file)));
@@ -223,15 +223,41 @@ const quickModel = () => { const q = { docs: 0, queries: 0, embed(t) { if (t.len
 	await ix.dispose();
 }
 
+// Failure diagnostics must survive the host factory instead of looking like absent assets.
+{
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-model-error'), async () => { throw new Error('fixture model startup failed'); }, opts);
+	await ix.sync();
+	await until(() => ix.state.meaning?.error === 'fixture model startup failed', 3000);
+	check('model startup errors reach the public index diagnostics', ix.state.meaning?.error === 'fixture model startup failed' && ix.state.meaning.on === false);
+	check('word search remains usable after model startup fails', (await ix.search('bucket')).results.length > 0);
+	await ix.dispose();
+}
+
+// Closing the folder while the model is still loading must not retain it or run work.
+{
+	const m = model(); let finishStart; let starting = false;
+	const start = new Promise(resolve => { finishStart = resolve; });
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-close-loading'), async () => { starting = true; return start; }, opts);
+	await ix.sync();
+	check('the delayed factory reaches a controlled loading barrier', await until(() => starting, 3000));
+	await ix.dispose();
+	finishStart(m);
+	await until(() => m.disposed || m.docTexts > 0, 3000);
+	check('a model that finishes loading after folder close is released', m.disposed);
+	check('no document embedding starts after folder close', m.docTexts === 0, String(m.docTexts));
+}
+
 // ---- on battery nothing is embedded
 {
-	const m = model(); let held = true;
-	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-h'), async () => m, { ...opts, hold: () => held });
+	const m = model(); let held = true; let modelStarts = 0;
+	const ix = new CodebaseIndexer(project, path.join(tmp, 'store-h'), async () => { modelStarts++; return m; }, { ...opts, hold: () => held, holdRetryMs: 100 });
 	await ix.sync(); await wait(500);
 	check('while the computer is on battery the model is not run in the background', m.docTexts === 0, String(m.docTexts));
+	check('a held background queue does not even load the code model into memory', modelStarts === 0, String(modelStarts));
 	held = false;
 	await until(() => m.docTexts >= 5, 10_000);
 	check('and the work starts when it is plugged in', m.docTexts >= 5, String(m.docTexts));
+	check('resuming the queue loads the model once', modelStarts === 1, String(modelStarts));
 	await ix.dispose();
 }
 

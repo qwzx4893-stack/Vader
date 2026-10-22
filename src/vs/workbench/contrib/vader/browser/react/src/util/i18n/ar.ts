@@ -6,6 +6,16 @@
 // Generated from the translation tables; a text that is missing here shows in English.
 
 export const ar: Record<string, string> = {
+	"Checking the local server...": "جارٍ فحص الخادم المحلي...",
+	"The local server has not been checked yet.": "لم يُفحص الخادم المحلي بعد.",
+	"Not checked": "لم يُفحص",
+	"{0} saved model{1}. Check whether the local server is running.": "{0} نموذج محفوظ. تحقّق من تشغيل الخادم المحلي.",
+	"No usable model is selected. Connect a provider or start your local server, then choose a model in Settings.": "لم يُحدّد نموذج قابل للاستخدام. اربط مزوّداً أو شغّل خادمك المحلي، ثم اختر نموذجاً في الإعدادات.",
+	"Selected": "محدّد",
+	"Search diagnostics": "تشخيص البحث",
+	"File watching reported an error. Refresh to try again.": "أبلغت مراقبة الملفات عن خطأ. اضغط تحديث للمحاولة مجدداً.",
+	"The search model could not run; search still matches words.": "تعذّر تشغيل نموذج البحث؛ يستمر البحث بمطابقة الكلمات.",
+	"Fast search by meaning is ready for {0} pieces. The high-quality search model could not run; search still works with the available index.": "البحث الدلالي السريع جاهز لـ {0} مقطع. تعذّر تشغيل نموذج البحث عالي الجودة؛ يستمر البحث بالفهرس المتاح.",
 	"\"{0}\" is not a valid regular expression.": "\"{0}\" ليس تعبيراً نمطياً صالحاً.",
 	"% of": "% من",
 	"(Chat model)": "(نموذج المحادثة)",

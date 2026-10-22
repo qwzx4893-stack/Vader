@@ -27,8 +27,12 @@ export const ModelOverridesDialog = ({ target, onClose }: { target: OverrideTarg
 	const [on, setOn] = useState(!!current)
 	const [text, setText] = useState(current ? JSON.stringify(current, null, 2) : placeholder)
 	const [problem, setProblem] = useState<string | undefined>()
-	const ref = useRef<HTMLDivElement>(null)
-	useEffect(() => { ref.current?.focus() }, [])
+	const ref = useRef<HTMLButtonElement>(null)
+	useEffect(() => {
+		const previous = document.activeElement as HTMLElement | null
+		ref.current?.focus()
+		return () => { if (previous?.isConnected) previous.focus() }
+	}, [])
 
 	const save = async () => {
 		if (!on) { await settings.setOverridesOfModel(providerName, modelName, undefined); onClose(); return }
@@ -41,7 +45,7 @@ export const ModelOverridesDialog = ({ target, onClose }: { target: OverrideTarg
 		onClose()
 	}
 
-	return <div role='dialog' aria-modal='true' aria-label={`Defaults for ${modelName}`} data-testid='vader-overrides-dialog' ref={ref} tabIndex={-1} onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
+	return <div role='dialog' aria-modal='true' aria-label={`Defaults for ${modelName}`} data-testid='vader-overrides-dialog' onKeyDown={e => { if (e.key === 'Escape') { e.stopPropagation(); onClose() } }}
 		style={{ position: 'fixed', inset: 0, zIndex: 50, background: 'rgba(0,0,0,.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', outline: 0 }} onMouseDown={e => { if (e.target === e.currentTarget) onClose() }}>
 		<div className='sheet c' style={{ width: 560, maxHeight: '88vh', padding: 22, gap: 14, overflow: 'auto' }}>
 			<div className='c' style={{ gap: 4 }}><span className='t1' style={{ fontWeight: 600, fontSize: 15 }}>Defaults for {modelName}</span><span className='hint'>{displayInfoOfProviderName(providerName).title}</span></div>
@@ -49,7 +53,7 @@ export const ModelOverridesDialog = ({ target, onClose }: { target: OverrideTarg
 			<div className='r' style={{ gap: 12 }}><Switch on={on} label='Override the defaults' testId='vader-overrides-switch' onChange={setOn} /><span className='t1'>Override the defaults</span></div>
 			<textarea className='ta mo' data-testid='vader-overrides-text' rows={9} readOnly={!on} spellCheck={false} aria-label='Overrides as JSON' style={{ resize: 'vertical', userSelect: 'text', opacity: on ? 1 : .55 }} value={text} onChange={e => { setText(e.target.value); setProblem(undefined) }} />
 			{problem ? <Note kind='warn' testId='vader-overrides-problem'>{problem}</Note> : null}
-			<div className='r' style={{ gap: 10, justifyContent: 'flex-end' }}><button className='tx' onClick={onClose}>Cancel</button><button className='pb' data-testid='vader-overrides-save' onClick={() => void save()}>Save</button></div>
+			<div className='r' style={{ gap: 10, justifyContent: 'flex-end' }}><button ref={ref} className='tx' onClick={onClose}>Cancel</button><button className='pb' data-testid='vader-overrides-save' onClick={() => void save()}>Save</button></div>
 		</div>
 	</div>
 }

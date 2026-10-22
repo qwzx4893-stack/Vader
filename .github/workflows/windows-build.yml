@@ -117,9 +117,8 @@ jobs:
         run: npm run gulp vscode-win32-%ARCH%-min
         shell: cmd
 
-      # Search by meaning: the small runtime and the embedding model (about 56 MB, checked against build/embedding/model.lock.json) go into
-      # resources/embedding next to the app, where electron-main/localEmbedder.ts looks. Without this folder the app still works and search stays on
-      # words. The script has been run by hand on this machine (build/embedding/prepare.mjs), but this step has NOT yet run in the workflow or inside an installed app.
+      # The pinned runtime and both semantic models go in resources/embedding.
+      # The separately bundled worker entry is also checked before the installer.
       - name: Add the search-by-meaning runtime and model
         shell: pwsh
         run: |

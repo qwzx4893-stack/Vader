@@ -2,8 +2,9 @@
  *  Vader addition. Licensed under the Apache License, Version 2.0. See LICENSE.txt.
  *--------------------------------------------------------------------------------------*/
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { URI } from '../../../../../../../base/common/uri.js'
+import { extUriBiasedIgnorePathCase } from '../../../../../../../base/common/resources.js'
 import { useAccessor, useShellState } from '../util/services.js'
 import { Icon } from './icons.js'
 
@@ -32,21 +33,67 @@ export const FilesPage = () => {
 	const [kids, setKids] = useState<Record<string, Entry[] | 'error'>>({})
 	const [open, setOpen] = useState<Record<string, boolean>>({})
 	const [shown, setShown] = useState<Shown | null>(null)
+	const [fileRevision, setFileRevision] = useState(0)
+	const [watchAttempt, setWatchAttempt] = useState(0)
+	const [watchError, setWatchError] = useState(false)
+	const epoch = useRef(0)
+	const directoryRequests = useRef(new Map<string, number>())
+	const previousRoot = useRef('')
+	useEffect(() => {
+		const errors = files.onDidWatchError(() => setWatchError(true))
+		return () => errors.dispose()
+	}, [files])
 
 	const load = useCallback(async (dir: string) => {
+		const generation = epoch.current
+		const request = (directoryRequests.current.get(dir) ?? 0) + 1
+		directoryRequests.current.set(dir, request)
+		const current = () => generation === epoch.current && directoryRequests.current.get(dir) === request
 		try {
 			const stat = await files.resolve(URI.file(dir))
 			const list = (stat.children ?? []).filter(c => !HIDDEN.has(c.name)).map(c => ({ name: c.name, path: c.resource.fsPath, dir: c.isDirectory })).sort(byKind)
-			setKids(k => ({ ...k, [dir]: list }))
-		} catch { setKids(k => ({ ...k, [dir]: 'error' })) }
+			if (current()) setKids(k => ({ ...k, [dir]: list }))
+		} catch { if (current()) setKids(k => ({ ...k, [dir]: 'error' })) }
 	}, [files])
 
-	useEffect(() => { if (rootPath) void load(rootPath) }, [rootPath, load])
+	useEffect(() => {
+		epoch.current++
+		if (previousRoot.current !== rootPath) {
+			previousRoot.current = rootPath
+			directoryRequests.current.clear()
+			setKids({}); setOpen({}); setShown(null)
+		}
+		setWatchError(false)
+		if (!rootPath) return
+		const uri = URI.file(rootPath)
+		const changes = files.onDidFilesChange(event => {
+			if (!event.affects(uri)) return
+			for (const dir of directoryRequests.current.keys()) if (event.affects(URI.file(dir))) void load(dir)
+		})
+		let watcher: { dispose(): void } | undefined
+		try { watcher = files.watch(uri, { recursive: true, excludes: ['**/.git/**', '**/node_modules/**'] }) }
+		catch { setWatchError(true) }
+		void load(rootPath)
+		for (const dir of directoryRequests.current.keys()) if (dir !== rootPath) void load(dir)
+		return () => { epoch.current++; changes.dispose(); watcher?.dispose() }
+	}, [rootPath, load, files, watchAttempt])
 
 	// a file chosen from elsewhere (the search): open the folders above it
 	const chosen = shell.file
 	useEffect(() => {
-		if (!chosen || !rootPath || !fwd(chosen).toLowerCase().startsWith(fwd(rootPath).toLowerCase())) { return }
+		if (!chosen) return
+		const uri = URI.file(chosen)
+		const changes = files.onDidFilesChange(event => { if (event.contains(uri)) setFileRevision(n => n + 1) })
+		let watcher: { dispose(): void } | undefined
+		// Search may choose a file in another workspace folder, or outside the first root.
+		if (!rootPath || !extUriBiasedIgnorePathCase.isEqualOrParent(uri, URI.file(rootPath))) {
+			try { watcher = files.watch(uri, { recursive: false, excludes: [] }) }
+			catch { setWatchError(true) }
+		}
+		return () => { changes.dispose(); watcher?.dispose() }
+	}, [chosen, rootPath, files, watchAttempt])
+	useEffect(() => {
+		if (!chosen || !rootPath || !extUriBiasedIgnorePathCase.isEqualOrParent(URI.file(chosen), URI.file(rootPath))) { return }
 		const parts = fwd(chosen).slice(rootPath.length).split('/').filter(Boolean)
 		const sep = rootPath.includes('\\') ? '\\' : '/'
 		let dir = rootPath
@@ -61,6 +108,7 @@ export const FilesPage = () => {
 	useEffect(() => {
 		if (!chosen) { setShown(null); return }
 		let live = true
+		setShown({ path: chosen, note: 'Loading...' })
 		void (async () => {
 			try {
 				const uri = URI.file(chosen)
@@ -75,7 +123,7 @@ export const FilesPage = () => {
 			} catch { if (live) { setShown({ path: chosen, note: 'This file could not be read.' }) } }
 		})()
 		return () => { live = false }
-	}, [chosen, files])
+	}, [chosen, files, fileRevision, rootPath])
 
 	const toggle = (e: Entry) => {
 		setOpen(o => ({ ...o, [e.path]: !o[e.path] }))
@@ -99,13 +147,16 @@ export const FilesPage = () => {
 		return list.map(e => <React.Fragment key={e.path}>{row(e, depth)}{e.dir && open[e.path] ? dirRows(e.path, depth + 1) : null}</React.Fragment>)
 	}
 
-	const relative = shown && rootPath && fwd(shown.path).toLowerCase().startsWith(fwd(rootPath).toLowerCase()) ? fwd(shown.path).slice(rootPath.length).replace(/^\//, '') : shown?.path
+	const relative = shown && rootPath && extUriBiasedIgnorePathCase.isEqualOrParent(URI.file(shown.path), URI.file(rootPath)) ? fwd(shown.path).slice(rootPath.length).replace(/^\//, '') : shown?.path
 
 	return <div className='r' style={{ height: '100%', alignItems: 'stretch', minHeight: 0 }} data-testid='vader-files'>
 		<div className='c' style={{ width: 280, flex: 'none', borderRight: '1px solid var(--ln)', minHeight: 0 }}>
 			<div className='r' style={{ height: 44, padding: '0 10px', flex: 'none', borderBottom: '1px solid var(--ln)' }}>
 				<button type='button' className='tx t1' data-testid='vader-files-back' onClick={() => shellService.show('conversation')}><Icon k='left' small /> Back</button>
+				<span className='fl' />
+				<button type='button' className='tx' data-testid='vader-files-refresh' onClick={() => { setWatchAttempt(n => n + 1); setFileRevision(n => n + 1) }}>Refresh</button>
 			</div>
+			{watchError ? <div className='t3' role='status' style={{ padding: 8, fontSize: 12.5 }}>File watching reported an error. Refresh to try again.</div> : null}
 			<div className='c' style={{ flex: 1, minHeight: 0, overflow: 'auto', padding: '8px 6px' }} data-testid='vader-files-tree'>
 				{root ? dirRows(rootPath, 0) : <div className='t3' style={{ padding: 8, fontSize: 12.5 }}>Open a folder to see its files.</div>}
 			</div>

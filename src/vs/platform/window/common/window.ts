@@ -479,6 +479,8 @@ export interface INativeWindowConfiguration extends IWindowConfiguration, Native
 	userDataDir: string;
 
 	partsSplash?: IPartsSplash;
+	/** Vader's full-window startup must not restore the classic editor splash. */
+	vaderWindowFirst?: boolean;
 
 	workspace?: IWorkspaceIdentifier | ISingleFolderWorkspaceIdentifier;
 

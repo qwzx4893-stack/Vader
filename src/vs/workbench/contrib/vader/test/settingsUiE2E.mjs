@@ -574,17 +574,105 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// Missing selection is a real enabled state, distinct from the explicit Off option.
+{
+	const { page } = await newPage(undefined, 'models');
+	await page.evaluate(() => {
+		window.__settings._modelOptions = [];
+		window.__settings.modelSelectionOfFeature.Autocomplete = null;
+		window.__accessor.get('IVaderSettingsService').setGlobalSetting('enableAutocomplete', true);
+	});
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-models-autocomplete"]')?.getAttribute('data-value') === '');
+	check('enabled suggestions with no usable model do not falsely display Off', await page.locator(TID('vader-models-autocomplete')).getAttribute('data-value') === '' && (await page.locator(TID('vader-models-autocomplete')).innerText()).trim() !== 'Off');
+	await choose(page, 'vader-models-autocomplete', '@special');
+	check('Off remains selectable when an enabled feature has no model', (await log(page)).includes('global:enableAutocomplete=false'));
+	await page.close();
+}
+{
+	const { page } = await newPage(undefined, 'models');
+	await page.locator(TID('vader-models-chat')).click();
+	await page.locator(`${TID('vader-models-chat-list')} [role=option]`).first().waitFor({ state: 'visible' });
+	await page.keyboard.press('Tab');
+	await page.keyboard.press('Tab');
+	const focused = await page.evaluate(() => document.activeElement.getAttribute('data-value'));
+	check('Tab reaches the second model option', focused === 'openAI/gpt-5', String(focused));
+	await page.locator(`${TID('vader-models-chat-list')} [role=option]`).first().hover();
+	await page.keyboard.press('Enter');
+	await page.waitForFunction(expected => document.querySelector('[data-testid="vader-models-chat"]')?.getAttribute('data-value') === expected, focused);
+	check('Enter chooses the focused option even when a different option is hovered', await page.locator(TID('vader-models-chat')).getAttribute('data-value') === focused && focused === 'openAI/gpt-5');
+	await page.locator(TID('vader-models-chat')).click();
+	await page.keyboard.press('Tab');
+	await page.keyboard.press('Escape');
+	check('Escape from an option closes the list and returns focus to its trigger', await page.locator(TID('vader-models-chat-list')).count() === 0 && await page.locator(TID('vader-models-chat')).evaluate(el => document.activeElement === el));
+	await page.evaluate(() => {
+		window.__agents.signIn.codex = undefined;
+		window.__accessor.get('IVaderSettingsService').setGlobalSetting('externalAgentId', 'codex');
+	});
+	await page.locator(TID('vader-settings-nav-agents')).click();
+	check('a selected agent with unverified sign-in is labelled honestly and can be deselected', (await page.locator(TID('vader-external-agent-codex-state')).innerText()) === 'Selected' && await page.locator(TID('vader-external-agent-codex-unuse')).isVisible());
+	await page.locator(TID('vader-external-agent-codex-unuse')).click();
+	check('Use my models recovers from an unverified selected agent', (await log(page)).includes('global:externalAgentId=null'));
+	await page.evaluate(() => {
+		window.__settings.globalSettings.customAcpAgents = [{ id: 'custom-lost', name: 'Removed program', command: 'missing-fixture', args: [] }];
+		window.__agents.statuses['custom-lost'] = { state: 'missing-command' };
+		window.__agents.signIn['custom-lost'] = { state: 'out' };
+		window.__accessor.get('IVaderSettingsService').setGlobalSetting('externalAgentId', 'custom-lost');
+	});
+	await page.locator(TID('vader-external-agent-custom-lost-unuse')).click();
+	check('a missing signed-out custom agent can also be deselected', await page.evaluate(() => window.__settings.globalSettings.externalAgentId === null));
+	await page.close();
+}
+
+{
+	const { page } = await newPage(undefined, 'data');
+	for (const [label, command] of [['Settings', 'workbench.action.openSettings'], ['Keyboard', 'workbench.action.openGlobalKeybindings']]) {
+		await page.getByRole('button', { name: label, exact: true }).click();
+		await page.waitForFunction(id => window.__log.at(-1) === 'command:' + id, command);
+		const recent = (await log(page)).slice(-3);
+		check(`${label} closes Vader Settings and explicitly opens the editor before its command`, /toggleVaderSettings$/.test(recent[0]) && recent[1] === 'shell:editor' && recent[2] === 'command:' + command, recent.join(' | '));
+	}
+	await page.close();
+}
+{
+	const { page } = await newPage(undefined, 'models');
+	await page.evaluate(() => document.querySelector('#root').classList.add('monaco-workbench', 'vs-dark'));
+	const style = () => page.locator(TID('vader-settings-nav-models')).evaluate(el => { const s = getComputedStyle(el); return [s.color, s.backgroundColor, s.paddingTop, s.paddingBottom]; });
+	const before = await style();
+	await page.addStyleTag({ content: fs.readFileSync(path.join(here, '../browser/media/vaderPolish.css'), 'utf8') });
+	check('legacy polish CSS does not override modern Settings navigation', JSON.stringify(await style()) === JSON.stringify(before));
+	await page.close();
+}
+
+{
+	const { page } = await newPage(undefined, 'models');
+	for (const width of [1440, 1024]) {
+		await page.setViewportSize({ width, height: 900 });
+		const overlaps = await page.locator(TID('vader-provider-row')).evaluateAll(rows => rows.flatMap(row => {
+			const summary = row.querySelector('[data-testid="vader-provider-summary"]'), state = row.querySelector('[data-testid="vader-provider-state"]');
+			return summary && state && summary.getBoundingClientRect().right > state.getBoundingClientRect().left - 8 ? [row.getAttribute('data-provider')] : [];
+		}));
+		check(`provider descriptions stay separate from status labels at ${width}px`, overlaps.length === 0, overlaps.join(', '));
+	}
+	await page.evaluate(() => { window.__local.ollama.state = 'error'; window.__accessor.get('IVaderSettingsService').setGlobalSetting('autoRefreshModels', false); });
+	await page.waitForFunction(() => document.querySelector('[data-provider="ollama"] [data-testid="vader-provider-state"]')?.textContent === 'Not running');
+	check('cached model names do not claim a failed local server is running', (await page.locator('[data-provider="ollama"] [data-testid="vader-provider-state"]').innerText()) === 'Not running');
+	await page.evaluate(() => { window.__local.ollama.state = 'init'; window.__accessor.get('IVaderSettingsService').setGlobalSetting('autoRefreshModels', false); });
+	await page.waitForFunction(() => document.querySelector('[data-provider="ollama"] [data-testid="vader-provider-state"]')?.textContent === 'Not checked');
+	check('saved local models before a connection check are labelled as unverified', (await page.locator('[data-provider="ollama"] [data-testid="vader-provider-summary"]').innerText()).includes('3 saved models'));
+	await page.close();
+}
+
 // ===================================================================== Models
 {
 	const { page, errors } = await newPage(undefined, 'models');
 	check('the chat model is the one that is set', (await page.locator(TID('vader-models-chat')).getAttribute('data-value')) === 'anthropic/claude-sonnet-4-5');
-	check('suggestions are Off until a model is chosen for them', (await page.locator(TID('vader-models-autocomplete')).getAttribute('data-value')) === '');
+	check('suggestions are Off until a model is chosen for them', (await page.locator(TID('vader-models-autocomplete')).getAttribute('data-value')) === '@special');
 	await choose(page, 'vader-models-autocomplete', 'mistral/codestral-latest');
 	check('choosing a model for suggestions sets it and turns them on', (await log(page)).includes('select:Autocomplete=codestral-latest') && (await log(page)).includes('global:enableAutocomplete=true'));
-	check('applying edits follows the chat unless another model is chosen', (await page.locator(TID('vader-models-apply')).getAttribute('data-value')) === '');
+	check('applying edits follows the chat unless another model is chosen', (await page.locator(TID('vader-models-apply')).getAttribute('data-value')) === '@special');
 	await choose(page, 'vader-models-apply', 'openAI/gpt-5');
 	check('choosing a model for applying sets it and stops following the chat', (await log(page)).includes('select:Apply=gpt-5') && (await log(page)).includes('global:syncApplyToChat=false'));
-	await choose(page, 'vader-models-apply', '');
+	await choose(page, 'vader-models-apply', '@special');
 	check('and Same as chat brings the switch back', (await log(page)).includes('global:syncApplyToChat=true'));
 
 	const local = page.locator(`${TID('vader-provider-row')}[data-provider=ollama]`);
@@ -616,6 +704,7 @@ async function layoutProblems(page) {
 	check('a provider that publishes its models has no way to add one by name: the list comes from the provider', (await or.locator(TID('vader-provider-add-open')).count()) === 0);
 	await or.locator(`${TID('vader-provider-model')}[data-model="openai/gpt-5"] ${TID('vader-provider-model-defaults')}`).click();
 	check('Defaults opens what Vader assumes about the model', (await page.locator(TID('vader-overrides-dialog')).count()) === 1);
+	check('the dialog focuses a control rather than outlining the full viewport', await page.locator(TID('vader-overrides-dialog')).evaluate(el => el.contains(document.activeElement) && document.activeElement.tagName === 'BUTTON' && document.activeElement !== el));
 	await page.locator(TID('vader-overrides-switch')).click();
 	await page.locator(TID('vader-overrides-text')).fill('{ not json');
 	await page.locator(TID('vader-overrides-save')).click();

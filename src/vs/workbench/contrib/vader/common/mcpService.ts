@@ -5,6 +5,7 @@
 
 import { URI } from '../../../../base/common/uri.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
+import { equals } from '../../../../base/common/objects.js';
 import { registerSingleton, InstantiationType } from '../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../platform/instantiation/common/instantiation.js';
 import { IFileService } from '../../../../platform/files/common/files.js';
@@ -78,6 +79,8 @@ class MCPService extends Disposable implements IMCPService {
 
 
 	private readonly channel: IChannel // MCPChannel
+	private _lastConfig: MCPConfigFileJSON = { mcpServers: {} }
+	private _refreshQueue: Promise<void> = Promise.resolve()
 
 	// list of MCP servers pulled from mcpChannel
 	state: MCPServiceState = {
@@ -325,7 +328,13 @@ class MCPService extends Disposable implements IMCPService {
 
 
 	// Handle server state changes
-	private async _refreshMCPServers(): Promise<void> {
+	private _refreshMCPServers(): Promise<void> {
+		const refresh = this._refreshQueue.then(() => this._applyMCPConfig())
+		this._refreshQueue = refresh.catch(() => { /* the caller receives the error; a later file change may recover */ })
+		return refresh
+	}
+
+	private async _applyMCPConfig(): Promise<void> {
 
 		this._setHasError(undefined)
 
@@ -334,7 +343,7 @@ class MCPService extends Disposable implements IMCPService {
 		if (!newConfigFileJSON?.mcpServers) { console.log(`Not setting state: MCP config file did not have an 'mcpServers' field`); return }
 
 
-		const oldConfigFileNames = Object.keys(this.state.mcpServerOfName)
+		const oldConfigFileNames = Object.keys(this._lastConfig.mcpServers)
 		const newConfigFileNames = Object.keys(newConfigFileJSON.mcpServers)
 
 		const addedServerNames = newConfigFileNames.filter(serverName => !oldConfigFileNames.includes(serverName)); // in new and not in old
@@ -342,25 +351,30 @@ class MCPService extends Disposable implements IMCPService {
 
 		// set isOn to any new servers in the config
 		const addedUserStateOfName: MCPUserStateOfName = {}
-		for (const name of addedServerNames) { addedUserStateOfName[name] = { isOn: true } }
-		await this.vaderSettingsService.addMCPUserStateOfNames(addedUserStateOfName);
+		for (const name of addedServerNames) {
+			if (!this.vaderSettingsService.state.mcpUserStateOfName[name]) { addedUserStateOfName[name] = { isOn: true } }
+		}
+		if (Object.keys(addedUserStateOfName).length) await this.vaderSettingsService.addMCPUserStateOfNames(addedUserStateOfName);
 
 		// delete isOn for any servers that no longer show up in the config
-		await this.vaderSettingsService.removeMCPUserStateOfNames(removedServerNames);
+		if (removedServerNames.length) await this.vaderSettingsService.removeMCPUserStateOfNames(removedServerNames);
 
-		// set all servers to loading
-		for (const serverName in newConfigFileJSON.mcpServers) {
+		const updatedServerNames = newConfigFileNames.filter(name => oldConfigFileNames.includes(name) && !equals(this._lastConfig.mcpServers[name], newConfigFileJSON.mcpServers[name]))
+		if (addedServerNames.length + removedServerNames.length + updatedServerNames.length === 0) return
+
+		// An unchanged save must not restart programs or discard the review state.
+		for (const serverName of [...addedServerNames, ...updatedServerNames]) {
 			this._setMCPServerState(serverName, { status: 'loading', tools: [] })
 		}
-		const updatedServerNames = Object.keys(newConfigFileJSON.mcpServers).filter(serverName => !addedServerNames.includes(serverName) && !removedServerNames.includes(serverName))
 
-		this.channel.call('refreshMCPServers', {
+		await this.channel.call('refreshMCPServers', {
 			mcpConfigFileJSON: newConfigFileJSON,
 			addedServerNames,
 			removedServerNames,
 			updatedServerNames,
 			userStateOfName: this.vaderSettingsService.state.mcpUserStateOfName,
 		})
+		this._lastConfig = newConfigFileJSON
 	}
 
 	stringifyResult(result: RawMCPToolCall): string {
@@ -384,7 +398,7 @@ class MCPService extends Disposable implements IMCPService {
 		this._setMCPServerState(serverName, { status: 'loading', tools: [] })
 
 		await this.vaderSettingsService.setMCPServerState(serverName, { ...this.vaderSettingsService.state.mcpUserStateOfName[serverName], isOn });
-		this.channel.call('toggleMCPServer', { serverName, isOn })
+		await this.channel.call('toggleMCPServer', { serverName, isOn })
 	}
 
 

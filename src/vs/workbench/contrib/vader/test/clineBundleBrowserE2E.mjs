@@ -27,6 +27,7 @@ if (!fs.existsSync(bundle)) { console.error('Missing clineBundle/index.js - run 
 
 // Reuse the existing scenarios, swapping the Node-only parts for browser equivalents.
 let smoke = fs.readFileSync(path.join(here, 'clineRuntimeSmoke.mjs'), 'utf8')
+	.replace(/\r\n/g, '\n')
 	.replace("import { AgentRuntime } from '@cline/agents';", "import { AgentRuntime } from './bundle.js';")
 	.replace(/import \{ execFileSync \}.*\n/, '').replace(/import \{ fileURLToPath \}.*\n/, '').replace(/import \{ dirname, resolve \}.*\n/, '')
 	.replace(/\n\{\n\tconst __dirname[\s\S]*?\n\}\n/, '\n')

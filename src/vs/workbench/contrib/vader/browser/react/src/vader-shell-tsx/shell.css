@@ -125,7 +125,11 @@ width:100%;height:100%;box-sizing:border-box;background:var(--g0);color:var(--t1
 .vader-shell .vader-nv.vader-on:hover,.vader-shell .vader-ag.vader-on:hover{background:var(--g3)}
 .vader-shell .vader-gb:hover{background:rgba(255,255,255,.05)}
 .vader-shell .vader-pb:hover{background:#fff}
-.vader-shell :focus-visible{outline:1px solid var(--ac) !important;outline-offset:1px !important;border-radius:6px}
+.monaco-workbench .vader-shell :focus:not(:focus-visible){outline:none !important}
+.vader-shell:focus,.vader-shell [role='dialog']:focus{outline:none !important}
+.vader-shell :where(button,a[href],input,select,textarea,[role='option'],[role='tab'],[tabindex]:not([tabindex='-1'])):focus-visible{outline:1px solid var(--t2) !important;outline-offset:2px !important;border-radius:6px}
+.vader-shell :where(button:not(:disabled)):hover{background-color:var(--g3);color:var(--t1)}
+.vader-shell :is([data-testid='vader-files-file'],[data-testid='vader-files-dir']):hover{background:var(--g3) !important}
 /* the message box shows where the focus is by the border of the whole box (it brightens while the text is focused), so the text field itself draws no second frame */
 .vader-shell textarea[data-testid='vader-input']:focus-visible{outline:none !important}
 .vader-shell input,.vader-shell textarea{font:inherit;color:inherit;background:transparent;border:0;outline:0;min-width:0}

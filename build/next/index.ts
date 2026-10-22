@@ -98,6 +98,7 @@ const desktopWorkerEntryPoints = [
 
 // Desktop workbench and code entry points
 const desktopEntryPoints = [
+	'vs/workbench/contrib/vader/electron-main/embedWorker',
 	'vs/workbench/workbench.desktop.main',
 	'vs/sessions/sessions.desktop.main',
 	'vs/workbench/contrib/debug/node/telemetryApp',

@@ -29,7 +29,9 @@ const realNodeModules = ['@vscode/sandbox-runtime', '@pondwader/socks5-server', 
 const allowed = (spec) => spec.startsWith('<') || builtins.has(spec) || spec.startsWith('electron/') || realNodeModules.some(m => spec === m || spec.startsWith(m + '/'));
 
 // Entry bundles that Electron's main process loads before any resolve hook exists.
-const entries = ['main.js', 'cli.js', 'bootstrap-fork.js'];
+// Worker file URLs are not static imports, so dependency scanning alone misses
+// their absence. Each must be a standalone entry in both desktop build graphs.
+const entries = ['main.js', 'cli.js', 'bootstrap-fork.js', 'vs/workbench/contrib/vader/electron-main/embedWorker.js'];
 let failed = 0;
 for (const entry of entries) {
 	const file = path.join(outDir, entry);

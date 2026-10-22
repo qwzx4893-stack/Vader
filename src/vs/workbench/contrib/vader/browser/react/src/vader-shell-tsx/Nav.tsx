@@ -40,19 +40,24 @@ export const ThreadRow = ({ t, selected, nested, onOpen }: { t: ShellThread, sel
 /** how many of the add-ons on this computer have an update waiting (an extension whose gallery lists a newer version); nothing is shown while there are none */
 const useAddonUpdates = (): number => {
 	const accessor = useAccessor()
+	const marketplace = accessor.get('IUnifiedMarketplaceService')
 	const [count, setCount] = useState(0)
 	useEffect(() => {
 		let live = true
+		let looking = false
 		const look = async () => {
+			if (looking) return
+			looking = true
 			try {
-				const items = await accessor.get('IUnifiedMarketplaceService')?.listInstalled?.()
+				const items = await marketplace?.listInstalled?.()
 				if (live && Array.isArray(items)) setCount(items.filter(i => i.installMethod === 'update').length)
 			} catch { /* a source that cannot be asked is not an update */ }
+			finally { looking = false }
 		}
 		void look()
 		const timer = setInterval(() => { void look() }, 10 * 60_000)
 		return () => { live = false; clearInterval(timer) }
-	}, [accessor])
+	}, [marketplace])
 	return count
 }
 

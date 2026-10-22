@@ -8,7 +8,8 @@
 // electron-main/externalAgentMainService.ts; installs and logins that need a terminal run in a visible one so the person sees every line.
 
 import { Emitter, Event } from '../../../../../base/common/event.js';
-import { Disposable } from '../../../../../base/common/lifecycle.js';
+import { Disposable, DisposableMap } from '../../../../../base/common/lifecycle.js';
+import { RunOnceScheduler } from '../../../../../base/common/async.js';
 import { isWindows } from '../../../../../base/common/platform.js';
 import { InstantiationType, registerSingleton } from '../../../../../platform/instantiation/common/extensions.js';
 import { createDecorator } from '../../../../../platform/instantiation/common/instantiation.js';
@@ -42,7 +43,7 @@ export interface IExternalAgentsService {
 	readonly onDidChange: Event<void>;
 	readonly state: ExternalAgentsState;
 
-	/** reads what is installed or already on this computer, then (in the background) which agents are signed in */
+	/** reads what is installed without starting agents or checking their sign-in */
 	refresh(): Promise<void>;
 	/** shows what will be downloaded and from where, then downloads an ACP agent, or runs a terminal agent's installer in a terminal */
 	install(agentId: string): Promise<void>;
@@ -84,8 +85,9 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	readonly onDidChange = this._onDidChange.event;
 
 	state: ExternalAgentsState = { statuses: {}, busy: {}, errors: {}, probes: {}, signIn: {}, configOfThread: {}, opened: {} };
-	private readonly _signInCheckedAt = new Map<string, number>()
 	private _refreshing: Promise<void> | undefined
+	private readonly _installPolls = this._register(new DisposableMap<string, RunOnceScheduler>())
+	private readonly _connecting = new Set<string>()
 
 	constructor(
 		@IExternalAgentMainService private readonly _main: IExternalAgentMainService,
@@ -104,6 +106,7 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 			if (e.type === 'status' && (e.sessionKey.startsWith('install:') || e.sessionKey.startsWith('connect:'))) { this._patch('busy', e.sessionKey.slice(e.sessionKey.indexOf(':') + 1), e.message) }
 			else if (e.type === 'auth-terminal' && e.sessionKey.startsWith('connect:')) {
 				const id = e.sessionKey.slice('connect:'.length)
+				if (!this._connecting.has(id)) return // only the window that requested this sign-in opens its terminal
 				const name = externalAgentById(id)?.name ?? this.customAgents().find(c => c.id === id)?.name ?? id
 				void this.openSignInTerminal(name, e.command, e.args, e.env).catch(err => this._patch('errors', id, messageOf(err)))
 			}
@@ -143,23 +146,9 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 			for (const s of list) { statuses[s.id] = s }
 			this.state = { ...this.state, statuses }
 			this._onDidChange.fire()
-			void this._checkSignIns(list)
 		} catch (e) {
 			this._patch('errors', '*', messageOf(e))
 		}
-	}
-
-	/** asks every agent that is ready (not the terminal ones: their sign-in is theirs) whether it is signed in; three at a time, each at most once a minute */
-	private async _checkSignIns(list: readonly ExternalAgentStatus[]) {
-		const todo = list.filter(s => s.state === 'ready' && externalAgentById(s.id)?.kind !== 'terminal' && Date.now() - (this._signInCheckedAt.get(s.id) ?? 0) > 60_000)
-		for (const s of todo) { this._signInCheckedAt.set(s.id, Date.now()); if (!this.state.signIn[s.id]) { this._patch('signIn', s.id, { state: 'checking' }) } }
-		const next = async (): Promise<void> => {
-			const s = todo.shift()
-			if (!s) { return }
-			await this._checkSignIn(s.id)
-			return next()
-		}
-		await Promise.all([next(), next(), next()])
 	}
 
 	private async _checkSignIn(id: string): Promise<boolean> {
@@ -182,13 +171,16 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	private _waitUntilReady(def: ExternalAgentDef, busyText: string) {
 		this._patch('busy', def.id, busyText)
 		const started = Date.now()
-		const timer = setInterval(async () => {
-			await this._refresh()
+		const poll = new RunOnceScheduler(async () => {
+			await this.refresh()
+			if (this._store.isDisposed || this._installPolls.get(def.id) !== poll) return
 			if (this.state.statuses[def.id]?.state === 'ready' || Date.now() - started > POLL_LIMIT_MS) {
-				clearInterval(timer)
+				this._installPolls.deleteAndDispose(def.id)
 				this._patch('busy', def.id, undefined)
-			}
+			} else poll.schedule()
 		}, POLL_MS)
+		this._installPolls.set(def.id, poll)
+		poll.schedule()
 	}
 
 	/** what installing an ACP agent does, in words, for the question asked before it happens */
@@ -219,7 +211,6 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 				if (!confirmed) { return }
 				this._patch('busy', agentId, 'Starting...')
 				await this._main.install(agentId)
-				this._signInCheckedAt.delete(agentId)
 				await this.refresh()
 				this._patch('busy', agentId, undefined)
 				return
@@ -257,7 +248,6 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 			await this._main.uninstall(agentId)
 			this._patch('probes', agentId, undefined)
 			this._patch('signIn', agentId, undefined)
-			this._signInCheckedAt.delete(agentId)
 		} catch (e) {
 			this._patch('errors', agentId, messageOf(e))
 		}
@@ -265,6 +255,8 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	}
 
 	async connect(agentId: string): Promise<void> {
+		if (this._connecting.has(agentId) || this._store.isDisposed) return
+		this._connecting.add(agentId)
 		this._patch('errors', agentId, undefined)
 		this._patch('busy', agentId, 'Connecting...')
 		try {
@@ -275,16 +267,17 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 				// the login runs in the terminal that just opened: the card turns to "Connected" by itself when it is done
 				this._patch('busy', agentId, 'Finish signing in in the terminal...')
 				const started = Date.now()
-				while (Date.now() - started < SIGN_IN_POLL_LIMIT_MS) {
+				while (!this._store.isDisposed && Date.now() - started < SIGN_IN_POLL_LIMIT_MS) {
 					await new Promise(r => setTimeout(r, SIGN_IN_POLL_MS))
+					if (this._store.isDisposed) break
 					if (await this._checkSignIn(agentId)) { break }
 				}
 			}
 		} catch (e) {
 			this._patch('errors', agentId, messageOf(e))
 		}
-		this._signInCheckedAt.set(agentId, Date.now())
 		this._patch('busy', agentId, undefined)
+		this._connecting.delete(agentId)
 	}
 
 	async signOut(agentId: string): Promise<void> {

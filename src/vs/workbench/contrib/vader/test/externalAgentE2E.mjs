@@ -20,6 +20,14 @@ const require = createRequire(path.join(repo, 'package.json'));
 const esbuild = require('esbuild');
 const root = path.join(here, '..').split(path.sep).join('/'); // forward slashes: the template strings below are import paths for esbuild
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-extagent-'));
+// Never discover/launch a vendor installed on the test host. Custom agents use
+// absolute node paths; the dedicated local-program case supplies its own PATH.
+const emptyBin = path.join(tmp, 'empty-bin'); fs.mkdirSync(emptyBin);
+// Keep the OS tree-termination utility available, without user npm/vendor bins.
+const fixturePath = process.platform === 'win32'
+	? emptyBin + path.delimiter + path.join(process.env.SystemRoot, 'System32') : emptyBin;
+process.env.PATH = fixturePath;
+if (process.platform === 'win32') process.env.Path = fixturePath;
 // the service keeps installed agents under the home folder: a throw-away one
 process.env.HOME = path.join(tmp, 'home'); process.env.USERPROFILE = path.join(tmp, 'home');
 fs.mkdirSync(process.env.HOME, { recursive: true });
@@ -348,8 +356,11 @@ try {
 		try {
 			const statuses = await svc.getStatuses([]);
 			const oc = statuses.find(x => x.id === 'opencode'), cu = statuses.find(x => x.id === 'cursor');
-			check('local: a program the person already has, which answers the protocol, is ready with nothing to download', oc?.state === 'ready' && oc.source === 'local' && oc.installedVersion === '9.9.9' && oc.detail === path.join(bin, 'opencode'), JSON.stringify(oc));
-			check('local: a program with the right name that does not speak the protocol is not offered as ready', cu?.state === 'not-installed' && cu.source === undefined, JSON.stringify(cu));
+			check('local: inventory locates a program without launching it for its version', oc?.state === 'ready' && oc.source === 'local' && oc.installedVersion === undefined && oc.detail === path.join(bin, 'opencode'), JSON.stringify(oc));
+			check('local: inventory locates even an unverified candidate without running it', cu?.state === 'ready' && cu.source === 'local', JSON.stringify(cu));
+			const verified = await svc.probe('opencode');
+			check('local: explicit verification still obtains the protocol and version', verified.ok && verified.agentVersion === '9.9.9', JSON.stringify(verified));
+			check('local: explicit verification rejects a program that does not speak ACP', (await svc.probe('cursor')).ok === false);
 			const key = 'k-local';
 			const r = await svc.runTurn({ sessionKey: key, agentId: 'opencode', cwd: workDir, text: 'use what I have' });
 			check('local: the chat runs on that program', r.stopReason === 'end_turn' && eventsOf(key, 'text').map(e => e.text).join('').includes('use what I have'));
@@ -488,6 +499,56 @@ const goodBinary = { id: 'opencode', version: '1.2.3', distribution: { binary: {
 		const urls = [d.terminal.install.windows, d.terminal.install.posix].join(' ').match(/https?:\/\/[^\s|"']+/g) ?? [];
 		return urls.every(u => /^https:\/\/(claude\.ai|antigravity\.google)\//.test(u));
 	}));
+}
+
+// Real subprocess barriers: startup may be cancelled before it ever receives a prompt.
+{
+	const waitUntil = async (condition, label) => {
+		const deadline = Date.now() + 5000;
+		while (!condition()) { if (Date.now() > deadline) throw new Error('Timed out: ' + label); await new Promise(r => setTimeout(r, 10)); }
+	};
+	const alive = pid => { try { process.kill(pid, 0); return true; } catch { return false; } };
+	const service = () => new m.ExternalAgentMainService({ request: async () => { throw new Error('No network'); } }, logService);
+	const gated = (s, key) => {
+		const gate = path.join(tmp, key + '.gate');
+		const result = s.runTurn({ sessionKey: key, agentId: 'custom-gate', custom: { id: 'custom-gate', name: 'Startup barrier fixture', command: process.execPath, args: [agentFile, 'gate-new', gate] }, cwd: workDir, text: 'must not run after close' }).then(value => ({ value }), error => ({ error }));
+		return { gate, result };
+	};
+	const s = service();
+	try {
+		const one = gated(s, 'close-during-open');
+		await waitUntil(() => fs.existsSync(one.gate + '.started'), 'agent reached startup barrier');
+		const pid = Number(fs.readFileSync(one.gate + '.started', 'utf8'));
+		await s.closeSession('close-during-open');
+		check('closing a starting chat rejects its pending turn', !!(await one.result).error);
+		await waitUntil(() => !alive(pid), 'closed starting process exits');
+		check('a cancelled opening never becomes a live session', !s._sessions.has('close-during-open') && !alive(pid));
+		const bin = path.join(tmp, 'cold-probe-bin'); fs.mkdirSync(bin);
+		const gate = path.join(tmp, 'cold-local-probe.gate');
+		const launcher = path.join(bin, process.platform === 'win32' ? 'opencode.cmd' : 'opencode');
+		fs.writeFileSync(launcher, process.platform === 'win32' ? `@"${process.execPath}" "${agentFile}" gate-init "${gate}"\r\n` : `#!/bin/sh\nexec "${process.execPath}" "${agentFile}" gate-init "${gate}"\n`, { mode: 0o755 });
+		const oldPath = process.env.PATH, oldWinPath = process.env.Path;
+		try {
+			process.env.PATH = bin + path.delimiter + fixturePath;
+			if (process.platform === 'win32') process.env.Path = process.env.PATH;
+			const pending = s.runTurn({ sessionKey: 'cold-local-opening', agentId: 'opencode', cwd: workDir, text: 'not after close' }).then(() => undefined, error => error);
+			await waitUntil(() => fs.existsSync(gate + '.started'), 'local verifier initialize barrier');
+			const probePid = Number(fs.readFileSync(gate + '.started', 'utf8'));
+			await s.closeSession('cold-local-opening');
+			check('closing during cold local verification cancels the opening', !!(await pending));
+			await waitUntil(() => !alive(probePid), 'cancelled local verifier exits');
+			check('cancelled verification leaves neither its process nor a false negative cache', !alive(probePid) && s._localVerified.size === 0);
+		} finally { process.env.PATH = oldPath; if (oldWinPath === undefined) delete process.env.Path; else process.env.Path = oldWinPath; }
+		const starts = Array.from({ length: 5 }, (_, i) => gated(s, 'parallel-open-' + i));
+		await waitUntil(() => starts.slice(0, 4).every(a => fs.existsSync(a.gate + '.started')), 'four admitted starts');
+		check('the fifth concurrent start is rejected by the shared capacity limit', /4 agents/.test((await starts[4].result).error?.message ?? ''));
+		check('capacity applies before a fifth subprocess is launched', !fs.existsSync(starts[4].gate + '.started') && s._startingCount === 4);
+		const pids = starts.slice(0, 4).map(a => Number(fs.readFileSync(a.gate + '.started', 'utf8')));
+		s.dispose();
+		check('service disposal rejects all starting turns', (await Promise.all(starts.slice(0, 4).map(a => a.result))).every(a => !!a.error));
+		await waitUntil(() => pids.every(pid => !alive(pid)), 'disposed startup processes exit');
+		check('service disposal leaves no owned startup process', pids.every(pid => !alive(pid)) && s._sessions.size === 0);
+	} finally { s.dispose(); }
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

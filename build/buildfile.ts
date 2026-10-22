@@ -21,6 +21,7 @@ export const workerOutputLinks = createModuleDescription('vs/workbench/contrib/o
 export const workerBackgroundTokenization = createModuleDescription('vs/workbench/services/textMate/browser/backgroundTokenization/worker/textMateTokenizationWorker.workerMain');
 
 export const workbenchDesktop = [
+	createModuleDescription('vs/workbench/contrib/vader/electron-main/embedWorker'),
 	createModuleDescription('vs/workbench/contrib/debug/node/telemetryApp'),
 	createModuleDescription('vs/platform/files/node/watcher/watcherMain'),
 	createModuleDescription('vs/platform/localTranscription/node/localTranscriptionMain'),

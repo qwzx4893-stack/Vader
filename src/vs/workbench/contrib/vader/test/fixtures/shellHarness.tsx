@@ -130,15 +130,38 @@ const reviewSvc: any = {
 	async repoInfo() { return { branch: 'agent/context-budget', pullRequestUrl: w.__noRemote ? undefined : 'https://github.com/o/r/compare/agent/context-budget?expand=1' } },
 	async openPullRequestPage() { w.__log.push('pr'); return true },
 }
-const workspaceSvc: any = { getWorkspace: () => ({ folders: [{ uri: { fsPath: ROOT } }] }) }
+const workspaceSvc: any = { getWorkspace: () => ({ folders: w.__workspaceFolders ?? [{ uri: { fsPath: ROOT } }] }) }
 // ---- the files of the project, for the files page ("Open in editor")
 const norm = (p: string) => p.replace(/\\/g, '/').replace(/\/$/, '').toLowerCase()
 const treeOf: { [dir: string]: [string, boolean][] } = { [norm(ROOT)]: [['src', true], ['README.md', false], ['.git', true], ['node_modules', true]], [norm(ROOT) + '/src']: [['app.ts', false]] }
 const textOf: { [file: string]: string } = { [norm(ROOT + '/README.md')]: 'first line\nsecond line\n', [norm(ROOT + '/src/app.ts')]: 'export const answer = 42\n' }
+const fileListeners = new Set<(event: any) => void>()
+const watchErrorListeners = new Set<(error: Error) => void>()
+w.__watchError = () => { for (const listener of watchErrorListeners) listener(new Error('asynchronous provider failure')) }
+w.__fileWatchers = 0
+w.__fileWatchFail = false
+const heldReads = new Map<string, Promise<void>>()
+w.__holdFileRead = (p: string) => { heldReads.set(norm(p), new Promise<void>(resolve => { w.__releaseFileRead = resolve })); w.__fileReadHeld = false }
+w.__diskChange = (name: string, text: string | null, emit = true) => {
+	const p = norm(/^[a-z]:/i.test(name) ? name : ROOT + '/' + name)
+	if (text === null) delete textOf[p]; else textOf[p] = text
+	const parent = p.slice(0, p.lastIndexOf('/')), base = name.split('/').pop()!
+	treeOf[parent] = (treeOf[parent] ?? []).filter(([n]) => n.toLowerCase() !== base.toLowerCase())
+	if (text !== null) treeOf[parent].push([base, false])
+	const event = { affects: (u: any) => p === norm(u.fsPath) || p.startsWith(norm(u.fsPath) + '/'), contains: (u: any) => p === norm(u.fsPath) }
+	if (emit) for (const listener of fileListeners) listener(event)
+}
 const fileSvc: any = {
+	onDidFilesChange(listener: (event: any) => void) { fileListeners.add(listener); return { dispose: () => fileListeners.delete(listener) } },
+	onDidWatchError(listener: (error: Error) => void) { watchErrorListeners.add(listener); return { dispose: () => watchErrorListeners.delete(listener) } },
+	watch() { if (w.__fileWatchFail) throw new Error('fixture watch failed'); w.__fileWatchers++; return { dispose() { w.__fileWatchers-- } } },
 	async resolve(uri: any) { return { children: (treeOf[norm(uri.fsPath)] ?? []).map(([name, isDirectory]) => ({ name, isDirectory, resource: { fsPath: uri.fsPath.replace(/[\\/]$/, '') + '/' + name } })) } },
-	async stat(uri: any) { return { size: (textOf[norm(uri.fsPath)] ?? '').length } },
-	async readFile(uri: any) { return { value: { buffer: new TextEncoder().encode(textOf[norm(uri.fsPath)] ?? '') } } },
+	async stat(uri: any) { const text = textOf[norm(uri.fsPath)]; if (text === undefined) throw new Error('File not found'); return { size: text.length } },
+	async readFile(uri: any) {
+		const p = norm(uri.fsPath), text = textOf[p]; if (text === undefined) throw new Error('File not found')
+		const gate = heldReads.get(p); if (gate) { heldReads.delete(p); w.__fileReadHeld = true; await gate }
+		return { value: { buffer: new TextEncoder().encode(text) } }
+	},
 }
 // ---- what the agent did in its browser and its terminals
 if (!process.env.VADER_PREVIEW) allThreads['t-wait'].messages.splice(2, 0,
@@ -182,6 +205,10 @@ const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 w.__accessor = {
 	get: (name: string) => ({ IAgentOrchestrationService: orchSvc, ITaskCopyService: copySvc, IChatThreadService: w.__chat, IVaderShellService: shell, ICommandService: commands, IToolsService: tools, IVaderSettingsService: settingsSvc, IEditCodeService: editSvc, IModelService: modelSvc, IAgentGatewayService: gatewaySvc, IVerificationService: verifySvc, IVaderReviewService: reviewSvc, IWorkspaceContextService: workspaceSvc, IFileService: fileSvc, IBrowserToolMainService: browserSvc, ITerminalToolService: term, IOpenerService: opener } as any)[name],
 }
+const realGet = w.__accessor.get
+const marketplace: any = { async listInstalled() { w.__inventoryCalls = (w.__inventoryCalls ?? 0) + 1; return [{ installMethod: 'update' }] } }
+w.__accessor.get = (name: string) => name === 'IUnifiedMarketplaceService' ? marketplace : realGet(name)
+w.__notifyShell = notify
 Date.now = () => NOW
 
 installLanguage(document.getElementById('root')!)

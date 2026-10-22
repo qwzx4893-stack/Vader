@@ -177,7 +177,7 @@ export const NoModelCard = () => {
 	const none = why === 'addProvider'
 	return <div className='rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2.5' data-testid='vader-no-model' role='alert' data-reason={String(why)}>
 		<div className='flex items-center gap-2'><Triangle color='#e2a93f' /><span className='font-semibold text-vader-fg-1'>{none ? 'Choose a model first' : why === 'needToEnableModel' ? 'Switch a model on' : 'Add a model'}</span></div>
-		<div className='text-vader-fg-2 leading-relaxed'>{none ? 'No provider has a key yet, so there is no model to ask.' : why === 'needToEnableModel' ? 'A provider is set up, but all its models are hidden from the picker.' : 'A provider is set up, but it has no model yet. Add the one you use.'}</div>
+		<div className='text-vader-fg-2 leading-relaxed'>{none ? 'No provider has a key yet, so there is no model to ask.' : why === 'needToEnableModel' ? 'A provider is set up, but all its models are hidden from the picker.' : 'No usable model is selected. Connect a provider or start your local server, then choose a model in Settings.'}</div>
 		<div className='flex flex-wrap gap-2'>
 			<button data-testid='vader-no-model-add-key' className='px-3 py-1 rounded-md bg-vader-fg-0 text-vader-bg-3 hover:opacity-90 text-sm font-medium' onClick={open}>{none ? 'Add a key' : 'Open Models'}</button>
 			{none ? <button data-testid='vader-no-model-local' className='px-3 py-1 rounded-md text-sm border border-vader-border-2 text-vader-fg-1 hover:bg-vader-bg-2-hover' onClick={open}>Use a local model</button> : null}

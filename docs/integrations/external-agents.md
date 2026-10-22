@@ -27,12 +27,9 @@ Tests: `test/externalAgentE2E.mjs` (120 checks against `test/fixtures/fakeAcpAge
 
 ## Detect, install, connect: what a card does
 
-1. **Detect.** Before a card offers anything to download, Vader looks for the program on this computer (the PATH and the vendor's usual folder). A program that is found is started once for the protocol handshake: only
-   one that answers is used (`source: 'local'`, "Found on this computer: nothing is downloaded", the sign-in it already holds counts). The answer is remembered for ten minutes. This starts a few well-known program names
-   from the person's own PATH when the Coding Agents page opens, and nothing else; a program with the right name that does not speak the protocol (an old version, another tool) is not used and the card offers "Install".
-   Terminal agents (Claude Code, Freebuff) are only looked for, never started by the page.
+1. **Detect.** Inventory reads installed manifests and looks for the program on this computer (PATH and the vendor's usual folder). It does not launch programs, perform protocol handshakes, or create sign-in sessions. A located candidate is marked installed (`source: 'local'`); an unverified local candidate has no probed version. Connect, Test connection, and an actual chat explicitly verify the protocol before use. A program with the right name but no ACP support fails that verification with an actionable error. Terminal agents are also only looked for by inventory.
 2. **Install** (only when nothing usable was found): shows what will be downloaded and from where, asks, installs into Vader's own folder. A copy installed by Vader is the only one Vader updates or removes.
-3. **Connect.** The page asks every ready agent whether it can start a conversation without a sign-in (`session/new` in an empty folder; nothing is sent to a model). "Not connected" shows the **Connect** button: the agent's own
+3. **Connect.** Opening the page never checks sign-in automatically: unknown state is shown as **Installed** with **Connect** available. Only an explicit connection action asks the agent whether it can start a conversation without sign-in (`session/new` in an empty folder; nothing is sent to a model). The agent's own
    sign-in is started (the vendor's page opens, or the vendor's own login runs in a terminal); the card turns to **Connected** when it is done. Terminal logins are watched for up to five minutes. **Sign out** (under "More") calls the agent's
    own `logout` when it has one.
 4. **Use in the chat.**
