@@ -36,6 +36,8 @@ const modes = () => ({ currentModeId: modeId, availableModes: [{ id: 'ask', name
 const rich = mode === 'resumable' || mode === 'loadable';
 async function handle(msg) {
 	if (msg.method === 'initialize') {
+		if (mode === 'gate-new' || mode === 'gate-init') fs.writeFileSync(authFile + '.started', String(process.pid));
+		if (mode === 'gate-init') await new Promise(resolve => { const t = setInterval(() => { if (fs.existsSync(authFile)) { clearInterval(t); resolve(); } }, 10); });
 		const authMethods = mode === 'auth-agent' ? [{ id: 'web', name: 'Sign in on the web', type: 'agent' }]
 			: mode === 'auth-terminal' ? [{ id: 'cli', name: 'Sign in with the CLI', type: 'terminal', args: ['login'], env: { FAKE: '1' } }]
 			: mode === 'auth-terminal-meta' ? [{ id: 'login', name: 'Login with the vendor', description: 'Run `fake login` in the terminal', _meta: { 'terminal-auth': { command: process.execPath, args: ['/fake/login.js', authFile], label: 'Fake Login', env: { FAKE_LOGIN: '1' } } } }]
@@ -51,6 +53,7 @@ async function handle(msg) {
 	}
 	if (msg.method === 'logout') { authed = false; if (authFile) { try { fs.unlinkSync(authFile); } catch { } } return send({ jsonrpc: '2.0', id: msg.id, result: {} }); }
 	if (msg.method === 'session/new') {
+		if (mode === 'gate-new') await new Promise(resolve => { const t = setInterval(() => { if (fs.existsSync(authFile)) { clearInterval(t); resolve(); } }, 10); });
 		if ((mode === 'auth-agent' || mode === 'auth-terminal' || mode === 'auth-terminal-meta' || mode === 'logout-agent' || mode === 'multi-auth') && !isAuthed()) return send({ jsonrpc: '2.0', id: msg.id, error: { code: -32000, message: 'Authentication required' } });
 		return send({ jsonrpc: '2.0', id: msg.id, result: rich ? { sessionId: 'S-' + process.pid, configOptions: configOptions(), modes: modes() } : { sessionId: 'S1' } });
 	}

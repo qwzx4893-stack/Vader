@@ -276,3 +276,33 @@
 	background: #0b0b0c;
 	outline: none;
 }
+
+/* The inherited titlebar's menus use z-index 2500, above our pages. Hide only
+   its editor controls; keep actual window buttons available on every page. */
+body.vader-window-starting .monaco-workbench .part:not(.titlebar),
+.monaco-workbench.vader-window-layer .part:not(.titlebar) {
+	visibility: hidden;
+}
+body.vader-window-starting .monaco-workbench:not(.web):is(.windows, .mac) .part.titlebar,
+.monaco-workbench.vader-window-layer:not(.web):is(.windows, .mac) .part.titlebar {
+	visibility: hidden;
+	pointer-events: none;
+}
+body.vader-window-starting .monaco-workbench .part.titlebar .window-controls-container,
+.monaco-workbench.vader-window-layer .part.titlebar .window-controls-container {
+	visibility: visible;
+	pointer-events: auto;
+}
+body.vader-window-starting .monaco-workbench,
+.monaco-workbench.vader-window-layer {
+	--window-border-color: transparent !important;
+}
+.monaco-workbench.vader-window-settings .vader-onboarding-container {
+	visibility: hidden;
+	pointer-events: none;
+}
+.monaco-workbench .vader-shell-overlay:focus,
+.monaco-workbench .vader-settings-overlay:focus,
+.monaco-workbench .vader-onboarding-container:focus {
+	outline: none !important;
+}

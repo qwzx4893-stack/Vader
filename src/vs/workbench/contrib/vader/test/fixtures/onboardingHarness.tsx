@@ -14,7 +14,7 @@ w.__log = [] as string[]
 
 const settingsOfProvider: any = {}
 for (const p of providerNames) settingsOfProvider[p] = { models: [], _didFillInProviderSettings: false, apiKey: '' }
-w.__settings = { settingsOfProvider, modelSelectionOfFeature: { Chat: null }, globalSettings: { isOnboardingComplete: false, chatMode: 'agent', externalAgentId: null } }
+w.__settings = { settingsOfProvider, modelSelectionOfFeature: { Chat: null }, globalSettings: { isOnboardingComplete: !!w.__onboardingCompleteOnLoad, chatMode: 'agent', externalAgentId: null } }
 
 /** what asking a provider for its models answers: set by the test, one answer per provider */
 w.__answers = w.__answers ?? {}
@@ -43,7 +43,7 @@ const refreshSvc: any = {
 const policySvc: any = { setMode(m: string) { w.__log.push(`policy:${m}`); w.__policy = { state: { mode: m } }; notify() } }
 const storage: any = { _m: new Map<string, string>(Object.entries(w.__storageSeed ?? {}) as [string, string][]), get(k: string) { return this._m.get(k) }, store(k: string, v: string) { this._m.set(k, v); w.__log.push(`store:${k}=${v}`) }, remove(k: string) { this._m.delete(k); w.__log.push(`remove:${k}`) } }
 w.__storage = storage
-const commands: any = { async executeCommand(id: string) { w.__log.push(`command:${id}`) } }
+const commands: any = { async executeCommand(id: string, ...args: any[]) { w.__log.push(`command:${id}${args.length ? ':' + args.join(',') : ''}`) } }
 w.__opened = [] as string[]
 const opener: any = { async open(u: any) { w.__opened.push(String(u)) } }
 const chat: any = { state: { currentThreadId: 'new-thread' }, openNewThread() { w.__log.push('new-thread') } }

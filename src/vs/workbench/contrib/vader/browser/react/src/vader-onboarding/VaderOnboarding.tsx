@@ -89,7 +89,8 @@ const ModePreview = ({ mode }: { mode: string }) => <div className='c' style={{ 
 export const VaderOnboarding = () => {
 	const settingsState = useSettingsState()
 	const complete = settingsState.globalSettings.isOnboardingComplete
-	return <div className='shell' data-testid='vader-onboarding' style={{ position: 'fixed', inset: 0, zIndex: 99999, height: '100vh', width: '100vw', transition: 'opacity 600ms ease-in-out', opacity: complete ? 0 : 1, pointerEvents: complete ? 'none' : 'auto' }}>
+	if (complete) return null
+	return <div className='shell' data-testid='vader-onboarding' style={{ position: 'fixed', inset: 0, zIndex: 99999, height: '100vh', width: '100vw' }}>
 		<ErrorBoundary><Pages /></ErrorBoundary>
 	</div>
 }
@@ -213,7 +214,7 @@ const Pages = () => {
 							{failed ? <div className='c' style={{ gap: 6 }} role='alert' data-testid='vader-onboarding-failed' data-reason={failed.reason}>
 								<span className='r' style={{ gap: 8, color: 'var(--wa)' }}>{'△'}<span>{failed.reason === 'unauthorized' ? `${who} answered 401` : failed.reason === 'rate-limited' ? `${who} limits this key for now` : failed.reason === 'network' ? `Could not reach ${who}` : failed.reason === 'unsupported' ? `${who} does not list its models` : `${who} did not answer as expected`}</span></span>
 								<span className='t2' style={{ lineHeight: 1.55 }}>{failed.reason === 'unauthorized' ? 'The key may have a space at the end, or may have been revoked. Paste it again.' : failed.reason === 'network' ? 'Nothing was sent. Check your connection or proxy, or choose a model on this computer instead.' : failed.message}</span>
-								<span className='r' style={{ gap: 8 }}><button className='pb' data-testid='vader-onboarding-test-again' onClick={test}>{failed.reason === 'network' ? 'Try again' : 'Test again'}</button>{failed.reason === 'network' ? <><button className='gb' onClick={() => setChoice('local')}>Use a local model</button><button className='tx' onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }}>Network settings</button></> : null}</span>
+								<span className='r' style={{ gap: 8 }}><button className='pb' data-testid='vader-onboarding-test-again' onClick={test}>{failed.reason === 'network' ? 'Try again' : 'Test again'}</button>{failed.reason === 'network' ? <><button className='gb' onClick={() => setChoice('local')}>Use a local model</button><button className='tx' onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID, 'privacy') }}>Network settings</button></> : null}</span>
 							</div> : null}
 						</div> : null}
 					</div>
@@ -230,7 +231,7 @@ const Pages = () => {
 								<span className='t2'>Found on this computer, signed in:</span>
 								{readyAgents.map(id => <span key={id} className='r' style={{ gap: 10 }}><span className='t1 fl'>{id}</span><button className='gb' onClick={() => { settings.setGlobalSetting('externalAgentId', id); setStep(2) }}>Use it</button></span>)}
 							</> : <span className='t2' style={{ lineHeight: 1.55 }}>None is installed here yet. Install one from Add-ons, Agents, or in Settings, Connected agents, then come back.</span>}
-							<span><button className='tx' style={{ padding: 0 }} onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID) }}>Open Settings, Connected agents</button></span>
+							<span><button className='tx' style={{ padding: 0 }} onClick={() => { void commands.executeCommand(VADER_OPEN_SETTINGS_ACTION_ID, 'agents') }}>Open Settings, Connected agents</button></span>
 						</div> : null}
 					</div>
 

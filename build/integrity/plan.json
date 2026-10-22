@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "inputs": [
+    "AGENTS.md",
+    "build/integrity/integrity.py",
+    "build/integrity/test_integrity.py",
+    "build/integrity/plan.json",
+    ".github/workflows/ci.yml"
+  ],
+  "gates": [
+    {
+      "id": "integrity-adversarial",
+      "level": "unit",
+      "argv": ["{python}", "-B", "-m", "unittest", "discover", "-s", "build/integrity", "-p", "test_integrity.py", "-v"],
+      "timeout": 60,
+      "reject_output": ["FAILED \\(", "OK \\(skipped=", "\\.\\.\\. skipped"]
+    }
+  ],
+  "criteria": [
+    {
+      "id": "INTEGRITY-TOOLING",
+      "behavior": "Real failed commands, stubs, unavailable integration, runtime failure, altered evidence, and unsupported completion claims are rejected in isolated fixtures",
+      "gates": ["integrity-adversarial"],
+      "levels": ["unit"]
+    }
+  ]
+}

@@ -8,7 +8,7 @@ Picking up the project mid-stream (current state, owner's standing rules, decisi
 
 1. Read `ARCHITECTURE.md`'s subsystem table and find which subsystem owns the thing you're touching.
 2. Check `docs/integrations/` for a guide specific to that subsystem, if one exists.
-3. Run a full TypeScript check before AND after your change: `node_modules/.bin/tsc -p src/tsconfig.json --noEmit`. This project's build has no test suite beyond that type check and whatever `npm run compile` (gulp) catches - treat a clean compile as the minimum bar, not full verification.
+3. Run a full TypeScript check before AND after code changes: `node_modules/.bin/tsc -p src/tsconfig.json --noEmit`. The repository also has regression, browser-harness, packaged Windows, and real-model suites; consult `.github/workflows/ci.yml` and `docs/engineering-integrity.md`. A typecheck or build alone does not verify runtime behavior. Record pre-existing failures rather than hiding them.
 4. If you touch anything under `browser/react/src/`, rebuild it (`npm run buildreact`) before re-running the type check above - `src/tsconfig.json` resolves against the built `react/out/` bundle, not the `.tsx` source, so stale output hides real errors.
 
 ## Rules that exist for a reason, not by accident
@@ -33,3 +33,17 @@ The mission this platform was built under anticipates being told things like "re
 ## Where this platform is still thin
 
 Read the final report delivered with this build (or `CHANGELOG.md`) for the current, honest list of what's implemented at MVP depth vs. what's a stub. Don't assume a subsystem is more complete than its own file's comments say it is.
+
+## Engineering integrity gates
+
+- Before substantial changes, map observable acceptance criteria to affected code, real dependencies, required verification levels, and evidence. Use `engineering-integrity` if installed; otherwise follow `docs/engineering-integrity.md`.
+- Never substitute fixtures, hardcoded results, no-op UI, or silent success fallbacks for working production behavior. UI harnesses establish component behavior only; packaged-app and real-model claims need their respective evidence.
+- Preserve failing tests, assertions, and exit codes. Justify legitimate test changes against deliberate behavior changes. Review diffs for skips, removed assertions, production placeholders, swallowed errors, and CI suppression; heuristics flag review, not correctness.
+- Run applicable existing checks serially for UI suites. `python -B -m unittest discover -s build/integrity -p test_integrity.py -v` verifies the integrity tooling. See the project plan for additional gate commands; unselected/missing gates remain NOT RUN.
+- Report each criterion as VERIFIED / IMPLEMENTED BUT UNVERIFIED / PARTIAL / FAILED / BLOCKED / NOT STARTED, with exact commands, outcomes, evidence paths, and limits. Separate independent review from SELF-REVIEW.
+- Do not push, merge, publish, build installers, change branch protection, or alter global Codex configuration without explicit authorization for that action. Existing instruction/approval/security boundaries remain in force.
+
+## Code Review Rules
+
+- Flag acceptance claims supported only by mocks or build success when real runtime/integration behavior is required. Require evidence at the claimed layer.
+- Flag skipped tests, removed assertions, ignored failures, or changed CI gates without a behavioral justification; do not assume an increase in passing test count proves better coverage.

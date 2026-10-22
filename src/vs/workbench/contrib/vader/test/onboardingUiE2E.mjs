@@ -134,6 +134,8 @@ async function layoutProblems(page) {
 	await page.locator(TID('vader-onboarding-test-again')).click();
 	await page.waitForFunction(() => document.querySelector('[data-testid="vader-onboarding-failed"]')?.getAttribute('data-reason') === 'network');
 	check('when the provider cannot be reached it says nothing was sent and offers a local model', (await f.innerText()).includes('Could not reach OpenRouter') && (await f.innerText()).includes('Nothing was sent') && (await f.getByText('Use a local model').count()) === 1);
+	await f.getByText('Network settings', { exact: true }).click();
+	check('Network settings routes directly to Privacy and network', (await log(page)).some(l => /openVaderSettings:privacy$/.test(l)));
 	await f.getByText('Use a local model').click();
 	check('"Use a local model" switches to that choice', (await page.locator(TID('vader-onboarding-local-none')).count()) === 1);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
@@ -179,6 +181,8 @@ async function layoutProblems(page) {
 	const { page } = await newPage();
 	await page.locator(TID('vader-onboarding-choice-agent')).click();
 	check('with no agent installed it says where to install one', (await page.locator(TID('vader-onboarding-agent-panel')).innerText()).includes('None is installed here yet'));
+	await page.getByText('Open Settings, Connected agents', { exact: true }).click();
+	check('the connected-agent link opens its actual settings page', (await log(page)).some(l => /openVaderSettings:agents$/.test(l)));
 	await page.close();
 }
 
@@ -256,8 +260,8 @@ async function layoutProblems(page) {
 	const l = await log(page);
 	check('a suggested task opens a new conversation in the right mode and starts it', l.includes('global:chatMode=agent') && l.includes('new-thread') && l.some(x => x.startsWith('task:Run the tests of this project')), l.join(','));
 	check('and the first run is finished and its step forgotten', l.includes('global:isOnboardingComplete=true') && l.includes('remove:vader.onboardingStep'));
-	await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid="vader-onboarding"]')).pointerEvents === 'none');
-	check('the first run no longer takes clicks once finished', true);
+	await page.waitForSelector(TID('vader-onboarding'), { state: 'detached' });
+	check('the first run is unmounted once finished', await page.locator(TID('vader-onboarding')).count() === 0);
 	await page.close();
 }
 {
@@ -281,6 +285,13 @@ async function layoutProblems(page) {
 	await page.locator(TID('vader-onboarding-continue')).click();
 	await page.locator(TID('vader-import-done')).click();
 	check('Skip, open Vader finishes the first run without a task', (await log(page)).includes('global:isOnboardingComplete=true') && !(await log(page)).some(x => x.startsWith('task:')));
+	await page.close();
+}
+
+{
+	const { page } = await newPage(() => { window.__onboardingCompleteOnLoad = true; });
+	check('a returning user never mounts the hidden first-run pages', await page.locator(TID('vader-onboarding')).count() === 0);
+	check('the completed first run performs no provider requests', !(await log(page)).some(x => /^(refresh|look|task):/.test(x)));
 	await page.close();
 }
 

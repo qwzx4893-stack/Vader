@@ -292,29 +292,29 @@
 	color: #5f6164 !important;
 }
 
-.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"] {
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:not(.vader-nv) {
 	border-radius: 8px !important;
 	color: #a3a5a8 !important;
 	padding-top: 7px !important;
 	padding-bottom: 7px !important;
 }
 
-.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"] svg {
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:not(.vader-nv) svg {
 	opacity: .7 !important;
 }
 
-.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:hover {
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:not(.vader-nv):hover {
 	background: rgba(255,255,255,.04) !important;
 	color: #e6e6e6 !important;
 }
 
-.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"].vader-text-white {
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:not(.vader-nv).vader-text-white {
 	background: rgba(255,255,255,.08) !important;
 	color: #f0f0f0 !important;
 	box-shadow: inset 0 0 0 1px rgba(255,255,255,.04);
 }
 
-.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"].vader-text-white svg {
+.monaco-workbench.vs-dark [data-testid^="vader-settings-nav-"]:not(.vader-nv).vader-text-white svg {
 	opacity: 1 !important;
 	color: #3794ff;
 }

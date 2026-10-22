@@ -9,9 +9,9 @@ import type { Embedder } from './semanticLayer.js';
 
 // The embedding model that ships with Vader, run in a worker thread so that the editor never waits for it. Which model it is, and how it is to be used (the pooling, the words put in
 // front of a question), is written in the folder's manifest.json by build/embedding/prepare.mjs from model.lock.json, so changing the model does not change this file. The model is
-// CodeRankEmbed (MIT): 137 million parameters, trained on code, 768-number vectors, 132 MB in its int8 form. The worker (embedWorker.ts) loads it with transformers.js from the app's
+// CodeRankEmbed (MIT), trained on code, with 768-number vectors. The locked manifest, not this comment, specifies the artifact and precision. The worker (embedWorker.ts) loads it with transformers.js from the app's
 // own folder (never the network) and one or two threads, never more. It is started when something asks for an embedding and stopped after a while without a question, so an editor
-// that is not being searched holds none of its memory. If the folder is not in the app, or the worker cannot start, this gives back nothing and search stays on words.
+// that is not being searched holds none of its memory. A missing model returns nothing; a worker failure rejects with its cause so the index can report it while word search continues.
 
 export type ModelManifest = { name: string; revision?: string; dtype: string; pooling: string; queryPrefix: string; docPrefix: string; dims: number; requiredFiles: string[] }
 
@@ -50,27 +50,29 @@ type Pending = { resolve: (v: Float32Array[]) => void; reject: (e: Error) => voi
 /** one running worker, with its own table of questions waiting for answers */
 type Running = { worker: Worker; pending: Map<number, Pending>; dead: boolean }
 
-export async function createLocalEmbedder(opts: { embeddingDir: string; workerPath: string; cores: number; idleMs?: number }): Promise<Embedder | undefined> {
+export async function createLocalEmbedder(opts: { embeddingDir: string; workerPath: string; cores: number; idleMs?: number; startupMs?: number; requestMs?: number }): Promise<Embedder | undefined> {
 	if (!modelIsInstalled(opts.embeddingDir)) return undefined
 	const manifest = readManifest(opts.embeddingDir)!
 	let nextId = 1
 	let running: Running | undefined
 	let starting: Promise<Running | undefined> | undefined
+	let startingWorker: Running | undefined
 	let idleTimer: ReturnType<typeof setTimeout> | undefined
 	let disposed = false
 	let busy = 0
 
 	const start = async (): Promise<Running | undefined> => {
 		let worker: Worker
-		try {
-			worker = new Worker(opts.workerPath, { workerData: { root: modelRootOf(opts.embeddingDir), runtimeDir: opts.embeddingDir, name: manifest.name, dtype: manifest.dtype, pooling: manifest.pooling, threads: threadsFor(opts.cores) }, resourceLimits: { maxOldGenerationSizeMb: 256 } })
-		} catch { return undefined }
+		worker = new Worker(opts.workerPath, { workerData: { root: modelRootOf(opts.embeddingDir), runtimeDir: opts.embeddingDir, name: manifest.name, dtype: manifest.dtype, pooling: manifest.pooling, threads: threadsFor(opts.cores) }, resourceLimits: { maxOldGenerationSizeMb: 256 } })
 		const r: Running = { worker, pending: new Map(), dead: false }
+		startingWorker = r
 		const failAll = (e: Error): void => { r.dead = true; for (const p of r.pending.values()) p.reject(e); r.pending.clear(); if (running === r) running = undefined }
-		const ready = new Promise<boolean>(resolve => {
-			worker.once('message', (m: { ready?: boolean }) => resolve(!!m.ready))
-			worker.once('error', () => resolve(false))
-			worker.once('exit', () => resolve(false))
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const ready = new Promise<void>((resolve, reject) => {
+			worker.once('message', (m: { ready?: boolean; why?: string }) => m.ready ? resolve() : reject(new Error(m.why ?? 'The search model could not initialize.')))
+			worker.once('error', reject)
+			worker.once('exit', code => reject(new Error(`The search model worker stopped during initialization (exit ${code}).`)))
+			timer = setTimeout(() => reject(new Error('The search model worker did not become ready in time.')), opts.startupMs ?? 60_000)
 		})
 		worker.on('message', (m: { id?: number; vectors?: ArrayBuffer; dims?: number; error?: string }) => {
 			if (m.id === undefined) return
@@ -85,13 +87,18 @@ export async function createLocalEmbedder(opts: { embeddingDir: string; workerPa
 		})
 		worker.on('error', e => failAll(e instanceof Error ? e : new Error(String(e))))
 		worker.on('exit', () => failAll(new Error('the embedding worker stopped')))
-		if (!(await ready)) { try { await worker.terminate() } catch { /* gone */ } return undefined }
+		try { await ready } catch (error) {
+			failAll(error instanceof Error ? error : new Error(String(error)))
+			await worker.terminate()
+			throw error
+		} finally { clearTimeout(timer); if (startingWorker === r) startingWorker = undefined }
 		worker.unref()
 		return r
 	}
 
 	const armIdle = (): void => {
 		if (idleTimer) clearTimeout(idleTimer)
+		if (disposed) return
 		idleTimer = setTimeout(() => {
 			idleTimer = undefined
 			if (busy > 0 || !running) return
@@ -107,6 +114,10 @@ export async function createLocalEmbedder(opts: { embeddingDir: string; workerPa
 		starting ??= start().finally(() => { starting = undefined })
 		const r = await starting
 		if (!r) throw new Error('the embedding worker could not start')
+		if (disposed || r.dead) {
+			await r.worker.terminate()
+			throw new Error('the embedder was closed')
+		}
 		running = r
 		return r
 	}
@@ -117,19 +128,40 @@ export async function createLocalEmbedder(opts: { embeddingDir: string; workerPa
 			const r = await ensure()
 			return await new Promise<Float32Array[]>((resolve, reject) => {
 				const id = nextId++
-				r.pending.set(id, { resolve, reject })
-				r.worker.postMessage({ id, texts })
+				const timer = setTimeout(() => {
+					r.dead = true
+					if (running === r) running = undefined
+					for (const p of r.pending.values()) p.reject(new Error('The search model did not answer in time.'))
+					r.pending.clear()
+					void r.worker.terminate()
+				}, opts.requestMs ?? 60_000)
+				r.pending.set(id, { resolve: v => { clearTimeout(timer); resolve(v) }, reject: e => { clearTimeout(timer); reject(e) } })
+				try { r.worker.postMessage({ id, texts }) } catch (error) {
+					r.pending.get(id)?.reject(error instanceof Error ? error : new Error(String(error)))
+					r.pending.delete(id)
+				}
 			})
 		} finally { busy--; armIdle() }
 	}
 
 	// the first start is made now, so that a model that cannot run is found out before search relies on it
-	try { running = await ensure() } catch { return undefined }
+	running = await ensure()
 	armIdle()
 
 	return {
 		embedDocs: texts => ask(texts.map(t => manifest.docPrefix + t)),
 		embedQuery: async q => (await ask([manifest.queryPrefix + q]))[0],
-		dispose: () => { disposed = true; if (idleTimer) clearTimeout(idleTimer); const r = running; running = undefined; if (r) { r.dead = true; void r.worker.terminate() } },
+		dispose: () => {
+			disposed = true
+			if (idleTimer) clearTimeout(idleTimer)
+			const active = new Set([running, startingWorker])
+			running = undefined
+			for (const r of active) if (r) {
+				r.dead = true
+				for (const p of r.pending.values()) p.reject(new Error('the embedder was closed'))
+				r.pending.clear()
+				void r.worker.terminate()
+			}
+		},
 	}
 }

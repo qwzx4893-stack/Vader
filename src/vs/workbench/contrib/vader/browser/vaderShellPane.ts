@@ -5,7 +5,7 @@
 import * as nls from '../../../../nls.js';
 import { getActiveWindow } from '../../../../base/browser/dom.js';
 import { isMacintosh, isWindows } from '../../../../base/common/platform.js';
-import { Disposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Disposable, DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
 import { KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { ContextKeyExpr, IContextKey, IContextKeyService, RawContextKey } from '../../../../platform/contextkey/common/contextkey.js';
 import { IInstantiationService } from '../../../../platform/instantiation/common/instantiation.js';
@@ -15,6 +15,8 @@ import { ServicesAccessor } from '../../../../editor/browser/editorExtensions.js
 import { Codicon } from '../../../../base/common/codicons.js';
 import { IWorkbenchContribution, registerWorkbenchContribution2, WorkbenchPhase } from '../../../common/contributions.js';
 import { IChatThreadService } from './chatThreadService.js';
+import { IWorkbenchLayoutService } from '../../../services/layout/browser/layoutService.js';
+import { setVaderWindowLayer } from './vaderWindowLayers.js';
 import { IVaderShellService } from './vaderShellService.js';
 import { mountVaderShell } from './react/out/vader-shell-tsx/index.js';
 import { VADER_OPEN_SHELL_ACTION_ID, VADER_SHELL_NEW_CHAT_ACTION_ID, VADER_SHELL_SEARCH_ACTION_ID } from './actionIDs.js';
@@ -40,6 +42,7 @@ class VaderShellOverlay extends Disposable {
 		const workbench = win.document.querySelector('.monaco-workbench') as HTMLElement | null
 		if (!workbench) { return }
 		if (!this.root) { this.create(workbench) }
+		setVaderWindowLayer(workbench, 'shell', true)
 		this.position()
 		this.root!.style.display = 'flex'
 		this.shown = true
@@ -48,6 +51,8 @@ class VaderShellOverlay extends Disposable {
 	hide(): void {
 		if (!this.root) { return }
 		this.root.style.display = 'none'
+		const workbench = this.root.closest<HTMLElement>('.monaco-workbench')
+		if (workbench) setVaderWindowLayer(workbench, 'shell', false)
 		this.shown = false
 	}
 
@@ -68,14 +73,21 @@ class VaderShellOverlay extends Disposable {
 		root.setAttribute('data-testid', 'vader-shell-overlay')
 		root.style.display = 'none'
 		workbench.appendChild(root)
-		this.root = root
+		const resources = new DisposableStore()
 		const onResize = () => { if (this.shown) { this.position() } }
 		doc.defaultView?.addEventListener('resize', onResize)
-		this._register(toDisposable(() => { doc.defaultView?.removeEventListener('resize', onResize); root.remove() }))
-		this.instantiationService.invokeFunction(accessor => {
-			const mounted = mountVaderShell(root, accessor) // lives as long as the window
-			if (mounted) { this._register(toDisposable(mounted.dispose)) }
-		})
+		resources.add(toDisposable(() => { doc.defaultView?.removeEventListener('resize', onResize); setVaderWindowLayer(workbench, 'shell', false); root.remove() }))
+		try {
+			this.instantiationService.invokeFunction(accessor => {
+				const mounted = mountVaderShell(root, accessor) // lives as long as the window
+				if (mounted) { resources.add(toDisposable(mounted.dispose)) }
+			})
+			this.root = root
+			this._register(resources)
+		} catch (error) {
+			resources.dispose()
+			throw error
+		}
 	}
 }
 
@@ -88,22 +100,33 @@ export class VaderShellContribution extends Disposable implements IWorkbenchCont
 		@IInstantiationService instantiationService: IInstantiationService,
 		@IVaderShellService private readonly shell: IVaderShellService,
 		@IContextKeyService contextKeyService: IContextKeyService,
+		@IWorkbenchLayoutService layoutService: IWorkbenchLayoutService,
 	) {
 		super()
 		this.overlay = this._register(new VaderShellOverlay(instantiationService))
 		this.active = VADER_SHELL_ACTIVE.bindTo(contextKeyService)
 		this._register(shell.onDidChange(() => this.sync()))
+		// At BlockRestore the DOM is still being created. The first layout is
+		// synchronous, before paint; do not wait for editor restoration to finish.
+		this._register(layoutService.onDidLayoutMainContainer(() => this.sync()))
 		this.sync()
 	}
 
 	private sync(): void {
-		if (this.shell.state.mode === 'window') { this.overlay.show() } else { this.overlay.hide() }
+		try {
+			if (this.shell.state.mode === 'window') { this.overlay.show() } else { this.overlay.hide() }
+		} catch (error) {
+			// Keep the workbench/error UI reachable and leave mounting retryable.
+			this.active.set(false)
+			getActiveWindow().document.body.classList.remove('vader-window-starting')
+			throw error
+		}
 		this.active.set(this.overlay.isShown)
+		if (this.overlay.isShown || this.shell.state.mode === 'editor') getActiveWindow().document.body.classList.remove('vader-window-starting')
 	}
 }
 
-// Created after the workbench is restored, so the title bar it sits under is already laid out. The person's setting decides where Vader opens.
-registerWorkbenchContribution2(VaderShellContribution.ID, VaderShellContribution, WorkbenchPhase.AfterRestored)
+registerWorkbenchContribution2(VaderShellContribution.ID, VaderShellContribution, WorkbenchPhase.BlockRestore)
 
 registerAction2(class extends Action2 {
 	constructor() {

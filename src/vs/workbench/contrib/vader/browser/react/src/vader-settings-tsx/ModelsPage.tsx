@@ -174,10 +174,16 @@ export const ModelsPage = () => {
 		const of = state.settingsOfProvider[p] as any
 		const n = of.models.length
 		const st = (local as any)[p]?.state as string | undefined
-		const running = n > 0 || st === 'finished'
+		const running = st === 'finished'
+		const unchecked = !st || st === 'init'
 		const where = of.endpoint || LOCAL_PORT[p]
-		const detail = p === 'vLLM' && !of.endpoint ? 'Not set up. Give it the address of your server.' : running ? `${n} model${n === 1 ? '' : 's'}${where ? ', ' + String(where).replace(/^https?:\/\//, '') : ''}` : `Not found${where ? ' on ' + String(where).replace(/^https?:\/\//, '') : ''}. Start its local server, then look again.`
-		return { running, detail, refreshing: st === 'refreshing' }
+		let detail: string
+		if (p === 'vLLM' && !of.endpoint) detail = 'Not set up. Give it the address of your server.'
+		else if (st === 'refreshing') detail = 'Checking the local server...'
+		else if (running) detail = `${n} model${n === 1 ? '' : 's'}${where ? ', ' + String(where).replace(/^https?:\/\//, '') : ''}`
+		else if (unchecked) detail = n > 0 ? `${n} saved model${n === 1 ? '' : 's'}. Check whether the local server is running.` : 'The local server has not been checked yet.'
+		else detail = `Not found${where ? ' on ' + String(where).replace(/^https?:\/\//, '') : ''}. Start its local server, then look again.`
+		return { running, detail, refreshing: st === 'refreshing', unchecked }
 	}
 
 	return <div data-testid='vader-settings-models'>
@@ -199,9 +205,9 @@ export const ModelsPage = () => {
 				return <div key={p} data-testid='vader-provider-row' data-provider={p} style={{ borderTop: i === 0 ? '1px solid var(--ln)' : undefined, borderBottom: '1px solid var(--ln)' }}>
 					<div className='r' style={{ gap: 14, minHeight: 52, padding: '0 2px' }}>
 						<button className='r fl' style={{ gap: 14, minWidth: 0, alignSelf: 'stretch' }} aria-expanded={isOpen} data-testid='vader-provider-toggle' onClick={() => setOpen(isOpen ? undefined : p)}>
-							<span className='t3' style={{ width: 20 }}><ProviderLogo providerName={p} size={16} /></span><span className='t1' style={{ fontWeight: 600, width: 100 }}>{displayInfoOfProviderName(p).title}</span><span className='t2 fl tr' data-testid='vader-provider-summary'>{r.detail}</span>
+							<span className='t3' style={{ width: 20, flex: 'none' }}><ProviderLogo providerName={p} size={16} /></span><span className='t1 tr' style={{ fontWeight: 600, width: 100, flex: 'none' }}>{displayInfoOfProviderName(p).title}</span><span className='t2 fl tr' data-testid='vader-provider-summary' title={r.detail}>{r.detail}</span>
 						</button>
-						<span className='r' style={{ gap: 7 }}>{r.refreshing ? <Spinner /> : <span className='dot' style={{ background: r.running ? '#4cc38a' : 'var(--t4)' }} />}<span className='t2'>{r.refreshing ? 'Looking' : r.running ? 'Running' : 'Not running'}</span></span>
+						<span className='r' data-testid='vader-provider-state' style={{ gap: 7, flex: 'none', whiteSpace: 'nowrap' }}>{r.refreshing ? <Spinner /> : <span className='dot' style={{ background: r.running ? '#4cc38a' : 'var(--t4)' }} />}<span className='t2'>{r.refreshing ? 'Looking' : r.running ? 'Running' : r.unchecked ? 'Not checked' : 'Not running'}</span></span>
 						{p !== 'vLLM' ? <button className='gb' data-testid='vader-provider-look' disabled={r.refreshing} onClick={() => refresh.startRefreshingModels(p as any, { enableProviderOnSuccess: true, doNotFire: false })}>{r.running ? 'Refresh' : 'Look again'}</button> : <button className='gb' data-testid='vader-provider-set-address' onClick={() => setOpen(isOpen ? undefined : p)}>Set an address</button>}
 					</div>
 					{isOpen ? <ProviderBody p={p} onOverrides={setOverrides} /> : null}
@@ -217,9 +223,9 @@ export const ModelsPage = () => {
 				return <div key={p} data-testid='vader-provider-row' data-provider={p} data-has-key={has(p) ? 'true' : 'false'} style={{ borderTop: i === 0 ? '1px solid var(--ln)' : undefined, borderBottom: '1px solid var(--ln)' }}>
 					<div className='r' style={{ gap: 14, minHeight: 46, padding: '0 2px' }}>
 						<button className='r fl' style={{ gap: 14, minWidth: 0, alignSelf: 'stretch' }} aria-expanded={isOpen} data-testid='vader-provider-toggle' onClick={() => setOpen(isOpen ? undefined : p)}>
-							<span className='t3' style={{ width: 20 }}><ProviderLogo providerName={p} size={16} /></span><span className='t1' style={{ fontWeight: 600, width: 130 }}>{displayInfoOfProviderName(p).title}</span><span className='t2 fl tr' data-testid='vader-provider-summary'>{summary(p)}</span>
+							<span className='t3' style={{ width: 20, flex: 'none' }}><ProviderLogo providerName={p} size={16} /></span><span className='t1 tr' title={displayInfoOfProviderName(p).title} style={{ fontWeight: 600, width: 130, flex: 'none' }}>{displayInfoOfProviderName(p).title}</span><span className='t2 fl tr' data-testid='vader-provider-summary' title={summary(p)}>{summary(p)}</span>
 						</button>
-						{st ? <span className='r' style={{ gap: 7 }} data-testid='vader-provider-state'>{st.spin ? <Spinner /> : <span className='dot' style={{ background: st.color }} />}<span className='t2'>{st.text}</span></span> : null}
+						{st ? <span className='r' style={{ gap: 7, flex: 'none', whiteSpace: 'nowrap' }} data-testid='vader-provider-state'>{st.spin ? <Spinner /> : <span className='dot' style={{ background: st.color }} />}<span className='t2'>{st.text}</span></span> : null}
 						{!has(p) ? <button className='gb' data-testid='vader-provider-add-key' onClick={() => setOpen(isOpen ? undefined : p)}>Add a key</button> : <button className='tx' aria-label={isOpen ? 'Close' : 'Open'} onClick={() => setOpen(isOpen ? undefined : p)}><Icon k={isOpen ? 'up' : 'down'} small /></button>}
 					</div>
 					{isOpen ? <ProviderBody p={p} onOverrides={setOverrides} /> : null}

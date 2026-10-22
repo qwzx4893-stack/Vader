@@ -40,6 +40,12 @@ jobs:
         with:
           node-version-file: '.nvmrc'
 
+      - name: Integrity adversarial checks with reproducible evidence
+        run: |
+          python3 -B build/integrity/integrity.py run --plan build/integrity/plan.json --root . --evidence "$RUNNER_TEMP/engineering-integrity"
+          python3 -B build/integrity/integrity.py audit --plan build/integrity/plan.json --root . --evidence "$RUNNER_TEMP/engineering-integrity"
+          python3 -B -m unittest discover -s build/integrity -p test_posix_integrity.py -v
+
       # --ignore-scripts: native modules are not needed for type checking or these tests, and
       # skipping them keeps this job fast. esbuild ships its binary as a package, not a script.
       - name: Install dependencies
@@ -76,12 +82,19 @@ jobs:
           done
           exit $status
 
+      - name: Startup and MCP lifecycle regressions (isolated services)
+        run: |
+          node src/vs/workbench/contrib/vader/test/startupServicesE2E.mjs
+          node src/vs/workbench/contrib/vader/test/mcpLifecycleE2E.mjs
+            node src/vs/workbench/contrib/vader/test/fileWatchLifecycleE2E.mjs
+
       - name: Test model server speaks the OpenAI protocol as the official SDK expects
         run: node src/vs/workbench/contrib/vader/test/e2e/modelServerE2E.mjs
 
       - name: Agent runtime bundle in a real browser (no Node)
         run: |
           npx playwright-core install --with-deps chromium
+          node src/vs/workbench/contrib/vader/test/windowLayersE2E.mjs
           node src/vs/workbench/contrib/vader/test/clineBundleBrowserE2E.mjs
           node src/vs/workbench/contrib/vader/test/addonsUiE2E.mjs
           node src/vs/workbench/contrib/vader/test/shellUiE2E.mjs

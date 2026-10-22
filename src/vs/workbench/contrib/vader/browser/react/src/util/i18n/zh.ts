@@ -6,6 +6,16 @@
 // Generated from the translation tables; a text that is missing here shows in English.
 
 export const zh: Record<string, string> = {
+	"Checking the local server...": "正在检查本地服务器...",
+	"The local server has not been checked yet.": "尚未检查本地服务器。",
+	"Not checked": "尚未检查",
+	"{0} saved model{1}. Check whether the local server is running.": "已保存 {0} 个模型。请检查本地服务器是否正在运行。",
+	"No usable model is selected. Connect a provider or start your local server, then choose a model in Settings.": "尚未选择可用模型。请连接提供商或启动本地服务器，然后在设置中选择模型。",
+	"Selected": "已选择",
+	"Search diagnostics": "搜索诊断",
+	"File watching reported an error. Refresh to try again.": "文件监控报告了错误。请刷新重试。",
+	"The search model could not run; search still matches words.": "搜索模型无法运行；仍可按词匹配搜索。",
+	"Fast search by meaning is ready for {0} pieces. The high-quality search model could not run; search still works with the available index.": "快速语义搜索已覆盖 {0} 个片段。高质量搜索模型无法运行；搜索仍使用现有索引。",
 	"\"{0}\" is not a valid regular expression.": "“{0}”不是有效的正则表达式。",
 	"% of": "% /",
 	"(Chat model)": "（对话模型）",

@@ -95,6 +95,20 @@ async function layoutProblems(page) {
 	});
 }
 
+// Render churn must not restart installed-add-on discovery (which reaches agent discovery).
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-shell-addons-updates')).waitFor();
+	check('the genuine update count remains available', await page.locator(TID('vader-shell-addons-updates')).innerText() === '1');
+	for (let i = 0; i < 8; i++) {
+		await page.evaluate(() => window.__notifyShell());
+		await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+	}
+	check('rerenders with fresh accessor wrappers do not repeat add-on discovery', await page.evaluate(() => window.__inventoryCalls === 1), String(await page.evaluate(() => window.__inventoryCalls)));
+	check('no runtime errors after repeated shell updates', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
 // ===================================================================== the sidebar
 {
 	const { page, errors } = await newPage();
@@ -145,8 +159,41 @@ async function layoutProblems(page) {
 	check('a file shows its code on the right, with the line numbers', await page.locator(TID('vader-files-code')).waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false) && (await page.locator(TID('vader-files-code')).innerText()).includes('second line') && (await page.locator(TID('vader-files-path')).innerText()) === 'README.md');
 	check('the chosen file is marked in the list', (await page.locator(`${TID('vader-files-file')}[data-path$="README.md"]`).getAttribute('aria-current')) === 'true');
 	await shot(page, '22-files');
+	await page.evaluate(() => window.__diskChange('README.md', 'updated by an external process'));
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-files-code"]')?.textContent.includes('updated by an external process'));
+	check('disk edits update the selected file without switching files', (await page.locator(TID('vader-files-code')).innerText()).includes('updated by an external process'));
+	await page.evaluate(() => window.__diskChange('new.txt', 'created externally'));
+	await page.locator(`${TID('vader-files-file')}[data-path$="new.txt"]`).waitFor();
+	check('new disk files appear in the tree', await page.locator(`${TID('vader-files-file')}[data-path$="new.txt"]`).isVisible());
+	await page.evaluate(() => window.__diskChange('README.md', null));
+	await page.getByText('This file could not be read.', { exact: true }).waitFor();
+	check('deleting the selected file clears stale content and its tree entry', await page.locator(`${TID('vader-files-file')}[data-path$="README.md"]`).count() === 0 && await page.locator(TID('vader-files-code')).count() === 0);
+	check('the files page owns one recursive watcher', await page.evaluate(() => window.__fileWatchers === 1));
+	await page.evaluate(() => window.__watchError());
+	await page.getByText('File watching reported an error. Refresh to try again.', { exact: true }).waitFor();
+	await page.locator(TID('vader-files-refresh')).click();
+	check('an asynchronous watch error is visible and Refresh restarts the watcher', await page.getByText('File watching reported an error. Refresh to try again.', { exact: true }).count() === 0 && await page.evaluate(() => window.__fileWatchers === 1));
+	await page.evaluate(() => {
+		window.__diskChange('c:/work/other/outside.txt', 'old outside content');
+		window.__holdFileRead('c:/work/other/outside.txt');
+		window.__shell.openFile('c:/work/other/outside.txt');
+	});
+	await page.waitForFunction(() => window.__fileReadHeld);
+	await page.evaluate(() => window.__diskChange('c:/work/other/outside.txt', 'new outside content'));
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-files-code"]')?.textContent.includes('new outside content'));
+	await page.evaluate(() => window.__releaseFileRead());
+	await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+	check('a file outside the first root refreshes and late reads cannot overwrite it', (await page.locator(TID('vader-files-code')).innerText()).includes('new outside content') && await page.evaluate(() => window.__fileWatchers === 2));
 	await page.locator(TID('vader-files-back')).click();
+	check('leaving files disposes its watcher', await page.evaluate(() => window.__fileWatchers === 0));
 	check('Back returns to the conversation', await page.locator(TID('vader-shell-conversation')).isVisible() && (await page.locator(TID('vader-shell-nav')).count()) === 1);
+	await page.evaluate(() => { window.__workspaceFolders = []; window.__shell.openFile('c:/work/other/outside.txt'); });
+	await page.locator(TID('vader-files-code')).waitFor();
+	await page.evaluate(() => { window.__diskChange('c:/work/other/outside.txt', 'changed while watcher failed', false); window.__watchError(); });
+	await page.getByText('File watching reported an error. Refresh to try again.', { exact: true }).waitFor();
+	await page.locator(TID('vader-files-refresh')).click();
+	await page.waitForFunction(() => document.querySelector('[data-testid="vader-files-code"]')?.textContent.includes('changed while watcher failed'));
+	check('watcher errors and manual refresh work for a standalone file with no workspace root', (await page.locator(TID('vader-files-code')).innerText()).includes('changed while watcher failed') && await page.evaluate(() => window.__fileWatchers === 1));
 	await page.close();
 }
 

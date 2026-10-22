@@ -11,7 +11,8 @@ const useTick = () => {
 	useEffect(() => { const l = () => setN(n => n + 1); listeners.add(l); return () => { listeners.delete(l) } }, [])
 }
 
-export const useAccessor = () => w.__accessor
+// A wrapper may change identity on render; effects must follow the service they use.
+export const useAccessor = () => ({ get: w.__accessor.get })
 export const useIsDark = () => true
 export const useSkillsState = () => w.__skills ?? []
 export const useSettingsState = () => { useTick(); return w.__settings }

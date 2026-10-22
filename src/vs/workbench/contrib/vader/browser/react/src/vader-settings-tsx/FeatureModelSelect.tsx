@@ -33,14 +33,14 @@ export const FeatureModelSelect = ({ feature, testId, special, onModel, width = 
 	const needsPick = !special?.active && options.length > 0 && !current
 	useEffect(() => { if (needsPick) settings.setModelSelectionOfFeature(feature, options[0].selection) }, [needsPick, feature]) // eslint-disable-line react-hooks/exhaustive-deps
 	if (options.length === 0 && !special) return <span className='t3' data-testid={testId} style={{ maxWidth: width, textAlign: 'right' }}>{emptyMessage?.message ?? 'No model is set up for this yet'}</span>
-	const value = special?.active ? '' : current ? key(current) : ''
+	const value = special?.active ? '@special' : current ? key(current) : ''
 	const drop: DropOption[] = [
-		...(special ? [{ value: '', label: special.label }] : !current ? [{ value: '', label: 'Choose a model' }] : []),
+		...(special ? [{ value: '@special', label: special.label }] : !current ? [{ value: '', label: 'Choose a model' }] : []),
 		...options.map(o => ({ value: key(o.selection), label: o.name, mark: <ProviderLogo providerName={o.selection.providerName} size={14} /> })),
 	]
-	return <Dropdown testId={testId} label={`Model for ${feature}`} width={width} value={value} options={drop}
+	return <Dropdown testId={testId} label={`Model for ${feature}`} width={width} value={value} options={drop} placeholder={emptyMessage?.message ?? 'Choose a model'}
 		onChange={v => {
-			if (v === '') { special?.onPick(); return }
+			if (v === '@special') { special?.onPick(); return }
 			const o = options.find(x => key(x.selection) === v)
 			if (o) { settings.setModelSelectionOfFeature(feature, o.selection); onModel?.() }
 		}} />

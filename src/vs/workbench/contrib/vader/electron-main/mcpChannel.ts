@@ -9,6 +9,7 @@
 
 import { IServerChannel } from '../../../../base/parts/ipc/common/ipc.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
+import { equals } from '../../../../base/common/objects.js';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
 import { buildMcpServerEnv } from './mcpServerEnv.js';
@@ -18,6 +19,14 @@ import { MCPConfigFileJSON, MCPConfigFileEntryJSON, MCPServer, RawMCPToolCall, M
 import { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import { MCPUserStateOfName } from '../common/vaderSettingsTypes.js';
+import { DisposableStore, toDisposable } from '../../../../base/common/lifecycle.js';
+
+/** Application.dispose runs earlier in onWillShutdown. Its cleanup must not
+ * remove the later join listener before that listener can join the same promise. */
+export function registerMCPShutdown(channel: MCPChannel, lifecycle: { onWillShutdown: Event<{ join(id: string, promise: Promise<void>): void }> }, disposables: DisposableStore, onError: (error: unknown) => void): void {
+	disposables.add(toDisposable(() => { void channel.shutdown().catch(onError) }))
+	Event.once(lifecycle.onWillShutdown)(event => event.join('vader-mcp', channel.shutdown()))
+}
 
 const getClientConfig = (serverName: string) => {
 	return {
@@ -39,7 +48,7 @@ type ClientInfo = {
 } | {
 	_client?: undefined,
 	mcpServerEntryJSON: MCPConfigFileEntryJSON,
-	mcpServer: MCPServerError,
+	mcpServer: MCPServer,
 }
 
 type InfoOfClientId = {
@@ -49,7 +58,23 @@ type InfoOfClientId = {
 export class MCPChannel implements IServerChannel {
 
 	private readonly infoOfClientId: InfoOfClientId = {}
-	private readonly _refreshingServerNames: Set<string> = new Set()
+	private readonly _serverOperations = new Map<string, Promise<void>>()
+	private _closing = false
+	private _shutdown: Promise<void> | undefined
+	private readonly _closedClients = new WeakSet<Client>()
+
+	/** Keep every requested transition; a delete while connecting must run after that connect. */
+	private _forServer(name: string, operation: () => Promise<void>, duringShutdown = false): Promise<void> {
+		const previous = this._serverOperations.get(name) ?? Promise.resolve()
+		const current = previous.catch(() => { /* the previous caller received its error */ }).then(() => {
+			if (this._closing && !duringShutdown) return
+			return operation()
+		})
+		this._serverOperations.set(name, current)
+		const done = () => { if (this._serverOperations.get(name) === current) this._serverOperations.delete(name) }
+		void current.then(done, done)
+		return current
+	}
 
 	// mcp emitters
 	private readonly mcpEmitters = {
@@ -87,6 +112,7 @@ export class MCPChannel implements IServerChannel {
 	// browser uses this to call (see this.channel.call() in mcpConfigService.ts for all usages)
 	async call(_: unknown, command: string, params: any): Promise<any> {
 		try {
+			if (this._closing && command !== 'closeAllMCPServers') throw new Error('MCP connections are shutting down')
 			if (command === 'refreshMCPServers') {
 				await this._refreshMCPServers(params)
 			}
@@ -107,6 +133,7 @@ export class MCPChannel implements IServerChannel {
 		}
 		catch (e) {
 			console.error('mcp channel: Call Error:', e)
+			throw e
 		}
 	}
 
@@ -131,41 +158,42 @@ export class MCPChannel implements IServerChannel {
 			...updatedServerNames.map(n => ({ serverName: n, type: 'updated' }) as const),
 		]
 
-		await Promise.all(
-			allChanges.map(async ({ serverName, type }) => {
-
-				// check if already refreshing
-				if (this._refreshingServerNames.has(serverName)) return
-				this._refreshingServerNames.add(serverName)
-
-				const prevServer = this.infoOfClientId[serverName]?.mcpServer;
-
-				// close and delete the old client
-				if (type === 'removed' || type === 'updated') {
-					await this._closeClient(serverName)
-					delete this.infoOfClientId[serverName]
-					this.mcpEmitters.serverEvent.onDelete.fire({ response: { prevServer, name: serverName, } })
-				}
-
-				// create a new client
-				if (type === 'added' || type === 'updated') {
-					const clientInfo = await this._createClient(mcpServersJSON[serverName], serverName, userStateOfName[serverName]?.isOn)
-					this.infoOfClientId[serverName] = clientInfo
-					this.mcpEmitters.serverEvent.onAdd.fire({ response: { newServer: clientInfo.mcpServer, name: serverName, } })
-				}
-			})
-		)
-
-		allChanges.forEach(({ serverName, type }) => {
-			this._refreshingServerNames.delete(serverName)
-		})
+		await Promise.all(allChanges.map(({ serverName, type }) => this._forServer(serverName, async () => {
+			const previous = this.infoOfClientId[serverName]
+			const prevServer = previous?.mcpServer
+			const on = userStateOfName[serverName]?.isOn !== false
+			if (type !== 'removed' && previous && equals(previous.mcpServerEntryJSON, mcpServersJSON[serverName])
+				&& ((on && previous._client) || (!on && previous.mcpServer.status === 'offline'))) {
+				// A new window starts with loading state even when the process already
+				// owns this connection. Publish it without restarting the transport.
+				this.mcpEmitters.serverEvent.onAdd.fire({ response: { newServer: previous.mcpServer, name: serverName } })
+				return
+			}
+			await this._closeClient(serverName)
+			delete this.infoOfClientId[serverName]
+			if (type === 'removed') {
+				this.mcpEmitters.serverEvent.onDelete.fire({ response: { prevServer, name: serverName } })
+				return
+			}
+			const clientInfo = this._storeClient(serverName, await this._createClient(mcpServersJSON[serverName], serverName, on))
+			this.mcpEmitters.serverEvent.onAdd.fire({ response: { newServer: clientInfo.mcpServer, name: serverName } })
+		})))
 
 	}
 
-	private async _createClientUnsafe(server: MCPConfigFileEntryJSON, serverName: string, isOn: boolean, onClientCreated?: (client: Client) => void): Promise<ClientInfo> {
+	private async _createClientUnsafe(server: MCPConfigFileEntryJSON, serverName: string, isOn: boolean, attempt: { cancelled: boolean }, onClientCreated?: (client: Client) => void): Promise<ClientInfo> {
+		if (this._closing) throw new Error('MCP connections are shutting down')
 
 		const clientConfig = getClientConfig(serverName)
 		const client = new Client(clientConfig)
+		client.onclose = () => {
+			this._closedClients.add(client)
+			const current = this.infoOfClientId[serverName]
+			if (current?._client !== client) return
+			const next: MCPServerError = { status: 'error', error: 'The MCP server disconnected. Turn it on again to reconnect.', command: current.mcpServer.command }
+			this.infoOfClientId[serverName] = { mcpServerEntryJSON: server, mcpServer: next }
+			this.mcpEmitters.serverEvent.onUpdate.fire({ response: { name: serverName, prevServer: current.mcpServer, newServer: next } })
+		}
 		onClientCreated?.(client)
 		let transport: Transport;
 		let info: MCPServerNonError;
@@ -184,6 +212,10 @@ export class MCPChannel implements IServerChannel {
 					command: server.url.toString(),
 				}
 			} catch (httpErr) {
+				if (attempt.cancelled || this._closing) throw httpErr
+				await client.close()
+				if (attempt.cancelled || this._closing) throw httpErr
+				this._closedClients.delete(client) // the SSE fallback owns the next transport
 				console.warn('HTTP failed for %s, trying SSE…', serverName, httpErr);
 				transport = new SSEClientTransport(server.url);
 				await client.connect(transport);
@@ -225,7 +257,16 @@ export class MCPChannel implements IServerChannel {
 		}
 
 
+		if (attempt.cancelled) { await client.close(); throw new Error('MCP connection was cancelled') }
 		return { _client: client, mcpServerEntryJSON: server, mcpServer: info }
+	}
+
+	private _storeClient(name: string, info: ClientInfo): ClientInfo {
+		if (info._client && this._closedClients.has(info._client)) {
+			info = { mcpServerEntryJSON: info.mcpServerEntryJSON, mcpServer: { status: 'error', command: info.mcpServer.command, error: 'The MCP server disconnected while connecting. Turn it on again to retry.' } }
+		}
+		this.infoOfClientId[name] = info
+		return info
 	}
 
 	private _addUniquePrefix(base: string) {
@@ -246,17 +287,23 @@ export class MCPChannel implements IServerChannel {
 	private static readonly MCP_CONNECT_TIMEOUT_MS = 20_000;
 
 	private async _createClient(serverConfig: MCPConfigFileEntryJSON, serverName: string, isOn = true): Promise<ClientInfo> {
+		if (!isOn) {
+			return { mcpServerEntryJSON: serverConfig, mcpServer: { status: 'offline', tools: [], command: serverConfig.url?.toString() ?? `${serverConfig.command ?? ''} ${serverConfig.args?.join(' ') ?? ''}`.trim() } }
+		}
 		let createdClient: Client | undefined
+		let timer: ReturnType<typeof setTimeout> | undefined
+		const attempt = { cancelled: false }
 		try {
 			const c: ClientInfo = await Promise.race([
-				this._createClientUnsafe(serverConfig, serverName, isOn, (client) => { createdClient = client }),
-				new Promise<never>((_, reject) => setTimeout(
+				this._createClientUnsafe(serverConfig, serverName, isOn, attempt, (client) => { createdClient = client }),
+				new Promise<never>((_, reject) => { timer = setTimeout(
 					() => reject(new Error(`Connecting to MCP server "${serverName}" timed out after ${MCPChannel.MCP_CONNECT_TIMEOUT_MS / 1000}s.`)),
 					MCPChannel.MCP_CONNECT_TIMEOUT_MS,
-				)),
+				) }),
 			])
 			return c
 		} catch (err) {
+			attempt.cancelled = true
 			console.error('❌ Failed to connect to server "%s":', serverName, err)
 			// the losing side of the race above isn't cancelled - if the connect attempt is still
 			// in flight (or somehow succeeds later), this closes it rather than leaking a live
@@ -269,15 +316,22 @@ export class MCPChannel implements IServerChannel {
 			const fullCommand = !serverConfig.command ? '' : `${serverConfig.command} ${serverConfig.args?.join(' ') || ''}`
 			const c: MCPServerError = { status: 'error', error: err + '', command: fullCommand, }
 			return { mcpServerEntryJSON: serverConfig, mcpServer: c, }
-		}
+		} finally { clearTimeout(timer) }
 	}
 
 	private async _closeAllMCPServers() {
-		for (const serverName in this.infoOfClientId) {
+		const names = new Set([...Object.keys(this.infoOfClientId), ...this._serverOperations.keys()])
+		await Promise.all([...names].map(serverName => this._forServer(serverName, async () => {
 			await this._closeClient(serverName)
 			delete this.infoOfClientId[serverName]
-		}
+		}, true)))
 		console.log('Closed all MCP servers');
+	}
+
+	/** Joined by Electron's shutdown lifecycle; no new clients may start afterwards. */
+	shutdown(): Promise<void> {
+		this._closing = true
+		return this._shutdown ??= this._closeAllMCPServers()
 	}
 
 	private async _closeClient(serverName: string) {
@@ -285,6 +339,8 @@ export class MCPChannel implements IServerChannel {
 		if (!info) return
 		const { _client: client } = info
 		if (client) {
+			// Clear ownership first so an intentional close cannot publish a disconnect error.
+			this.infoOfClientId[serverName] = { mcpServerEntryJSON: info.mcpServerEntryJSON, mcpServer: info.mcpServer }
 			await client.close()
 		}
 		console.log(`Closed MCP server ${serverName}`);
@@ -292,9 +348,20 @@ export class MCPChannel implements IServerChannel {
 
 
 	private async _toggleMCPServer(serverName: string, isOn: boolean) {
-		const prevServer = this.infoOfClientId[serverName]?.mcpServer
+		return this._forServer(serverName, () => this._applyToggle(serverName, isOn))
+	}
+
+	private async _applyToggle(serverName: string, isOn: boolean) {
+		const previous = this.infoOfClientId[serverName]
+		if (!previous) throw new Error(`MCP server "${serverName}" is not configured`)
+		const prevServer = previous.mcpServer
 		// Handle turning on the server
 		if (isOn) {
+			if (previous._client && previous.mcpServer.status === 'success') {
+				this.mcpEmitters.serverEvent.onUpdate.fire({ response: { name: serverName, newServer: previous.mcpServer, prevServer } })
+				return
+			}
+			await this._closeClient(serverName)
 			// this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
 			// Vader fix, found in a production-hardening audit: this used to call
 			// _createClientUnsafe directly, so a connect failure (bad command, unreachable URL,
@@ -304,8 +371,7 @@ export class MCPChannel implements IServerChannel {
 			// re-save. _createClient already exists specifically to turn a connect failure into
 			// a real MCPServerError status instead of throwing - use that here too, the same way
 			// _refreshMCPServers already does above.
-			const clientInfo = await this._createClient(this.infoOfClientId[serverName].mcpServerEntryJSON, serverName, isOn)
-			this.infoOfClientId[serverName] = clientInfo
+			const clientInfo = this._storeClient(serverName, await this._createClient(this.infoOfClientId[serverName].mcpServerEntryJSON, serverName, isOn))
 			this.mcpEmitters.serverEvent.onUpdate.fire({
 				response: {
 					name: serverName,
@@ -319,6 +385,7 @@ export class MCPChannel implements IServerChannel {
 			// this.mcpEmitters.serverEvent.onChangeLoading.fire(getLoadingServerObject(serverName, isOn))
 			await this._closeClient(serverName).catch(err => console.error('Error closing MCP server "%s":', serverName, err))
 			delete this.infoOfClientId[serverName]._client
+			this.infoOfClientId[serverName].mcpServer = { status: 'offline', tools: [], command: previous.mcpServer.command }
 
 			this.mcpEmitters.serverEvent.onUpdate.fire({
 				response: {
@@ -405,7 +472,7 @@ export class MCPChannel implements IServerChannel {
 					codeDescription = 'Invalid Parameters';
 				if (code === -32603)
 					codeDescription = 'Internal Error';
-				errorMessage = `${codeDescription}. Full response:\n${JSON.stringify(err, null, 2)}`
+				errorMessage = `${codeDescription}: ${typeof err['message'] === 'string' ? err['message'] : String(err)}. Full response:\n${JSON.stringify(err, null, 2)}`
 			}
 			// Check if it's an MCP error with a code
 			else if (typeof err === 'string') {
@@ -413,7 +480,7 @@ export class MCPChannel implements IServerChannel {
 				errorMessage = err;
 			} else {
 				// Unknown error format
-				errorMessage = JSON.stringify(err, null, 2);
+				errorMessage = err instanceof Error ? err.message : JSON.stringify(err, null, 2);
 			}
 
 			const fullErrorMessage = `❌ Failed to call tool "${toolName}" on server "${serverName}": ${errorMessage}`;

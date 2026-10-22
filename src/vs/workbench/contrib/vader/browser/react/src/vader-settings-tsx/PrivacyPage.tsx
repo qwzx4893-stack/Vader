@@ -83,6 +83,7 @@ export const PrivacyPage = () => {
 		<Group title='Search in the project'>
 			<Line first lockKey='codebaseIndex' title='Keep an index of the project for search' detail='Lets the agent find code by what it does, not only by exact text. The index is made and kept on this computer; no file, no word of it is sent anywhere. Files that hold secrets (.env, keys) are never read.' right={<Switch on={indexOn} label='Keep an index of the project for search' testId='vader-privacy-index' onChange={v => settings.setGlobalSetting('codebaseIndex', v)} />} />
 			<Line testId='vader-privacy-index-status' title={<span data-testid='vader-privacy-index-title'>{indexWords.title}</span>} detail={<span data-testid='vader-privacy-index-detail'>{indexWords.detail}</span>} right={indexOn && root ? <button className='gb' data-testid='vader-privacy-index-rebuild' disabled={indexWords.tone === 'busy'} onClick={() => { void indexService.rebuild(root) }}>Rebuild</button> : undefined} />
+			{indexState?.meaning?.error ? <details style={{ padding: '8px 0', color: 'var(--t3)' }} data-testid='vader-privacy-index-diagnostics'><summary>Search diagnostics</summary><pre style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere', fontSize: 12 }}>{indexState.meaning.error}</pre></details> : null}
 		</Group>
 		<div style={{ paddingTop: 14 }}><button className='gb' data-testid='vader-privacy-verified' onClick={() => { void opener.open(URI.parse(`${REPO_URL}/blob/main/docs/integrations/privacy.md`)) }}>How this is verified</button></div>
 	</div>

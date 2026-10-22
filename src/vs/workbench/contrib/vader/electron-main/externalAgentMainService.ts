@@ -55,6 +55,7 @@ const MAX_LIVE_AGENTS = 4
 type LiveRegistry = { [registryId: string]: { version: string, distribution: RegistryDistribution } }
 
 type LaunchSpec = { command: string, args: string[], env?: { [k: string]: string } }
+type OpeningOwner = { cancelled: boolean, stop?: () => void }
 
 /** written next to an installed agent: the exact way it is started, so an older install keeps working when Vader's own list moves on */
 type InstallManifest = { id: string, version: string, kind: 'npm' | 'binary', command: string, args: string[], env?: { [k: string]: string } }
@@ -177,6 +178,10 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 	private readonly _sessions = new Map<string, Session>()
 	private readonly _opening = new Map<string, Promise<Session>>()
+	private readonly _openingOwners = new Map<string, OpeningOwner>()
+	private readonly _ownedPrograms = new Map<ChildProcess, () => void>()
+	private _startingCount = 0
+	private _disposed = false
 	private readonly _pendingPermissions = new Map<string, { sessionKey: string, resolve: (optionId: string | null) => void }>()
 	private _live: LiveRegistry | undefined
 	/** programs found on this computer and whether they answered the protocol, by path (and the file's modification time), so a settings page opening does not start them every time */
@@ -189,7 +194,13 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		super()
 		const sweep = setInterval(() => this._stopIdleAgents(), 60_000)
 		;(sweep as unknown as { unref?: () => void }).unref?.() // the sweep alone must not keep the process alive
-		this._register({ dispose: () => { clearInterval(sweep); for (const key of [...this._sessions.keys()]) { void this.closeSession(key) } } })
+		this._register({ dispose: () => {
+			this._disposed = true
+			clearInterval(sweep)
+			for (const key of new Set([...this._sessions.keys(), ...this._openingOwners.keys()])) void this.closeSession(key)
+			for (const stop of this._ownedPrograms.values()) stop()
+			this._ownedPrograms.clear()
+		} })
 	}
 
 	private _emit(e: ExternalAgentEvent) { this._onEvent.fire(e) }
@@ -235,20 +246,23 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 	/**
 	 * The program a person already has on this computer for an agent (found on the PATH or in the vendor's usual folder), when it answers the protocol.
-	 * Nothing is trusted from its name alone: it is started once for a handshake, and the answer is remembered for ten minutes.
+	 * Inventory only checks the file. A protocol check is explicit: some programs
+	 * start all of their own MCP servers as soon as they start, even for initialize.
 	 */
-	private async _localProgram(def: ExternalAgentDef): Promise<{ command: string, args: string[], version?: string } | undefined> {
+	private async _localProgram(def: ExternalAgentDef, verify = true, owner?: OpeningOwner): Promise<{ command: string, args: string[], version?: string } | undefined> {
 		const l = def.acp?.local
 		if (!l) { return undefined }
 		const dirs = (l.candidateDirs ?? []).map(d => path.join(homeDir(), d))
 		let found: string | null = null
 		for (const name of [l.command, ...(l.alternates ?? [])]) { found = await findProgram(name, dirs); if (found) { break } }
 		if (!found) { return undefined }
+		if (!verify) { return { command: found, args: [...l.args] } }
 		let mtime = 0
 		try { mtime = (await fs.promises.stat(found)).mtimeMs } catch { return undefined }
 		const cached = this._localVerified.get(found)
 		if (cached && cached.mtime === mtime && Date.now() - cached.at < 10 * 60_000) { return cached.ok ? { command: found, args: [...l.args], version: cached.version } : undefined }
-		const probe = await this._probeSpec(`local:${def.id}`, { command: found, args: [...l.args] }, 20_000)
+		const probe = await this._probeSpec(`local:${def.id}`, { command: found, args: [...l.args] }, 20_000, owner)
+		if (owner?.cancelled) throw new Error('The chat was closed during local agent verification')
 		this._localVerified.set(found, { ok: probe.ok, version: probe.agentVersion, at: Date.now(), mtime })
 		return probe.ok ? { command: found, args: [...l.args], version: probe.agentVersion } : undefined
 	}
@@ -266,7 +280,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			const installed = await this._installed(def)
 			if (installed) { return { id: def.id, state: 'ready', source: 'vader', installedVersion: installed.version, latestVersion: compareVersions(dist.version, installed.version) > 0 ? dist.version : undefined } }
 			// not downloaded by Vader: a program the person already has is used as it is, so there is nothing to download
-			const local = await this._localProgram(def)
+			const local = await this._localProgram(def, false)
 			if (local) { return { id: def.id, state: 'ready', source: 'local', installedVersion: local.version, detail: local.command } }
 			if (dist.distribution.npx) { return { id: def.id, state: node ? 'not-installed' : 'needs-node', detail: `version ${dist.version}` } }
 			const key = platformKeyOf(process.platform, process.arch)
@@ -421,7 +435,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 	// ------------------------------------------------------------------ starting an agent
 
-	private async _launchSpec(agentId: string, custom: CustomAcpAgent | undefined): Promise<LaunchSpec> {
+	private async _launchSpec(agentId: string, custom: CustomAcpAgent | undefined, owner?: OpeningOwner): Promise<LaunchSpec> {
 		if (custom) {
 			const found = await findProgram(custom.command, [])
 			if (!found) { throw new Error(`Could not find "${custom.command}". Check the program name in Settings > Coding Agents.`) }
@@ -431,9 +445,9 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		if (!def?.acp) { throw new Error(`Vader does not know an agent called "${agentId}".`) }
 		const installed = await this._installed(def)
 		if (!installed) {
-			const local = await this._localProgram(def)
+			const local = await this._localProgram(def, true, owner)
 			if (local) { return { command: local.command, args: local.args } }
-			throw new Error(`${def.name} is not installed yet. Use "Install" on its card in Settings > Coding Agents.`)
+			throw new Error(`${def.name} is not installed yet. Use "Install" on its card in Settings > Connected agents.`)
 		}
 		const script = path.join(installed.dir, installed.command)
 		if (installed.kind === 'npm') {
@@ -446,6 +460,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 	/** starts the program and the protocol connection to it */
 	private _launch(key: string, spec: LaunchSpec, cwd: string, handlers: { onUpdate: (n: acp.SessionNotification) => void, onPermission: (title: string, options: PermissionOption[]) => Promise<string | null> }) {
+		if (this._disposed) throw new Error('The agent service is closed')
 		this._emit({ sessionKey: key, type: 'status', message: 'Starting the agent...' })
 		const stderr = { text: '' }
 		// POSIX: its own process group, so that stopping it also stops what it started
@@ -471,6 +486,9 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			})
 			.onNotification(acp.methods.client.session.update, ctx => { handlers.onUpdate(ctx.params) })
 			.connect(stream)
+		this._ownedPrograms.set(proc, () => { connection.close(); killTree(proc) })
+		proc.once('exit', () => this._ownedPrograms.delete(proc))
+		proc.once('error', () => this._ownedPrograms.delete(proc))
 		return { proc, stderr, exited, connection }
 	}
 
@@ -487,11 +505,13 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		]).finally(() => clearTimeout(timer))
 	}
 
-	private async _probeSpec(key: string, spec: LaunchSpec, timeoutMs: number): Promise<ProbeResult> {
+	private async _probeSpec(key: string, spec: LaunchSpec, timeoutMs: number, owner?: OpeningOwner): Promise<ProbeResult> {
 		const started = Date.now()
 		let launched: ReturnType<ExternalAgentMainService['_launch']> | undefined
 		try {
+			if (owner?.cancelled) throw new Error('The chat was closed before local agent verification')
 			launched = this._launch(key, spec, os.tmpdir(), { onUpdate: () => { }, onPermission: async () => null })
+			if (owner) owner.stop = () => { launched!.connection.close(); killTree(launched!.proc) }
 			const init = await this._initialize(launched.connection, launched.exited, timeoutMs)
 			const caps = init.agentCapabilities as { loadSession?: boolean, sessionCapabilities?: { resume?: unknown } } | undefined
 			return {
@@ -504,6 +524,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			const reported = launched ? await explainedByExit(e, launched.exited) : e
 			return { ok: false, ms: Date.now() - started, error: reported instanceof Error ? reported.message : String(reported) }
 		} finally {
+			if (owner) owner.stop = undefined
 			if (launched) { launched.connection.close(); killTree(launched.proc) }
 		}
 	}
@@ -584,15 +605,17 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		}
 	}
 
-	private async _openSession(key: string, agentId: string, custom: CustomAcpAgent | undefined, cwd: string, resumeSessionId: string | undefined): Promise<Session> {
+	private async _openSession(key: string, agentId: string, custom: CustomAcpAgent | undefined, cwd: string, resumeSessionId: string | undefined, owner: OpeningOwner): Promise<Session> {
 		const def = externalAgentById(agentId)
-		const spec = await this._launchSpec(agentId, custom)
+		const spec = await this._launchSpec(agentId, custom, owner)
+		if (owner.cancelled || this._disposed) throw new Error('The chat was closed before the agent started')
 		const holder: { session?: Session } = {}
 		const launched = this._launch(key, spec, cwd, {
 			onUpdate: n => { if (holder.session && n.sessionId === holder.session.sessionId && !holder.session.suppressUpdates) { this._relay(holder.session, n.update) } },
 			onPermission: (title, options) => this._askPermission(key, title, options),
 		})
 		const { proc, stderr, exited, connection } = launched
+		owner.stop = () => { connection.close(); killTree(proc) }
 		try {
 			const init = await this._initialize(connection, exited, INIT_TIMEOUT_MS)
 			const caps = init.agentCapabilities as { loadSession?: boolean, sessionCapabilities?: { resume?: unknown } } | undefined
@@ -638,6 +661,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 				resumed = await Promise.race([begin(), exited])
 			}
 
+			if (owner.cancelled || this._disposed) throw new Error('The chat was closed while the agent was starting')
 			proc.once('exit', () => { session.closed = true; if (this._sessions.get(key) === session) { this._sessions.delete(key) } })
 			this._sessions.set(key, session)
 			this._emit({ sessionKey: key, type: 'session', sessionId: session.sessionId, resumed })
@@ -688,14 +712,24 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	// ------------------------------------------------------------------ one conversation turn
 
 	private async _getSession(params: RunTurnParams): Promise<Session> {
+		if (this._disposed) throw new Error('The agent service is closed')
 		const { sessionKey: key, agentId, custom, cwd, resumeSessionId } = params
 		const existing = this._sessions.get(key)
 		if (existing && !existing.closed && existing.agentId === agentId && existing.cwd === cwd) { return existing }
 		if (existing) { await this.closeSession(key) }
 		let pending = this._opening.get(key)
 		if (!pending) {
-			await this._makeRoomForAnotherAgent()
-			pending = this._openSession(key, agentId, custom, cwd, resumeSessionId).finally(() => this._opening.delete(key))
+			const owner: OpeningOwner = { cancelled: false }
+			this._openingOwners.set(key, owner)
+			pending = Promise.resolve().then(async () => {
+				if (owner.cancelled || this._disposed) throw new Error('The chat was closed before the agent started')
+				await this._makeRoomForAnotherAgent()
+				try { return await this._openSession(key, agentId, custom, cwd, resumeSessionId, owner) }
+				finally { this._startingCount-- }
+			}).finally(() => {
+				if (this._opening.get(key) === pending) this._opening.delete(key)
+				if (this._openingOwners.get(key) === owner) this._openingOwners.delete(key)
+			})
 			this._opening.set(key, pending)
 		}
 		return pending
@@ -703,6 +737,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 
 	async runTurn(params: RunTurnParams): Promise<{ stopReason: string }> {
 		const s = await this._getSession(params)
+		if (s.closed || this._disposed) throw new Error('The chat was closed')
 		if (s.busy) { throw new Error('This chat is still working on the previous message.') }
 		s.busy = true
 		s.lastUsed = Date.now()
@@ -794,6 +829,8 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	}
 
 	async closeSession(sessionKey: string): Promise<void> {
+		const owner = this._openingOwners.get(sessionKey)
+		if (owner) { owner.cancelled = true; owner.stop?.() }
 		for (const [id, p] of this._pendingPermissions) { if (p.sessionKey === sessionKey) { this._pendingPermissions.delete(id); p.resolve(null) } }
 		const s = this._sessions.get(sessionKey)
 		if (!s) { return }
@@ -810,10 +847,12 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	}
 
 	private async _makeRoomForAnotherAgent() {
-		while (this._sessions.size >= MAX_LIVE_AGENTS) {
+		while (this._sessions.size + this._startingCount >= MAX_LIVE_AGENTS) {
 			const idle = [...this._sessions.values()].filter(s => !s.busy).sort((a, b) => a.lastUsed - b.lastUsed)[0]
 			if (!idle) { throw new Error(`${MAX_LIVE_AGENTS} agents are working at the same time. Wait for one to finish, then send your message again.`) }
 			await this.closeSession(idle.key)
 		}
+		// Reserve before yielding so distinct concurrent chats share the same limit.
+		this._startingCount++
 	}
 }

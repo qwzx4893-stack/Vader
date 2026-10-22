@@ -19,11 +19,12 @@ type Row = { def: ExternalAgentDef }
 
 /** where the agent stands, in the words of the page */
 const stateWord = (def: ExternalAgentDef, state: string | undefined, sign: SignInState | undefined, inUse: boolean): { text: string, tone: 'ok' | 'plain' | 'warn' } => {
-	if (inUse) return { text: 'In use', tone: 'ok' }
+	if (inUse && state === 'ready' && sign?.state === 'in') return { text: 'In use', tone: 'ok' }
+	if (inUse) return { text: 'Selected', tone: 'plain' }
 	switch (state) {
 		case 'ready':
 			if (def.kind === 'terminal') return { text: 'Installed', tone: 'plain' }
-			return sign?.state === 'in' ? { text: 'Signed in', tone: 'ok' } : sign?.state === 'out' ? { text: 'Not signed in', tone: 'warn' } : sign?.state === 'unknown' ? { text: 'Ready', tone: 'plain' } : { text: 'Checking sign-in...', tone: 'plain' }
+			return sign?.state === 'in' ? { text: 'Signed in', tone: 'ok' } : sign?.state === 'out' ? { text: 'Not signed in', tone: 'warn' } : sign?.state === 'checking' ? { text: 'Checking sign-in...', tone: 'plain' } : { text: 'Installed', tone: 'plain' }
 		case 'not-installed': return { text: 'Not installed', tone: 'plain' }
 		case 'needs-node': return { text: 'Needs Node.js', tone: 'warn' }
 		case 'unsupported': return { text: 'Not available for this computer', tone: 'plain' }
@@ -54,8 +55,8 @@ const AgentRow = ({ def }: Row) => {
 	const isChat = def.kind === 'acp'
 	const installable = !!status && !ready && status.state !== 'unsupported' && (status.state !== 'needs-node' || def.kind === 'terminal')
 	const own = ready && isChat && status?.source === 'vader'      // the copy Vader downloaded (the only one it may update or delete)
-	const mustConnect = ready && isChat && sign?.state === 'out'
-	const canUse = ready && isChat && (sign?.state === 'in' || sign?.state === 'unknown')
+	const mustConnect = ready && isChat && (!sign || sign.state === 'out' || sign.state === 'unknown')
+	const canUse = ready && isChat && sign?.state === 'in'
 	const word = stateWord(def, status?.state, sign, inUse)
 	const version = status?.installedVersion
 
@@ -70,7 +71,7 @@ const AgentRow = ({ def }: Row) => {
 					{installable ? <button className='pb' data-testid={`vader-external-agent-${def.id}-install`} onClick={() => service.install(def.id)}>Install</button> : null}
 					{mustConnect ? <button className='pb' data-testid={`vader-external-agent-${def.id}-connect`} onClick={() => service.connect(def.id)}>Connect</button> : null}
 					{canUse && !inUse ? <button className='pb' data-testid={`vader-external-agent-${def.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', def.id)}>Use</button> : null}
-					{canUse && inUse ? <button className='gb' data-testid={`vader-external-agent-${def.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : null}
+					{inUse ? <button className='gb' data-testid={`vader-external-agent-${def.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : null}
 					{ready && !isChat ? <button className='gb' data-testid={`vader-external-agent-${def.id}-open`} onClick={() => service.openInTerminal(def.id)}>{opened[def.id] ? 'Open in a terminal' : 'Connect'}</button> : null}
 					{own && status?.latestVersion ? <button className='gb' data-testid={`vader-external-agent-${def.id}-update`} onClick={() => service.install(def.id)}>Update to {status.latestVersion}</button> : null}
 				</>}
@@ -124,7 +125,7 @@ const CustomAgents = () => {
 				</div>
 				<div className='r' style={{ gap: 8, padding: '8px 0 0 42px', flexWrap: 'wrap' }}>
 					{ready && !busy[a.id] && sign?.state === 'out' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-connect`} onClick={() => service.connect(a.id)}>Connect</button> : null}
-					{ready && !busy[a.id] && sign?.state !== 'out' ? (g.externalAgentId === a.id ? <button className='gb' onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : <button className='pb' data-testid={`vader-external-agent-${a.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', a.id)}>Use</button>) : null}
+					{g.externalAgentId === a.id ? <button className='gb' data-testid={`vader-external-agent-${a.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : ready && !busy[a.id] && sign?.state !== 'out' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', a.id)}>Use</button> : null}
 					{ready && !busy[a.id] ? <button className='gb' data-testid={`vader-external-agent-${a.id}-test`} onClick={() => service.testConnection(a.id)}>Test connection</button> : null}
 					<button className='tx' data-testid={`vader-external-agent-${a.id}-remove`} onClick={() => service.removeCustomAgent(a.id)}>Remove</button>
 				</div>

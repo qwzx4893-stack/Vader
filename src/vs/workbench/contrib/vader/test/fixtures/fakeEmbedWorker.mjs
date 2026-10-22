@@ -6,10 +6,12 @@ const marker = (n) => fs.existsSync(path.join(workerData.root, workerData.name, 
 
 if (marker('NOT_READY')) { parentPort.postMessage({ ready: false }); }
 else if (marker('DIES_AT_START')) { process.exit(1); }
+else if (marker('HANG_AT_START')) { setInterval(() => {}, 1000); }
 else {
 	fs.appendFileSync(path.join(workerData.root, workerData.name, 'STARTS'), 'x'); // one mark for every start of this worker
 	parentPort.postMessage({ ready: true });
 	parentPort.on('message', ({ id, texts }) => {
+		if (texts.some(t => t === 'HANG')) return;
 		if (texts.some(t => t === 'FAIL')) { parentPort.postMessage({ id, error: 'the model failed' }); return; }
 		if (texts.some(t => t === 'DIE')) { process.exit(1); }
 		const dims = 4;

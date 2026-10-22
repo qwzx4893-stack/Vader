@@ -31,6 +31,12 @@
 
 	function showDefaultSplash(configuration: INativeWindowConfiguration) {
 		let data = configuration.partsSplash;
+		if (configuration.vaderWindowFirst !== false) {
+			// Keep the saved theme/zoom, but never paint the classic editor skeleton
+			// while the full-window shell is starting. Released by its first layout.
+			if (data) data = { ...data, layoutInfo: undefined };
+			document.body.classList.add('vader-window-starting');
+		}
 		if (data) {
 			if (configuration.autoDetectHighContrast && configuration.colorScheme.highContrast) {
 				if ((configuration.colorScheme.dark && data.baseTheme !== 'hc-black') || (!configuration.colorScheme.dark && data.baseTheme !== 'hc-light')) {

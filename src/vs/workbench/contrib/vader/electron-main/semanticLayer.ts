@@ -27,7 +27,7 @@ export type QuickFactory = () => Promise<StaticEmbedder | undefined>
 
 export type ChunkRef = { start: number; end: number; symbol?: string }
 /** `ready` and `waiting` are pieces with and without a code-model vector; `on` is whether that model runs (undefined until tried); `quick` is the pieces with a quick-tier vector (undefined when there is no quick tier) */
-export type MeaningState = { ready: number; waiting: number; on?: boolean; quick?: number }
+export type MeaningState = { ready: number; waiting: number; on?: boolean; quick?: number; error?: string }
 
 type Piece = { hash: string; start: number; end: number; symbol?: string }
 type Loc = { file: string; start: number; end: number; symbol?: string }
@@ -89,7 +89,7 @@ export class SemanticLayer {
 	}
 
 	get state(): MeaningState {
-		return { ready: this._store.size, waiting: this._queue.pending, on: this._tried ? !!this._embedder : undefined, quick: this._o.quickFactory && !(this._quickTried && !this._quick) ? this._quickStore.size : undefined }
+		return { ready: this._store.size, waiting: this._queue.pending, on: this._tried ? !!this._embedder : undefined, quick: this._o.quickFactory && !(this._quickTried && !this._quick) ? this._quickStore.size : undefined, error: this.lastError }
 	}
 
 	private get _quickWanted(): boolean { return !!this._o.quickFactory && !(this._quickTried && !this._quick) }
@@ -103,9 +103,15 @@ export class SemanticLayer {
 
 	/** the code model, started once: everyone who asks while it is starting gets the same answer when it is ready */
 	private _model(): Promise<Embedder | undefined> {
+		if (this._disposed) return Promise.resolve(undefined)
 		if (!this._modelStart) {
 			this._modelStart = (async () => {
-				try { this._embedder = await this._factory() } catch { this._embedder = undefined }
+				try {
+					const model = await this._factory()
+					if (this._disposed) { model?.dispose(); return undefined }
+					this._embedder = model
+					this.lastError = undefined
+				} catch (error) { this._embedder = undefined; this.lastError = error instanceof Error ? error.message : String(error) }
 				this._tried = true
 				return this._embedder
 			})()
@@ -114,10 +120,14 @@ export class SemanticLayer {
 	}
 
 	private _quickModel(): Promise<StaticEmbedder | undefined> {
-		if (!this._o.quickFactory) return Promise.resolve(undefined)
+		if (this._disposed || !this._o.quickFactory) return Promise.resolve(undefined)
 		if (!this._quickStart) {
 			this._quickStart = (async () => {
-				try { this._quick = await this._o.quickFactory!() } catch { this._quick = undefined }
+				try {
+					const model = await this._o.quickFactory!()
+					if (this._disposed) return undefined
+					this._quick = model
+				} catch { this._quick = undefined }
 				this._quickTried = true
 				return this._quick
 			})()
@@ -210,18 +220,20 @@ export class SemanticLayer {
 		this._running = true
 		let again: number | undefined // when to look again; scheduled after `_running` is cleared, or _wake would ignore it
 		try {
+			if (this._o.hold?.()) { again = this._o.holdRetryMs ?? 30_000; return }
 			const model = await this._model()
-			if (!model) return // nothing to run: the quick tier and the words are all there is
+			if (!model || this._disposed) return // nothing to run: the quick tier and the words are all there is
 			const stats = await this._queue.runSlice({
 				embed: t => model.embedDocs(t), now: () => Date.now(),
 				sleep: ms => new Promise(r => { const h = setTimeout(r, ms); (h as unknown as { unref?: () => void }).unref?.() }),
-				hold: this._o.hold,
+				hold: () => this._disposed || !!this._o.hold?.(),
 			}, this._o.sliceMs ?? 3000)
 			for (const h of [...this._textOfHash.keys()]) if (this._store.has(h)) this._textOfHash.delete(h)
 			this._changed()
 			if (stats.embedded > 0) this._schedulePersist()
 			this.lastSlice = { embedded: stats.embedded, stopped: stats.stopped }
 			if (stats.stopped === 'failed') this.lastError = stats.error
+			else if (stats.embedded > 0) this.lastError = undefined
 			if (stats.stopped === 'failed') this._failures++; else if (stats.embedded > 0) this._failures = 0
 			if (stats.stopped === 'held') again = this._o.holdRetryMs ?? 30_000 // the computer may be plugged in later
 			else if (stats.stopped === 'failed') { if (this._failures < 5) again = Math.min(60_000, (this._o.failRetryMs ?? 2000) * 2 ** (this._failures - 1)) } // a model that stumbles is tried again, later each time, and given up on after five in a row
@@ -232,7 +244,7 @@ export class SemanticLayer {
 		}
 	}
 
-	private _changed(): void { this.onDidChange?.(this.state) }
+	private _changed(): void { if (!this._disposed) this.onDidChange?.(this.state) }
 
 	// ---- searching
 
@@ -243,6 +255,7 @@ export class SemanticLayer {
 	async rerank(query: string, hits: readonly Hit[], limit = 80): Promise<Hit[]> {
 		const quick = await this._quickModel()
 		const model = await this._model()
+		if (this._disposed) return [...hits]
 		if (!quick && !model) return [...hits]
 		try {
 			const byKey = new Map<string, Hit>(hits.map(h => [keyOf(h.chunk.file, h.chunk.start, h.chunk.end), h]))
@@ -350,7 +363,9 @@ export class SemanticLayer {
 	async dispose(): Promise<void> {
 		this._disposed = true
 		if (this._loop) clearTimeout(this._loop)
-		if (this._persistTimer) { clearTimeout(this._persistTimer); this._persistTimer = undefined; this._disposed = false; await this.persist(); this._disposed = true }
+		if (this._persistTimer) { clearTimeout(this._persistTimer); this._persistTimer = undefined; await this.persist() }
 		try { this._embedder?.dispose() } catch { /* gone */ }
+		this._embedder = undefined
+		this._quick = undefined
 	}
 }
