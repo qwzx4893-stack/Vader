@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased — startup, lifecycle and engineering verification
+## Vader 1.0.0 — Production Release (2026-10-22)
 
 - Follow-up installed-app audit: register the dynamically loaded embedding worker in both desktop build graphs and reject packages missing that entry. Worker startup/request failures now retain their cause, time out and terminate; disposal also covers idle restarts. A separate offline integration test runs the real worker against explicitly supplied local model assets; it is not an installed-app test.
 - The files viewer watches disk changes, refreshes the selected file and tree, rejects stale reads and observes watcher errors. Files opened from another workspace root are watched too. FileService now publishes asynchronous watch-setup failures. The viewer remains read-only.

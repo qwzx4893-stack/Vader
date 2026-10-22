@@ -10,7 +10,7 @@ Contents: 1 project and owner · 2 standing rules · 3 decisions already made ·
 ## 1. The project and the owner
 
 - **Vader**: an AI-native IDE, a fork of Void on VS Code **1.136.2** (Electron 42.11.10). Repo `qwzx4893-stack/Vader`, default branch `main`. `product.json`: `nameShort` Vader,
-  `applicationName` vader, `dataFolderName` `.vader-editor`, `vaderVersion` **0.2.0** (this number names the release and the installer `Vader-Setup-x64-0.2.0.exe`).
+  `applicationName` vader, `dataFolderName` `.vader-editor`, `vaderVersion` **1.0.0** (this number names the release and the installer `Vader-Setup-x64-1.0.0.exe`).
   Windows is the only platform built in CI. Vader's own code is in `src/vs/workbench/contrib/vader/` (about 40k lines of TypeScript/TSX, plus tests); the rest is the VS Code base.
 - Agent loop: `@cline/agents` behind Vader's own gate (policy engine, approvals, agent scope). **48 providers**, **39 built-in tools** (files, search, terminal and persistent terminals,
   browser via Playwright, verification, MCP/skill discovery, agents and sub-agents), MCP, permanent agents and sub-agents, plan mode, checkpoints, verification pipeline,
@@ -60,6 +60,7 @@ Contents: 1 project and owner · 2 standing rules · 3 decisions already made ·
 
 ## 4. State right now (update this when you finish something)
 
+- **2026-10-22**: production release **Vader 1.0.0** incorporating full runtime repair, menubar layering, live file watches, security updates and engineering integrity gates. Branch `fix/runtime-and-layers-fixes` merged into `main`. The owner requested deleting the previous release and publishing `v1.0.0`.
 - **2026-10-21**: the interface of the design boards (branch `ui/r-interface`, PR #9) is merged into `main` as **Vader 0.2.0**. The owner asked for this release, for `v0.1.0` to be deleted, and for the new number in the name
   (`remove_previous_releases=true`). The notes below about `v0.1.0` are history.
 
