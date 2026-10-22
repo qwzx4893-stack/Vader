@@ -1516,7 +1516,7 @@ export class CodeApplication extends Disposable {
 		// Vader added this
 		const mcpChannel = new MCPChannel();
 		mainProcessElectronServer.registerChannel('vader-channel-mcp', mcpChannel);
-		registerMCPShutdown(mcpChannel, this.lifecycleMainService, disposables, error => this.logService.error(error));
+		registerMCPShutdown(mcpChannel, this.lifecycleMainService, disposables, error => this.logService.error(error instanceof Error ? error : String(error)));
 
 		// Vader added this
 		const discoveryChannel = ProxyChannel.fromService(accessor.get(IDiscoveryMainService), disposables);
