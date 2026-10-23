@@ -1,0 +1,35 @@
+name: Windows Job Diagnostic
+on:
+  push:
+    branches: [test/windows-job-diagnostic]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.11'
+      - name: Reproduce the kernel containment gate without app compilation
+        run: |
+          node src/vs/workbench/contrib/vader/test/devValidationJobE2E.mjs *> job-diagnostic.log
+          $testExit = $LASTEXITCODE
+          Get-Content job-diagnostic.log
+          exit $testExit
+      - name: Preserve exact diagnostic output
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: windows-job-diagnostic
+          path: job-diagnostic.log
+          if-no-files-found: error
+          retention-days: 3
