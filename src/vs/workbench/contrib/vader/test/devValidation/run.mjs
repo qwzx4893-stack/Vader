@@ -1,11 +1,13 @@
 // Supervises the existing real-Electron tests. No production services are substituted here.
-import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { finished } from 'node:stream/promises';
 import { ProcessMonitor } from './monitor.mjs';
 import { assess, scenarioCounts } from './verdict.mjs';
 import { redact as redactText, sanitizeArtifacts } from './redact.mjs';
+import { expectedScenarios } from './expectedScenarios.mjs';
+import { launchJobDriver } from './windowsJob.mjs';
 
 const mode = process.argv[2];
 if (!['smoke', 'scripted', 'live'].includes(mode) || process.platform !== 'win32') { throw new Error('Usage on Windows: node devValidation/run.mjs smoke|scripted|live'); }
@@ -23,7 +25,7 @@ if (mode === 'live') {
 	delete environment.REAL_LLM_API_KEY; delete environment.REAL_LLM_MODEL; delete environment.E2E_ONLY;
 }
 const script = fileURLToPath(new URL(mode === 'smoke' ? '../windowsLiveSmoke.mjs' : '../e2e/suite.mjs', import.meta.url));
-const child = spawn(process.execPath, [script], { env: environment, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+const job = await launchJobDriver({ executable: process.execPath, args: [script], env: environment, cwd: process.cwd() });
 const log = fs.createWriteStream(path.join(out, 'driver.log'));
 // Buffer by line so a secret split across pipe chunks is redacted before it reaches disk/stdout.
 function capture(stream, destination) {
@@ -36,35 +38,41 @@ function capture(stream, destination) {
 	});
 	stream.on('end', () => { if (pending) { const text = redact(pending) + '\n'; log.write(text); destination.write(text); } });
 }
-capture(child.stdout, process.stdout); capture(child.stderr, process.stderr);
-const monitor = new ProcessMonitor(child.pid, path.join(out, 'resources.jsonl'));
+capture(job.stdout, process.stdout); capture(job.stderr, process.stderr);
+const monitor = new ProcessMonitor(job.pid, path.join(out, 'resources.jsonl'), { job });
 let done = false, exitCode, spawnError, timedOut = false;
-const exit = new Promise(resolve => {
-	child.once('error', e => { spawnError = redact(e); done = true; resolve(); });
-	child.once('close', code => { exitCode = code; done = true; resolve(); });
-});
+const exit = job.exit.then(({ code }) => { exitCode = code; done = true; }, error => { spawnError = redact(error); done = true; });
 const deadline = Date.now() + (mode === 'scripted' ? 65 : mode === 'live' ? 30 : 8) * 60000;
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
-while (!done) {
-	await monitor.tick();
-	if (Date.now() > deadline) {
-		timedOut = true;
-		spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });
-		await Promise.race([exit, sleep(10000)]); break;
+let orphans = [];
+try {
+	while (!done) {
+		await monitor.tick();
+		if (Date.now() > deadline) {
+			timedOut = true;
+			await job.terminate();
+			await Promise.race([exit, sleep(10000)]); break;
+		}
+		await Promise.race([exit, sleep(5000)]);
 	}
-	await Promise.race([exit, sleep(5000)]);
+	await sleep(5000);
+	const remaining = await monitor.tick();
+	orphans = remaining.filter(p => p.pid !== job.pid);
+} catch (error) {
+	spawnError = [spawnError, redact(error)].filter(Boolean).join('; ');
+} finally {
+	try {
+		const cleanup = await job.dispose();
+		orphans = cleanup.leaks;
+	} catch (error) { spawnError = [spawnError, redact(error)].filter(Boolean).join('; '); }
 }
-await sleep(5000);
-const remaining = await monitor.tick();
-const orphans = remaining.filter(p => p.pid !== child.pid);
-// Record leaks before cleanup; killing a leak does not turn it into a pass.
-for (const p of orphans) { spawnSync('taskkill.exe', ['/PID', String(p.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }); }
 const metrics = monitor.report();
+await Promise.all([finished(job.stdout), finished(job.stderr)]);
 const resultsFile = mode === 'smoke' ? path.join(out, 'startup/results.json') : path.join(out, 'scenarios/results.json');
 let resultError, counts;
 try {
 	const result = JSON.parse(fs.readFileSync(resultsFile, 'utf8'));
-	counts = scenarioCounts(result, mode === 'smoke');
+	counts = scenarioCounts(result, mode === 'smoke', expectedScenarios(mode));
 	if (!counts.total || counts.failed || counts.skipped) { resultError = 'Missing, failing or skipped scenarios require review'; }
 } catch (e) { resultError = redact(e); }
 await new Promise(resolve => log.end(resolve));

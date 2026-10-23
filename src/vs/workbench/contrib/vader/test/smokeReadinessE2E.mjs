@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { inspectStartupSurface } from './smokeReadiness.mjs';
+import { waitForStartupSurface } from './waitForStartupSurface.mjs';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright-core');
 let executablePath = process.env.CHROME_PATH;
@@ -98,5 +99,12 @@ try {
 	check('a visible control can override a hidden ancestor in a ready shell', (await inspect(overriddenControl)).surface, 'shell');
 	check('display none still suppresses an overridden visible shell control', await inspect(overriddenControl.replace('visibility:hidden', 'display:none')), false);
 	check('inert still suppresses an overridden visible shell control', await inspect(overriddenControl.replace('style="visibility:hidden"', 'inert style="visibility:hidden"')), false);
+	const overlay = '<section data-testid="vader-onboarding" style="position:fixed;inset:0;background:black;z-index:99"><select><option>English</option></select></section>';
+	check('an onboarding select over a shell establishes the actual interactive surface', (await inspect(shell + overlay)).surface, 'onboarding');
+	check('a shell behind an unrelated overlay is not usable', await inspect(shell + overlay.replace('data-testid="vader-onboarding"', 'id="unrelated"')), false);
+	await page.setContent('<meta http-equiv="Content-Security-Policy" content="script-src \'nonce-vader-smoke\'; require-trusted-types-for \'script\'">' + overlay +
+		'<script nonce="vader-smoke">try { new Function("return true")(); window.__vaderEvalBlocked = false; } catch { window.__vaderEvalBlocked = true; }</script>');
+	check('the fixture actually blocks string-based evaluation under CSP', await page.evaluate(() => window.__vaderEvalBlocked), true);
+	check('startup polling works under the actual Trusted Types constraint', (await waitForStartupSurface(page, { expectedMode: 'modern' }, 2000)).surface, 'onboarding');
 } finally { await browser.close(); }
 console.log(`${count} passed, 0 failed`);

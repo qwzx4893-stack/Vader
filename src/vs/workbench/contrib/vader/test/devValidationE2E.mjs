@@ -6,6 +6,9 @@ import { spawn } from 'node:child_process';
 import { selectTree, aggregate, identity, ProcessMonitor } from './devValidation/monitor.mjs';
 import { assess, scenarioCounts } from './devValidation/verdict.mjs';
 import { redact, sanitizeArtifacts } from './devValidation/redact.mjs';
+import { expectedScenarios } from './devValidation/expectedScenarios.mjs';
+import { realLlmScenarios } from './e2e/scenarios/realLlm.mjs';
+import { protectScreenshots } from './e2e/screenshotPrivacy.mjs';
 
 let count = 0;
 function check(name, test) { test(); count++; console.log(`PASS: ${name}`); }
@@ -30,6 +33,34 @@ check('lying summary cannot hide a failing assertion', () => {
 });
 check('empty and malformed evidence is rejected', () => {
 	assert.throws(() => scenarioCounts({ results: [] })); assert.throws(() => scenarioCounts({ results: [{ ok: 'true' }] }, true));
+});
+check('a partial suite cannot pass after a required scenario disappears', () => {
+	assert.throws(() => scenarioCounts({ results: [{ group: 'test', name: 'first', status: 'pass', checks: [{ ok: true }] }] }, false, ['test\nfirst', 'test\nsecond']));
+});
+check('a green scenario without assertions cannot pass', () => {
+	assert.throws(() => scenarioCounts({ results: [{ group: 'test', name: 'empty', status: 'pass', checks: [] }] }));
+});
+check('the inventory includes every runtime group and unique scenario identity', () => {
+	const required = expectedScenarios('scripted');
+	assert.equal(new Set(required).size, required.length); assert.ok(required.length > 90);
+	assert.ok(required.some(k => k.startsWith('privacy\n'))); assert.ok(required.some(k => k.startsWith('external-agents\n')));
+	assert.equal(expectedScenarios('live').length, 4); assert.ok(expectedScenarios('smoke').length >= 9);
+});
+const liveChecks = [];
+await realLlmScenarios[2].fn({
+	write() {}, abs: name => name, send: async () => {}, runUntilIdle: async () => ({ idle: true }),
+	ui: { toolHeaders: async () => [], assistantTexts: async () => [], errorTexts: async () => ['intentional provider failure'] }, page: {},
+	check: (name, ok) => liveChecks.push({ name, ok }),
+});
+check('the actual live-file scenario rejects provider failure even when it returns to idle', () => {
+	assert.ok(liveChecks.filter(c => !c.ok).length >= 3);
+});
+check('screenshots preserve caller options while masking key inputs and visible secret text', () => {
+	const page = { screenshot: options => options, locator: selector => ({ selector }), getByText: text => ({ text }) };
+	protectScreenshots(page, 'isolated-fixture-not-a-key');
+	const options = page.screenshot({ path: 'fixture.png', mask: ['existing-mask'] });
+	assert.equal(options.path, 'fixture.png'); assert.equal(options.mask[0], 'existing-mask');
+	assert.ok(options.mask[1].selector.includes('password')); assert.equal(options.mask[2].text, 'isolated-fixture-not-a-key');
 });
 const good = { exitCode: 0, orphans: [], metrics: { rootObserved: true, samples: 3, errors: [], breaches: [] } };
 check('clean evidence passes', () => assert.equal(assess(good), true));

@@ -424,6 +424,10 @@ export interface IChatThreadService {
 
 	readonly state: ThreadsState;
 	readonly streamState: ThreadStreamState; // not persistent
+	/** Reject a project change while any chat is preparing/running or another change owns the workspace. */
+	assertCanSwitchProject(): void;
+	/** Synchronously acquire exclusive workspace ownership until change settles, including thread selection. */
+	withProjectSwitch<T>(change: () => Promise<T>): Promise<T>;
 
 	onDidChangeCurrentThread: Event<void>;
 	onDidChangeStreamState: Event<{ threadId: string }>
@@ -561,6 +565,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 	readonly streamState: ThreadStreamState = {}
 	private readonly _preparingThreads = new Set<string>()
+	private _switchingProject = false
 	state: ThreadsState // allThreads is persisted, currentThread is not
 
 	// used in checkpointing
@@ -758,7 +763,27 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		this._onDidChangeStreamState.fire({ threadId })
 	}
 
+	assertCanSwitchProject(): void {
+		if (this._switchingProject) throw new Error('A project is opening. Wait for it to finish.')
+		if (this._preparingThreads.size || Object.values(this.streamState).some(s => s?.isPreparing || s?.isRunning !== undefined)) {
+			throw new Error('Stop the running task or wait for message preparation before switching projects.')
+		}
+	}
+
+	async withProjectSwitch<T>(change: () => Promise<T>): Promise<T> {
+		// Check and acquisition have no await between them. Preparation uses this same
+		// owner, so neither direction can enter while the other changes its context.
+		this.assertCanSwitchProject()
+		this._switchingProject = true
+		try {
+			return await change()
+		} finally {
+			this._switchingProject = false
+		}
+	}
+
 	private async _withThreadPreparation<T>(threadId: string, prepare: () => Promise<T>): Promise<T> {
+		if (this._switchingProject) throw new Error('A project is opening. Wait for it to finish.')
 		if (this._preparingThreads.has(threadId)) throw new Error('A message is already being prepared for this chat. Wait for it to finish.')
 		this._preparingThreads.add(threadId)
 		try {

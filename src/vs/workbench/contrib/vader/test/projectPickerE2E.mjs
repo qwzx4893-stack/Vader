@@ -67,12 +67,24 @@ export const isRecentFolder=r=>!!r.folderUri;`;
 	} };
 	const { VaderShellService } = await load('../browser/vaderShellService.ts', 'service', [servicePlugin]);
 	const { URI } = await load('../../../../base/common/uri.ts', 'uri');
+	// Share actual chat preparation/project-lock methods with the actual shell service.
+	// Dependencies remain isolated; no workspace mutation or vendor runtime is real here.
+	const source = fs.readFileSync(path.join(here, '../browser/chatThreadService.ts'), 'utf8');
+	const ast = ts.createSourceFile('chat.ts', source, ts.ScriptTarget.Latest, true);
+	const cls = ast.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'ChatThreadService');
+	const coordinationNames = ['_preparingThreads', '_switchingProject', '_setStreamState', '_withThreadPreparation', 'assertCanSwitchProject', 'withProjectSwitch'];
+	const coordination = cls.members.filter(n => coordinationNames.includes(n.name?.getText(ast))).map(n => n.getText(ast)).join('\n');
+	const coordinationJs = ts.transpileModule(`class ChatCoordination { ${coordination} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+	const ChatCoordination = new Function(`${coordinationJs}; return ChatCoordination;`)();
+	const deferred = () => { let resolve, reject; const promise = new Promise((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; };
 	const fixture = () => {
 		let folders = ['/project/one'];
 		let selection;
 		let failHistory = false, cancelSwitch = false;
 		const calls = [];
-		const chat = {
+		const statStarted = deferred(), updateStarted = deferred();
+		let statGate, updateGate;
+		const chat = Object.assign(new ChatCoordination(), {
 			state: { currentThreadId: 'one', allThreads: {
 				one: { id: 'one', projectFolders: ['/project/one'], lastModified: '1' },
 				two: { id: 'two', projectFolders: ['/project/two'], lastModified: '2' },
@@ -80,14 +92,15 @@ export const isRecentFolder=r=>!!r.folderUri;`;
 			listProjectGroups: () => [{ key: '/project/one', threadIds: ['one'] }, { key: '/project/two', threadIds: ['two'] }],
 			switchToThread(id) { calls.push(['thread', id]); chat.state.currentThreadId = id; },
 			openNewThread() { calls.push(['new']); },
-		};
+			_onDidChangeStreamState: { fire() {} },
+		});
 		const service = new VaderShellService({ getValue: () => true },
 			{ getWorkspace: () => ({ folders: folders.map(p => ({ uri: URI.file(p) })) }), onDidChangeWorkspaceFolders: () => ({ dispose() {} }) },
 			{ async getRecentlyOpened() { if (failHistory) throw Error('history unavailable'); return { workspaces: [{ folderUri: URI.file('/recent') }, { workspace: { configPath: URI.file('/saved.code-workspace') } }], files: [] }; } },
-			{ async updateFolders(index, count, added, report) { calls.push(['workspace', index, count, report]); if (!cancelSwitch) folders = added.map(a => a.uri.fsPath.replace(/\\/g, '/')); } },
+			{ async updateFolders(index, count, added, report) { calls.push(['workspace', index, count, report]); updateStarted.resolve(); if (updateGate) await updateGate.promise; if (!cancelSwitch) folders = added.map(a => a.uri.fsPath.replace(/\\/g, '/')); } },
 			{ showOpenDialog: async () => selection },
-			{ async stat(uri) { if (uri.fsPath.endsWith('missing')) throw Error('missing'); return { isDirectory: true }; } }, chat, { getState: () => undefined });
-		return { service, chat, calls, get folders() { return folders; }, set selection(v) { selection = v; }, set failHistory(v) { failHistory = v; }, set cancelSwitch(v) { cancelSwitch = v; } };
+			{ async stat(uri) { statStarted.resolve(); if (statGate) await statGate.promise; if (uri.fsPath.endsWith('missing')) throw Error('missing'); return { isDirectory: true }; } }, chat, { getState: () => undefined });
+		return { service, chat, calls, statStarted, updateStarted, set statGate(v) { statGate = v; }, set updateGate(v) { updateGate = v; }, get folders() { return folders; }, set selection(v) { selection = v; }, set failHistory(v) { failHistory = v; }, set cancelSwitch(v) { cancelSwitch = v; } };
 	};
 	await check('history read failures retain actual known projects and report unavailability', async () => {
 		const f = fixture(); f.failHistory = true;
@@ -124,6 +137,76 @@ export const isRecentFolder=r=>!!r.folderUri;`;
 		f.selection = [URI.file('/context.txt')]; assert.equal((await f.service.pickContextFiles())[0].fsPath, URI.file('/context.txt').fsPath); f.service.dispose();
 	});
 
+	// Run every race independently so the pre-fix run records both directions.
+	let raceFailures = 0;
+	const race = async (name, run) => { try { await check(name, run); } catch (e) { raceFailures++; console.error(`FAIL: ${name}\n${e.stack}`); } };
+	await race('preparation already in progress rejects a different project before workspace mutation', async () => {
+		const f = fixture(), held = deferred();
+		const preparation = f.chat._withThreadPreparation('one', () => held.promise);
+		try {
+			await assert.rejects(f.service.openThread('two'), /Stop the running task/);
+			assert.deepEqual(f.calls, []); assert.deepEqual(f.folders, ['/project/one']);
+		} finally { held.resolve(); await preparation; f.service.dispose(); }
+	});
+	for (const state of ['preparing', 'LLM']) await race(`${state} beginning during folder stat rejects the project change after validation`, async () => {
+		const f = fixture(), stat = deferred(), held = deferred(); f.statGate = stat;
+		const switching = f.service.openThread('two'); const result = Promise.allSettled([switching]);
+		await f.statStarted.promise;
+		const preparation = state === 'preparing' ? f.chat._withThreadPreparation('one', () => held.promise) : undefined;
+		if (state === 'LLM') f.chat._setStreamState('one', { isRunning: 'LLM' });
+		try {
+			stat.resolve(); const [outcome] = await result;
+			assert.equal(outcome.status, 'rejected'); assert.match(outcome.reason.message, /Stop the running task/);
+			assert.deepEqual(f.calls, []); assert.equal(f.chat.state.currentThreadId, 'one');
+		} finally { stat.resolve(); held.resolve(); await preparation; await result; f.service.dispose(); }
+	});
+	await race('asynchronous workspace mutation rejects new preparation before its callback or stream publication', async () => {
+		const f = fixture(), update = deferred(); f.updateGate = update;
+		const switching = f.service.openThread('two'); const result = Promise.allSettled([switching]);
+		await f.updateStarted.promise; let prepared = false;
+		try {
+			await assert.rejects(f.chat._withThreadPreparation('one', async () => { prepared = true; }), /project is opening/i);
+			assert.equal(prepared, false); assert.deepEqual(f.chat.streamState, {}); assert.equal(f.chat._preparingThreads.size, 0);
+		} finally { update.resolve(); await result; f.service.dispose(); }
+		assert.equal((await result)[0].status, 'fulfilled'); assert.equal(f.chat.state.currentThreadId, 'two');
+		assert.equal(await f.chat._withThreadPreparation('two', async () => 'ready'), 'ready');
+	});
+	await race('workspace ownership remains held through synchronous conversation selection callbacks', async () => {
+		const f = fixture(); const select = f.chat.switchToThread; let duringSelection;
+		f.chat.switchToThread = id => {
+			duringSelection = assert.rejects(f.chat._withThreadPreparation('one', async () => assert.fail('preparation ran before conversation selection finished')), /project is opening/i);
+			select(id);
+		};
+		try {
+			await f.service.openThread('two'); await duringSelection;
+			assert.equal(f.chat.state.currentThreadId, 'two');
+			assert.equal(await f.chat._withThreadPreparation('two', async () => 'ready'), 'ready');
+		} finally { f.service.dispose(); }
+	});
+	for (const failure of ['throw', 'cancel']) await race(`workspace ${failure} releases the shared lock and permits preparation and a later switch`, async () => {
+		const f = fixture(), update = deferred(); f.updateGate = update;
+		f.cancelSwitch = failure === 'cancel';
+		const switching = f.service.openThread('two'); const result = Promise.allSettled([switching]);
+		await f.updateStarted.promise;
+		if (failure === 'throw') update.reject(Error('workspace write failed')); else update.resolve();
+		try {
+			const [outcome] = await result; assert.equal(outcome.status, 'rejected');
+			assert.equal(f.chat.state.currentThreadId, 'one');
+			assert.equal(await f.chat._withThreadPreparation('one', async () => 'recovered'), 'recovered');
+			f.updateGate = undefined; f.cancelSwitch = false; await f.service.openThread('two');
+			assert.equal(f.chat.state.currentThreadId, 'two');
+		} finally { f.service.dispose(); }
+	});
+	for (const state of ['preparing', 'LLM']) await race(`same-project conversation switches remain available while ${state}`, async () => {
+		const f = fixture(), held = deferred();
+		f.chat.state.allThreads.same = { id: 'same', projectFolders: ['/project/one'] };
+		const preparation = state === 'preparing' ? f.chat._withThreadPreparation('one', () => held.promise) : undefined;
+		if (state === 'LLM') f.chat._setStreamState('one', { isRunning: 'LLM' });
+		try { await f.service.openThread('same'); assert.deepEqual(f.calls, [['thread', 'same']]); }
+		finally { held.resolve(); await preparation; f.service.dispose(); }
+	});
+	if (raceFailures) throw Error(`${raceFailures} cross-service race regressions failed`);
+
 	const P = await load('../common/prompt/prompts.ts', 'prompts');
 	await check('persisted file chips restore URIs and real file contents enter request context', async () => {
 		const file = path.join(tmp, 'context.txt'); fs.writeFileSync(file, 'real attachment content 4937');
@@ -134,9 +217,6 @@ export const isRecentFolder=r=>!!r.folderUri;`;
 	});
 	// Exercise actual composer persistence methods with an isolated storage/state seam, using
 	// the TypeScript AST rather than a copied implementation. This does not instantiate the runtime.
-	const source = fs.readFileSync(path.join(here, '../browser/chatThreadService.ts'), 'utf8');
-	const ast = ts.createSourceFile('chat.ts', source, ts.ScriptTarget.Latest, true);
-	const cls = ast.statements.find(n => ts.isClassDeclaration(n) && n.name?.text === 'ChatThreadService');
 	const names = ['setThreadComposerState', 'setCurrentThreadState', '_currentWorkspaceFolders', '_adoptCurrentProject', 'openNewThread'];
 	const methods = cls.members.filter(n => names.includes(n.name?.getText(ast))).map(n => n.getText(ast)).join('\n');
 	const factory = ast.statements.find(n => ts.isVariableStatement(n) && n.declarationList.declarations.some(d => d.name.getText(ast) === 'newThreadObject')).getText(ast);

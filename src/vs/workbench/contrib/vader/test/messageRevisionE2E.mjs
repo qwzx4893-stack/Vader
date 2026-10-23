@@ -53,7 +53,7 @@ try {
 	}).join('\n');
 	// Include guard declarations when present so the same behavioral tests can also
 	// run against the saved pre-guard source; no substitute implementation is used.
-	const preparation = cls.members.filter(n => ['_preparingThreads', '_withThreadPreparation'].includes(n.name?.getText(ast))).map(n => n.getText(ast)).join('\n');
+	const preparation = cls.members.filter(n => ['_preparingThreads', '_switchingProject', '_withThreadPreparation', 'assertCanSwitchProject', 'withProjectSwitch'].includes(n.name?.getText(ast))).map(n => n.getText(ast)).join('\n');
 	const defaults = ast.statements.find(n => ts.isVariableStatement(n) && n.declarationList.declarations.some(d => d.name.getText(ast) === 'defaultMessageState'));
 	assert.ok(defaults, 'actual message-state defaults exist');
 	const js = ts.transpileModule(`${defaults.getText(ast)}\nclass RevisionService { ${preparation}\n${methods} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText;
@@ -281,6 +281,23 @@ try {
 		assert.equal(f.service._preparingThreads.has('original'), true); assert.equal(f.service._preparingThreads.has('other'), false);
 		held.resolve(); await original;
 		assert.equal(f.service._preparingThreads.size, 0);
+	});
+
+	for (const method of ['send', 'invoke']) await check(`${method} rejects during a project mutation before touching history, storage or context`, async () => {
+		const f = fixture(), held = deferred();
+		const switching = f.service.withProjectSwitch(() => held.promise);
+		try {
+			// A rejected second owner must not release the first owner's lock.
+			await assert.rejects(f.service.withProjectSwitch(async () => assert.fail('second workspace mutation ran')), /project is opening/i);
+			await assert.rejects(f[method](), /project is opening/i);
+			assert.equal(f.service.state.allThreads.original, f.thread);
+			assert.equal(f.service.state.allThreads.original.messages, f.history);
+			assert.deepEqual(f.calls, []); assert.deepEqual(f.saved, []); assert.deepEqual(f.events, []);
+			assert.equal(f.service._preparingThreads.size, 0); assert.deepEqual(f.service.streamState, {});
+		} finally { held.resolve(); await switching; }
+		const accepted = f[method](); await f.started.promise; f.read.resolve('context after project mutation'); await accepted;
+		assert.equal(f.service.streamState.original.isRunning, 'LLM');
+		f.runtime.resolve(); await Promise.allSettled(f.detached);
 	});
 
 	await check('a normal new turn still awaits interruption of an existing runtime rather than rejecting it as duplicate preparation', async () => {

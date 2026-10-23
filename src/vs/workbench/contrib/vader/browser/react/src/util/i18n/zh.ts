@@ -1276,6 +1276,7 @@ export const zh: Record<string, string> = {
 	"Stop all": "全部停止",
 	"Stop it": "停止它",
 	"Stop the running task before switching projects.": "切换项目前请停止正在运行的任务。",
+	"Stop the running task or wait for message preparation before switching projects.": "切换项目前请停止正在运行的任务，或等待消息准备完成。",
 	"Stopped": "已停止",
 	"Stopped between two steps": "在两步之间停止",
 	"Stopped by an error": "因错误而停止",

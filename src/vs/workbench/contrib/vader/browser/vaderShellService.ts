@@ -129,15 +129,22 @@ class VaderShellService extends Disposable implements IVaderShellService {
 			const current = this._workspace.getWorkspace().folders.map(f => f.uri.fsPath);
 			const same = current.length === folders.length && current.every((p, i) => projectKeyOf([p]) === projectKeyOf([folders[i]]));
 			if (!same) {
-				if (Object.values(this._chat.streamState).some(s => !!s?.isRunning)) throw new Error('Stop the running task before switching projects.');
+				this._chat.assertCanSwitchProject();
 				for (const path of folders) {
 					if (!(await this._files.stat(URI.file(path))).isDirectory) throw new Error('This project folder is unavailable. Choose another folder.');
 				}
-				await this._workspaceEditing.updateFolders(0, current.length, folders.map(p => ({ uri: URI.file(p) })), true);
-				const actual = this._workspace.getWorkspace().folders.map(f => f.uri.fsPath);
-				if (actual.length !== folders.length || actual.some((p, i) => projectKeyOf([p]) !== projectKeyOf([folders[i]]))) {
-					throw new Error('The project did not open. Try again or choose another folder.');
-				}
+				// Validation can yield to a send/revision. Recheck while synchronously
+				// acquiring chat's lock, then keep it through mutation and selection.
+				await this._chat.withProjectSwitch(async () => {
+					await this._workspaceEditing.updateFolders(0, current.length, folders.map(p => ({ uri: URI.file(p) })), true);
+					const actual = this._workspace.getWorkspace().folders.map(f => f.uri.fsPath);
+					if (actual.length !== folders.length || actual.some((p, i) => projectKeyOf([p]) !== projectKeyOf([folders[i]]))) {
+						throw new Error('The project did not open. Try again or choose another folder.');
+					}
+					then();
+					this.show('conversation', 'conversation');
+				});
+				return;
 			}
 			then();
 			this.show('conversation', 'conversation');

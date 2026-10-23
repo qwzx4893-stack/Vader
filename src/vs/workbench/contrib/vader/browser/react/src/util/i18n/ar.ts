@@ -1276,6 +1276,7 @@ export const ar: Record<string, string> = {
 	"Stop all": "إيقاف الكل",
 	"Stop it": "أوقفه",
 	"Stop the running task before switching projects.": "أوقف المهمة الجارية قبل تبديل المشروع.",
+	"Stop the running task or wait for message preparation before switching projects.": "أوقف المهمة الجارية أو انتظر اكتمال تحضير الرسالة قبل تبديل المشروع.",
 	"Stopped": "متوقف",
 	"Stopped between two steps": "توقف بين خطوتين",
 	"Stopped by an error": "توقف بسبب خطأ",

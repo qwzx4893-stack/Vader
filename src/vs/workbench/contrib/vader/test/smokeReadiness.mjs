@@ -25,16 +25,23 @@ export function inspectStartupSurface({ expectedMode = 'modern' } = {}) {
 		for (let parent = element; parent; parent = parent.parentElement) {
 			if (parent.inert) return false;
 		}
-		return true;
+		const rect = element.getBoundingClientRect();
+		const left = Math.max(0, rect.left), right = Math.min(innerWidth, rect.right);
+		const top = Math.max(0, rect.top), bottom = Math.min(innerHeight, rect.bottom);
+		if (left >= right || top >= bottom) return false;
+		const hit = document.elementFromPoint((left + right) / 2, (top + bottom) / 2);
+		return !!hit && (hit === element || element.contains(hit));
 	};
-	const controls = 'button,[role="button"],input,textarea,[contenteditable="true"],[role="textbox"]';
+	const controls = 'button,[role="button"],input,textarea,select,a[href],[contenteditable="true"],[role="textbox"]';
 	const surfaces = expectedMode === 'classic' ? [['classic', '.monaco-workbench']] : [
 		['onboarding', '[data-testid="vader-onboarding"]'],
 		['shell', '[data-testid="vader-shell"]'],
 	];
 	for (const [surface, selector] of surfaces) {
 		for (const root of document.querySelectorAll(selector)) {
-			if (!visible(root)) continue;
+			// A root can have no box or inherited hidden visibility while a descendant
+			// explicitly paints. Usable controls establish actual on-screen readiness.
+			if (!root.isConnected) continue;
 			const interactive = [...root.querySelectorAll(controls)].filter(usable).length;
 			if (!interactive) continue;
 			if (surface === 'shell' && !root.querySelector('[data-testid="vader-shell-main"]')) continue;

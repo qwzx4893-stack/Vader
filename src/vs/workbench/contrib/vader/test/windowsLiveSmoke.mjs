@@ -19,13 +19,14 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { inspectStartupSurface } from './smokeReadiness.mjs';
+import { waitForStartupSurface } from './waitForStartupSurface.mjs';
 
 const expectedMode = process.env.SMOKE_EXPECTED_MODE ?? 'modern';
 if (expectedMode !== 'modern' && expectedMode !== 'classic') {
 	console.error(`SMOKE_EXPECTED_MODE must be modern or classic: ${expectedMode}`);
 	process.exit(2);
 }
-const readinessOptions = { expectedMode };
+const readinessOptions = { expectedMode, expectedSurface: process.env.SMOKE_EXPECTED_SURFACE };
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PW_CORE || 'playwright-core');
@@ -100,8 +101,8 @@ async function main() {
 	if (!page) { return; }
 
 	// Give the workbench time to bootstrap, but poll for the signal instead of a fixed sleep.
-	const rendered = await page.waitForFunction(inspectStartupSurface, readinessOptions, { timeout: 60_000 }).then(() => true, () => false);
-	const surface = await page.evaluate(inspectStartupSurface, readinessOptions);
+	const surface = await waitForStartupSurface(page, readinessOptions);
+	const rendered = !!surface;
 	await page.screenshot({ path: path.join(outDir, 'window.png') }).catch(() => { });
 
 	const dom = await page.evaluate(() => ({

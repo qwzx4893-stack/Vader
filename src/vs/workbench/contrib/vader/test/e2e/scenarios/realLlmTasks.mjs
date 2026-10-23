@@ -5,7 +5,7 @@
 // A small CAPABILITY eval for the real agent: coding tasks given in plain language to a real model (in CI a small one served by Ollama, so it needs
 // no API key), graded by what ends up on disk - not by what the model says and not by the order of its tool calls. Each task is tried several times,
 // because one run says little about an LLM: pass@k (at least one success) shows what the agent CAN do, pass^k (all succeed) is the figure that matters
-// for something people depend on. Results are information plus a JSON file; the only hard check is that the app stays healthy throughout.
+// for something people depend on. Every attempt must remain healthy and produce the requested on-disk behavior; model failures remain failures.
 //
 // With a small model the numbers are low and noisy; they are a baseline that moves when the harness, the prompts or the tool layer change, and the
 // same file runs unchanged against a stronger model by setting REAL_LLM_MODEL / REAL_LLM_BASEURL.
@@ -66,10 +66,12 @@ export const realLlmTaskScenarios = [
 					await t.send(task.prompt);
 					const r = await t.runUntilIdle({ timeout: PER_ATTEMPT_MS });
 					if (!r.idle) { healthy = false; }
+					const errors = await t.ui.errorTexts(t.page);
+					t.check(`${task.id} attempt ${k}: no provider/runtime error`, errors.length === 0, errors.join(' | '));
 					let ok = false;
 					try { ok = !!task.grade(t); } catch { ok = false; }
 					outcomes.push(ok);
-					t.info(`${task.id} attempt ${k}: ${ok ? 'PASS' : 'fail'}`, ok, `${Math.round((Date.now() - t0) / 1000)} s, approvals ${r.approvals}, idle ${r.idle}`);
+					t.check(`${task.id} attempt ${k}: requested files pass their behavioral grade`, ok && r.idle, `${Math.round((Date.now() - t0) / 1000)} s, approvals ${r.approvals}, idle ${r.idle}`);
 				}
 				rows.push({ task: task.id, attempts: outcomes.length, passes: outcomes.filter(Boolean).length, pass_at_k: outcomes.some(Boolean), pass_hat_k: outcomes.every(Boolean) });
 			}
