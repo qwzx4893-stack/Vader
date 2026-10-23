@@ -299,7 +299,11 @@ class Job:
                         "cpuMs": cpu, "privateBytes": memory.PrivateUsage, "workingBytes": memory.WorkingSetSize,
                         "handles": handles.value, "readBytes": io.ReadTransferCount, "writeBytes": io.WriteTransferCount}
             except OSError:
-                if WaitForSingleObject(handle, 0) == 0:
+                # Windows may revoke image/counter queries during process teardown
+                # before the process handle becomes signaled. Confirm actual exit
+                # on that same identity-bound handle; a still-live probe failure
+                # remains fatal. GitHub reproduction: wait=258 then wait=0.
+                if WaitForSingleObject(handle, 2000) == 0:
                     return None
                 raise
         finally:
