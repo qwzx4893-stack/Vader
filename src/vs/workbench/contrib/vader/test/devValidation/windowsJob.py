@@ -296,8 +296,9 @@ class Job:
                     image_error = c.get_last_error()
                     before_wait = WaitForSingleObject(handle, 0)
                     after_wait = WaitForSingleObject(handle, 2000)
-                    # Diagnostic only: keep the original fatal outcome in every case.
-                    raise OSError(f"QueryFullProcessImageName failed (Win32 {image_error}); pid={pid}; root={self.pid}; beforeWait={before_wait}; afterWait={after_wait}")
+                    # RuntimeError deliberately bypasses the exit-race OSError handler:
+                    # this diagnostic must preserve failure even if the process exits.
+                    raise RuntimeError(f"QueryFullProcessImageName failed (Win32 {image_error}); pid={pid}; root={self.pid}; beforeWait={before_wait}; afterWait={after_wait}")
                 return {"pid": pid, "parent": None, "created": created, "jobMember": True,
                         "name": os.path.basename(name.value), "role": "unknown",
                         # PROCESS_MEMORY_COUNTERS_EX.PrivateUsage and WorkingSetSize are bytes.
