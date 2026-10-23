@@ -154,8 +154,8 @@ export async function launchJobDriver({ executable, args = [], env = process.env
 						throw new Error('Job cleanup was not verified');
 					}
 					const before = cleanup.beforeCleanup;
-					for (const memberPid of before.membershipPids) {
-						if (memberPid !== pid) { leaks.push(before.processes.find(p => p.pid === memberPid) ?? { pid: memberPid, exitedDuringSnapshot: true }); }
+					for (const proc of before.processes) {
+						if (proc.pid !== pid) { leaks.push(proc); }
 					}
 					cleanup.leaks = leaks;
 					cleanup.driverRunningAtDispose = !before.driverExited;
