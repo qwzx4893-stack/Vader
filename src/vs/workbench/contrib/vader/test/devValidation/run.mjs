@@ -72,7 +72,7 @@ const resultsFile = mode === 'smoke' ? path.join(out, 'startup/results.json') : 
 let resultError, counts;
 try {
 	const result = JSON.parse(fs.readFileSync(resultsFile, 'utf8'));
-	counts = scenarioCounts(result, mode === 'smoke', expectedScenarios(mode));
+	counts = scenarioCounts(result, mode === 'smoke', expectedScenarios(mode, result.initialSurface));
 	if (!counts.total || counts.failed || counts.skipped) { resultError = 'Missing, failing or skipped scenarios require review'; }
 } catch (e) { resultError = redact(e); }
 await new Promise(resolve => log.end(resolve));

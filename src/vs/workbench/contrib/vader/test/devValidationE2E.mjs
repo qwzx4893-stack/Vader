@@ -44,8 +44,17 @@ check('the inventory includes every runtime group and unique scenario identity',
 	const required = expectedScenarios('scripted');
 	assert.equal(new Set(required).size, required.length); assert.ok(required.length > 90);
 	assert.ok(required.some(k => k.startsWith('privacy\n'))); assert.ok(required.some(k => k.startsWith('external-agents\n')));
-	assert.equal(expectedScenarios('live').length, 4); assert.ok(expectedScenarios('smoke').length >= 9);
+	assert.equal(expectedScenarios('live').length, 4); assert.ok(expectedScenarios('smoke', 'onboarding').length >= 8);
 });
+for (const surface of ['onboarding', 'shell']) {
+	check(`${surface} smoke requires its actual branch checks, without requiring classic-only controls`, () => {
+		const required = expectedScenarios('smoke', surface);
+		const results = required.map(name => ({ name, ok: true }));
+		assert.equal(scenarioCounts({ results }, true, required).failed, 0);
+		assert.throws(() => scenarioCounts({ results: results.slice(0, 5).concat(results.slice(6)) }, true, required));
+	});
+}
+check('a missing startup surface cannot suppress required checks', () => assert.throws(() => expectedScenarios('smoke')));
 const liveChecks = [];
 await realLlmScenarios[2].fn({
 	write() {}, abs: name => name, send: async () => {}, runUntilIdle: async () => ({ idle: true }),

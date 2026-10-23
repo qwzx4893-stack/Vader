@@ -13,13 +13,15 @@ import { realLlmTaskScenarios, oracleTaskScenarios } from '../e2e/scenarios/real
 import { externalAgentScenarios } from '../e2e/scenarios/externalAgents.mjs';
 
 const grouped = (name, scenarios) => scenarios.map(s => `${name}\n${s.name}`);
-export function expectedScenarios(mode) {
+export function expectedScenarios(mode, surface) {
 	if (mode === 'smoke') {
+		if (!['onboarding', 'shell'].includes(surface)) { throw new Error('Missing or invalid modern startup surface'); }
+		const branch = surface === 'onboarding' ? ['onboarding responds to input and offers all three languages'] :
+			['the modern window opens Settings', 'closing Settings returns to the shell or first-run setup without the classic menu'];
 		return ['app process stays alive and exposes CDP', 'workbench window target exists',
 			'the expected modern window rendered with visible usable controls (not a blank/gray window)',
 			'window title mentions Vader', 'the classic menubar does not overlap the modern window',
-			'command palette opens (UI responds to input)', 'Vader commands are registered in the palette',
-			'no renderer errors / failed requests after attach', 'no uncaught exceptions / missing modules in main & utility process logs'];
+			...branch, 'no renderer errors / failed requests after attach', 'no uncaught exceptions / missing modules in main & utility process logs'];
 	}
 	if (mode === 'live') { return grouped('real-llm', [...realLlmScenarios, ...realLlmTaskScenarios]); }
 	if (mode !== 'scripted') { throw new Error('Unknown validation mode'); }

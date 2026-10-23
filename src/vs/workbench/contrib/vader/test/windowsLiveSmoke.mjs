@@ -42,6 +42,7 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-ud-'));
 const extDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-ext-'));
 
 const results = [];
+let initialSurface;
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${detail ? ` - ${detail}` : ''}`); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const short = (s, n = 400) => String(s).replace(/\s+/g, ' ').slice(0, n);
@@ -102,6 +103,7 @@ async function main() {
 
 	// Give the workbench time to bootstrap, but poll for the signal instead of a fixed sleep.
 	const surface = await waitForStartupSurface(page, readinessOptions);
+	initialSurface = surface?.surface;
 	const rendered = !!surface;
 	await page.screenshot({ path: path.join(outDir, 'window.png') }).catch(() => { });
 
@@ -201,7 +203,7 @@ let crashed = false;
 try { await main(); } catch (e) { crashed = true; check('smoke harness ran to completion', false, String(e).slice(0, 300)); }
 dumpLogs();
 try { spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* best effort */ }
-fs.writeFileSync(path.join(outDir, 'results.json'), JSON.stringify({ label, expectedMode, results }, null, 2));
+fs.writeFileSync(path.join(outDir, 'results.json'), JSON.stringify({ label, expectedMode, initialSurface, results }, null, 2));
 const failed = results.filter(r => !r.ok).length;
 console.log(`\n[${label}] ${results.length - failed} passed, ${failed} failed${crashed ? ' (harness crashed)' : ''}`);
 process.exit(failed ? 1 : 0);
