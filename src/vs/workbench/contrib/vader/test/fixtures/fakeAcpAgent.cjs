@@ -44,7 +44,7 @@ async function handle(msg) {
 			: mode === 'logout-agent' ? [{ id: 'web', name: 'Sign in on the web', type: 'agent' }]
 			: mode === 'multi-auth' ? [{ id: 'api-key', name: 'API Key', _meta: { 'api-key': { provider: 'x' } } }, { id: 'chat-gpt', name: 'ChatGPT' }] : [];
 		const agentCapabilities = mode === 'logout-agent' ? { auth: { logout: {} } } : mode === 'resumable' ? { loadSession: true, sessionCapabilities: { resume: {} } } : mode === 'loadable' ? { loadSession: true } : {};
-		return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: 1, agentInfo: { name: 'fake-agent', title: 'Fake Agent', version: '9.9.9' }, agentCapabilities, authMethods } });
+		return send({ jsonrpc: '2.0', id: msg.id, result: { protocolVersion: mode === 'unsupported-protocol' ? 999 : 1, agentInfo: { name: 'fake-agent', title: 'Fake Agent', version: '9.9.9' }, agentCapabilities, authMethods } });
 	}
 	if (msg.method === 'authenticate') {
 		if (mode === 'multi-auth' && msg.params.methodId !== 'chat-gpt') return send({ jsonrpc: '2.0', id: msg.id, error: { code: -32603, message: 'wrong method ' + msg.params.methodId } });

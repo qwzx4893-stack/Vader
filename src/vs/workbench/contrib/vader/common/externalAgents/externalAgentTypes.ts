@@ -15,6 +15,16 @@ export type ExternalAgentState =
 	| 'unsupported'         // no build for this computer
 	| 'missing-command'     // a custom agent whose program was not found
 
+/** The exact reviewed artifact for the current machine, before installation consent. */
+export type ExternalAgentInstallPlan = {
+	readonly version: string;
+	readonly fingerprint: string;
+	readonly package?: string;
+	readonly archive?: string;
+	readonly sha256?: string;
+	readonly registryWarning?: string;
+}
+
 export type ExternalAgentStatus = {
 	readonly id: string
 	readonly state: ExternalAgentState
@@ -96,7 +106,8 @@ export interface IExternalAgentMainService {
 
 	getStatuses(custom: readonly CustomAcpAgent[]): Promise<ExternalAgentStatus[]>;
 	/** downloads an agent: a binary (checksum verified when the registry gives one) or an npm package installed into Vader's own folder; progress is reported as `status` events with the session key `install:<id>` */
-	install(agentId: string): Promise<ExternalAgentStatus>;
+	install(agentId: string, expectedFingerprint?: string): Promise<ExternalAgentStatus>;
+	getInstallPlan(agentId: string): Promise<ExternalAgentInstallPlan>;
 	/** deletes what `install` put on disk */
 	uninstall(agentId: string): Promise<ExternalAgentStatus>;
 	/** asks the agent whether it can start a conversation without asking for a sign-in; changes nothing */
@@ -108,7 +119,7 @@ export interface IExternalAgentMainService {
 	/** starts the agent, does the protocol handshake and stops it again: proves the program works and reports what it is, without signing in or sending a prompt */
 	probe(agentId: string, custom?: CustomAcpAgent): Promise<ProbeResult>;
 	/** reads the live ACP registry for newer versions of the agents in the catalog; the snapshot built into Vader stays as the fallback */
-	checkRegistry(): Promise<{ readonly updated: readonly string[] }>;
+	checkRegistry(force?: boolean): Promise<{ readonly updated: readonly string[], readonly checkedAt?: number, readonly warning?: string }>;
 
 	/** one prompt; resolves with the stop reason (`end_turn`, `cancelled`, ...), rejects with a readable message */
 	runTurn(params: RunTurnParams): Promise<{ readonly stopReason: string }>;

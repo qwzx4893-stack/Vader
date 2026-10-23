@@ -148,7 +148,7 @@ try {
 		const mp = new MCPMarketplaceProvider(mcpSvc, discovery(), quick, opener, settings());
 		const items = await mp.browse(never);
 		const labels = new Set(items.flatMap((i) => i.metadata.sourcesListing ?? []));
-		check('MCP: the front page lists servers from Smithery, npm, Docker and GitHub (the registry only features known organisations)', ['Smithery', 'npm', 'Docker', 'GitHub'].every((l) => labels.has(l)) && !labels.has('MCP Registry'), [...labels].join());
+		check('MCP: the front page includes live registry entries from any publisher alongside the other sources', ['MCP Registry', 'Smithery', 'npm', 'Docker', 'GitHub'].every((l) => labels.has(l)) && calls.registry.includes(''), [...labels].join());
 		check('MCP: every row has sections, a setup, facts and a score', items.every((i) => i.metadata.categories && i.metadata.setup && i.metadata.facts.length >= 2 && i.trustScore));
 		const gh = items.find((i) => /github/i.test(i.name) && i.metadata.smithery);
 		const topicRepo = P.parseGithubSearch(fixture('github-topic-search.json'))[0];
@@ -164,6 +164,8 @@ try {
 		check('MCP: another section holds other servers, and does not list what is already set up', dbs.every((i) => i.metadata.categories.includes('databases')));
 		const found = await mp.search('github', never);
 		check('MCP: a search asks all five sources with the words', calls.npm.includes('github') && calls.smithery.includes('github') && calls.docker.includes('github') && calls.registry.includes('github') && calls.topic.some(([t, q]) => t === 'mcp-server' && q === 'github') && found.length > 0);
+		await mp.search('supabase', never, 'databases');
+		check('MCP: search within a category preserves typed words for every source', [calls.registry, calls.smithery, calls.npm, calls.docker].every(xs => xs.at(-1) === 'supabase') && calls.topic.at(-1)[1] === 'supabase');
 		const registryPkg = found.find((i) => i.metadata.packages?.length) ?? items.find((i) => i.metadata.packages?.length);
 		const remoteReg = items.concat(found).find((i) => i.metadata.remoteUrl);
 		if (remoteReg) { await mp.configure(remoteReg); check('MCP: a remote registry entry is written with its address and nothing is asked', mcpSvc.added.length === 1 && String(mcpSvc.added[0][1].url) === remoteReg.metadata.remoteUrl && quick.asked.length === 0); }
@@ -194,7 +196,24 @@ try {
 		}
 		const refined = await mp.refine(items.find((i) => i.metadata.npm));
 		check('MCP: opening a server asks again and refreshes the facts', refined.metadata.refined === true && refined.metadata.facts.some((f) => f.label === 'Licence' || f.label === 'Stars'), JSON.stringify(refined.metadata.facts.map((f) => f.label)));
-		check('MCP: what is already configured comes first and is not offered again', (() => { const s2 = { ...mcpSvc, state: { mcpServerOfName: { [items[0].metadata.serverKey]: { status: 'success' } } } }; return true; })());
+		const configuredKey = items.find(i => i.metadata.serverKey).metadata.serverKey;
+		const configuredService = { ...mcpSvc, state: { mcpServerOfName: { [configuredKey]: { status: 'success' } } } };
+		const configuredRows = await new MCPMarketplaceProvider(configuredService, discovery(), quick, opener, settings()).browse(never);
+		check('MCP: what is already configured comes first and is not offered again', configuredRows[0].installed && configuredRows[0].id === configuredKey && !configuredRows.some(i => !i.installed && i.metadata.serverKey === configuredKey));
+	}
+	{
+		const mp = new MCPMarketplaceProvider({ state: { mcpServerOfName: {} } }, discovery({ searchNpmMcp: async () => [{ name: 'new-mcp', description: 'A new real listing', version: '1', weeklyDownloads: 1, keywords: [] }] }), {}, {}, settings(['mcp-registry', 'smithery', 'docker-mcp', 'github-topic-mcp']));
+		check('MCP: new packages are not silently hidden by a minimum download count', (await mp.browse(never)).some(i => i.name === 'new-mcp'));
+		const dead = async () => { throw new Error('offline'); };
+		const offline = discovery({ listGithubSkills: dead, querySkillNet: dead, searchSkillsSh: dead, searchSkillsMp: dead, searchSmitherySkills: dead, searchGithubTopic: dead, queryMcpRegistry: dead, searchSmithery: dead, searchNpmMcp: dead, searchDockerMcp: dead });
+		for (const provider of [new SkillMarketplaceProvider(skillSvc(), offline, settings()), new MCPMarketplaceProvider({ state: { mcpServerOfName: {} } }, offline, {}, {}, settings())]) {
+			let error;
+			try { await provider.search('pdf', never); } catch (e) { error = e; }
+			check(`${provider.id}: all sources failing search is an error, not a successful empty answer`, /offline/.test(error?.message ?? ''));
+		}
+		const partial = new SkillMarketplaceProvider(skillSvc(), discovery({ listGithubSkills: async r => r === 'openai/skills' ? { repo: r, stars: 0, entries: [], error: 'offline' } : { repo: r, stars: 1, entries: [skillEntry('real-skill', 'A skill', 'anthropics', 'skills', 'real-skill', 20, 'text')] } }), settings());
+		await partial.browse(never);
+		check('skills: one failed repository is reported even when another repository answered', partial.takeWarnings().some(w => /openai\/skills: offline/.test(w)));
 	}
 	{
 		const mcpSvc = { state: { mcpServerOfName: { github: { status: 'success', tools: [] } } }, async addOrUpdateServer() { }, async revealMCPConfigFile() { }, async toggleServerIsOn() { } };

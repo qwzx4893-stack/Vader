@@ -34,6 +34,12 @@ const setThread = (patch: any) => { const t = thread(); chat.state = { ...chat.s
 Object.assign(chat, {
 	getCurrentThread: thread,
 	setCurrentThreadState(p: any) { const t = thread(); setThread({ state: { stagingSelections: [], currCheckpointIdx: null, focusedMessageIdx: undefined, linksOfMessageIdx: {}, ...t.state, ...p } }) },
+	setThreadComposerState(id: string, patch: any) {
+		const t = w.__chat.state.allThreads[id];
+		if (!t) return;
+		w.__chat.state = { ...w.__chat.state, allThreads: { ...w.__chat.state.allThreads, [id]: { ...t, state: { ...t.state, ...patch } } } };
+		notify();
+	},
 	setCurrentlyFocusedMessageIdx() { }, getCurrentMessageState: () => ({ stagingSelections: [], isBeingEdited: false }), setCurrentMessageState() { }, focusCurrentChat() { },
 	onDidChangeUsage: () => ({ dispose() { } }), onDidChangeProjectApprovals: () => ({ dispose() { } }),
 	canRememberForProject: () => true,

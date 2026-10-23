@@ -26,6 +26,8 @@ const statusOf = (e: unknown): number | undefined => typeof e === 'object' && e 
 export const cardForError = (category: ProviderErrorCategory, status: number | undefined, who: string, model: string | undefined): Card | null => {
 	if (status === 402) return { title: `${who} says your credit is used up`, text: 'The provider answered 402. Add credit on its site, or choose another model. The work so far is saved.', actions: ['billing', 'another'] }
 	switch (category) {
+		case 'ACCESS_RESTRICTED': return { title: `${who} restricts access to this model`, text: 'This model is available only through applications allowed by the provider. Choose another model, or check the provider’s access requirements below.', actions: ['another'] }
+		case 'PERMISSION_DENIED': return { title: `${who} denied access`, text: 'The provider answered 403. Check your account and model permissions, or choose another model. Its explanation is below.', actions: ['settings', 'another'] }
 		case 'AUTHENTICATION': return { title: `${who} rejected your key`, text: `The provider answered ${status ?? 401}. The key may have been revoked or pasted with a space. Nothing was changed.`, actions: ['settings', 'again'] }
 		case 'RATE_LIMIT': return { title: `${who} limits this key for now`, text: 'The provider answered 429: too many requests too fast. Wait a little and send again, or choose another model. Everything the agent did is saved.', actions: ['again', 'another'] }
 		case 'PROVIDER_UNAVAILABLE': return { title: `${who} is having trouble${status ? ` (${status})` : ''}`, text: 'It is overloaded or down, not your key. Vader tried again before showing this.', actions: ['again', 'another'] }

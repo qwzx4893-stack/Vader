@@ -69,7 +69,7 @@ export type GithubSkillListing = {
 	/** what GitHub says about the repository itself (forks, last change, licence, archived), from the same call that gave the stars */
 	readonly signals?: RepoSignals;
 	readonly entries: readonly GithubSkillEntry[];
-	/** set when the repository could not be read (not found, rate limited, offline); the entries are then empty */
+	/** A failed or partial read. Partial entries can retain real folder names with empty instructions. */
 	readonly error?: string;
 };
 
@@ -80,6 +80,8 @@ export interface IDiscoveryMainService {
 	/** the same search, but it throws when the registry cannot be reached, so Add-ons can say that this one source did not answer while the others did */
 	queryMcpRegistry(query: string): Promise<McpRegistrySearchResult[]>;
 	searchSkillNet(query: string): Promise<SkillNetSearchResult[]>;
+	/** Add-ons needs to distinguish an unavailable source from a successful empty search. */
+	querySkillNet(query: string): Promise<SkillNetSearchResult[]>;
 	/** the skills in a GitHub repository ("owner/repo" or its https://github.com address); read from GitHub's public API, nothing about the workspace is sent */
 	listGithubSkills(repo: string): Promise<GithubSkillListing>;
 	/** skills.sh: a live index of skills with how many times each was installed. Throws when the source cannot be reached, so a store can say so. */

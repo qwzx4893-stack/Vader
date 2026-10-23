@@ -129,10 +129,36 @@ width:100%;height:100%;box-sizing:border-box;background:var(--g0);color:var(--t1
 .vader-shell:focus,.vader-shell [role='dialog']:focus{outline:none !important}
 .vader-shell :where(button,a[href],input,select,textarea,[role='option'],[role='tab'],[tabindex]:not([tabindex='-1'])):focus-visible{outline:1px solid var(--t2) !important;outline-offset:2px !important;border-radius:6px}
 .vader-shell :where(button:not(:disabled)):hover{background-color:var(--g3);color:var(--t1)}
+/* Light actions keep dark text; only neutral actions brighten their text on hover. */
+.vader-shell .vader-pb:hover,.vader-shell button.vader-bg-vader-fg-0:hover{background:#fff;color:#0b0b0c}
+.vader-shell button.vader-sw[aria-checked=true]:hover{background:var(--t1);color:var(--g0)}
 .vader-shell :is([data-testid='vader-files-file'],[data-testid='vader-files-dir']):hover{background:var(--g3) !important}
 /* the message box shows where the focus is by the border of the whole box (it brightens while the text is focused), so the text field itself draws no second frame */
 .vader-shell textarea[data-testid='vader-input']:focus-visible{outline:none !important}
 .vader-shell input,.vader-shell textarea{font:inherit;color:inherit;background:transparent;border:0;outline:0;min-width:0}
+.vader-shell :is(.vader-srch,.vader-fld):focus-within{border-color:var(--t2);box-shadow:0 0 0 1px rgba(255,255,255,.08)}
+.vader-shell :is(.vader-srch,.vader-fld)>:is(input,textarea){background:transparent !important;border:0 !important;box-shadow:none !important;outline:none !important}
+.vader-shell :is(.vader-srch,.vader-fld)>:is(input,textarea):focus-visible{outline:none !important}
+.vader-shell [data-testid=vader-assistant-text],.vader-shell [data-testid=vader-assistant-text] :is(p,span,li,pre,code,strong,em){user-select:text;-webkit-user-select:text;cursor:text}
+.vader-shell [data-testid=vader-assistant-text] :is(button,a){cursor:pointer}
+.vader-shell [data-testid=vader-reasoning-text]{background:transparent;border:0;color:var(--t3)}
+/* More comfortable settings controls, without enlarging dense tool/status rows. */
+.vader-shell[data-testid=vader-settings-page] .vader-sw{width:39px;height:21px;border-radius:11px;padding:3px}
+.vader-shell[data-testid=vader-settings-page] .vader-sw i{width:15px;height:15px;transform:translateX(18px)}
+.vader-shell[data-testid=vader-settings-page] .vader-sw.vader-off{padding:2px}
+.vader-shell[data-testid=vader-settings-page] .vader-sw.vader-off i{width:15px;height:15px;transform:none}
+.vader-shell[data-testid=vader-settings-page] .vader-sw::after{inset:-12px -6px}
+[data-testid=vader-settings-page].vader-shell{font-size:14px}
+[data-testid=vader-settings-page] .vader-hint{font-size:13px}
+.vader-shell [data-testid=vader-provider-row]>.vader-r{padding-inline:10px !important;border-radius:9px;transition:background-color .12s ease}
+.vader-shell [data-testid=vader-provider-row]>.vader-r:hover{background:var(--g2)}
+.vader-shell [data-testid=vader-provider-toggle]:hover{background:transparent}
+.vader-shell .vader-agent-card{border:1px solid var(--ln);border-radius:10px;padding:8px 12px;margin-bottom:10px;background:var(--g1)}
+.vader-shell .vader-agent-card>.vader-r{min-height:62px}
+.vader-shell .vader-message-action{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:1px solid var(--ln2);border-radius:6px;background:var(--g2);color:var(--t2)}
+.vader-shell .vader-message-action:hover{background:var(--g3);color:var(--t1)}
+.vader-shell .vader-message-copy,.vader-shell .vader-message-copy:hover{border-color:transparent;background:transparent}
+.vader-shell .vader-message-action:disabled{cursor:default;opacity:.4}
 .vader-shell ::-webkit-scrollbar{width:10px;height:10px}
 .vader-shell ::-webkit-scrollbar-thumb{background:rgba(255,255,255,.1);border-radius:5px;border:2px solid transparent;background-clip:padding-box}
 .vader-shell ::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.18);background-clip:padding-box;border:2px solid transparent}

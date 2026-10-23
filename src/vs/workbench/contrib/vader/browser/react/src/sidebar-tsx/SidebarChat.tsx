@@ -13,7 +13,7 @@ import { ChatMarkdownRender, ChatMessageLocation, getApplyBoxId } from '../markd
 import { URI } from '../../../../../../../base/common/uri.js';
 import { IDisposable } from '../../../../../../../base/common/lifecycle.js';
 import { ErrorDisplay } from './ErrorDisplay.js';
-import { TextAreaFns, VaderCustomDropdownBox, VaderInputBox2, VaderSlider, VaderSwitch, VaderButtonBgDarken } from '../util/inputs.js';
+import { TextAreaFns, VaderCustomDropdownBox, VaderInputBox2, VaderButtonBgDarken } from '../util/inputs.js';
 import { ModelDropdown, } from '../vader-settings-tsx/ModelDropdown.js';
 import { ExternalAgentChatPicker } from '../vader-settings-tsx/ExternalAgents.js';
 import { PastThreadsList } from './SidebarThreadSelector.js';
@@ -21,8 +21,8 @@ import { VADER_CTRL_L_ACTION_ID } from '../../../actionIDs.js';
 import { VADER_OPEN_SETTINGS_ACTION_ID } from '../../../actionIDs.js';
 import { ChatMode, displayInfoOfProviderName, FeatureName, isFeatureNameDisabled } from '../../../../../../../workbench/contrib/vader/common/vaderSettingsTypes.js';
 import { ICommandService } from '../../../../../../../platform/commands/common/commands.js';
-import { getModelCapabilities, getIsReasoningEnabledState, modelSupportsVision } from '../../../../common/modelCapabilities.js';
-import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Pencil, Undo, Undo2, X, Flag, Copy as CopyIcon, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
+import { getModelCapabilities, modelSupportsVision } from '../../../../common/modelCapabilities.js';
+import { AlertTriangle, File, Ban, Check, ChevronRight, Dot, FileIcon, Undo, X, Flag, Info, CirclePlus, Ellipsis, CircleEllipsis, Folder, ALargeSmall, TypeOutline, Text } from 'lucide-react';
 import { ChatMessage, CheckpointEntry, StagingSelectionItem, ToolMessage } from '../../../../common/chatThreadServiceTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, ToolName, LintErrorItem, ToolApprovalType, toolApprovalTypes } from '../../../../common/toolsServiceTypes.js';
 import { CopyButton, EditToolAcceptRejectButtonsHTML, IconShell1, JumpToFileButton, JumpToTerminalButton, StatusIndicator, StatusIndicatorForApplyButton, useApplyStreamState, useEditToolStreamState } from '../markdown/ApplyBlockHoverButtons.js';
@@ -41,6 +41,10 @@ import { projectNameOf } from '../../../../common/threadProjects.js';
 import { contextBreakdown, contextMeterNote, shouldFoldPaste } from '../../../../common/runStateModel.js';
 import { BlockedCard, GateCard, SecretBlockedCard } from './GateCards.js';
 import { ChoiceMenu } from './ComposerMenus.js';
+import { ComposerProjectPicker } from './ComposerProjectPicker.js';
+import { ComposerFiles } from './ComposerFiles.js';
+import { MessageActions } from './MessageActions.js';
+import { translateText } from '../util/i18n/translator.js';
 import { CheckpointsButton } from './CheckpointsPanel.js';
 import { commandEndWords, foldOutput, lineCount } from '../../../../common/outputFold.js';
 import { FoldedOutput } from './FoldedOutput.js';
@@ -58,7 +62,7 @@ import { TerminalWaitingCard } from './TerminalWaitingCard.js';
 import { peekContextSources, readContextSource } from './contextSourcesReader.js';
 import { attachmentBlock, ContextSourceId } from '../../../../common/contextSources.js';
 import { findSecrets, redactSecrets, SecretHit } from '../../../../common/secretScan.js';
-import { ContextBanner, FinishedCard, NoModelCard, NoProjectCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
+import { ContextBanner, FinishedCard, NoModelCard, OfflineBanner, Paste, PastedChips, PausedCard, QueueList, SlashMenu, SlashNote, StoppedCard } from './RunStateCards.js';
 import { INIT_PROMPT, noteLabel, parseSlash, slashMatches, SlashCommand } from '../../../../common/slashCommands.js';
 
 
@@ -145,168 +149,9 @@ export const IconWarning = ({ size, className = '' }: { size: number, className?
 };
 
 
-export const IconLoading = ({ className = '' }: { className?: string }) => {
-
-	const [loadingText, setLoadingText] = useState('.');
-
-	useEffect(() => {
-		let intervalId;
-
-		// Function to handle the animation
-		const toggleLoadingText = () => {
-			if (loadingText === '...') {
-				setLoadingText('.');
-			} else {
-				setLoadingText(loadingText + '.');
-			}
-		};
-
-		// Start the animation loop
-		intervalId = setInterval(toggleLoadingText, 300);
-
-		// Cleanup function to clear the interval when component unmounts
-		return () => clearInterval(intervalId);
-	}, [loadingText, setLoadingText]);
-
-	return <div className={`${className}`}>{loadingText}</div>;
-
-}
-
-
-
-// SLIDER ONLY:
-const ReasoningOptionSlider = ({ featureName }: { featureName: FeatureName }) => {
-	const accessor = useAccessor()
-
-	const vaderSettingsService = accessor.get('IVaderSettingsService')
-	const vaderSettingsState = useSettingsState()
-
-	const modelSelection = vaderSettingsState.modelSelectionOfFeature[featureName]
-	const overridesOfModel = vaderSettingsState.overridesOfModel
-
-	if (!modelSelection) return null
-
-	const { modelName, providerName } = modelSelection
-	const { reasoningCapabilities } = getModelCapabilities(providerName, modelName, overridesOfModel)
-	const { canTurnOffReasoning, reasoningSlider: reasoningBudgetSlider } = reasoningCapabilities || {}
-
-	const modelSelectionOptions = vaderSettingsState.optionsOfModelSelection[featureName][providerName]?.[modelName]
-	const isReasoningEnabled = getIsReasoningEnabledState(featureName, providerName, modelName, modelSelectionOptions, overridesOfModel)
-
-	if (canTurnOffReasoning && !reasoningBudgetSlider) { // if it's just a on/off toggle without a power slider
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-vader-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VaderSwitch
-				size='xxs'
-				value={isReasoningEnabled}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && !newVal
-					vaderSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff })
-				}}
-			/>
-		</div>
-	}
-
-	if (reasoningBudgetSlider?.type === 'budget_slider') { // if it's a slider
-		const { min: min_, max, default: defaultVal } = reasoningBudgetSlider
-
-		const nSteps = 8 // only used in calculating stepSize, stepSize is what actually matters
-		const stepSize = Math.round((max - min_) / nSteps)
-
-		const valueIfOff = min_ - stepSize
-		const min = canTurnOffReasoning ? valueIfOff : min_
-		const value = isReasoningEnabled ? vaderSettingsState.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName]?.reasoningBudget ?? defaultVal
-			: valueIfOff
-
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-vader-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VaderSlider
-				width={50}
-				size='xs'
-				min={min}
-				max={max}
-				step={stepSize}
-				value={value}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && newVal === valueIfOff
-					vaderSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningBudget: newVal })
-				}}
-			/>
-			<span className='text-vader-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${value} tokens` : 'Thinking disabled'}</span>
-		</div>
-	}
-
-	if (reasoningBudgetSlider?.type === 'effort_slider') {
-
-		const { values, default: defaultVal } = reasoningBudgetSlider
-
-		const min = canTurnOffReasoning ? -1 : 0
-		const max = values.length - 1
-
-		const currentEffort = vaderSettingsState.optionsOfModelSelection[featureName][modelSelection.providerName]?.[modelSelection.modelName]?.reasoningEffort ?? defaultVal
-		const valueIfOff = -1
-		const value = isReasoningEnabled && currentEffort ? values.indexOf(currentEffort) : valueIfOff
-
-		const currentEffortCapitalized = currentEffort.charAt(0).toUpperCase() + currentEffort.slice(1, Infinity)
-
-		return <div className='flex items-center gap-x-2'>
-			<span className='text-vader-fg-3 text-xs pointer-events-none inline-block w-10 pr-1'>Thinking</span>
-			<VaderSlider
-				width={30}
-				size='xs'
-				min={min}
-				max={max}
-				step={1}
-				value={value}
-				onChange={(newVal) => {
-					const isOff = canTurnOffReasoning && newVal === valueIfOff
-					vaderSettingsService.setOptionsOfModelSelection(featureName, modelSelection.providerName, modelSelection.modelName, { reasoningEnabled: !isOff, reasoningEffort: values[newVal] ?? undefined })
-				}}
-			/>
-			<span className='text-vader-fg-3 text-xs pointer-events-none'>{isReasoningEnabled ? `${currentEffortCapitalized}` : 'Thinking disabled'}</span>
-		</div>
-	}
-
-	return null
-}
-
-
-
-/** the thinking budget as one quiet chip in the footer; the slider (or switch) is in the small panel it opens, so the footer keeps one row */
-const ThinkingChip = ({ featureName }: { featureName: FeatureName }) => {
-	const settingsState = useSettingsState()
-	const [open, setOpen] = useState(false)
-	const ref = useRef<HTMLDivElement>(null)
-	useEffect(() => {
-		if (!open) return
-		const away = (e: Event) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
-		const esc = (e: Event) => { if ((e as { key?: string }).key === 'Escape') setOpen(false) }
-		document.addEventListener('mousedown', away)
-		document.addEventListener('keydown', esc)
-		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
-	}, [open])
-	const sel = settingsState.modelSelectionOfFeature[featureName]
-	if (!sel) return null
-	const { reasoningCapabilities } = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
-	const { canTurnOffReasoning, reasoningSlider } = reasoningCapabilities || {}
-	if (!canTurnOffReasoning && !reasoningSlider) return null
-	const options = settingsState.optionsOfModelSelection[featureName][sel.providerName]?.[sel.modelName]
-	const on = getIsReasoningEnabledState(featureName, sel.providerName, sel.modelName, options, settingsState.overridesOfModel)
-	const label = !on ? 'Off'
-		: reasoningSlider?.type === 'budget_slider' ? `${options?.reasoningBudget ?? reasoningSlider.default}`
-			: reasoningSlider?.type === 'effort_slider' ? (() => { const e = options?.reasoningEffort ?? reasoningSlider.default; return e.charAt(0).toUpperCase() + e.slice(1) })()
-				: 'On'
-	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
-		<button type='button' data-testid='vader-thinking' aria-expanded={open} aria-haspopup='dialog' onClick={() => setOpen(o => !o)}
-				className='flex items-center gap-1 h-7 px-1.5 text-[13px] text-vader-fg-3 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' title='How much the model thinks before it answers'>
-			<span>Thinking</span><span className='text-vader-fg-2'>{label}</span>
-		</button>
-		{open ? <div role='dialog' aria-label='Thinking' data-testid='vader-thinking-panel' className='motion-safe:animate-card-in absolute bottom-full right-0 mb-2 z-50 rounded-lg border border-vader-border-2 bg-vader-bg-1 px-3 py-2.5 shadow-lg flex flex-col gap-1.5' style={{ minWidth: 220 }}>
-			<ReasoningOptionSlider featureName={featureName} />
-			<div className='text-vader-fg-3 text-xs leading-relaxed'>More thinking can give better answers, and costs more and takes longer.</div>
-		</div> : null}
-	</div>
-}
+export const IconLoading = ({ className = '' }: { className?: string }) => <span role='status' aria-label='Working' data-testid='vader-loading' className={`inline-flex items-center justify-center gap-1 ${className}`} style={{ minWidth: 30, minHeight: 20, verticalAlign: 'middle' }}>
+	{[0, 1, 2].map(i => <span key={i} aria-hidden='true' className='size-1.5 rounded-full bg-current motion-safe:animate-pulse' style={{ animationDelay: `${i * 180}ms`, animationDuration: '1.2s', opacity: .65 }} />)}
+</span>
 
 const nameOfChatMode = {
 	'normal': 'Chat',
@@ -349,15 +194,11 @@ const PERMISSION_DETAIL = {
 	autonomous: 'Runs without asking, except what is on the locked list.',
 } as const
 
-/** how much of the model's window this conversation uses, as a ring and a percentage; a click opens what it is made of, and Compact now (board R06, "Context meter") */
+/** Estimated use of the model's window. The popover explains consumption and does not change the context budget. */
 const ContextMeter = () => {
-	const accessor = useAccessor()
-	const chat = accessor.get('IChatThreadService')
 	const settingsState = useSettingsState()
 	const threadsState = useChatThreadsState()
 	const [open, setOpen] = useState(false)
-	const [busy, setBusy] = useState(false)
-	const [result, setResult] = useState<string | undefined>()
 	const ref = useRef<HTMLDivElement>(null)
 	useEffect(() => {
 		if (!open) return
@@ -370,23 +211,17 @@ const ContextMeter = () => {
 	const sel = settingsState.modelSelectionOfFeature?.Chat
 	if (!sel) return null
 	const thread = threadsState.allThreads[threadsState.currentThreadId]
-	if (!thread || thread.messages.length === 0) return null
+	if (!thread) return null
 	const caps = getModelCapabilities(sel.providerName, sel.modelName, settingsState.overridesOfModel)
 	const windowTokens = caps.contextWindow
 	if (!windowTokens) return null
-	// the share of the room a request may use (the window less what is kept for the answer), as the banner and the real thresholds measure it
+	// Report estimated consumed tokens against the full model window. The run's
+	// input-budget share also reserves the answer and is not a consumption counter.
 	const bd = contextBreakdown(thread.messages as never, windowTokens, caps.reservedOutputTokenSpace)
-	const tokens = Math.round(bd.share * windowTokens)
-	const pct = Math.min(100, Math.round(100 * bd.share))
+	const tokens = bd.usedTokens
+	const pct = Math.min(100, Math.round(100 * tokens / windowTokens))
 	const r = 6.5, c = 2 * Math.PI * r
 	const color = pct >= 90 ? '#f06a6e' : pct >= 70 ? '#e2a93f' : '#8a8a91'
-	const compact = async () => {
-		setBusy(true); setResult(undefined)
-		try {
-			const res = await chat.compactThreadNow(thread.id)
-			setResult(res === 'done' ? 'The older messages are summarised.' : res === 'nothing' ? 'There is too little to summarise yet.' : 'The model did not answer, so nothing was summarised.')
-		} finally { setBusy(false) }
-	}
 	const widest = Math.max(1, ...bd.rows.map(x => x.tokens))
 	return <div ref={ref} className='relative' onClick={e => e.stopPropagation()}>
 		<button type='button' aria-expanded={open} aria-haspopup='dialog' className='flex items-center gap-1.5 text-xs text-vader-fg-3 hover:text-vader-fg-1 transition-colors duration-150' title={`About ${formatTokens(tokens)} of ${formatTokens(windowTokens)} tokens of this model's window`} data-testid='vader-context-meter' onClick={() => setOpen(o => !o)}>
@@ -397,7 +232,6 @@ const ContextMeter = () => {
 			<div className='flex items-baseline gap-2'>
 				<span className='font-semibold text-vader-fg-1 text-[13px]' data-testid='vader-context-panel-title'>{pct}% of {formatTokens(windowTokens)}</span>
 				<span className='flex-1' />
-				<button type='button' data-testid='vader-context-compact' disabled={busy} className='text-vader-fg-2 hover:text-vader-fg-1 text-[13px] disabled:opacity-50' onClick={() => { void compact() }}>{busy ? 'Summarising...' : 'Compact now'}</button>
 			</div>
 			<div className='h-1 rounded-full bg-vader-border-3 overflow-hidden flex'>
 				{bd.rows.map((row, k) => <div key={row.label} title={row.label} style={{ width: `${Math.min(100, 100 * row.tokens / windowTokens)}%`, background: ['#8a8a91', '#5b8def', '#b0b0b5', '#e2a93f'][k % 4] }} />)}
@@ -409,7 +243,7 @@ const ContextMeter = () => {
 				</div>)}
 			</div>
 			<div className='text-vader-fg-3 text-xs leading-relaxed'>{contextMeterNote()}</div>
-			{result ? <div className='text-vader-fg-2 text-xs' role='status' data-testid='vader-context-panel-result'>{result}</div> : null}
+			<div className='text-vader-fg-3 text-xs leading-relaxed'>Estimates are for the current context, not lifetime token usage. Automatic cleanup uses the input budget after reserving room for the reply.</div>
 		</div> : null}
 	</div>
 }
@@ -483,7 +317,7 @@ const RunControls = ({ isStreaming }: { isStreaming: boolean }) => {
 	</div>
 }
 
-/** The + at the left of the box: files and photos from this computer (the same as dropping them on the box), and the project's own things (a file, the terminal output, a page, the git changes). */
+/** Attachment menu beside Add files: uploaded files/photos and context from the project. */
 const AttachButton = ({ onFiles, onAddContext }: { onFiles: (files: File[]) => void, onAddContext?: () => void }) => {
 	const [open, setOpen] = useState(false)
 	const box = useRef<HTMLSpanElement>(null)
@@ -496,9 +330,9 @@ const AttachButton = ({ onFiles, onAddContext }: { onFiles: (files: File[]) => v
 		return () => { document.removeEventListener('mousedown', away); document.removeEventListener('keydown', esc) }
 	}, [open])
 	return <span ref={box} className='relative inline-flex'>
-		<button type='button' data-testid='vader-attach' title='Add files, photos and context' aria-label='Add files, photos and context' aria-haspopup='menu' aria-expanded={open}
+		<button type='button' data-testid='vader-attach' title='More attachment options' aria-label='More attachment options' aria-haspopup='menu' aria-expanded={open}
 			className='flex items-center justify-center h-7 w-7 text-vader-fg-2 hover:text-vader-fg-1 hover:bg-vader-bg-2-hover rounded-md transition-colors duration-150' onClick={e => { e.stopPropagation(); setOpen(v => !v) }}>
-			<svg className='size-[16px] flex-none' viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' aria-hidden='true'><path d='M12 5v14M5 12h14' /></svg>
+			<svg className='size-[12px] flex-none' viewBox='0 0 12 12' fill='none' stroke='currentColor' strokeWidth='1.5' strokeLinecap='round' strokeLinejoin='round' aria-hidden='true'><path d='m3 4.5 3 3 3-3' /></svg>
 		</button>
 		<input ref={input} type='file' multiple data-testid='vader-attach-input' className='hidden' style={{ display: 'none' }} onChange={e => { const files = Array.from(e.target.files ?? []); e.target.value = ''; setOpen(false); if (files.length > 0) onFiles(files) }} />
 		{open ? <div role='menu' data-testid='vader-attach-menu' className='absolute left-0 bottom-9 z-50 flex flex-col p-1 rounded-lg border border-vader-border-2 bg-vader-bg-2 shadow-lg' style={{ width: 270, background: 'var(--g2)', border: '1px solid var(--ln2)', boxShadow: '0 8px 24px rgba(0,0,0,.45)' }}>
@@ -601,11 +435,11 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 				{/* Bottom row */}
 				<div ref={footerRef} className='flex flex-row justify-between items-end gap-1'>
 					{showModelDropdown && (
-						<div className='flex flex-col gap-y-1'>
-							{/* the thinking budget lives in the chip */}
+						<div className='flex flex-col gap-y-1 min-w-0'>
+							{/* Context consumption is displayed separately from the mode and model. */}
 
-<div className='flex items-center flex-wrap gap-x-1 gap-y-1 text-nowrap '>
-{featureName === 'Chat' && showFooter && onDropFiles ? <AttachButton onFiles={onDropFiles} onAddContext={onAddContext} /> : null}
+<div className='flex items-center flex-nowrap min-w-0 gap-x-1 gap-y-1 text-nowrap '>
+{featureName === 'Chat' && showFooter ? <span className='inline-flex items-center gap-0 flex-none'><ComposerFiles compact={narrow} />{onDropFiles ? <AttachButton onFiles={onDropFiles} onAddContext={onAddContext} /> : null}</span> : null}
 {featureName === 'Chat' && <ChatModeDropdown className='text-[13px] text-vader-fg-2' />}
 								{featureName === 'Chat' && <ExternalAgentChatPicker className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />}
 								<ModelDropdown featureName={featureName} className='text-[13px] text-vader-fg-2 bg-vader-bg-1 rounded' />
@@ -615,9 +449,6 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 					)}
 
 					<div className="flex items-center gap-2">
-
-						{featureName === 'Chat' ? <ThinkingChip featureName={featureName} /> : null}
-
 						{showFooter ? <ContextMeter /> : null}
 
 						{isStreaming && loadingIcon}
@@ -652,7 +483,7 @@ export const ButtonSubmit = ({ className, disabled, ...props }: ButtonProps & Re
 		data-testid='vader-send'
 		aria-label='Send'
 		disabled={disabled}
-		className={`rounded-md w-7 h-7 flex-shrink-0 flex-grow-0 flex items-center justify-center transition-colors duration-150 ml-1.5
+		className={`rounded-full w-[28px] h-[28px] flex-shrink-0 flex-grow-0 flex items-center justify-center transition-colors duration-150 ml-1.5
 			${disabled ? 'bg-vader-bg-2-hover text-vader-fg-4 cursor-default' : 'bg-vader-fg-1 text-black hover:opacity-90 cursor-pointer'}
 			${className}
 		`}
@@ -895,6 +726,18 @@ export const SelectedFiles = (
 			</button>)}
 		</div>
 	}
+
+	if (!showProspectiveSelections) return <div className='flex flex-wrap gap-1 min-w-0' data-testid='vader-attached-files'>
+		{selections.map((selection, i) => <span key={`${selection.type}:${selection.uri.toString()}:${i}`} data-testid='vader-attached-file' data-file-uri={selection.uri.toString()}
+			className='inline-flex items-center min-w-0 max-w-full border border-vader-border-2 rounded-md text-xs text-vader-fg-2'>
+			<button type='button' data-testid='vader-attached-file-open' title={selection.uri.fsPath} className='truncate min-w-0 px-2 py-1 hover:text-vader-fg-1' data-i18n-skip
+				onClick={e => { e.stopPropagation(); if (selection.type === 'Folder') void commandService.executeCommand('revealInExplorer', selection.uri); else vaderOpenFileFn(selection.uri, accessor, selection.type === 'CodeSelection' ? selection.range : undefined) }}>
+				{getBasename(selection.uri.fsPath)}{selection.type === 'CodeSelection' ? ` (${selection.range[0]}-${selection.range[1]})` : ''}
+			</button>
+			<button type='button' data-testid='vader-attached-file-remove' aria-label='Remove attachment' title='Remove attachment' className='flex-none px-1.5 py-1 hover:text-vader-fg-1'
+				onClick={e => { e.stopPropagation(); setSelections(selections.filter((_, index) => index !== i)) }}><span aria-hidden='true'>×</span></button>
+		</span>)}
+	</div>
 
 	return (
 		<div className='flex items-center flex-wrap text-left relative gap-x-0.5 gap-y-1 pb-0.5'>
@@ -1300,11 +1143,18 @@ const SimplifiedToolHeader = ({
 
 
 
-const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, currCheckpointIdx, _scrollToBottom }: { chatMessage: ChatMessage & { role: 'user' }, messageIdx: number, currCheckpointIdx: number | undefined, isCheckpointGhost: boolean, _scrollToBottom: (() => void) | null }) => {
+const UserMessageComponent = ({ threadId, chatMessage, messageIdx, isCheckpointGhost, currCheckpointIdx, _scrollToBottom }: { threadId: string, chatMessage: ChatMessage & { role: 'user' }, messageIdx: number, currCheckpointIdx: number | undefined, isCheckpointGhost: boolean, _scrollToBottom: (() => void) | null }) => {
 
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
 	const agentGatewayService = accessor.get('IAgentGatewayService')
+	const stream = useChatThreadsStreamState(threadId)
+	const saving = useRef(false)
+	const mounted = useRef(false)
+	const [isSaving, setIsSaving] = useState(false)
+	const [editError, setEditError] = useState('')
+	const actionsRef = useRef<HTMLDivElement>(null)
+	useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
 	// global state
 	let isBeingEdited = false
@@ -1316,15 +1166,13 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		const _state = chatThreadsService.getCurrentMessageState(messageIdx)
 		isBeingEdited = _state.isBeingEdited
 		stagingSelections = _state.stagingSelections
-		setIsBeingEdited = (v) => chatThreadsService.setCurrentMessageState(messageIdx, { isBeingEdited: v })
-		setStagingSelections = (s) => chatThreadsService.setCurrentMessageState(messageIdx, { stagingSelections: s })
+		setIsBeingEdited = (v) => { if (chatThreadsService.state.currentThreadId === threadId) chatThreadsService.setCurrentMessageState(messageIdx, { isBeingEdited: v }) }
+		setStagingSelections = (s) => { if (chatThreadsService.state.currentThreadId === threadId) chatThreadsService.setCurrentMessageState(messageIdx, { stagingSelections: s }) }
 	}
 
 
 	// local state
 	const mode: ChatBubbleMode = isBeingEdited ? 'edit' : 'display'
-	const [isFocused, setIsFocused] = useState(false)
-	const [isHovered, setIsHovered] = useState(false)
 	const [isDisabled, setIsDisabled] = useState(false)
 	const [branchedTo, setBranchedTo] = useState<string | undefined>()
 	const [textAreaRefState, setTextAreaRef] = useState<HTMLTextAreaElement | null>(null)
@@ -1355,19 +1203,19 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 	}, [chatMessage, mode, _justEnabledEdit, textAreaRefState, textAreaFnsRef.current, _justEnabledEdit.current, _mustInitialize.current])
 
 	const onOpenEdit = () => {
+		if (chatThreadsService.state.currentThreadId !== threadId || chatThreadsService.streamState[threadId]?.isRunning !== undefined || chatThreadsService.streamState[threadId]?.isPreparing || isCheckpointGhost) return
+		setEditError('')
 		setIsBeingEdited(true)
 		chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx)
 		_justEnabledEdit.current = true
 	}
 	const onCloseEdit = () => {
-		setIsFocused(false)
-		setIsHovered(false)
+		if (saving.current || chatThreadsService.state.currentThreadId !== threadId) return
 		setIsBeingEdited(false)
+		setEditError('')
 		chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)
-
+		requestAnimationFrame(() => actionsRef.current?.querySelector<HTMLButtonElement>('[data-testid="vader-edit-message"]')?.focus())
 	}
-
-	const EditSymbol = mode === 'display' ? Pencil : X
 
 
 	let chatbubbleContents: React.ReactNode
@@ -1382,54 +1230,52 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
 		const onSubmit = async () => {
 
-			if (isDisabled) return;
+			if (isDisabled || saving.current) return;
 			if (!textAreaRefState) return;
 			if (messageIdx === undefined) return;
-
-			// cancel any streams on this thread
-			const threadId = chatThreadsService.state.currentThreadId
-
-			await agentGatewayService.cancelTask(threadId)
-
-			// update state
-			setIsBeingEdited(false)
-			chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)
-
-			// stream the edit
-			const userMessage = textAreaRefState.value;
+			if (chatThreadsService.state.currentThreadId !== threadId || chatThreadsService.state.allThreads[threadId]?.messages[messageIdx] !== chatMessage) { setEditError('This message changed. Try again.'); return }
+			if (chatThreadsService.streamState[threadId]?.isRunning !== undefined || chatThreadsService.streamState[threadId]?.isPreparing) { setEditError('Wait for the current reply to finish.'); return }
+			const userMessage = textAreaRefState.value
+			if (!userMessage.trim() && !chatMessage.images?.length) return
+			saving.current = true
+			setIsSaving(true); setEditError('')
 			try {
 				await agentGatewayService.reviseTask({ userMessage, fromMessageIdx: messageIdx, threadId })
+				if (mounted.current && chatThreadsService.state.currentThreadId === threadId) {
+					setIsBeingEdited(false)
+					chatThreadsService.setCurrentlyFocusedMessageIdx(undefined)
+					await chatThreadsService.focusCurrentChat()
+					requestAnimationFrame(() => { if (mounted.current) _scrollToBottom?.() })
+				}
 			} catch (e) {
-				console.error('Error while editing message:', e)
+				if (mounted.current) setEditError('The message could not be updated. Your edit is still here. Try again.')
+			} finally {
+				saving.current = false
+				if (mounted.current) setIsSaving(false)
 			}
-			await chatThreadsService.focusCurrentChat()
-			requestAnimationFrame(() => _scrollToBottom?.())
 		}
 
 		const onAbort = async () => {
-			const threadId = chatThreadsService.state.currentThreadId
 			await agentGatewayService.cancelTask(threadId)
 		}
 
 		const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
 			if (e.key === 'Escape') {
+				e.preventDefault(); e.stopPropagation()
 				onCloseEdit()
 			}
 			if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-				onSubmit()
+				e.preventDefault()
+				void onSubmit()
 			}
 		}
 
-		if (!chatMessage.content) { // don't show if empty and not loading (if loading, want to show).
-			return null
-		}
-
-		chatbubbleContents = <VaderChatArea
+		chatbubbleContents = <fieldset disabled={isSaving} aria-label='Edit your message' className='min-w-0 border-0 p-0 m-0'><VaderChatArea
 			featureName='Chat'
 			onSubmit={onSubmit}
 			onAbort={onAbort}
 			isStreaming={false}
-			isDisabled={isDisabled}
+			isDisabled={isDisabled || isSaving || stream?.isRunning !== undefined}
 			showSelections={true}
 			showProspectiveSelections={false}
 			selections={stagingSelections}
@@ -1440,19 +1286,16 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 				ref={setTextAreaRef}
 				className='min-h-[81px] max-h-[500px] px-0.5'
 				placeholder="Edit your message..."
-				onChangeText={(text) => setIsDisabled(!text)}
+				testId='vader-edit-input'
+				onChangeText={(text) => setIsDisabled(!text.trim() && !chatMessage.images?.length)}
 				onFocus={() => {
-					setIsFocused(true)
-					chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx);
-				}}
-				onBlur={() => {
-					setIsFocused(false)
+					if (chatThreadsService.state.currentThreadId === threadId) chatThreadsService.setCurrentlyFocusedMessageIdx(messageIdx)
 				}}
 				onKeyDown={onKeyDown}
 				fnsRef={textAreaFnsRef}
 				multiline={true}
 			/>
-		</VaderChatArea>
+		</VaderChatArea></fieldset>
 	}
 
 	const isMsgAfterCheckpoint = currCheckpointIdx !== undefined && currCheckpointIdx === messageIdx - 1
@@ -1467,48 +1310,30 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 
         ${isCheckpointGhost && !isMsgAfterCheckpoint ? 'opacity-50 pointer-events-none' : ''}
     `}
-		onMouseEnter={() => setIsHovered(true)}
-		onMouseLeave={() => setIsHovered(false)}
 	>
 		<div
 			// style chatbubble according to role
 			className={`
             text-left rounded-lg max-w-full
             ${mode === 'edit' ? ''
-						: mode === 'display' ? 'px-3.5 py-[11px] flex flex-col bg-vader-bg-1 text-vader-fg-1 text-[14px] leading-[1.65] overflow-x-auto cursor-pointer' : ''
+						: mode === 'display' ? 'px-3.5 py-[11px] flex flex-col bg-vader-bg-1 text-vader-fg-1 text-[14px] leading-[1.65] overflow-x-auto' : ''
 				}
         `}
-			onClick={() => { if (mode === 'display') { onOpenEdit() } }}
 		>
 			{chatbubbleContents}
 		</div>
 
 
 
-		<div
+		{mode === 'edit' ? <div
 			className="absolute -top-1 -right-1 translate-x-0 -translate-y-0 z-1"
 		// data-tooltip-id='vader-tooltip'
 		// data-tooltip-content='Edit message'
 		// data-tooltip-place='left'
 		>
-			<EditSymbol
-				size={18}
-				className={`
-                    cursor-pointer
-                    p-[2px]
-                    bg-vader-bg-1 border border-vader-border-1 rounded-md
-                    transition-opacity duration-200 ease-in-out
-                    ${isHovered || (isFocused && mode === 'edit') ? 'opacity-100' : 'opacity-0'}
-                `}
-				onClick={() => {
-					if (mode === 'display') {
-						onOpenEdit()
-					} else if (mode === 'edit') {
-						onCloseEdit()
-					}
-				}}
-			/>
-		</div>
+			<button type='button' aria-label='Cancel editing' title='Cancel editing' data-testid='vader-edit-cancel' disabled={isSaving} className='inline-flex h-7 w-7 items-center justify-center rounded-md bg-vader-bg-1 text-vader-fg-2 disabled:opacity-40' onClick={onCloseEdit}><X size={14} aria-hidden='true' /></button>
+		</div> : null}
+		{editError ? <div role='alert' data-testid='vader-edit-error' className='py-1 text-xs text-vader-fg-2'>{editError}</div> : null}
 
 
 
@@ -1518,10 +1343,8 @@ const UserMessageComponent = ({ chatMessage, messageIdx, isCheckpointGhost, curr
 		</div> : null}
 
 		{/* looking back: a copy of the chat from before this message, to try another way; the original stays as it is */}
-		{mode === 'display' && messageIdx !== undefined && !isCheckpointGhost ? <div className={`flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none transition-opacity duration-200 ${isHovered || branchedTo ? 'opacity-100' : 'opacity-0'}`}>
-			<button data-testid='vader-copy-message' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
-			<button data-testid='vader-redo' className='hover:text-vader-fg-1' title='Send this message again from here: what came after it is replaced' onClick={() => { void agentGatewayService.reviseTask({ userMessage: chatMessage.displayContent ?? '', fromMessageIdx: messageIdx, threadId: chatThreadsService.state.currentThreadId }) }}>Redo from here</button>
-			{messageIdx > 0 ? <button data-testid='vader-branch' className='hover:text-vader-fg-1' title='A new chat that starts with everything before this message. This chat stays as it is.' onClick={() => { const id = chatThreadsService.branchThread(chatThreadsService.state.currentThreadId, messageIdx); if (id) setBranchedTo(id) }}>Branch the chat</button> : null}
+		{mode === 'display' && messageIdx !== undefined && !isCheckpointGhost ? <div ref={actionsRef} className='flex items-center gap-3 px-1 pt-1 text-xs text-vader-fg-3 select-none'>
+			<MessageActions key={`${threadId}:${messageIdx}`} threadId={threadId} messageIdx={messageIdx} message={chatMessage} role='user' onEdit={onOpenEdit} onBranch={setBranchedTo} />
 		</div> : null}
 		{branchedTo ? <div className='mt-2 rounded-xl border border-vader-border-2 bg-vader-bg-1 px-4 py-3 flex flex-col gap-2' data-testid='vader-branched'>
 			<div className='font-semibold text-vader-fg-1'>Branched here</div>
@@ -1598,7 +1421,7 @@ prose-table:text-[13px]
 }
 
 const ProseWrapper = ({ children }: { children: React.ReactNode }) => {
-	return <div className='
+	return <div style={{ userSelect: 'text', cursor: 'text' }} className='
 text-vader-fg-1
 text-[14px]
 prose
@@ -1621,9 +1444,9 @@ prose-headings:font-bold
 prose-p:leading-[1.7]
 prose-ol:leading-[1.7]
 prose-ul:leading-[1.7]
-prose-p:max-w-[64ch]
-prose-ol:max-w-[64ch]
-prose-ul:max-w-[64ch]
+prose-p:max-w-[80ch]
+prose-ol:max-w-[80ch]
+prose-ul:max-w-[80ch]
 
 max-w-none
 '
@@ -1631,19 +1454,19 @@ max-w-none
 		{children}
 	</div>
 }
-const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
+const AssistantMessageComponent = ({ threadId, chatMessage, isCheckpointGhost, isCommitted, messageIdx }: { threadId: string, chatMessage: ChatMessage & { role: 'assistant' }, isCheckpointGhost: boolean, messageIdx: number, isCommitted: boolean }) => {
 
 	const accessor = useAccessor()
 	const chatThreadsService = accessor.get('IChatThreadService')
+	const [branchedTo, setBranchedTo] = useState<string | undefined>()
 
 	const reasoningStr = chatMessage.reasoning?.trim() || null
 	const hasReasoning = !!reasoningStr
 	const isDoneReasoning = !!chatMessage.displayContent
-	const thread = chatThreadsService.getCurrentThread()
 
 
 	const chatMessageLocation: ChatMessageLocation = {
-		threadId: thread.id,
+		threadId,
 		messageIdx: messageIdx,
 	}
 
@@ -1678,8 +1501,9 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 						isLinkDetectionEnabled={true}
 					/>
 				</ProseWrapper>
-				{isCommitted ? <div className='flex items-center gap-3 pt-1 text-xs text-vader-fg-3 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity duration-200 select-none'>
-					<button type='button' data-testid='vader-copy-answer' className='hover:text-vader-fg-1' onClick={() => { void navigator.clipboard?.writeText(chatMessage.displayContent ?? '') }}>Copy</button>
+				{isCommitted && !isCheckpointGhost ? <div className='pt-1 text-xs text-vader-fg-3 select-none'>
+					<MessageActions key={`${threadId}:${messageIdx}`} threadId={threadId} messageIdx={messageIdx} message={chatMessage} role='assistant' onBranch={setBranchedTo} />
+					{branchedTo ? <div className='flex items-center gap-3 py-2' data-testid='vader-answer-branched'><span>Branched here</span><button type='button' className='underline' data-testid='vader-answer-branch-open' onClick={() => { chatThreadsService.switchToThread(branchedTo); setBranchedTo(undefined) }}>Open the new chat</button><button type='button' data-testid='vader-answer-branch-stay' onClick={() => setBranchedTo(undefined)}>Stay here</button></div> : null}
 				</div> : null}
 			</div>
 		}
@@ -1688,23 +1512,16 @@ const AssistantMessageComponent = ({ chatMessage, isCheckpointGhost, isCommitted
 }
 
 const ReasoningWrapper = ({ isDoneReasoning, isStreaming, children }: { isDoneReasoning: boolean, isStreaming: boolean, children: React.ReactNode }) => {
-	const isDone = isDoneReasoning || !isStreaming
-	const isWriting = !isDone
+	const isWriting = !isDoneReasoning && isStreaming
 	const [isOpen, setIsOpen] = useState(isWriting)
-	useEffect(() => {
-		if (!isWriting) setIsOpen(false) // if just finished reasoning, close
-	}, [isWriting])
-	return <ToolHeaderWrapper title='Reasoning' desc1={isWriting ? <IconLoading /> : ''} isOpen={isOpen} onClick={() => setIsOpen(v => !v)}>
-		<ToolChildrenWrapper>
-			<div className='!select-text cursor-auto'>
-				{children}
-			</div>
-		</ToolChildrenWrapper>
-	</ToolHeaderWrapper>
+	useEffect(() => { if (!isWriting) setIsOpen(false) }, [isWriting])
+	return <div className='flex flex-col gap-2 py-1 text-vader-fg-3' data-testid='vader-reasoning'>
+		<button type='button' data-testid='vader-reasoning-toggle' aria-expanded={isOpen} className='inline-flex items-center gap-1.5 self-start text-[13px] text-vader-fg-3 hover:text-vader-fg-2' onClick={() => setIsOpen(v => !v)}>
+			<ChevronRight size={14} aria-hidden='true' style={{ transform: isOpen ? 'rotate(90deg)' : undefined }} /><span>Thinking</span>{isWriting ? <IconLoading /> : null}
+		</button>
+		{isOpen ? <div className='select-text cursor-text text-vader-fg-3' data-testid='vader-reasoning-text'>{children}</div> : null}
+	</div>
 }
-
-
-
 
 // should either be past or "-ing" tense, not present tense. Eg. when the LLM searches for something, the user expects it to say "I searched for X" or "I am searching for X". Not "I search X".
 
@@ -2946,6 +2763,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 
 	if (role === 'user') {
 		return <UserMessageComponent
+			threadId={threadId}
 			chatMessage={chatMessage}
 			isCheckpointGhost={isCheckpointGhost}
 			currCheckpointIdx={currCheckpointIdx}
@@ -2955,6 +2773,7 @@ const _ChatBubble = ({ threadId, chatMessage, currCheckpointIdx, isCommitted, me
 	}
 	else if (role === 'assistant') {
 		return <AssistantMessageComponent
+			threadId={threadId}
 			chatMessage={chatMessage}
 			isCheckpointGhost={isCheckpointGhost}
 			messageIdx={messageIdx}
@@ -3124,15 +2943,20 @@ export const SidebarChat = () => {
 
 	const settingsState = useSettingsState()
 	// ----- HIGHER STATE -----
+	const composerRef = useCallback((node: HTMLTextAreaElement | null) => {
+		textAreaRef.current = node
+		if (node) node.setAttribute('aria-label', translateText('Describe the task', settingsState.globalSettings.uiLanguage) ?? 'Describe the task')
+	}, [settingsState.globalSettings.uiLanguage])
 
 	// threads state
 	const chatThreadsState = useChatThreadsState()
 
 	const currentThread = chatThreadsService.getCurrentThread()
+	const composerThreadId = currentThread.id
 	const previousMessages = currentThread?.messages ?? []
 
 	const selections = currentThread.state.stagingSelections
-	const setSelections = (s: StagingSelectionItem[]) => { chatThreadsService.setCurrentThreadState({ stagingSelections: s }) }
+	const setSelections = useCallback((s: StagingSelectionItem[]) => { chatThreadsService.setThreadComposerState(composerThreadId, { stagingSelections: s }) }, [chatThreadsService, composerThreadId])
 
 	// stream state
 	const currThreadStreamState = useChatThreadsStreamState(chatThreadsState.currentThreadId)
@@ -3149,15 +2973,24 @@ export const SidebarChat = () => {
 	const initVal = ''
 	const [instructionsAreEmpty, setInstructionsAreEmpty] = useState(!initVal)
 	// long pasted texts are folded to one line each above the message box, and sent in full with the message
-	const [pastes, setPastes] = useState<Paste[]>([])
+	const pastes = currentThread.state.composerAttachments ?? []
+	const setPastes: React.Dispatch<React.SetStateAction<Paste[]>> = useCallback(update => {
+		const draft = chatThreadsService.state.allThreads[composerThreadId]?.state.composerAttachments ?? []
+		chatThreadsService.setThreadComposerState(composerThreadId, { composerAttachments: typeof update === 'function' ? update(draft) : update })
+	}, [chatThreadsService, composerThreadId])
 	// images attached to the message: they go to the model that was chosen, and only to it (common/imageRules.ts)
-	const [images, setImages] = useState<ChatImage[]>([])
+	const images = currentThread.state.composerImages ?? []
+	const setImages: React.Dispatch<React.SetStateAction<ChatImage[]>> = useCallback(update => {
+		const draft = chatThreadsService.state.allThreads[composerThreadId]?.state.composerImages ?? []
+		chatThreadsService.setThreadComposerState(composerThreadId, { composerImages: typeof update === 'function' ? update(draft) : update })
+	}, [chatThreadsService, composerThreadId])
 	// a key found in the message that was about to be sent: it is not sent (board S02)
 	const [secretHits, setSecretHits] = useState<SecretHit[] | null>(null)
+	const [preparingThreads, setPreparingThreads] = useState<ReadonlySet<string>>(new Set())
 
 	// a coding agent chosen for the chat brings its own model, so no model has to be configured
 	const noModel = !settingsState.globalSettings.externalAgentId && !!isFeatureNameDisabled('Chat', settingsState)
-	const isDisabled = (instructionsAreEmpty && pastes.length === 0 && images.length === 0) || noModel
+	const isDisabled = (instructionsAreEmpty && pastes.length === 0 && images.length === 0) || noModel || preparingThreads.has(composerThreadId) || !!currThreadStreamState?.isPreparing
 
 	// a message with images needs a model that reads them; a connected agent's own model is not known here, so it is not offered images
 	const chatModel = settingsState.modelSelectionOfFeature?.Chat
@@ -3178,12 +3011,14 @@ export const SidebarChat = () => {
 		return () => ro.disconnect()
 	}, [showingLanding])
 	const scrollContainerRef = useRef<HTMLDivElement | null>(null)
+	const pendingSends = useRef(new Set<string>())
 	const onSubmit = useCallback(async (_forceSubmit?: string) => {
 
 		if (isDisabled && !_forceSubmit) return
 		if (imagesBlocked && !_forceSubmit) return // the card above the box says why, and what to do
 
-		const threadId = chatThreadsService.state.currentThreadId
+		const threadId = composerThreadId
+		if (chatThreadsService.state.currentThreadId !== threadId || pendingSends.current.has(threadId)) return
 
 		// what is typed, then each long paste in a block, as one message
 		const typed = _forceSubmit || textAreaRef.current?.value || ''
@@ -3201,23 +3036,37 @@ export const SidebarChat = () => {
 
 		if (isRunning) {
 			// a run is going: the message waits for it to end (Send now stops the run and sends it at once); images do not wait in the queue
-			if (images.length > 0 && !_forceSubmit) { setSlashNote({ text: 'A message with images cannot wait for the run to end. Send it when the run is done, or stop the run first.', busy: false }); return }
+			if ((images.length > 0 || selections.length > 0) && !_forceSubmit) { setSlashNote({ text: 'A message with files or images cannot wait for the run to end. Send it when the run is done, or stop the run first.', busy: false }); return }
 			if (!chatThreadsService.queueMessage(threadId, userMessage)) return
 		} else {
+			pendingSends.current.add(threadId)
+			setPreparingThreads(ids => new Set(ids).add(threadId))
 			try {
 				await agentGatewayService.startTask({ userMessage, threadId, ...(images.length > 0 && !_forceSubmit ? { images } : {}) })
 			} catch (e) {
 				console.error('Error while sending message in chat:', e)
+				if (chatThreadsService.state.currentThreadId === threadId) setSlashNote({ text: 'The message could not be sent. Your files are still attached. Try again.', busy: false })
+				return
+			} finally {
+				pendingSends.current.delete(threadId)
+				setPreparingThreads(ids => { const next = new Set(ids); next.delete(threadId); return next })
 			}
 		}
 
-		setPastes([])
-		setImages([])
-		setSelections([]) // clear staging
-		textAreaFnsRef.current?.setValue('')
-		textAreaRef.current?.focus() // focus input after submit
+		// Only consume the context that went with this request. Another file or
+		// image may have been attached while its asynchronous preparation ran.
+		const draft = chatThreadsService.state.allThreads[threadId]?.state
+		if (draft) chatThreadsService.setThreadComposerState(threadId, {
+			composerAttachments: _forceSubmit ? draft.composerAttachments : (draft.composerAttachments ?? []).filter(p => !pastes.some(sent => sent.id === p.id)),
+			composerImages: _forceSubmit ? draft.composerImages : (draft.composerImages ?? []).filter(i => !images.some(sent => sent.id === i.id)),
+			stagingSelections: draft.stagingSelections.filter(s => !selections.includes(s)),
+		})
+		if (!_forceSubmit && chatThreadsService.state.currentThreadId === threadId && textAreaRef.current?.value === typed) {
+			textAreaFnsRef.current?.setValue('')
+			textAreaRef.current?.focus()
+		}
 
-	}, [chatThreadsService, agentGatewayService, isDisabled, isRunning, pastes, images, imagesBlocked, textAreaRef, textAreaFnsRef, setSelections, settingsState])
+	}, [chatThreadsService, composerThreadId, agentGatewayService, isDisabled, isRunning, pastes, images, selections, imagesBlocked, textAreaRef, textAreaFnsRef, setPastes])
 
 	const onAbort = async () => {
 		const threadId = currentThread.id
@@ -3345,7 +3194,7 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 			${previousMessages.length === 0 && !displayContentSoFar ? 'hidden' : ''}
 		`}
 	>
-		<div className='w-full mx-auto flex flex-col' data-testid='vader-messages' style={{ maxWidth: 760, padding: compact ? '12px 12px' : '16px 20px', minHeight: '100%' }}>
+		<div className='w-full mx-auto flex flex-col' data-testid='vader-messages' style={{ maxWidth: 950, padding: compact ? '12px 12px' : '16px 20px', minHeight: '100%' }}>
 		<div className='flex flex-col mt-auto' style={{ gap: 18 }}>
 		{/* previous messages */}
 		{previousMessagesHTML}
@@ -3453,12 +3302,12 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		}
 		if (taken.length > 0) setImages(list => [...list, ...taken].slice(0, MAX_IMAGES))
 		return { taken, refused }
-	}, [images.length])
+	}, [images.length, setImages])
 	const addImageFiles = useCallback(async (files: File[]) => {
 		const { taken, refused } = await collectImages(files)
 		const note = dropNote({ accepted: taken.map(t => ({ name: t.name, size: t.bytes })), refused })
-		setSlashNote(note ? { text: note, busy: false } : undefined)
-	}, [collectImages])
+		if (chatThreadsService.state.currentThreadId === composerThreadId) setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [collectImages, chatThreadsService, composerThreadId])
 
 	// files dropped on the box: images are kept as images, text files are read and kept beside the message like a long paste; what is not taken is said, with the reason
 	const onDropFiles = useCallback(async (all: File[]) => {
@@ -3479,8 +3328,8 @@ Assumptions to keep in mind (double-check these as you go): ${plan.unresolvedAss
 		}
 		if (taken.length > 0) setPastes(ps => [...ps, ...taken])
 		const note = dropNote({ accepted: [...fromImages.taken.map(t => ({ name: t.name, size: t.bytes })), ...taken.map(t => ({ name: t.title ?? '', size: 0 }))], refused })
-		setSlashNote(note ? { text: note, busy: false } : undefined)
-	}, [pastes.length, collectImages])
+		if (chatThreadsService.state.currentThreadId === composerThreadId) setSlashNote(note ? { text: note, busy: false } : undefined)
+	}, [pastes.length, collectImages, setPastes, chatThreadsService, composerThreadId])
 
 	const onChangeText = useCallback((newStr: string) => {
 		setInstructionsAreEmpty(!newStr)
@@ -3540,7 +3389,7 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 			onChangeText={onChangeText}
 			onKeyDown={onKeyDown}
 			onFocus={() => { chatThreadsService.setCurrentlyFocusedMessageIdx(undefined) }}
-			ref={textAreaRef}
+			ref={composerRef}
 			fnsRef={textAreaFnsRef}
 			multiline={true}
 		/>
@@ -3552,7 +3401,6 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 
 
 	// what to start from: with a project open these are about the project; without one, plain questions
-	const [chatOnly, setChatOnly] = useState(false)
 	const hasProject = !!chatThreadsService.getCurrentProjectKey()
 	const initiallySuggestedPromptsHTML = <div className='flex flex-col w-full text-nowrap select-none'>
 		{(hasProject ? [
@@ -3589,9 +3437,10 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 	const hint = isLandingPage && instructionsAreEmpty && pastes.length === 0 && !isRunning ?<div className='px-3 pt-1.5 text-xs text-vader-fg-3 select-none' data-testid='vader-composer-hint'>Enter sends, Shift Enter adds a line.</div> : null
 
 	const threadPageInput = <div key={'input' + chatThreadsState.currentThreadId} className='flex-none' style={{ padding: compact ? '0 10px 10px' : '0 20px 14px' }}>
-		<div className='w-full mx-auto flex flex-col gap-2' style={{ maxWidth: 720 }}>
+		<div className='w-full mx-auto flex flex-col gap-2' style={{ maxWidth: 900 }}>
 			<CommandBarInChat />
 			{aboveComposer}
+			<ComposerProjectPicker />
 			{inputChatArea}
 			{hint}
 		</div>
@@ -3623,7 +3472,7 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 		className='w-full h-full max-h-full flex flex-col overflow-auto px-4 items-center justify-center'
 		data-testid='vader-landing'
 	>
-		<div className='w-full flex flex-col gap-4 py-8' style={{ maxWidth: 560 }}>
+		<div className='w-full flex flex-col gap-4 py-8' style={{ maxWidth: 700 }}>
 			<ErrorBoundary>
 				<div className='flex flex-col gap-1.5'>
 					<h2 className='text-xl font-semibold text-vader-fg-1' data-testid='vader-landing-title'>{projectName ? `New chat in ${projectName}` : 'New chat'}</h2>
@@ -3631,11 +3480,10 @@ placeholder={isRunning ? 'Add a message for after this run' : previousMessages.l
 				</div>
 				<OfflineBanner />
 				{aboveComposer}
+				<ComposerProjectPicker />
 				{inputChatArea}
 				{hint}
 			</ErrorBoundary>
-
-			{!hasProject && !chatOnly ? <ErrorBoundary><NoProjectCard onChatOnly={() => setChatOnly(true)} /></ErrorBoundary> : null}
 
 			<ErrorBoundary>
 				{recent.length > 0 ? <div className='flex flex-col mt-2' data-testid='vader-landing-recent'>

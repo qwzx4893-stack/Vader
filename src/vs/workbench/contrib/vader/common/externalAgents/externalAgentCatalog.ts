@@ -64,7 +64,7 @@ export const externalAgentCatalog: readonly ExternalAgentDef[] = [
 		id: 'codex', name: 'Codex', kind: 'acp', logo: 'codex',
 		tagline: 'Your ChatGPT plan (Plus, Pro, Business) or an OpenAI API key, through OpenAI\'s Codex.',
 		website: 'https://developers.openai.com/codex',
-		note: 'Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan.',
+		note: 'Uses the ACP-maintained Codex adapter, not an OpenAI-published ACP binary. Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan.',
 		acp: { registryId: 'codex-acp', loginNote: 'A browser page opens to sign in with your ChatGPT account.', authPreference: ['chat-gpt'] },
 	},
 	{

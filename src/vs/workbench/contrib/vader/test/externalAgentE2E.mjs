@@ -40,6 +40,7 @@ await esbuild.build({
 			`export * from '${root}/common/externalAgents/externalAgentProtocol.ts'`,
 			`export { agentLogos } from '${root}/common/externalAgents/agentLogoData.ts'`,
 			`export { acpRegistrySnapshot } from '${root}/common/externalAgents/acpRegistrySnapshot.ts'`,
+			`export { VSBuffer, bufferToStream } from '${root}/../../../base/common/buffer.ts'`,
 		].join('\n'),
 		resolveDir: root, loader: 'ts',
 	},
@@ -61,6 +62,9 @@ const events = [];
 svc.onEvent(e => events.push(e));
 const workDir = fs.mkdtempSync(path.join(tmp, 'work-'));
 const custom = (mode, ...extra) => ({ id: 'custom-' + mode, name: 'Fake ' + mode, command: process.execPath, args: [agentFile, mode, ...extra] });
+
+const incompatible = await svc.probe('custom-unsupported', custom('unsupported-protocol'));
+check('protocol: a newer incompatible agent is rejected before authentication or chat', !incompatible.ok && /requires ACP 999/.test(incompatible.error));
 const turn = (mode, key, textIn = 'hello') => svc.runTurn({ sessionKey: key, agentId: 'custom-' + mode, custom: custom(mode), cwd: workDir, text: textIn });
 const eventsOf = (key, type) => events.filter(e => e.sessionKey === key && (!type || e.type === type));
 
@@ -400,6 +404,50 @@ try {
 }
 
 // ---------- what may be downloaded and run ----------
+if (process.argv.includes('--live')) {
+	// Public release metadata only: no download, vendor process, prompt or account.
+	const liveService = new m.ExternalAgentMainService({ async request(options) {
+		if (options.url !== 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json') throw Error('Unexpected live metadata source');
+		const res = await fetch(options.url, { signal: AbortSignal.timeout(15000) });
+		return { res: { statusCode: res.status }, stream: m.bufferToStream(m.VSBuffer.fromString(await res.text())) };
+	} }, logService);
+	liveService.getStatuses = async () => []; // no host inventory is needed to verify plans
+	try {
+		for (const def of m.externalAgentCatalog.filter(d => d.acp)) {
+			const plan = await liveService.getInstallPlan(def.id);
+			check(`LIVE ${def.name}: current release accepted, exact platform plan ready (${plan.version})`, !plan.registryWarning && !!(plan.package || plan.archive), plan.registryWarning ?? '');
+		}
+	} finally { liveService.dispose(); }
+}
+{
+	let requests = 0, offline = false;
+	let release = { id: 'codex-acp', version: '9.0.0', distribution: { npx: { package: '@agentclientprotocol/codex-acp@9.0.0' } } };
+	const online = new m.ExternalAgentMainService({ async request(options) {
+		requests++; check('update source is the official ACP registry over HTTPS', options.url === 'https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json');
+		if (offline) throw new Error('isolated offline response');
+		return { res: { statusCode: 200 }, stream: m.bufferToStream(m.VSBuffer.fromString(JSON.stringify({ agents: [release] }))) };
+	} }, logService);
+	// Filesystem/inventory dependencies only; no vendor programs are discovered or run.
+	online.getStatuses = async () => [{ id: 'codex', state: 'ready', source: 'vader', installedVersion: '2.2.2', latestVersion: '9.0.0' }];
+	try {
+		const [a, b] = await Promise.all([online.checkRegistry(), online.checkRegistry()]);
+		check('concurrent update checks share one request and report actual installed-agent names', requests === 1 && a.updated.join() === 'Codex' && a.checkedAt === b.checkedAt);
+		await online.checkRegistry(); check('fresh registry checks reuse the hourly cache', requests === 1);
+		const plan = await online.getInstallPlan('codex');
+		check('consent plan uses the current registry package and a bound release fingerprint', plan.version === '9.0.0' && plan.package.endsWith('@9.0.0') && /^[0-9a-f]{64}$/.test(plan.fingerprint));
+		release = { ...release, distribution: { npx: { ...release.distribution.npx, args: ['--changed'] } } };
+		await online.checkRegistry(true);
+		let changed; try { await online.install('codex', plan.fingerprint); } catch (e) { changed = e.message; }
+		check('same-version artifact changes invalidate earlier consent before disk changes', /changed after confirmation/.test(changed));
+		offline = true;
+		try { await online.checkRegistry(true); } catch { /* failure is checked through the next consent plan */ }
+		const saved = await online.getInstallPlan('codex');
+		check('offline install plans retain the last valid release and disclose failed freshness checks', saved.version === '9.0.0' && /isolated offline response/.test(saved.registryWarning));
+		online.dispose(); let disposed;
+		try { await online.checkRegistry(); } catch (e) { disposed = e.message; }
+		check('disposed services cannot restart registry requests', /closed/.test(disposed));
+	} finally { online.dispose(); }
+}
 const archive = (url) => ({ archive: url, cmd: './bin/agent', sha256: 'a'.repeat(64) });
 const docOf = (agent) => ({ agents: [agent] });
 const goodBinary = { id: 'opencode', version: '1.2.3', distribution: { binary: { 'windows-x86_64': archive('https://github.com/sst/opencode/releases/download/v1.2.3/o.zip') } } };
@@ -413,8 +461,10 @@ const goodBinary = { id: 'opencode', version: '1.2.3', distribution: { binary: {
 	check('registry: a malformed checksum is rejected', !m.acceptRegistryDocument(docOf({ ...goodBinary, distribution: { binary: { 'windows-x86_64': { ...archive('https://github.com/o.zip'), sha256: 'zz' } } } })).opencode);
 	check('registry: a version that is not a plain number is rejected', !m.acceptRegistryDocument(docOf({ ...goodBinary, version: '1.2.3; rm -rf /' })).opencode);
 	check('registry: an npm package with shell characters is rejected', !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@x/y@1.0.0 && calc', args: [] } } }))['codex-acp']);
-	check('registry: an npm argument with shell characters is rejected', !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@x/y@1.0.0', args: ['$(calc)'] } } }))['codex-acp']);
-	check('registry: a plain npm package is accepted', !!m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@x/y@1.0.0', args: ['--acp'] } } }))['codex-acp']);
+	check('registry: an npm argument with shell characters is rejected', !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@agentclientprotocol/codex-acp@1.0.0', args: ['$(calc)'] } } }))['codex-acp']);
+	check('registry: the reviewed npm package at the declared version is accepted', !!m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@agentclientprotocol/codex-acp@1.0.0', args: ['--acp'] } } }))['codex-acp']);
+	check('registry: a different npm publisher cannot replace the reviewed adapter', !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: '@x/y@1.0.0' } } }))['codex-acp']);
+	check('registry: an unpinned or mismatched npm release is rejected', ['@agentclientprotocol/codex-acp', '@agentclientprotocol/codex-acp@2.0.0'].every(pkg => !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { npx: { package: pkg } } }))['codex-acp']));
 	check('registry: uvx entries are not offered', !m.acceptRegistryDocument(docOf({ id: 'codex-acp', version: '1.0.0', distribution: { uvx: { package: 'x' } } }))['codex-acp']);
 	check('registry: garbage documents give nothing', Object.keys(m.acceptRegistryDocument(null)).length === 0 && Object.keys(m.acceptRegistryDocument({ agents: 'x' })).length === 0);
 }

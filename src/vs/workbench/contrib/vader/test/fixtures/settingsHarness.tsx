@@ -162,7 +162,12 @@ w.__settings.mcpUserStateOfName = { GitHub: { isOn: true }, Linear: { isOn: fals
 // ---- connected agents
 w.__agents = { statuses: { codex: { id: 'codex', state: 'ready', source: 'vader', installedVersion: '2.2.2', latestVersion: '2.3.0' }, opencode: { id: 'opencode', state: 'ready', source: 'local', installedVersion: '1.19.0' }, cursor: { id: 'cursor', state: 'not-installed' }, copilot: { id: 'copilot', state: 'needs-node' } }, busy: {}, errors: {}, probes: {}, signIn: { codex: { state: 'in', canSignOut: true }, opencode: { state: 'out' } }, opened: {}, configOfThread: {} }
 const agentsExt: any = {
-	refresh() { }, async checkRegistry() { w.__log.push('agents:check'); return ['codex'] },
+	refresh() { }, async checkRegistry(force = true) {
+		w.__log.push(force ? 'agents:check' : 'agents:auto-check');
+		w.__agents = { ...w.__agents, registry: { checking: false, checkedAt: Date.parse('2026-10-23T12:00:00Z'), error: w.__registryFailure } }; notify();
+		if (w.__registryFailure) throw new Error(w.__registryFailure);
+		return ['Codex'];
+	},
 	install(id: string) { w.__log.push(`agent:install:${id}`) }, connect(id: string) { w.__log.push(`agent:connect:${id}`) }, uninstall(id: string) { w.__log.push(`agent:uninstall:${id}`) }, signOut(id: string) { w.__log.push(`agent:signout:${id}`) },
 	openInTerminal(id: string) { w.__log.push(`agent:terminal:${id}`) },
 	async testConnection(id: string) { w.__log.push(`agent:test:${id}`); w.__agents = { ...w.__agents, probes: { ...w.__agents.probes, [id]: { ok: true, agentName: 'Codex', agentVersion: '2.2.2', ms: 840, authMethods: [{ name: 'ChatGPT' }], canResume: true } } }; notify() },

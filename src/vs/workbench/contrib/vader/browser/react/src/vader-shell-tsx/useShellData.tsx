@@ -3,8 +3,8 @@
  *--------------------------------------------------------------------------------------*/
 
 import { useEffect, useMemo, useState } from 'react'
-import { useAccessor, useChatThreadsState, useFullChatThreadsStreamState, useUsageTick } from '../util/services.js'
-import { projectDisplayNames } from '../../../../common/threadProjects.js'
+import { useAccessor, useChatThreadsState, useFullChatThreadsStreamState, useUsageTick, useShellState } from '../util/services.js'
+import { projectDisplayNames, projectNameOf } from '../../../../common/threadProjects.js'
 import { branchLabel, hasCopyOnDisk } from '../../../../common/taskCopyModel.js'
 import { agentGroupOf, AgentGroupId, ageLabel, changedFilePaths, isAgentTask, isListed, threadTitle } from '../../../../common/shellModel.js'
 import type { ThreadStatus } from '../../../../common/threadStatus.js'
@@ -60,6 +60,7 @@ export const useShellData = (): ShellData => {
 	const state = useChatThreadsState()
 	const stream = useFullChatThreadsStreamState()
 	const usageTick = useUsageTick()
+	const shell = useShellState()
 	const tick = useMinuteTick()
 	const copies = accessor.get('ITaskCopyService')
 	const [copyTick, setCopyTick] = useState(0)
@@ -90,6 +91,8 @@ export const useShellData = (): ShellData => {
 			if (threads.length > 0) groups.push({ key: g.key, name: names.get(g.key) ?? g.name, threads })
 		}
 		const currentProjectKey = chat.getCurrentProjectKey()
+		// A project chosen before its first message still belongs in the navigation.
+		if (currentProjectKey && !groups.some(g => g.key === currentProjectKey)) groups.unshift({ key: currentProjectKey, name: projectNameOf(currentProjectKey), threads: [] })
 		const current = groups.find(g => g.key === currentProjectKey)
 		return {
 			groups,
@@ -101,5 +104,5 @@ export const useShellData = (): ShellData => {
 			currentProjectName: current?.name ?? (currentProjectKey ? currentProjectKey.split('/').filter(Boolean).pop() ?? 'Chats' : 'Chats'),
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [chat, state, stream, usageTick, tick, copies, copyTick])
+	}, [chat, state, stream, usageTick, tick, copies, copyTick, shell])
 }

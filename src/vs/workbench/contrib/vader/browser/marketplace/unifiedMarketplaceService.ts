@@ -16,7 +16,7 @@ export * from '../../common/marketplace/marketplaceTypes.js';
 // Vader addition, part of the Unified Capability Marketplace (see docs/integrations/marketplace.md).
 // Per-provider search timeout - a slow/hung network source must never hold up the other
 // providers' results (failure isolation, not just error isolation).
-const PROVIDER_SEARCH_TIMEOUT_MS = 8_000;
+const PROVIDER_SEARCH_TIMEOUT_MS = 15_000;
 const PROVIDER_BROWSE_TIMEOUT_MS = 30_000;
 
 // Soft per-type weighting used only to break ties among non-exact matches (see search()'s
@@ -51,12 +51,11 @@ const isFresh = (c: CacheEntry | undefined, ttlMs: number): boolean => !!c && Da
 // one session while still being an actual bound.
 const MAX_CACHED_SEARCHES = 300;
 
-class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplaceService {
+export class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplaceService {
 	readonly _serviceBrand: undefined;
 
 	private readonly _providers = new Map<string, IMarketplaceProvider>();
 	private readonly _cache = new LRUCache<string, CacheEntry>(MAX_CACHED_SEARCHES); // key: `${providerId}::${query}`
-	private _searchGeneration = 0;
 
 	/** Providers register themselves here at construction (see each providerXyz.ts's registerSingleton side effect + this file's own registration order in vader.contribution.ts) - same self-registration pattern this codebase already uses for tool/skill registries. */
 	registerProvider(provider: IMarketplaceProvider): void {
@@ -69,32 +68,53 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 
 	private _cacheKey(providerId: string, query: string): string { return `${providerId}::${query}`; }
 
-	private async _searchOneProvider(provider: IMarketplaceProvider, query: string, generation: number, category?: string): Promise<MarketplaceProviderSearchOutcome> {
-		const cacheKey = this._cacheKey(provider.id, `${query}\u0000${category ?? ''}`);
+	private _requestKey(provider: IMarketplaceProvider, query: string, browse: boolean, opts?: MarketplaceSearchOptions): string {
+		return this._cacheKey(provider.id, JSON.stringify([browse, query.trim().toLowerCase(), opts?.category, opts?.cacheScope]));
+	}
+
+	private async _queryProvider(provider: IMarketplaceProvider, query: string, browse: boolean, opts?: MarketplaceSearchOptions): Promise<MarketplaceProviderSearchOutcome> {
+		const cacheKey = this._requestKey(provider, query, browse, opts);
 		const cached = this._cache.get(cacheKey);
-		if (cached && isFresh(cached, provider.cacheTtlMs)) {
-			return { providerId: provider.id, items: cached.items, warnings: cached.warnings };
+		if (!opts?.refresh && cached && isFresh(cached, provider.cacheTtlMs)) {
+			return { providerId: provider.id, items: cached.items, warnings: cached.warnings, cachedAtMs: cached.atMs };
 		}
 
 		const cts = new CancellationTokenSource();
-		const timeoutHandle = setTimeout(() => cts.cancel(), PROVIDER_SEARCH_TIMEOUT_MS);
+		let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
+		let abort: (() => void) | undefined;
 		try {
-			const items = query.trim()
-				? await provider.search(query, cts.token, category)
-				: await provider.listInstalled();
-			// a slower provider that finishes after a newer search has already started still
-			// gets its result cached (so the next search benefits), but is not returned here -
-			// _searchGeneration is checked by the caller, not here, to keep this function pure
-			const warnings = provider.takeWarnings?.();
+			// Race the call as well as cancelling its token: providers/IPC calls may ignore cancellation.
+			const deadline = new Promise<never>((_, reject) => {
+				abort = () => { cts.cancel(); reject(new Error('Search cancelled')); };
+				if (opts?.signal?.aborted) { abort(); return; }
+				opts?.signal?.addEventListener('abort', abort, { once: true });
+				timeoutHandle = setTimeout(() => { cts.cancel(); reject(new Error('took too long to answer')); }, browse ? PROVIDER_BROWSE_TIMEOUT_MS : PROVIDER_SEARCH_TIMEOUT_MS);
+			});
+			const request = Promise.resolve().then(() => {
+				if (cts.token.isCancellationRequested) throw new Error('Search cancelled');
+				return browse ? (provider.browse ? provider.browse(cts.token, opts?.category) : provider.listInstalled())
+					: query.trim() ? provider.search(query, cts.token, opts?.category) : provider.listInstalled();
+			});
+			let items = await Promise.race([request, deadline]);
+			if (opts?.signal?.aborted) throw new Error('Search cancelled');
+			const warnings = provider.takeWarnings?.(cts.token);
+			// Keep previously read remote rows when a source is down, together with current local state.
+			if (warnings?.length && cached) {
+				const merged = new Map<string, MarketplaceItem>(cached.items.map(i => [i.id, i]));
+				for (const item of items) merged.set(item.id, item);
+				items = [...merged.values()];
+				return { providerId: provider.id, items, warnings, cachedAtMs: cached.atMs, stale: true };
+			}
 			this._cache.set(cacheKey, { atMs: Date.now(), items, warnings });
 			return { providerId: provider.id, items, warnings };
 		} catch (e) {
 			// per-provider failure isolation: one dead/offline source degrades to "0 results,
 			// error noted," never breaks the whole federated search - offline degradation and
 			// per-provider error surfacing are the same mechanism here, by design.
-			return { providerId: provider.id, items: cached?.items ?? [], error: e instanceof Error ? e.message : String(e) };
+			return { providerId: provider.id, items: cached?.items ?? [], error: e instanceof Error ? e.message : String(e), cachedAtMs: cached?.atMs, stale: !!cached };
 		} finally {
 			clearTimeout(timeoutHandle);
+			if (abort) opts?.signal?.removeEventListener('abort', abort);
 			cts.dispose();
 		}
 	}
@@ -112,18 +132,10 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 	}
 
 	async search(query: string, opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult> {
-		const generation = ++this._searchGeneration;
-		const queryLower = query.trim().toLowerCase();
+		return this._query(query, false, opts);
+	}
 
-		const providers = [...this._providers.values()].filter(p => !opts?.types?.length || opts.types.includes(p.itemType));
-		const outcomes = await Promise.all(providers.map(p => this._searchOneProvider(p, query, generation, opts?.category)));
-
-		// cancel-stale-searches: if a newer search started while this one was in flight, don't
-		// let its (possibly out-of-order) results overwrite what the UI is now showing.
-		if (generation !== this._searchGeneration) {
-			return { items: [], providerOutcomes: [] };
-		}
-
+	private _result(outcomes: MarketplaceProviderSearchOutcome[], query: string, browse: boolean): MarketplaceSearchResult {
 		const seen = new Set<string>();
 		const items: MarketplaceItem[] = [];
 		for (const outcome of outcomes) {
@@ -134,50 +146,32 @@ class UnifiedMarketplaceService extends Disposable implements IUnifiedMarketplac
 				items.push(item);
 			}
 		}
-		items.sort((a, b) => this._score(b, queryLower) - this._score(a, queryLower));
+		items.sort(browse ? (a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1))
+			: (a, b) => this._score(b, query.trim().toLowerCase()) - this._score(a, query.trim().toLowerCase()));
 
 		return { items, providerOutcomes: outcomes };
-	}
-
-	private async _browseOneProvider(provider: IMarketplaceProvider, category?: string): Promise<MarketplaceProviderSearchOutcome> {
-		const cacheKey = this._cacheKey(provider.id, `\u0000browse\u0000${category ?? ''}`);
-		const cached = this._cache.get(cacheKey);
-		if (cached && isFresh(cached, provider.cacheTtlMs)) {
-			return { providerId: provider.id, items: cached.items, warnings: cached.warnings };
-		}
-		const cts = new CancellationTokenSource();
-		let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
-		try {
-			// a listing can take longer than a search (a repository of skills is downloaded file by file), so it gets its own, longer limit
-			const timeout = new Promise<never>((_, reject) => { timeoutHandle = setTimeout(() => { cts.cancel(); reject(new Error('took too long to answer')); }, PROVIDER_BROWSE_TIMEOUT_MS); });
-			const items = await Promise.race([provider.browse ? provider.browse(cts.token, category) : provider.listInstalled(), timeout]);
-			const warnings = provider.takeWarnings?.();
-			this._cache.set(cacheKey, { atMs: Date.now(), items, warnings });
-			return { providerId: provider.id, items, warnings };
-		} catch (e) {
-			return { providerId: provider.id, items: cached?.items ?? [], error: e instanceof Error ? e.message : String(e) };
-		} finally {
-			if (timeoutHandle) { clearTimeout(timeoutHandle); }
-			cts.dispose();
-		}
 	}
 
 	async browse(opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult> {
+		return this._query('', true, opts);
+	}
+
+	private async _query(query: string, browse: boolean, opts?: MarketplaceSearchOptions): Promise<MarketplaceSearchResult> {
 		const providers = [...this._providers.values()].filter(p => !opts?.types?.length || opts.types.includes(p.itemType));
-		const outcomes = await Promise.all(providers.map(p => this._browseOneProvider(p, opts?.category)));
-		const seen = new Set<string>();
-		const items: MarketplaceItem[] = [];
-		for (const outcome of outcomes) {
-			for (const item of outcome.items) {
-				const key = `${item.providerId}:${item.id}`;
-				if (seen.has(key)) continue;
-				seen.add(key);
-				items.push(item);
-			}
+		const outcomes = new Map<string, MarketplaceProviderSearchOutcome>();
+		const result = () => this._result(providers.flatMap(p => outcomes.has(p.id) ? [outcomes.get(p.id)!] : []), query, browse);
+		// Saved results can be displayed immediately while expired entries are refreshed.
+		for (const p of providers) {
+			const cached = this._cache.get(this._requestKey(p, query, browse, opts));
+			if (cached) outcomes.set(p.id, { providerId: p.id, items: cached.items, warnings: cached.warnings, cachedAtMs: cached.atMs, stale: !isFresh(cached, p.cacheTtlMs) });
 		}
-		// installed first, then the most trusted; items without a score keep the order their source gave them
-		items.sort((a, b) => (Number(b.installed) - Number(a.installed)) || ((b.trustScore?.score ?? -1) - (a.trustScore?.score ?? -1)));
-		return { items, providerOutcomes: outcomes };
+		if (!opts?.signal?.aborted && outcomes.size) opts?.onProgress?.(result());
+		await Promise.all(providers.map(async p => {
+			const outcome = await this._queryProvider(p, query, browse, opts);
+			outcomes.set(p.id, outcome);
+			if (!opts?.signal?.aborted) opts?.onProgress?.(result());
+		}));
+		return result();
 	}
 
 	async listInstalled(): Promise<MarketplaceItem[]> {

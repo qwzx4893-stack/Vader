@@ -77,7 +77,7 @@ const keyless = [{ providerName: 'openAI', providerTitle: 'OpenAI' }, { provider
 // ===================================================================== several providers: the providers, the chosen one open
 {
 	const { page, errors } = await show({ options: [anthropic, openrouter, ollama], selected: ['anthropic', 'claude-sonnet-4-5'], withoutKey: keyless, addableCount: 48, local: ['ollama'] });
-	check('the button says the chosen model as a name', (await page.locator(TID('vader-picker-button')).innerText()) === 'Claude Sonnet 4.5');
+	check('the button pairs its provider with the chosen model name', (await page.locator(TID('vader-picker-caption')).innerText()) === 'Claude Sonnet 4.5' && (await page.locator(TID('vader-picker-button')).innerText()).includes('Anthropic'));
 	await open(page);
 	check('opening asks the lists that are old to refresh', (await log(page)).includes('opened'));
 	check('the search says how many models it searches', (await page.locator(TID('vader-picker-search')).getAttribute('placeholder')) === 'Search 22 models');

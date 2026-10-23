@@ -50,6 +50,9 @@ const addFake = async (t, name, mode) => {
 	await dialogButton(t, 'Add');
 	const id = 'custom-' + name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 	await t.waitFor(async () => (await card(t, id).getAttribute('data-testid').catch(() => null)) !== null, 10_000);
+	// Discovery is passive. The user explicitly checks the agent before choosing Use.
+	await card(t, id).getByRole('button', { name: 'Test connection', exact: true }).click();
+	await card(t, id).getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 30_000 });
 	return id;
 };
 const useInChat = async (t, id) => {
@@ -202,6 +205,10 @@ export const externalAgentScenarios = [
 			await custom.getByRole('button', { name: 'Add', exact: true }).click();
 			await dialogButton(t, 'Add');
 			const id = 'custom-connect-agent';
+			await card(t, id).getByRole('button', { name: 'Connect', exact: true }).waitFor({ state: 'visible' });
+			t.check('unchecked sign-in offers Connect without allowing Use', !(await card(t, id).getByRole('button', { name: 'Use', exact: true }).count()));
+			// Refresh must not start programs. Check sign-in explicitly, keeping the assertions below.
+			await card(t, id).getByRole('button', { name: 'Test connection', exact: true }).click();
 			t.check('before signing in the card says "Not signed in" and offers Connect (and no way to use it yet)', await t.waitFor(async () => /Not signed in/.test(await card(t, id).innerText().catch(() => '')), 30_000) && await card(t, id).getByRole('button', { name: 'Connect', exact: true }).isVisible() && !(await card(t, id).getByRole('button', { name: 'Use', exact: true }).count()), await card(t, id).innerText().catch(() => ''));
 			await card(t, id).getByRole('button', { name: 'Connect', exact: true }).click();
 			t.check('after Connect the card says "Signed in" and the sign-in is stored by the agent, not by Vader', await t.waitFor(async () => /Signed in/.test(await card(t, id).innerText().catch(() => '')) && fs.existsSync(authFile), 30_000), await card(t, id).innerText().catch(() => ''));

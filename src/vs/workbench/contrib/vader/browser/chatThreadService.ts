@@ -69,6 +69,7 @@ import { withResolvedPaths } from '../common/policy/realPaths.js';
 import { IAgentsService, agentScopeVerdict } from '../common/agents/agentsService.js';
 import { addToLedger, addTurnToThreadUsage, budgetState, priceTurn, dayKey, DayTotals, parseLedger, spentOn, ThreadUsage, TokenUsage, UsageLedger } from '../common/usageAccounting.js';
 import { groupThreadsByProject, ProjectGroup, projectKeyOf } from '../common/threadProjects.js';
+import { reusableProjectDraft } from '../common/projectPickerModel.js';
 import { changedFilesSinceLastUserMessage, deriveThreadStatus, endsWithToolRequest, ThreadStatus } from '../common/threadStatus.js';
 import { enqueue, QueuedMessage, queueIsFull, removeQueued, RunSnapshot, shouldSendQueued, StoppedRun, stoppedWhile, takeNext } from '../common/runStateModel.js';
 import { ApprovalKind, ApprovalSubject, EMPTY_APPROVAL_STATE, isApproved, listApprovals, parseApprovalState, ProjectApprovalState, withApproval, withoutApproval } from '../common/policy/projectApprovals.js';
@@ -288,6 +289,9 @@ export type ThreadType = {
 		currCheckpointIdx: number | null; // the latest checkpoint we're at (null if not at a particular checkpoint, like if the chat is streaming, or chat just finished and we haven't clicked on a checkpt)
 
 		stagingSelections: StagingSelectionItem[];
+		/** Optional draft attachments; old saved threads have neither. */
+		composerAttachments?: { id: string; text: string; title?: string; label?: string }[];
+		composerImages?: ChatImage[];
 		focusedMessageIdx: number | undefined; // index of the user message that is being edited (undefined if none)
 
 		linksOfMessageIdx: { // eg. link = linksOfMessageIdx[4]['RangeFunction']
@@ -336,7 +340,10 @@ export type IsRunningType =
 	| undefined
 
 export type ThreadStreamState = {
-	[threadId: string]: undefined | {
+	[threadId: string]: undefined | ({
+		/** Transient service-owned preparation, never persisted with thread history. */
+		isPreparing?: boolean;
+	} & ({
 		isRunning: undefined;
 		error?: { message: string, fullError: Error | null, };
 		llmInfo?: undefined;
@@ -377,7 +384,7 @@ export type ThreadStreamState = {
 		llmInfo?: undefined;
 		toolInfo?: undefined;
 		interrupt: 'not_needed' | Promise<() => void>; // calling this should have no effect on state - would be too confusing. it just cancels the tool
-	}
+	}))
 }
 
 const newThreadObject = (projectFolders?: string[]) => {
@@ -453,6 +460,7 @@ export interface IChatThreadService {
 	setCurrentMessageState: (messageIdx: number, newState: Partial<UserMessageState>) => void
 	getCurrentThreadState: () => ThreadType['state']
 	setCurrentThreadState: (newState: Partial<ThreadType['state']>) => void
+	setThreadComposerState(threadId: string, state: Pick<Partial<ThreadType['state']>, 'stagingSelections' | 'composerAttachments' | 'composerImages'>): void;
 
 	// you can edit multiple messages - the one you're currently editing is "focused", and we add items to that one when you press cmd+L.
 	getCurrentFocusedMessageIdx(): number | undefined;
@@ -552,6 +560,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 	readonly onDidChangeStreamState: Event<{ threadId: string }> = this._onDidChangeStreamState.event;
 
 	readonly streamState: ThreadStreamState = {}
+	private readonly _preparingThreads = new Set<string>()
 	state: ThreadsState // allThreads is persisted, currentThread is not
 
 	// used in checkpointing
@@ -741,8 +750,30 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 	private _setStreamState(threadId: string, state: ThreadStreamState[string]) {
-		this.streamState[threadId] = state
+		// Stream updates (including cancellation/error dismissal) must not release a
+		// preparation owned by the service while the conversation UI is unmounted.
+		this.streamState[threadId] = this._preparingThreads.has(threadId)
+			? { ...(state ?? { isRunning: undefined }), isPreparing: true }
+			: state
 		this._onDidChangeStreamState.fire({ threadId })
+	}
+
+	private async _withThreadPreparation<T>(threadId: string, prepare: () => Promise<T>): Promise<T> {
+		if (this._preparingThreads.has(threadId)) throw new Error('A message is already being prepared for this chat. Wait for it to finish.')
+		this._preparingThreads.add(threadId)
+		try {
+			this._setStreamState(threadId, this.streamState[threadId])
+			return await prepare()
+		} finally {
+			this._preparingThreads.delete(threadId)
+			// Use the latest state, never the snapshot from before preparation: a run
+			// may already be streaming or may have published its own error/checkpoint.
+			const current = this.streamState[threadId]
+			if (current) {
+				const { isPreparing, ...state } = current
+				this._setStreamState(threadId, state.isRunning === undefined && !state.error ? undefined : state)
+			}
+		}
 	}
 
 	// Vader addition: a plain method call (as opposed to a repeated inline property access)
@@ -944,7 +975,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		if (!thread || JSON.stringify(thread.projectFolders ?? []) === JSON.stringify(folders)) return
 		const { projectFolders: _old, ...rest } = thread
 		const updated: ThreadType = folders.length ? { ...rest, projectFolders: folders } : rest
-		this._setState({ allThreads: { ...this.state.allThreads, [threadId]: updated } }, true)
+		const allThreads = { ...this.state.allThreads, [threadId]: updated }
+		this._storeAllThreads(allThreads)
+		this._setState({ allThreads }, true)
 	}
 
 	listProjectGroups(): ProjectGroup[] {
@@ -2574,59 +2607,89 @@ We only need to do it for files that were edited since `from`, ie files between 
 
 
 	async addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images }: { userMessage: string, _chatSelections?: StagingSelectionItem[], threadId: string, images?: ChatImage[] }) {
-		const thread = this.state.allThreads[threadId];
-		if (!thread) return
+		return this._withThreadPreparation(threadId, async () => {
+			const thread = this.state.allThreads[threadId];
+			if (!thread) return
 
-		// if there's a current checkpoint, delete all messages after it
-		if (thread.state.currCheckpointIdx !== null) {
-			const checkpointIdx = thread.state.currCheckpointIdx;
-			const newMessages = thread.messages.slice(0, checkpointIdx + 1);
+			// if there's a current checkpoint, delete all messages after it
+			if (thread.state.currCheckpointIdx !== null) {
+				const checkpointIdx = thread.state.currCheckpointIdx;
+				const newMessages = thread.messages.slice(0, checkpointIdx + 1);
 
-			// Update the thread with truncated messages
-			const newThreads = {
-				...this.state.allThreads,
-				[threadId]: {
-					...thread,
-					lastModified: new Date().toISOString(),
-					messages: newMessages,
-				}
-			};
-			this._storeAllThreads(newThreads);
-			this._setState({ allThreads: newThreads });
-		}
+				// Update the thread with truncated messages
+				const newThreads = {
+					...this.state.allThreads,
+					[threadId]: {
+						...thread,
+						lastModified: new Date().toISOString(),
+						messages: newMessages,
+					}
+				};
+				this._storeAllThreads(newThreads);
+				this._setState({ allThreads: newThreads });
+			}
 
-		// Now call the original method to add the user message and stream the response
-		await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images });
+			// Now call the original method to add the user message and stream the response
+			await this._addUserMessageAndStreamResponse({ userMessage, _chatSelections, threadId, images });
 
+		})
 	}
 
 	editUserMessageAndStreamResponse: IChatThreadService['editUserMessageAndStreamResponse'] = async ({ userMessage, messageIdx, threadId }) => {
+		return this._withThreadPreparation(threadId, async () => {
 
-		const thread = this.state.allThreads[threadId]
-		if (!thread) return // should never happen
+			let thread = this.state.allThreads[threadId]
+			if (!thread) throw new Error('This conversation is no longer available.')
+			const originalMessage = thread.messages[messageIdx]
+			if (originalMessage?.role !== 'user') {
+				throw new Error(`Error: editing a message with role !=='user'`)
+			}
 
-		if (thread.messages?.[messageIdx]?.role !== 'user') {
-			throw new Error(`Error: editing a message with role !=='user'`)
-		}
+			// Preserve the existing cancel-before-revise behavior, including any checkpoint
+			// it records for work already executed. Never roll those changes back on failure.
+			if (this.streamState[threadId]?.isRunning !== undefined) await this.abortRunning(threadId)
+			thread = this.state.allThreads[threadId]
+			if (!thread || thread.messages[messageIdx] !== originalMessage) throw new Error('This message changed. Try again.')
+			const originalHistory = thread.messages
+			const currSelns = originalMessage.state.stagingSelections || []
+			const keptImages = originalMessage.images
 
-		// get prev and curr selections before clearing the message
-		const currSelns = thread.messages[messageIdx].state.stagingSelections || [] // staging selections for the edited message
-		const keptImages = (thread.messages[messageIdx] as { images?: ChatImage[] }).images // what was sent with it goes again
+			// Unlike a new turn, revision must keep the old message/editor mounted until
+			// preparation succeeds. _addUserMessageAndStreamResponse prepares after history
+			// is truncated, so use its same preparation here before publishing a replacement.
+			// Rejections propagate to the gateway; no recovery path rewinds executed work.
+			const content = await chat_userMessageContent(userMessage, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService })
+			const usedSkills = selectSkills(this._skillService.listActive().map(s => ({ id: s.id, name: s.name, description: s.description })), userMessage).used.map(toUsed)
+			// Model resolution can persist metadata. Reject stale preparation before that
+			// side effect as well as before the history commit.
+			if (this.state.allThreads[threadId]?.messages !== originalHistory) throw new Error('This message changed. Try again.')
+			if (this.streamState[threadId]?.isRunning !== undefined) throw new Error('Wait for the current reply to finish.')
+			const modelProps = this._currentModelSelectionProps(threadId)
+			const current = this.state.allThreads[threadId]
+			if (!current || current.messages !== originalHistory) throw new Error('This message changed. Try again.')
+			if (this.streamState[threadId]?.isRunning !== undefined) throw new Error('Wait for the current reply to finish.')
 
-		// clear messages up to the index
-		const slicedMessages = thread.messages.slice(0, messageIdx)
-		this._setState({
-			allThreads: {
+			const messages = originalHistory.slice(0, messageIdx)
+			// Match the initial empty checkpoint added by the new-turn path for old chats
+			// whose first user message has no preceding checkpoint.
+			if (messages.length === 0) messages.push({ role: 'checkpoint', type: 'user_edit', vaderFileSnapshotOfURI: {}, userModifications: { vaderFileSnapshotOfURI: {} } })
+			messages.push({ role: 'user', content, displayContent: userMessage, selections: currSelns, state: defaultMessageState,
+				...(keptImages?.length ? { images: keptImages } : {}), ...(usedSkills.length ? { skillsUsed: usedSkills } : {}) })
+			const newThreads = {
 				...this.state.allThreads,
-				[thread.id]: {
-					...thread,
-					messages: slicedMessages
+				[threadId]: {
+					...current, messages, lastModified: new Date().toISOString(), stopped: undefined,
+					state: { ...current.state, currCheckpointIdx: null },
 				}
 			}
-		})
+			this._storeAllThreads(newThreads)
+			this._setState({ allThreads: newThreads })
 
-		// re-add the message and stream it
-		this._addUserMessageAndStreamResponse({ userMessage, _chatSelections: currSelns, threadId, images: keptImages })
+			// Preparation is awaited, execution is not: the existing runtime owns streaming
+			// errors/checkpoints, and callers may close their editor once this turn is accepted.
+			this._wrapRunAgentToNotify(this._runChatAgent({ threadId, ...modelProps }), threadId)
+			this.state.allThreads[threadId]?.state.mountedInfo?.whenMounted.then(m => { m.scrollToBottom() })
+		})
 	}
 
 	// ---------- the rest ----------
@@ -2935,7 +2998,7 @@ We only need to do it for files that were edited since `from`, ie files between 
 		// if a thread with 0 messages already exists, switch to it
 		const { allThreads: currentThreads } = this.state
 		for (const threadId in currentThreads) {
-			if (currentThreads[threadId]!.messages.length === 0) {
+			if (reusableProjectDraft(currentThreads[threadId]!) && !currentThreads[threadId]!.state.composerAttachments?.length && !currentThreads[threadId]!.state.composerImages?.length) {
 				// switch to the existing empty thread and exit (it belongs to the project that is open now)
 				this._adoptCurrentProject(threadId)
 				this.switchToThread(threadId)
@@ -3277,6 +3340,13 @@ We only need to do it for files that were edited since `from`, ie files between 
 	}
 	setCurrentThreadState = (newState: Partial<ThreadType['state']>) => {
 		this._setThreadState(this.state.currentThreadId, newState)
+		if ('stagingSelections' in newState) this._storeAllThreads(this.state.allThreads)
+	}
+
+	setThreadComposerState(threadId: string, state: Pick<Partial<ThreadType['state']>, 'stagingSelections' | 'composerAttachments' | 'composerImages'>): void {
+		if (!this.state.allThreads[threadId]) return;
+		this._setThreadState(threadId, state, true);
+		this._storeAllThreads(this.state.allThreads);
 	}
 
 	// gets `staging` and `setStaging` of the currently focused element, given the index of the currently selected message (or undefined if no message is selected)

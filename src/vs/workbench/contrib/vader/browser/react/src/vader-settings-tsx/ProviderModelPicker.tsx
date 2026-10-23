@@ -6,7 +6,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useFloating, autoUpdate, offset, flip, shift, size } from '@floating-ui/react'
 import { ProviderLogo } from '../util/ProviderLogo.js'
 import { ProviderName } from '../../../../common/vaderSettingsTypes.js'
-import { PickerOption, pickerLayout, showSearchBox, groupByProvider, noMatchWords, addableLine, agoWords, friendlyModelName } from '../../../../common/modelPickerGroups.js'
+import { PickerOption, pickerLayout, showSearchBox, groupByProvider, noMatchWords, addableLine, agoWords, friendlyModelName, compactModelName } from '../../../../common/modelPickerGroups.js'
 
 // The model picker of the chat box (boards S04 and R06). One provider with a key: its live list of models. Several providers: the providers (logo, name, how many
 // models), and a click on one opens its models. A search box appears when there are many models and finds across all providers. The states the boards show are
@@ -205,16 +205,16 @@ export const ProviderModelPicker = <S,>({ options, selected, onChange, className
 	const singleState = single ? stateOf(single.providerName) : undefined
 
 	return (
-		<div className={`inline-block relative ${className}`}>
+		<div className={`inline-block relative ${className}`} style={{ minWidth: 0, maxWidth: 340 }}>
 			<button
 				type='button' ref={refs.setReference} data-testid='vader-picker-button'
 				aria-haspopup='listbox' aria-expanded={isOpen}
 				title={`${selectedOption.modelName} (${selectedOption.providerTitle})`}
-				className='flex items-center gap-1 h-4 bg-transparent whitespace-nowrap hover:brightness-90 max-w-full'
+				className='flex items-center gap-1 h-7 px-1.5 rounded-md bg-transparent whitespace-nowrap hover:bg-vader-bg-2-hover max-w-full'
 				onClick={() => setIsOpen(!isOpen)}
 			>
 				<ProviderLogo providerName={selectedOption.providerName as ProviderName} size={12} />
-				<span className='truncate'>{friendlyModelName(selectedOption.providerName, selectedOption.modelName).text}</span>
+				<span className='text-vader-fg-3 flex-none'>{selectedOption.providerTitle}</span><span className='text-vader-fg-3' aria-hidden='true'>·</span><span className='truncate' data-testid='vader-picker-caption'>{compactModelName(selectedOption.providerName, selectedOption.modelName)}</span>
 				<Caret />
 			</button>
 

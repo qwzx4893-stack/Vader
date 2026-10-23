@@ -73,6 +73,8 @@ check('a list is asked for again after ten minutes, never before', !G.listIsStal
 check('Anthropic ids read as names, other ids are left as written', G.friendlyModelName('anthropic', 'claude-sonnet-4-5').text === 'Claude Sonnet 4.5' && G.friendlyModelName('anthropic', 'claude-3-5-haiku-20241022').text === 'Claude Haiku 3.5' && G.friendlyModelName('anthropic', 'claude-opus-4-1').text === 'Claude Opus 4.1' && G.friendlyModelName('openRouter', 'deepseek/deepseek-v3.2').mono === true && G.friendlyModelName('anthropic', 'something-else').text === 'something-else');
 
 // ---- how the picker is wired (static checks)
+check('a long routed model has a compact caption without changing its id', G.compactModelName('openRouter', 'nvidia/nemotron-3-super-120b-a12b:free') === 'NVIDIA Nemotron 3 Super');
+check('compact names preserve family versions and do not alter full catalogue names', G.compactModelName('anthropic', 'claude-sonnet-4-5') === 'Claude Sonnet 4.5' && G.friendlyModelName('openRouter', 'nvidia/nemotron-3-super-120b-a12b:free').text === 'nvidia/nemotron-3-super-120b-a12b:free');
 const read = (rel) => fs.readFileSync(path.join(here, rel), 'utf8');
 const picker = read('../browser/react/src/vader-settings-tsx/ProviderModelPicker.tsx'), dropdown = read('../browser/react/src/vader-settings-tsx/ModelDropdown.tsx');
 check('the dropdown for every feature uses the new picker', /<ProviderModelPicker/.test(dropdown) && !/<VaderCustomDropdownBox/.test(dropdown));

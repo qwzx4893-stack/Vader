@@ -17,14 +17,15 @@ import { IDialogService } from '../../../../../platform/dialogs/common/dialogs.j
 import { IStorageService, StorageScope, StorageTarget } from '../../../../../platform/storage/common/storage.js';
 import { IWorkspaceContextService } from '../../../../../platform/workspace/common/workspace.js';
 import { IVaderSettingsService } from '../../common/vaderSettingsService.js';
-import { distributionOf, ExternalAgentDef, externalAgentById } from '../../common/externalAgents/externalAgentCatalog.js';
-import { AgentConfigOption, CustomAcpAgent, ExternalAgentStatus, IExternalAgentMainService, ProbeResult } from '../../common/externalAgents/externalAgentTypes.js';
+import { ExternalAgentDef, externalAgentById } from '../../common/externalAgents/externalAgentCatalog.js';
+import { AgentConfigOption, CustomAcpAgent, ExternalAgentInstallPlan, ExternalAgentStatus, IExternalAgentMainService, ProbeResult } from '../../common/externalAgents/externalAgentTypes.js';
 import { ITerminalToolService } from '../terminalToolService.js';
 
 /** whether an agent is signed in with the vendor: `checking` while it is being asked, `unknown` when it could not be asked */
 export type SignInState = { readonly state: 'checking' | 'in' | 'out' | 'unknown', readonly canSignOut?: boolean, readonly error?: string }
 
 export type ExternalAgentsState = {
+	readonly registry?: { readonly checking: boolean, readonly checkedAt?: number, readonly error?: string };
 	readonly statuses: { readonly [id: string]: ExternalAgentStatus | undefined }
 	/** what is happening to an agent right now ("Downloading... 40%", "Connecting..."), by id */
 	readonly busy: { readonly [id: string]: string | undefined }
@@ -59,7 +60,7 @@ export interface IExternalAgentsService {
 	openInTerminal(agentId: string): Promise<void>;
 	/** an ACP agent asked for its sign-in to run in a terminal */
 	openSignInTerminal(name: string, command: string, args: readonly string[], env: { readonly [k: string]: string }): Promise<void>;
-	checkRegistry(): Promise<string[]>;
+	checkRegistry(force?: boolean): Promise<string[]>;
 	/** after asking (the program runs with the person's rights): adds an agent given by hand */
 	addCustomAgent(agent: Omit<CustomAcpAgent, 'id'>): Promise<boolean>;
 	removeCustomAgent(id: string): void;
@@ -86,6 +87,7 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 
 	state: ExternalAgentsState = { statuses: {}, busy: {}, errors: {}, probes: {}, signIn: {}, configOfThread: {}, opened: {} };
 	private _refreshing: Promise<void> | undefined
+	private _checkingRegistry: Promise<string[]> | undefined
 	private readonly _installPolls = this._register(new DisposableMap<string, RunOnceScheduler>())
 	private readonly _connecting = new Set<string>()
 
@@ -152,20 +154,32 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	}
 
 	private async _checkSignIn(id: string): Promise<boolean> {
+		this._patch('signIn', id, { state: 'checking' })
 		try {
 			const r = await this._main.checkSignIn(id, this.customAgents().find(c => c.id === id))
 			this._patch('signIn', id, r.error ? { state: 'unknown', error: r.error } : { state: r.signedIn ? 'in' : 'out', canSignOut: r.canSignOut })
-			return r.signedIn
+			return !r.error && r.signedIn
 		} catch (e) {
 			this._patch('signIn', id, { state: 'unknown', error: messageOf(e) })
 			return false
 		}
 	}
 
-	async checkRegistry(): Promise<string[]> {
-		const { updated } = await this._main.checkRegistry()
-		await this.refresh()
-		return [...updated]
+	checkRegistry(force = true): Promise<string[]> {
+		if (this._checkingRegistry) return this._checkingRegistry
+		this.state = { ...this.state, registry: { ...this.state.registry, checking: true, error: undefined } }; this._onDidChange.fire()
+		this._checkingRegistry = Promise.resolve().then(async () => {
+			try {
+				const { updated, checkedAt, warning } = await this._main.checkRegistry(force)
+				await this.refresh()
+				this.state = { ...this.state, registry: { checking: false, checkedAt: checkedAt ?? Date.now(), error: warning } }
+				return [...updated]
+			} catch (e) {
+				this.state = { ...this.state, registry: { ...this.state.registry, checking: false, error: messageOf(e) } }
+				throw e
+			} finally { this._checkingRegistry = undefined; this._onDidChange.fire() }
+		})
+		return this._checkingRegistry
 	}
 
 	private _waitUntilReady(def: ExternalAgentDef, busyText: string) {
@@ -184,15 +198,13 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	}
 
 	/** what installing an ACP agent does, in words, for the question asked before it happens */
-	private _describeAcpInstall(def: ExternalAgentDef): string {
-		const dist = distributionOf(def)
-		if (dist?.distribution.npx) {
-			return `Vader will install the npm package ${dist.distribution.npx.package} (from the npm registry, without running any install scripts) into its own folder ~/.vader-editor/agents/${def.id}/. Nothing outside that folder is changed.`
+	private _describeAcpInstall(def: ExternalAgentDef, plan: ExternalAgentInstallPlan): string {
+		if (plan.package) {
+			return `Vader will install the npm package ${plan.package} (from the npm registry, without running any install scripts) into its own folder ~/.vader-editor/agents/${def.id}/. Nothing outside that folder is changed.`
 		}
-		const first = Object.values(dist?.distribution.binary ?? {})[0]
 		let host = 'the vendor'
-		try { host = new URL(first?.archive ?? '').hostname } catch { /* keep the generic name */ }
-		return `Vader will download ${def.name} version ${dist?.version ?? ''} from ${host} into its own folder ~/.vader-editor/agents/${def.id}/. ${first?.sha256 ? 'The file is checked against the checksum published in the ACP agent registry.' : `The registry publishes no checksum for it, so the download is protected only by the secure connection to ${host}.`}`
+		try { host = new URL(plan.archive ?? '').hostname } catch { /* keep the generic name */ }
+		return `Vader will download ${def.name} version ${plan.version} from ${host} into its own folder ~/.vader-editor/agents/${def.id}/. ${plan.sha256 ? 'The file is checked against the checksum published in the ACP agent registry.' : `The registry publishes no checksum for it, so the download is protected only by the secure connection to ${host}.`}`
 	}
 
 	async install(agentId: string): Promise<void> {
@@ -201,16 +213,19 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 		this._patch('errors', agentId, undefined)
 		try {
 			if (def.kind === 'acp') {
+				this._patch('busy', agentId, 'Checking the latest release...')
+				const plan = await this._main.getInstallPlan(agentId)
 				const isUpdate = !!this.state.statuses[agentId]?.latestVersion
 				const { confirmed } = await this._dialogs.confirm({
+					custom: true,
 					title: `${isUpdate ? 'Update' : 'Install'} ${def.name}`,
-					message: this._describeAcpInstall(def),
-					detail: `Source: ${def.website}\nThe program only runs when you send it a message in the chat.`,
+					message: `${isUpdate ? 'Update' : 'Install'} ${def.name} in Vader?`,
+					detail: `${plan.registryWarning ? plan.registryWarning + '\n\n' : ''}${this._describeAcpInstall(def, plan)}\n\nYou sign in through the agent using your own account. The program runs when you connect, test its connection, or send it a message.\n\nSource: ${def.website}`,
 					primaryButton: isUpdate ? 'Update' : 'Install',
 				})
-				if (!confirmed) { return }
+				if (!confirmed) { this._patch('busy', agentId, undefined); return }
 				this._patch('busy', agentId, 'Starting...')
-				await this._main.install(agentId)
+				await this._main.install(agentId, plan.fingerprint)
 				await this.refresh()
 				this._patch('busy', agentId, undefined)
 				return
@@ -220,16 +235,22 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 				throw new Error(`${def.name} is installed with npm, so Node.js has to be installed first (https://nodejs.org).`)
 			}
 			const command = isWindows ? spec.install.windows : spec.install.posix
+			const isUpdate = this.state.statuses[agentId]?.state === 'ready'
 			const { confirmed } = await this._dialogs.confirm({
-				title: `Install ${def.name}`,
+				custom: true,
+				title: `${isUpdate ? 'Update' : 'Install'} ${def.name}`,
 				message: `Vader will run the vendor's own installer in a terminal, so you can watch every line:`,
 				detail: `${command}\n\nSource: ${def.website}`,
-				primaryButton: 'Install',
+				primaryButton: isUpdate ? 'Update' : 'Install',
 			})
 			if (!confirmed) { return }
+			const name = `${isUpdate ? 'Update' : 'Install'} ${def.name}`
 			await this._terminals.openProgramTerminal(isWindows
-				? { name: `Install ${def.name}`, cwd: null, executable: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command] }
-				: { name: `Install ${def.name}`, cwd: null, executable: '/bin/sh', args: ['-c', command] })
+				? { name, cwd: null, executable: 'powershell.exe', args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command] }
+				: { name, cwd: null, executable: '/bin/sh', args: ['-c', command] })
+			// An already installed program is not evidence that this terminal's update
+			// completed. Its own terminal reports completion; never infer it from PATH.
+			if (isUpdate) return
 			this._waitUntilReady(def, 'Installing in the terminal...')
 			return
 		} catch (e) {
@@ -254,14 +275,25 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 		await this.refresh()
 	}
 
+	private _isReady(agentId: string): boolean { return this.state.statuses[agentId]?.state === 'ready' }
+
 	async connect(agentId: string): Promise<void> {
-		if (this._connecting.has(agentId) || this._store.isDisposed) return
+		if (this.state.busy[agentId] || this._connecting.has(agentId) || this._store.isDisposed) return
 		this._connecting.add(agentId)
 		this._patch('errors', agentId, undefined)
 		this._patch('busy', agentId, 'Connecting...')
 		try {
+			const def = externalAgentById(agentId)
+			if (def?.acp && !this._isReady(agentId)) {
+				// The vendor's authentication protocol is implemented by its program.
+				// Obtain it only after the existing installation consent, then continue
+				// into its own sign-in flow. Cancellation is not a successful connection.
+				await this.install(agentId)
+				if (this._store.isDisposed || !this._isReady(agentId)) return
+				this._patch('busy', agentId, 'Connecting...')
+			}
 			const result = await this._main.connect(agentId, this.customAgents().find(c => c.id === agentId))
-			if (result.error) { this._patch('errors', agentId, result.error); this._patch('signIn', agentId, { state: 'out', canSignOut: result.canSignOut }) }
+			if (result.error) { this._patch('errors', agentId, result.error); this._patch('signIn', agentId, { state: 'unknown', error: result.error }) }
 			else if (result.signedIn) { this._patch('signIn', agentId, { state: 'in', canSignOut: result.canSignOut }) }
 			else if (result.inTerminal) {
 				// the login runs in the terminal that just opened: the card turns to "Connected" by itself when it is done
@@ -272,15 +304,18 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 					if (this._store.isDisposed) break
 					if (await this._checkSignIn(agentId)) { break }
 				}
-			}
+			} else { this._patch('signIn', agentId, { state: 'out', canSignOut: result.canSignOut }) }
 		} catch (e) {
 			this._patch('errors', agentId, messageOf(e))
+			this._patch('signIn', agentId, { state: 'unknown', error: messageOf(e) })
+		} finally {
+			this._patch('busy', agentId, undefined)
+			this._connecting.delete(agentId)
 		}
-		this._patch('busy', agentId, undefined)
-		this._connecting.delete(agentId)
 	}
 
 	async signOut(agentId: string): Promise<void> {
+		if (this.state.busy[agentId] || this._store.isDisposed) return
 		this._patch('errors', agentId, undefined)
 		this._patch('busy', agentId, 'Signing out...')
 		try {
@@ -293,15 +328,20 @@ class ExternalAgentsService extends Disposable implements IExternalAgentsService
 	}
 
 	async testConnection(agentId: string): Promise<void> {
+		if (this.state.busy[agentId] || this._store.isDisposed) return
 		this._patch('errors', agentId, undefined)
 		this._patch('busy', agentId, 'Testing...')
 		try {
 			const custom = this.customAgents().find(c => c.id === agentId)
-			this._patch('probes', agentId, await this._main.probe(agentId, custom))
+			const probe = await this._main.probe(agentId, custom)
+			this._patch('probes', agentId, probe)
+			// Explicitly requested, unlike inventory refresh: ask whether a session can start.
+			if (probe.ok) { await this._checkSignIn(agentId) }
+			else { this._patch('signIn', agentId, { state: 'unknown', error: probe.error }) }
 		} catch (e) {
 			this._patch('probes', agentId, { ok: false, error: messageOf(e) })
-		}
-		this._patch('busy', agentId, undefined)
+			this._patch('signIn', agentId, { state: 'unknown', error: messageOf(e) })
+		} finally { this._patch('busy', agentId, undefined) }
 	}
 
 	async openInTerminal(agentId: string): Promise<void> {

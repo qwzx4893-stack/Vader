@@ -9,7 +9,6 @@ import ErrorBoundary from '../sidebar-tsx/ErrorBoundary.js'
 import type { ConversationTab } from '../../../vaderShellService.js'
 import { Icon } from './icons.js'
 import { chatToMarkdown, exportFileName } from '../../../../common/chatExport.js'
-import { friendlyModelName } from '../../../../common/modelPickerGroups.js'
 import { useShellData } from './useShellData.js'
 import { ReviewView } from './ReviewView.js'
 import { BrowserView } from './BrowserView.js'
@@ -26,7 +25,7 @@ export const ChatEmbed = () => {
 	const isDark = useIsDark()
 	return <div className='@@vader-scope' style={{ height: '100%', width: '100%' }}>
 		<div className={isDark ? 'dark' : ''} style={{ height: '100%', width: '100%', display: 'flex', justifyContent: 'center' }}>
-			<div className='bg-vader-bg-2 text-vader-fg-1' style={{ width: '100%', maxWidth: 780, height: '100%' }} data-testid='vader-shell-chat'>
+			<div className='bg-vader-bg-2 text-vader-fg-1' style={{ width: '100%', maxWidth: 975, height: '100%' }} data-testid='vader-shell-chat'>
 				<ErrorBoundary><SidebarChat /></ErrorBoundary>
 			</div>
 		</div>
@@ -57,9 +56,6 @@ export const ConversationPage = () => {
 	const data = useShellData()
 	const cur = data.all.find(t => t.id === data.currentId)
 	const pause = cur ? chat.getPause(cur.id) : undefined
-	// the model that did this conversation's work; for one that has not run yet, the one chosen now
-	const sel = cur?.model ?? settingsState.modelSelectionOfFeature?.Chat
-	const model = sel ? friendlyModelName(sel.providerName, sel.modelName).text : undefined
 	const isTask = !!cur?.isTask
 	const mode = settingsState.globalSettings.chatMode
 	// looking back through a chat: its name, a file of it, deleting it
@@ -87,7 +83,7 @@ export const ConversationPage = () => {
 			{isTask || !cur ? <>
 				{title()}
 				{cur?.copy?.branch ? <span className='mo t3 tr narrow-hide' title='The branch this task works on' data-testid='vader-shell-conversation-branch'>{cur.copy.branch}</span> : null}
-				{model ? <span className='t3 tr narrow-hide'>{model}</span> : null}
+				{data.currentProjectKey ? <span className='r t3 tr narrow-hide' style={{ gap: 6 }} data-testid='vader-shell-conversation-project'><Icon k='folder' small />{data.currentProjectName}</span> : null}
 			</> : <>
 				<span className='r t3 narrow-hide' style={{ gap: 8 }}><Icon k='folder' /><span>{data.currentProjectName}</span></span>
 				<span className='t3 narrow-hide'>/</span>

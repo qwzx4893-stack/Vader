@@ -14,6 +14,7 @@ export function makeWorld(P, fixture) {
 		searchSkillsMp: async (q) => { calls.skillsMp.push(q); return P.parseSkillsMp(fixture('skillsmp-search.json')); },
 		searchSmitherySkills: async (q) => { calls.smitherySkills.push(q); return P.parseSmitherySkills(fixture('smithery-skills.json')); },
 		searchSkillNet: async () => [{ name: 'pdf-tools', description: 'PDF helper', repositoryUrl: 'https://github.com/anymouschina/pdf-skill', stars: 301 }],
+		querySkillNet: async () => [{ name: 'pdf-tools', description: 'PDF helper', repositoryUrl: 'https://github.com/anymouschina/pdf-skill', stars: 301 }],
 		searchGithubTopic: async (topic, q) => { calls.topic.push([topic, q]); return P.parseGithubSearch(fixture('github-topic-search.json')); },
 		getRepoSignals: async (r) => repoSignals(r),
 		getNpmInfo: async () => ({ installScripts: false, deprecated: false, license: 'MIT' }),

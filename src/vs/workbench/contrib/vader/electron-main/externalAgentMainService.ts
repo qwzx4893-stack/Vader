@@ -36,7 +36,7 @@ import {
 } from '../common/externalAgents/externalAgentCatalog.js';
 import { acpRegistrySnapshot, RegistryDistribution } from '../common/externalAgents/acpRegistrySnapshot.js';
 import {
-	AgentConfigOption, CustomAcpAgent, ExternalAgentEvent, ExternalAgentStatus, IExternalAgentMainService, PermissionOption, ProbeResult, RunTurnParams, SignInResult
+	AgentConfigOption, CustomAcpAgent, ExternalAgentEvent, ExternalAgentInstallPlan, ExternalAgentStatus, IExternalAgentMainService, PermissionOption, ProbeResult, RunTurnParams, SignInResult
 } from '../common/externalAgents/externalAgentTypes.js';
 import { chooseAuthMethod, flattenConfigOptions, isAuthRequiredError, modesAsConfigOption, npmBinScript, pathsOfToolCall } from '../common/externalAgents/externalAgentProtocol.js';
 
@@ -149,12 +149,17 @@ export const acceptRegistryDocument = (doc: unknown): LiveRegistry => {
 		if (!def || typeof a.version !== 'string' || !/^\d+(\.\d+){1,3}$/.test(a.version) || !a.distribution) { continue }
 		const d = a.distribution
 		let ok = true
-		if (d.npx) { ok = ok && isPlainSpec(d.npx.package) && (d.npx.args ?? []).every(isPlainSpec) }
+		if (d.npx) {
+			const pinned = acpRegistrySnapshot[def.acp!.registryId]?.distribution.npx
+			const spec = typeof d.npx.package === 'string' ? splitPackageSpec(d.npx.package) : undefined
+			ok = ok && !!pinned && !!spec && spec.name === splitPackageSpec(pinned.package).name && spec.version === a.version
+				&& isPlainSpec(d.npx.package) && (d.npx.args === undefined || Array.isArray(d.npx.args) && d.npx.args.every(x => typeof x === 'string' && isPlainSpec(x)))
+		}
 		if (d.binary) {
 			for (const [key, t] of Object.entries(d.binary)) {
 				const valid = /^(darwin|linux|windows)-(aarch64|x86_64)$/.test(key) && typeof t?.archive === 'string' && isAllowedArchiveUrl(t.archive, def.acp!.archivePrefixes)
 					&& typeof t.cmd === 'string' && isSafeRelativePath(t.cmd) && (t.sha256 === undefined || /^[0-9a-fA-F]{64}$/.test(t.sha256))
-					&& (t.args ?? []).every(x => typeof x === 'string' && x.length < 200 && !x.includes('\0'))
+					&& (t.args === undefined || Array.isArray(t.args) && t.args.every(x => typeof x === 'string' && x.length < 200 && !x.includes('\0')))
 				ok = ok && valid
 			}
 		}
@@ -184,6 +189,10 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	private _disposed = false
 	private readonly _pendingPermissions = new Map<string, { sessionKey: string, resolve: (optionId: string | null) => void }>()
 	private _live: LiveRegistry | undefined
+	private _registryCheckedAt: number | undefined
+	private _registryRequest: Promise<{ updated: string[], checkedAt: number, warning?: string }> | undefined
+	private _registryCancellation: CancellationTokenSource | undefined
+	private _registryError: string | undefined
 	/** programs found on this computer and whether they answered the protocol, by path (and the file's modification time), so a settings page opening does not start them every time */
 	private readonly _localVerified = new Map<string, { ok: boolean, version?: string, at: number, mtime: number }>()
 
@@ -196,6 +205,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		;(sweep as unknown as { unref?: () => void }).unref?.() // the sweep alone must not keep the process alive
 		this._register({ dispose: () => {
 			this._disposed = true
+			this._registryCancellation?.cancel()
 			clearInterval(sweep)
 			for (const key of new Set([...this._sessions.keys(), ...this._openingOwners.keys()])) void this.closeSession(key)
 			for (const stop of this._ownedPrograms.values()) stop()
@@ -227,6 +237,7 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 	}
 
 	private _distributionOfDef(def: ExternalAgentDef) { return distributionOf(def, this._live) }
+	private _releaseFingerprint(def: ExternalAgentDef): string { return crypto.createHash('sha256').update(JSON.stringify(this._distributionOfDef(def))).digest('hex') }
 
 	/** the newest install of an agent that is complete on disk */
 	private async _installed(def: ExternalAgentDef): Promise<(InstallManifest & { dir: string }) | undefined> {
@@ -294,27 +305,71 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 		return out
 	}
 
-	async checkRegistry(): Promise<{ updated: string[] }> {
+	checkRegistry(force = false): Promise<{ updated: string[], checkedAt: number, warning?: string }> {
+		if (this._disposed) return Promise.reject(new Error('The agent service has closed.'))
+		if (this._registryRequest) return this._registryRequest
+		if (!force && !this._registryError && this._registryCheckedAt !== undefined && Date.now() - this._registryCheckedAt < 60 * 60_000) return this._registryResult()
+		this._registryRequest = this._readRegistry().finally(() => { this._registryRequest = undefined })
+		return this._registryRequest
+	}
+
+	private async _registryResult(): Promise<{ updated: string[], checkedAt: number, warning?: string }> {
+		const statuses = await this.getStatuses([])
+		const missing = externalAgentCatalog.filter(d => d.acp && !this._live?.[d.acp.registryId]).map(d => d.name)
+		return { updated: statuses.filter(s => s.source === 'vader' && !!s.latestVersion).map(s => externalAgentById(s.id)!.name), checkedAt: this._registryCheckedAt!, warning: missing.length ? `No compatible registry release was returned for: ${missing.join(', ')}. Saved releases are still available.` : undefined }
+	}
+
+	private async _readRegistry(): Promise<{ updated: string[], checkedAt: number, warning?: string }> {
 		const cts = new CancellationTokenSource()
+		this._registryCancellation = cts
 		const timer = setTimeout(() => cts.cancel(), 15_000)
 		try {
 			const context = await this._requestService.request({ type: 'GET', url: REGISTRY_URL, headers: { 'Accept': 'application/json' }, callSite: 'vaderExternalAgents.registry' }, cts.token)
 			if (!isSuccess(context)) { throw new Error(`The agent registry answered ${context.res.statusCode}.`) }
 			const live = acceptRegistryDocument(await asJson(context))
+			if (this._disposed || cts.token.isCancellationRequested) throw new Error('The release check was cancelled.')
+			if (!Object.keys(live).length) throw new Error('The agent registry returned no supported, valid releases. The saved versions remain available.')
 			this._live = live
-			return { updated: Object.entries(live).filter(([id, v]) => acpRegistrySnapshot[id]?.version !== v.version).map(([id]) => id) }
+			this._registryCheckedAt = Date.now()
+			this._registryError = undefined
+			return await this._registryResult()
+		} catch (e) {
+			this._registryError = e instanceof Error ? e.message : String(e)
+			throw e
 		} finally {
+			this._registryCancellation = undefined
 			clearTimeout(timer); cts.dispose()
 		}
 	}
 
 	private _progress(agentId: string, message: string) { this._emit({ sessionKey: `install:${agentId}`, type: 'status', message }) }
 
-	async install(agentId: string): Promise<ExternalAgentStatus> {
+	async getInstallPlan(agentId: string): Promise<ExternalAgentInstallPlan> {
+		if (this._disposed) throw new Error('The agent service has closed.')
+		const def = externalAgentById(agentId)
+		if (!def?.acp) throw new Error('This agent has no managed ACP download.')
+		let registryWarning: string | undefined
+		try { await this.checkRegistry() } catch (e) { registryWarning = `Could not check the latest release: ${e instanceof Error ? e.message : String(e)} Using saved release information.` }
+		if (this._disposed) throw new Error('The agent service has closed.')
+		if (!registryWarning && !this._live?.[def.acp.registryId]) registryWarning = 'The live registry has no compatible release for this agent. Using saved release information.'
+		const dist = this._distributionOfDef(def)
+		if (!dist) throw new Error(`No download is known for ${def.name}.`)
+		const fingerprint = this._releaseFingerprint(def)
+		if (dist.distribution.npx) return { version: dist.version, fingerprint, package: dist.distribution.npx.package, registryWarning }
+		const key = platformKeyOf(process.platform, process.arch)
+		const target = key ? dist.distribution.binary?.[key] : undefined
+		if (!target) throw new Error(`${def.name} has no download for this computer.`)
+		return { version: dist.version, fingerprint, archive: target.archive, sha256: target.sha256, registryWarning }
+	}
+
+	async install(agentId: string, expectedFingerprint?: string): Promise<ExternalAgentStatus> {
+		if (this._disposed) throw new Error('The agent service has closed.')
 		const def = externalAgentById(agentId)
 		if (!def || def.kind !== 'acp' || !def.acp) { throw new Error(`"${agentId}" is not an agent Vader downloads.`) }
 		const dist = this._distributionOfDef(def)
 		if (!dist) { throw new Error(`No download is known for ${def.name}.`) }
+		if (expectedFingerprint !== undefined && this._releaseFingerprint(def) !== expectedFingerprint) throw new Error('The available release changed after confirmation. Review the new version and try again.')
+		if ([...this._sessions.values()].some(s => s.agentId === agentId && !s.closed) || this._startingCount > 0) throw new Error('Stop the active agent tasks before installing an update.')
 		const existing = await this._installed(def)
 		if (existing && compareVersions(existing.version, dist.version) >= 0) { return { id: agentId, state: 'ready', source: 'vader', installedVersion: existing.version } }
 
@@ -502,7 +557,10 @@ export class ExternalAgentMainService extends Disposable implements IExternalAge
 			}),
 			exited,
 			new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error(`The agent did not answer within ${Math.round(timeoutMs / 1000)} seconds.`)), timeoutMs) }),
-		]).finally(() => clearTimeout(timer))
+		]).then(init => {
+			if (init.protocolVersion !== acp.PROTOCOL_VERSION) throw new Error(`This agent requires ACP ${init.protocolVersion}; Vader supports ACP ${acp.PROTOCOL_VERSION}. Update Vader before using this agent release.`)
+			return init
+		}).finally(() => clearTimeout(timer))
 	}
 
 	private async _probeSpec(key: string, spec: LaunchSpec, timeoutMs: number, owner?: OpeningOwner): Promise<ProbeResult> {

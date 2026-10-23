@@ -234,6 +234,11 @@ async function layoutProblems(page) {
 	const { page, errors } = await newPage(undefined, 'saved');
 	const rows = (await page.locator(TID('vader-saved-item')).allInnerTexts()).map(flat);
 	check('the saved agents are listed with what they do and what limits them', rows.length === 2 && rows[0].includes('Reviewer') && rows[0].includes('only src') && rows[1].includes('Release notes') && rows[1].includes('read only'), rows.join(' | '));
+	await page.waitForFunction(() =>
+		document.querySelector('[data-testid="vader-saved-name"]')?.value === 'Reviewer'
+		&& document.querySelector('[data-testid="vader-saved-folders"]')?.value === 'src/**'
+		&& document.querySelector('[data-testid="vader-saved-model"]')?.getAttribute('data-value') === 'anthropic/claude-sonnet-4-5',
+		undefined, { timeout: 5000 });
 	check('the first one is open in the form with its real values', (await page.locator(TID('vader-saved-name')).inputValue()) === 'Reviewer' && (await page.locator(TID('vader-saved-folders')).inputValue()) === 'src/**' && (await page.locator(TID('vader-saved-model')).getAttribute('data-value')) === 'anthropic/claude-sonnet-4-5');
 	check('what it may ask to do shows as ticks: not edit, yes commands', (await page.locator(`${TID('vader-saved-allow-edits')}[aria-checked=false]`).count()) === 1 && (await page.locator(`${TID('vader-saved-allow-terminal')}[aria-checked=true]`).count()) === 1);
 	check('its MCP servers and the tool it may never call are shown', (await page.locator(`${TID('vader-saved-mcp')}[aria-checked=true]`).innerText()) === 'GitHub' && (await page.locator(TID('vader-saved-denied')).innerText()) === 'create_pull_request');
@@ -278,6 +283,15 @@ async function layoutProblems(page) {
 	const { page, errors } = await newPage(undefined, 'editor');
 	check('suggestions are off by default and the model choice is hidden while they are off', (await page.locator(`${TID('vader-editor-autocomplete')}[aria-checked=false]`).count()) === 1 && (await page.locator(TID('vader-editor-model-autocomplete')).count()) === 0);
 	await page.locator(TID('vader-editor-autocomplete')).click();
+	await page.waitForFunction(() => {
+		const el = document.querySelector('[data-testid=vader-editor-autocomplete] i');
+		return new DOMMatrix(getComputedStyle(el).transform).m41 === 18;
+	});
+	const switchSize = await page.locator(TID('vader-editor-autocomplete')).evaluate(el => {
+		const track = el.getBoundingClientRect(), thumb = el.querySelector('i').getBoundingClientRect();
+		return { width: track.width, height: track.height, thumb: thumb.width, inside: thumb.left >= track.left && thumb.right <= track.right };
+	});
+	check('settings switches are larger and the on thumb stays inside its track', switchSize.width === 39 && switchSize.height === 21 && switchSize.thumb === 15 && switchSize.inside);
 	check('turning them on writes the real setting and shows the model for them', (await log(page)).includes('global:enableAutocomplete=true') && (await page.locator(TID('vader-editor-model-autocomplete')).count()) === 1);
 	check('only models that can fill in the middle are offered for suggestions', (await optionsOf(page, 'vader-editor-model-autocomplete')).filter(t => t !== 'Choose a model').join('|') === 'codestral-latest');
 	await choose(page, 'vader-editor-model-autocomplete', 'mistral/codestral-latest');
@@ -739,12 +753,12 @@ async function layoutProblems(page) {
 {
 	const { page, errors } = await newPage(undefined, 'agents');
 	const state = (id) => page.locator(`${TID(`vader-external-agent-${id}`)} ${TID(`vader-external-agent-${id}-state`)}`).innerText();
-	check('an agent that is signed in says so, with its version', (await state('codex')).includes('Signed in') && (await page.locator(TID('vader-external-agent-codex')).innerText()).includes('2.2.2'));
+	check('an agent that accepted a session is Connected, with its installed version', (await state('codex')).includes('Connected') && (await page.locator(TID('vader-external-agent-codex')).innerText()).includes('2.2.2'));
 	check('one that is found but not signed in says so', (await state('opencode')).includes('Not signed in'));
 	check('one that is not installed says so, and one that needs Node.js says that', (await state('cursor')) === 'Not installed' && (await state('copilot')) === 'Needs Node.js');
 	check('the agents are in two groups: in the chat, and in a terminal', (await page.locator(TID('vader-settings-external-agents')).innerText()).includes('In a terminal') && (await page.locator(TID('vader-external-agent-claude-code')).count()) === 1);
 	await page.locator(TID('vader-external-agent-cursor-install')).click();
-	check('Install asks the app to install it (which shows the exact steps first)', (await log(page)).includes('agent:install:cursor'));
+	check('Connect starts the account flow, including installation consent if the program is missing', (await log(page)).includes('agent:connect:cursor'));
 	await page.locator(TID('vader-external-agent-opencode-connect')).click();
 	check('Connect starts the vendor’s own sign-in', (await log(page)).includes('agent:connect:opencode'));
 	check('an agent that needs Node.js has no Install button to press in vain', (await page.locator(TID('vader-external-agent-copilot-install')).count()) === 0);
@@ -760,6 +774,7 @@ async function layoutProblems(page) {
 	check('an agent Vader installed can be removed, and one found here cannot', (await page.locator(TID('vader-external-agent-codex-remove')).count()) === 1);
 	await page.locator(TID('vader-external-agents-check')).click();
 	check('Check for newer versions asks the registry', (await log(page)).includes('agents:check'));
+	check('opening Connected agents checks releases and explains update approval in its details', (await log(page)).includes('agents:auto-check') && (await page.locator(TID('vader-external-agents-update-policy')).textContent()).includes('Updates need your approval'));
 	const custom = page.locator(TID('vader-external-agent-custom'));
 	check('adding an agent of your own needs a name and a program', await custom.locator(TID('vader-external-agent-custom-add')).isDisabled());
 	await custom.locator('input[placeholder="Name"]').fill('My agent');
@@ -925,6 +940,41 @@ async function layoutProblems(page) {
 	await page.close();
 }
 
+// Release-check failures are visible without hiding installed agents; retry recovers.
+{
+	const { page, errors } = await newPage(() => { window.__registryFailure = 'Registry offline'; }, 'agents');
+	await page.locator(TID('vader-external-agents-registry-error')).waitFor();
+	check('an automatic release-check failure is visible and keeps installed agents usable',
+		(await page.locator(TID('vader-external-agents-registry-error')).innerText()).includes('Registry offline')
+		&& await page.locator(TID('vader-external-agent-codex-use')).isVisible());
+	await page.evaluate(() => { window.__registryFailure = undefined; });
+	await page.locator(TID('vader-external-agents-check')).click();
+	await page.locator(TID('vader-external-agents-registry-error')).waitFor({ state: 'hidden' });
+	check('an explicit successful retry clears the failure and displays the last online check', await page.locator(TID('vader-external-agents-last-checked')).isVisible());
+	check('release-check failure and recovery produce no browser errors', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+// Regression checks for the owner's reported field, hover and light-button defects.
+{
+	const { page, errors } = await newPage(undefined, 'models');
+	const search = page.locator(TID('vader-settings-search'));
+	const fieldBefore = await search.evaluate(el => getComputedStyle(el.parentElement).borderColor);
+	await search.focus();
+	const fieldAfter = await search.evaluate(el => ({ border: getComputedStyle(el.parentElement).borderColor, inner: getComputedStyle(el).backgroundColor, outline: getComputedStyle(el).outlineStyle }));
+	check('search focuses its whole field and has no gray inner patch or inner outline', fieldAfter.border !== fieldBefore && fieldAfter.inner === 'rgba(0, 0, 0, 0)' && fieldAfter.outline === 'none');
+	const row = page.locator(TID('vader-provider-row')).first().locator(':scope > div').first();
+	await row.hover();
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid=vader-provider-row] > div')).backgroundColor === 'rgb(25, 25, 28)');
+	check('provider hover covers the rounded parent row', await row.evaluate(el => parseFloat(getComputedStyle(el).borderRadius) >= 8));
+	await page.locator(TID('vader-settings-nav-agents')).click();
+	const light = page.locator('button.vader-pb:not(:disabled)').first();
+	await light.hover();
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('button.vader-pb:not(:disabled)')).color === 'rgb(11, 11, 12)');
+	check('light button hover keeps dark readable text', await light.evaluate(el => getComputedStyle(el).backgroundColor === 'rgb(255, 255, 255)'));
+	await shot(page, 'preview-agent-cards');
+	check('the visual regression interactions have no console errors', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
 // every page, once, at the size of the boards (1440 by 900), for the side-by-side look against them (named qa-<page>)
 {
 	const { page } = await newPage();
