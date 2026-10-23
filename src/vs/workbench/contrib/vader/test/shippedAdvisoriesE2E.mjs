@@ -77,10 +77,6 @@ for (const dir of lockDirs) {
 console.log(`audited the production dependencies of ${audited} shipped packages; the installer leaves out ${ignored.length} package patterns (${excludedFromInstaller} advisory entries fall inside them)`);
 check('every shipped package.json with a lockfile was audited', audited >= 30, `${audited}`);
 check('no known advisory (any severity) in what ships, excluded packages and documented exceptions aside', unexplained.length === 0, '\n  ' + unexplained.join('\n  '));
-for (const ex of exceptions) {
-	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
-}
-
 // ---- the development trees: build tooling and tests. Several of their advisories have no upstream fix (braces, extract-zip, sprintf-js, node-forge...), so
 // Vader patches or replaces those packages (build/stubs, package.json overrides). Everything must be at zero here; an exception needs a written reason.
 const allLockDirs = [];
@@ -100,12 +96,16 @@ for (const dir of allLockDirs) {
 	const cwd = path.join(root, dir);
 	let a; try { a = JSON.parse(npmSync(['audit', '--json', '--package-lock-only'], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })); } catch (e) { a = JSON.parse(e.stdout || '{}'); }
 	for (const [name, v] of Object.entries(a.vulnerabilities ?? {})) {
-		if (exceptions.some(x => x.package === name && (x.in ?? '.') === dir)) { continue; }
+		const ex = exceptions.find(x => x.package === name && (x.in ?? '.') === dir);
+		if (ex) { usedExceptions.add(`${dir}:${name}`); continue; }
 		devFindings.push(`${dir}: ${v.severity} ${name} ${v.range}`);
 	}
 }
 console.log(`audited ${allLockDirs.length} lockfiles including development dependencies`);
 check('every lockfile in the repository, development dependencies included, is free of known advisories', devFindings.length === 0, '\n  ' + devFindings.join('\n  '));
+for (const ex of exceptions) {
+	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

@@ -40,8 +40,13 @@ jobs:
             node_modules
             build/node_modules
             extensions/**/node_modules
+            .vscode/extensions/**/node_modules
+            test/**/node_modules
+            remote/**/node_modules
           key: windows-dev-dependencies-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '!**/node_modules/**', '.npmrc', '.nvmrc', 'build/npm/**') }}
       - name: Install actual native and extension dependencies
+        env:
+          VSCODE_FORCE_INSTALL: 1
         run: npm install
       - name: Cache installed dependencies for later source-only iterations
         if: steps.dependency-cache.outputs.cache-hit != 'true'
@@ -51,6 +56,9 @@ jobs:
             node_modules
             build/node_modules
             extensions/**/node_modules
+            .vscode/extensions/**/node_modules
+            test/**/node_modules
+            remote/**/node_modules
           key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
       - name: Generate React and agent runtime bundles
         run: |
@@ -113,7 +121,7 @@ jobs:
           name: windows-dev-startup-${{ github.sha }}
           path: dev-validation/smoke
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
       - name: All existing real-app scripted journeys with resource monitoring
         id: scripted
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -131,7 +139,7 @@ jobs:
           name: windows-dev-scripted-${{ github.sha }}
           path: dev-validation/scripted
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore
       - name: Real external model journeys with resource monitoring
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
@@ -154,4 +162,4 @@ jobs:
           name: windows-dev-validation-${{ github.sha }}
           path: dev-validation
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: ignore

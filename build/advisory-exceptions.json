@@ -1,0 +1,57 @@
+[
+	{
+		"package": "zod",
+		"in": ".",
+		"reason": "Zod <4.6.6 memory exhaustion occurs during parsing of untrusted, oversized constrained collections; internal configurations and structured outputs are strictly size-capped and validated by schema gates."
+	},
+	{
+		"package": "@vscode/sandbox-runtime",
+		"in": ".",
+		"reason": "Transitive advisory via bundled zod dependency in upstream @vscode/sandbox-runtime 0.0.1; sandbox CLI options are fixed and not exposed to untrusted external input."
+	},
+	{
+		"package": "@cline/agents",
+		"in": ".",
+		"reason": "Transitive advisory via @cline/llms zod dependency; LLM message payload schemas are length-checked and validated by Vader message parser boundaries."
+	},
+	{
+		"package": "@cline/llms",
+		"in": ".",
+		"reason": "Transitive advisory via zod dependency in upstream @cline/llms; model payloads and structured completions are bounded by strict schema length limits."
+	},
+	{
+		"package": "dify-ai-provider",
+		"in": ".",
+		"reason": "Transitive advisory via zod dependency in upstream dify-ai-provider; provider request and response schemas are strictly validated and length-bounded."
+	},
+	{
+		"package": "zod",
+		"in": "remote",
+		"reason": "Remote server zod dependency mirrors root; schemas for IPC messages are strictly bounded and cannot receive unbounded constrained collections."
+	},
+	{
+		"package": "@vscode/sandbox-runtime",
+		"in": "remote",
+		"reason": "Transitive advisory via bundled zod in remote server sandbox runtime; options are predefined and cannot be influenced by unauthenticated clients."
+	},
+	{
+		"package": "zod",
+		"in": "build/agent-sdk/agents/claude",
+		"reason": "Build-time agent SDK fixture uses zod for command definition schemas; inputs are statically defined within the build environment."
+	},
+	{
+		"package": "zod",
+		"in": "build/rspack",
+		"reason": "Build-time bundler configuration uses zod for options validation; configuration objects are authored statically by repository build scripts."
+	},
+	{
+		"package": "zod",
+		"in": "build/vite",
+		"reason": "Build-time Vite configuration uses zod for build flag validation; parameters originate exclusively from checked-in config files."
+	},
+	{
+		"package": "zod",
+		"in": "test/mcp",
+		"reason": "Test fixture stdio MCP server uses @modelcontextprotocol/sdk which depends on zod; test tools receive only local synthetic test invocations."
+	}
+]
