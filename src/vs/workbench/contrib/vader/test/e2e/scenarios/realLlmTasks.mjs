@@ -70,6 +70,10 @@ export const realLlmTaskScenarios = [
 					t.check(`${task.id} attempt ${k}: no provider/runtime error`, errors.length === 0, errors.join(' | '));
 					let ok = false;
 					try { ok = !!task.grade(t); } catch { ok = false; }
+					// Preserve each attempt before the next thread/setup overwrites it.
+					// This distinguishes model output failures from tool/persistence defects.
+					const files = Object.fromEntries(['hello.txt', 'src/app.js', 'greet.js', 'notes.txt', 'out.txt'].map(rel => [rel, t.exists(rel) ? t.read(rel) : null]));
+					fs.writeFileSync(path.join(t.dir, `${task.id}-${k}.json`), JSON.stringify({ task: task.id, attempt: k, idle: r.idle, errors, gradePassed: ok, files, transcript: await t.transcript() }, null, 2));
 					outcomes.push(ok);
 					t.check(`${task.id} attempt ${k}: requested files pass their behavioral grade`, ok && r.idle, `${Math.round((Date.now() - t0) / 1000)} s, approvals ${r.approvals}, idle ${r.idle}`);
 				}

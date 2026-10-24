@@ -433,9 +433,9 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 				</div>
 
 				{/* Bottom row */}
-				<div ref={footerRef} className='flex flex-row justify-between items-end gap-1'>
+				<div ref={footerRef} data-testid='vader-composer-footer' className='flex flex-row justify-between items-end gap-1'>
 					{showModelDropdown && (
-						<div className='flex flex-col gap-y-1 min-w-0'>
+						<div className='flex flex-col flex-1 gap-y-1 min-w-0'>
 							{/* Context consumption is displayed separately from the mode and model. */}
 
 <div className='flex items-center flex-nowrap min-w-0 gap-x-1 gap-y-1 text-nowrap '>
@@ -448,7 +448,7 @@ export const VaderChatArea: React.FC<VaderChatAreaProps> = ({
 						</div>
 					)}
 
-					<div className="flex items-center gap-2">
+					<div className="flex flex-none items-center gap-2">
 						{showFooter ? <ContextMeter /> : null}
 
 						{isStreaming && loadingIcon}

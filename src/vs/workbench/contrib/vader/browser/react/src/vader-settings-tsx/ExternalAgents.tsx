@@ -31,7 +31,7 @@ const AgentConfigPickers = ({ threadId, className }: { threadId: string, classNa
 			const choices = [...(o.choices ?? [])]
 			const selected = choices.find(c => c.value === o.value) ?? choices[0]
 			return (
-				<span key={o.id} data-testid={`vader-agent-config-${o.id}`} title={o.description ?? o.name}>
+				<span className='flex min-w-0' key={o.id} data-testid={`vader-agent-config-${o.id}`} title={o.description ?? o.name}>
 					<VaderCustomDropdownBox
 						options={choices}
 						selectedOption={selected}
@@ -72,7 +72,7 @@ export const ExternalAgentChatPicker = ({ className }: { className: string }) =>
 
 	return (
 		<>
-			<span data-testid='vader-external-agent-picker'>
+			<span className='flex min-w-0' data-testid='vader-external-agent-picker'>
 				<VaderCustomDropdownBox
 					options={options}
 					selectedOption={selected}

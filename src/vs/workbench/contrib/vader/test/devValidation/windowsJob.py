@@ -309,26 +309,48 @@ class Job:
         finally:
             CloseHandle(handle)
 
+    def accounting(self):
+        accounting = JOB_ACCOUNTING()
+        checked(QueryInformationJobObject(self.handle, 8, c.byref(accounting), c.sizeof(accounting), None), "QueryInformationJobObject(accounting)")
+        basic, io = accounting.BasicInfo, accounting.IoInfo
+        return {"cpuMs": (basic.TotalUserTime + basic.TotalKernelTime) / 10000,
+                "readBytes": io.ReadTransferCount, "writeBytes": io.WriteTransferCount,
+                "otherBytes": io.OtherTransferCount, "totalProcesses": basic.TotalProcesses,
+                "activeProcesses": basic.ActiveProcesses, "terminatedProcesses": basic.TotalTerminatedProcesses}
+
     def sample(self):
         pids = self.members()
         rows = [row for pid in pids if (row := self.row(pid)) is not None]
         exited = self.exited()
-        accounting = JOB_ACCOUNTING()
-        checked(QueryInformationJobObject(self.handle, 8, c.byref(accounting), c.sizeof(accounting), None), "QueryInformationJobObject(accounting)")
-        basic, io = accounting.BasicInfo, accounting.IoInfo
         return {"scope": "windows-job", "at": time.time_ns() // 1000000, "processes": rows,
                 "membershipPids": pids, "rootIdentity": self.root_identity, "driverExited": exited,
-                "jobAccounting": {"cpuMs": (basic.TotalUserTime + basic.TotalKernelTime) / 10000,
-                                  "readBytes": io.ReadTransferCount, "writeBytes": io.WriteTransferCount,
-                                  "otherBytes": io.OtherTransferCount, "totalProcesses": basic.TotalProcesses,
-                                  "activeProcesses": basic.ActiveProcesses, "terminatedProcesses": basic.TotalTerminatedProcesses},
+                "jobAccounting": self.accounting(),
                 "driverExitCode": self.exit_code() if exited else None}
+
+    def before_cleanup(self):
+        observed = {}
+        # A bounded reconciliation prevents endless spawning from hanging cleanup.
+        # Retained exited PIDs alone are harmless; unexplained active members are not.
+        for _ in range(3):
+            initial = self.accounting()
+            snapshot = self.sample()
+            for row in snapshot["processes"]:
+                observed[(row["pid"], row["created"])] = row
+            members = self.members()
+            final = self.accounting()
+            if (initial["totalProcesses"] == final["totalProcesses"]
+                    and set(members).issubset(snapshot["membershipPids"])
+                    and final["activeProcesses"] <= len(snapshot["processes"])):
+                snapshot["jobAccounting"] = final
+                snapshot["observedProcesses"] = list(observed.values())
+                return snapshot
+        raise RuntimeError("Job active membership could not be reconciled before cleanup")
 
     def terminate(self):
         checked(TerminateJobObject(self.handle, 1), "TerminateJobObject")
 
     def dispose(self):
-        before = self.sample()  # Preserve leaks before terminating them.
+        before = self.before_cleanup()  # Preserve leaks before terminating them.
         self.terminate()
         deadline = time.monotonic() + 10
         while self.members():
@@ -342,6 +364,9 @@ class Job:
         self.exit_thread.join(timeout=2)
         if self.exit_thread.is_alive():
             raise RuntimeError("Driver exit was not acknowledged after job termination")
+        final = self.accounting()
+        if final["activeProcesses"] or final["totalProcesses"] != before["jobAccounting"]["totalProcesses"]:
+            raise RuntimeError("Job membership changed after the pre-cleanup reconciliation")
         return {"beforeCleanup": before, "remaining": [], "cleanupVerified": True}
 
     def close(self):

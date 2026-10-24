@@ -121,7 +121,9 @@ export class VaderMainUpdateService extends Disposable implements IVaderUpdateSe
 		const isDevMode = !this._envMainService.isBuilt // found in abstractUpdateService.ts
 
 		if (isDevMode) {
-			return { message: null } as const
+			// A manual check is read-only and works in source builds too. Never
+			// invoke the native updater or run background checks in development.
+			return explicit ? this._checkGitHubReleases(true) : { message: null } as const
 		}
 
 		// if disabled and not explicitly checking, return early

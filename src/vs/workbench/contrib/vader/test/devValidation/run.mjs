@@ -7,7 +7,7 @@ import { ProcessMonitor } from './monitor.mjs';
 import { assess, scenarioCounts } from './verdict.mjs';
 import { redact as redactText, sanitizeArtifacts } from './redact.mjs';
 import { expectedScenarios } from './expectedScenarios.mjs';
-import { launchJobDriver } from './windowsJob.mjs';
+import { launchJobDriver, mergeObservedOrphans } from './windowsJob.mjs';
 
 const mode = process.argv[2];
 if (!['smoke', 'scripted', 'live'].includes(mode) || process.platform !== 'win32') { throw new Error('Usage on Windows: node devValidation/run.mjs smoke|scripted|live'); }
@@ -63,7 +63,7 @@ try {
 } finally {
 	try {
 		const cleanup = await job.dispose();
-		orphans = cleanup.leaks;
+		orphans = mergeObservedOrphans(orphans, cleanup.leaks);
 	} catch (error) { spawnError = [spawnError, redact(error)].filter(Boolean).join('; '); }
 }
 const metrics = monitor.report();

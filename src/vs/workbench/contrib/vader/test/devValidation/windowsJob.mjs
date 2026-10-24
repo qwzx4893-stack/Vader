@@ -12,14 +12,32 @@ const snapshotScript = fileURLToPath(new URL('./snapshot.ps1', import.meta.url))
 
 // Metadata is optional for an exited process. A reused PID must never lend its role/parent
 // to another identity. Native handle-derived identity and counters always remain authoritative.
-export function mergeJobMetadata(snapshot, metadata) {
+export function mergeJobMetadata(snapshot, metadata, verification) {
 	if (!Array.isArray(metadata.processes)) { throw new Error('Invalid CIM role snapshot'); }
 	const byIdentity = new Map(metadata.processes.map(p => [`${p.pid}:filetime:${p.creationFileTime}`, p]));
+	const verified = new Set(verification?.scope === 'windows-job' && snapshot.scope === 'windows-job' && verification.rootIdentity === snapshot.rootIdentity
+		? verification.processes.map(p => `${p.pid}:${p.created}`) : []);
+	const byMicrosecond = new Map(metadata.processes.filter(p => typeof p.creationFileTime === 'string' && /^\d+0$/.test(p.creationFileTime))
+		.map(p => [`${p.pid}:${BigInt(p.creationFileTime) / 10n}`, p]));
 	for (const row of snapshot.processes) {
-		const extra = byIdentity.get(`${row.pid}:${row.created}`);
+		const key = `${row.pid}:${row.created}`;
+		let extra = byIdentity.get(key);
+		// CIM truncates FILETIME to microseconds. Only use that bucket when a
+		// second native sample AFTER CIM confirms the original exact identity.
+		if (!extra && verified.has(key) && /^filetime:\d+$/.test(row.created)) {
+			extra = byMicrosecond.get(`${row.pid}:${BigInt(row.created.slice(9)) / 10n}`);
+		}
 		if (extra) { row.parent = extra.parent; row.role = extra.role; }
 	}
 	return snapshot;
+}
+
+export function mergeObservedOrphans(previous, current) {
+	return [...new Map([...previous, ...current].map(p => [`${p.pid}:${p.created}`, p])).values()];
+}
+
+export function cleanupLeaks(before, driverPid) {
+	return mergeObservedOrphans(before.processes, before.observedProcesses ?? []).filter(p => p.pid !== driverPid);
 }
 
 /**
@@ -138,7 +156,8 @@ export async function launchJobDriver({ executable, args = [], env = process.env
 					const { stdout: cim } = await exec('powershell.exe', ['-NoProfile', '-NonInteractive', '-File', snapshotScript,
 						'-ProcessIds', snapshot.processes.map(p => p.pid).join(',')], { timeout: 20000, maxBuffer: 8 * 1024 * 1024, windowsHide: true });
 					const metadata = JSON.parse(cim.replace(/^\uFEFF/, ''));
-					mergeJobMetadata(snapshot, metadata);
+					const verification = await request('sample');
+					mergeJobMetadata(snapshot, metadata, verification);
 				}
 				return snapshot;
 			} catch (error) { fail(error); throw error; }
@@ -154,9 +173,7 @@ export async function launchJobDriver({ executable, args = [], env = process.env
 						throw new Error('Job cleanup was not verified');
 					}
 					const before = cleanup.beforeCleanup;
-					for (const proc of before.processes) {
-						if (proc.pid !== pid) { leaks.push(proc); }
-					}
+					leaks.push(...cleanupLeaks(before, pid));
 					cleanup.leaks = leaks;
 					cleanup.driverRunningAtDispose = !before.driverExited;
 					helper.stdin.end();

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawn, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { launchJobDriver, mergeJobMetadata } from './devValidation/windowsJob.mjs';
+import { launchJobDriver, mergeJobMetadata, mergeObservedOrphans, cleanupLeaks } from './devValidation/windowsJob.mjs';
 import { ProcessMonitor, selectTree } from './devValidation/monitor.mjs';
 import { assess } from './devValidation/verdict.mjs';
 
@@ -25,6 +25,11 @@ async function gone(pid) { const deadline = Date.now() + 10000; while (alive(pid
 let count = 0;
 function check(name, fn) { fn(); count++; console.log('PASS: ' + name); }
 const options = { executable: process.execPath, cwd: directory };
+// WindowsApps aliases can activate Python through a service broker, outside the
+// directly created process. Exercise native inheritance with the actual interpreter.
+const pythonCommand = process.env.DEV_VALIDATION_PYTHON || 'python';
+const pythonExecutable = (await exec(pythonCommand, ['-I', '-B', '-c', 'import sys; print(sys.executable)'], { timeout: 5000, windowsHide: true })).stdout.trim();
+assert.ok(path.isAbsolute(pythonExecutable) && fs.existsSync(pythonExecutable), 'Actual Python executable is missing');
 const unrelated = spawn(process.execPath, ['-e', 'setInterval(()=>{},1000)'], { stdio: 'ignore', windowsHide: true });
 await new Promise((resolve, reject) => { unrelated.once('spawn', resolve); unrelated.once('error', reject); });
 let job, coordinator;
@@ -48,6 +53,7 @@ try {
 		const row = first.find(p => p.pid === grandchild.pid);
 		assert.ok(row); assert.equal(row.jobMember, true); assert.match(row.created, /^filetime:\d+$/);
 		assert.ok(row.privateBytes > 0); assert.ok(row.handles > 0);
+		assert.equal(row.role, 'main-or-cli', 'CIM metadata must match the exact native identity across its precision loss');
 		assert.equal(selectTree(first, job.pid).length, 0, 'ancestry-only observer would miss it');
 		assert.equal(first.some(p => p.pid === unrelated.pid), false);
 		assert.equal(monitor.report().rootObserved, true, 'assignment evidence survives an immediate driver exit');
@@ -90,6 +96,47 @@ try {
 		mergeJobMetadata(snapshot, { processes: [{ pid: unrelated.pid, creationFileTime: '111', role: 'renderer', parent: 8 }] });
 		assert.equal(snapshot.processes[0].role, 'renderer');
 	});
+	check('CIM microsecond precision requires an exact native identity after the query', () => {
+		const original = { pid: 123, created: 'filetime:134373024311851893', role: 'unknown', parent: null };
+		const snapshot = () => ({ scope: 'windows-job', rootIdentity: 'fixture-root', processes: [{ ...original }] });
+		const metadata = { processes: [{ pid: 123, creationFileTime: '134373024311851890', parent: 9, role: 'renderer' }] };
+		const noWitness = mergeJobMetadata(snapshot(), metadata);
+		assert.equal(noWitness.processes[0].role, 'unknown');
+		const verified = mergeJobMetadata(snapshot(), metadata, snapshot());
+		assert.equal(verified.processes[0].role, 'renderer'); assert.equal(verified.processes[0].parent, 9);
+		const reused = snapshot(); reused.processes[0].created = 'filetime:134373024311851899';
+		assert.equal(mergeJobMetadata(snapshot(), metadata, reused).processes[0].role, 'unknown', 'Even PID reuse inside one microsecond cannot lend metadata');
+		const anotherJob = snapshot(); anotherJob.rootIdentity = 'another-job';
+		assert.equal(mergeJobMetadata(snapshot(), metadata, anotherJob).processes[0].role, 'unknown');
+		const differentTime = { processes: [{ ...metadata.processes[0], creationFileTime: '134373024311851880' }] };
+		assert.equal(mergeJobMetadata(snapshot(), differentTime, snapshot()).processes[0].role, 'unknown');
+	});
+	check('observed orphans survive empty cleanup and retain distinct reused-PID identities', () => {
+		const observed = { pid: 123, created: 'filetime:111' };
+		const orphans = mergeObservedOrphans([observed], []);
+		assert.deepEqual(orphans, [observed]);
+		assert.equal(mergeObservedOrphans(orphans, [{ ...observed, created: 'filetime:222' }]).length, 2);
+		assert.equal(assess({ exitCode: 0, orphans, metrics: { rootObserved: true, samples: 2, errors: [], breaches: [] } }), false);
+	});
+	const replacementFixture = fileURLToPath(new URL('./devValidation/windowsJobReplacementFixture.py', import.meta.url));
+	const replacement = JSON.parse((await exec(pythonExecutable, ['-I', '-B', replacementFixture], { timeout: 20000, windowsHide: true })).stdout);
+	check('a native B-to-C replacement during the exit-probe wait remains a failing verdict', () => {
+		const leaks = cleanupLeaks(replacement.cleanup.beforeCleanup, replacement.driverPid);
+		assert.equal(replacement.cleanup.cleanupVerified, true);
+		assert.equal(replacement.cleanup.beforeCleanup.driverExited, true);
+		assert.ok(replacement.liveAtTerminate.every(live => leaks.some(p => p.pid === live.pid && p.created === live.created)));
+		assert.equal(assess({ exitCode: 0, orphans: leaks, metrics: { rootObserved: true, samples: 2, errors: [], breaches: [] } }), false);
+	});
+	job = await launchJobDriver({ ...options, args: ['-e', 'setInterval(()=>{},1000)', '--', '--type=renderer'] });
+	job.stdout.resume(); job.stderr.resume();
+	const rendererSample = await job.sample();
+	check('live CIM renderer metadata preserves the exact kernel creation identity', () => {
+		const row = rendererSample.processes.find(p => p.pid === job.pid);
+		assert.equal(row.role, 'renderer');
+		assert.equal(`${row.pid}:${row.created}`, job.rootIdentity);
+	});
+	await job.terminate(); await bounded(job.exit); await job.dispose();
+	job = undefined;
 
 	job = await launchJobDriver({ ...options, args: ['-e', 'console.log("normal output"); process.exit(7)'] });
 	job.stdout.resume(); job.stderr.resume();
@@ -136,8 +183,6 @@ try {
 	coordinator = undefined;
 
 	const breakawayMarker = path.join(directory, 'breakaway-marker.txt');
-	const pythonCommand = process.env.DEV_VALIDATION_PYTHON || 'python';
-	const pythonExecutable = path.isAbsolute(pythonCommand) ? pythonCommand : (await exec('where.exe', [pythonCommand], { timeout: 5000, windowsHide: true })).stdout.trim().split(/\r?\n/)[0];
 	const breakawayCode = [
 		'import subprocess,sys',
 		'try:',

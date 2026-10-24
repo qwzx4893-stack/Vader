@@ -210,11 +210,11 @@ export const ProviderModelPicker = <S,>({ options, selected, onChange, className
 				type='button' ref={refs.setReference} data-testid='vader-picker-button'
 				aria-haspopup='listbox' aria-expanded={isOpen}
 				title={`${selectedOption.modelName} (${selectedOption.providerTitle})`}
-				className='flex items-center gap-1 h-7 px-1.5 rounded-md bg-transparent whitespace-nowrap hover:bg-vader-bg-2-hover max-w-full'
+				className='flex items-center gap-1 h-7 px-1.5 rounded-md bg-transparent whitespace-nowrap hover:bg-vader-bg-2-hover max-w-full overflow-hidden'
 				onClick={() => setIsOpen(!isOpen)}
 			>
 				<ProviderLogo providerName={selectedOption.providerName as ProviderName} size={12} />
-				<span className='text-vader-fg-3 flex-none'>{selectedOption.providerTitle}</span><span className='text-vader-fg-3' aria-hidden='true'>·</span><span className='truncate' data-testid='vader-picker-caption'>{compactModelName(selectedOption.providerName, selectedOption.modelName)}</span>
+				<span className='text-vader-fg-3 truncate' style={{ maxWidth: '50%' }}>{selectedOption.providerTitle}</span><span className='text-vader-fg-3 flex-none' aria-hidden='true'>·</span><span className='truncate min-w-0' data-testid='vader-picker-caption'>{compactModelName(selectedOption.providerName, selectedOption.modelName)}</span>
 				<Caret />
 			</button>
 

@@ -57,7 +57,7 @@ const addFake = async (t, name, mode) => {
 };
 const useInChat = async (t, id) => {
 	await openAgentsTab(t);
-	await t.waitFor(async () => /Signed in|Ready/.test(await card(t, id).innerText().catch(() => '')), 20_000);
+	await card(t, id).getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
 	await card(t, id).getByRole('button', { name: 'Use', exact: true }).click();
 };
 const cleanUp = async (t, id) => {
@@ -83,10 +83,10 @@ export const externalAgentScenarios = [
 			// whether Claude Code exists on the machine running the suite is not ours to decide: an installed one offers "Connect", a missing one "Install"
 			t.check('a terminal agent offers either "Connect" (installed, its own sign-in) or "Install" (missing), and never "Use"', (/Connect/.test(cc) ? !/Install/.test(cc) : /Install/.test(cc)) && (await card(t, 'claude-code').locator('[data-testid$="-use"]').count()) === 0, cc);
 			const codexText = await card(t, 'codex').innerText();
-			t.check('an agent that is not on this computer offers "Install", not "Download", and no sign-in yet', /Install/.test(codexText) && !/Download/.test(codexText) && !/Connect/.test(codexText), codexText);
+			t.check('a missing agent offers Connect to start its install and authentication flow, never Download or Use', /Not installed/.test(codexText) && /Connect/.test(codexText) && !/Download/.test(codexText) && !(await card(t, 'codex').getByRole('button', { name: 'Use', exact: true }).count()), codexText);
 			t.check('Gemini CLI is no longer offered (its free personal login ended)', !(await card(t, 'gemini').isVisible().catch(() => false)));
 			const buttons = async (id) => (await card(t, id).getByRole('button').allInnerTexts()).map(x => x.trim());
-			t.check('a card that is not installed has exactly two buttons: Install and More (the website is under More)', (await buttons('mistral-vibe')).join('|') === 'Install|More', (await buttons('mistral-vibe')).join('|'));
+			t.check('a missing chat agent has Connect and More, keeping installation in the connection flow', (await buttons('mistral-vibe')).join('|') === 'Connect|More', (await buttons('mistral-vibe')).join('|'));
 			t.check('a terminal agent can never be chosen for the chat', (await card(t, 'freebuff').locator('[data-testid$="-use"]').count()) === 0 && (await card(t, 'claude-code').locator('[data-testid$="-use"]').count()) === 0);
 			await t.page.locator('main').first().evaluate(e => { e.scrollTop = 0; }).catch(() => { });
 			await t.sleep(300);
@@ -155,7 +155,7 @@ export const externalAgentScenarios = [
 		timeout: 150_000,
 		fn: async (t) => {
 			const id = await addFake(t, 'Resumable Agent', 'resumable');
-			await t.waitFor(async () => /Signed in|Ready/.test(await card(t, id).innerText().catch(() => '')), 20_000);
+			await card(t, id).getByRole('button', { name: 'Use', exact: true }).waitFor({ state: 'visible', timeout: 20_000 });
 			await card(t, id).getByRole('button', { name: 'Test connection', exact: true }).click();
 			const probe = t.page.locator(`[data-testid="vader-external-agent-${id}-probe"]`);
 			t.check('"Test connection" starts the program and reports what answered', await probe.waitFor({ state: 'visible', timeout: 20_000 }).then(() => true, () => false) && /Works: Fake Agent 9\.9\.9/.test(await probe.innerText()), await probe.innerText().catch(() => ''));
@@ -211,7 +211,7 @@ export const externalAgentScenarios = [
 			await card(t, id).getByRole('button', { name: 'Test connection', exact: true }).click();
 			t.check('before signing in the card says "Not signed in" and offers Connect (and no way to use it yet)', await t.waitFor(async () => /Not signed in/.test(await card(t, id).innerText().catch(() => '')), 30_000) && await card(t, id).getByRole('button', { name: 'Connect', exact: true }).isVisible() && !(await card(t, id).getByRole('button', { name: 'Use', exact: true }).count()), await card(t, id).innerText().catch(() => ''));
 			await card(t, id).getByRole('button', { name: 'Connect', exact: true }).click();
-			t.check('after Connect the card says "Signed in" and the sign-in is stored by the agent, not by Vader', await t.waitFor(async () => /Signed in/.test(await card(t, id).innerText().catch(() => '')) && fs.existsSync(authFile), 30_000), await card(t, id).innerText().catch(() => ''));
+			t.check('after Connect the card says Connected and the agent stored its own sign-in', await t.waitFor(async () => /Connected/.test(await card(t, id).innerText().catch(() => '')) && fs.existsSync(authFile), 30_000), await card(t, id).innerText().catch(() => ''));
 			t.check('"Use" is offered now', await card(t, id).getByRole('button', { name: 'Use', exact: true }).isVisible());
 			await t.shot('external-agents-connected');
 			await cleanUp(t, id);

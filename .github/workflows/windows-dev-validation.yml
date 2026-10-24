@@ -43,7 +43,7 @@ jobs:
             .vscode/extensions/**/node_modules
             test/**/node_modules
             remote/**/node_modules
-          key: windows-dev-dependencies-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '!**/node_modules/**', '.npmrc', '.nvmrc', 'build/npm/**') }}
+          key: windows-dev-dependencies-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '**/package.json', '**/.npmrc', '!**/node_modules/**', '.nvmrc', 'build/npm/**') }}
       - name: Install actual native and extension dependencies
         env:
           VSCODE_FORCE_INSTALL: 1
@@ -99,7 +99,10 @@ jobs:
       - name: Verify monitoring and failure gates
         run: node src/vs/workbench/contrib/vader/test/devValidationE2E.mjs
       - name: Verify Windows job containment and deliberate leak/observer failures
-        run: node src/vs/workbench/contrib/vader/test/devValidationJobE2E.mjs
+        run: |
+          python -I -B src/vs/workbench/contrib/vader/test/devValidation/windowsJobExitRaceE2E.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node src/vs/workbench/contrib/vader/test/devValidationJobE2E.mjs
       - name: Exercise both actual local search models and native inference worker
         run: node src/vs/workbench/contrib/vader/test/embedWorkerRuntimeE2E.mjs
       - name: Modern window startup and legacy-layer smoke with resource monitoring
@@ -121,7 +124,7 @@ jobs:
           name: windows-dev-startup-${{ github.sha }}
           path: dev-validation/smoke
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
       - name: All existing real-app scripted journeys with resource monitoring
         id: scripted
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -139,7 +142,7 @@ jobs:
           name: windows-dev-scripted-${{ github.sha }}
           path: dev-validation/scripted
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error
       - name: Real external model journeys with resource monitoring
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         env:
@@ -162,4 +165,4 @@ jobs:
           name: windows-dev-validation-${{ github.sha }}
           path: dev-validation
           retention-days: 7
-          if-no-files-found: ignore
+          if-no-files-found: error

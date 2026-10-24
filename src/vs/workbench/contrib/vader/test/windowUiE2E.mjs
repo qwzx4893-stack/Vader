@@ -225,6 +225,22 @@ const shot = async (page, name) => { await auditShot(page, name); await page.scr
 	});
 	await page.locator('[data-testid=vader-loading]').first().waitFor({ state: 'visible' });
 	await shot(page, '20-preview-loading');
+	// The editor sidebar can be only 300px wide. A long provider/model label
+	// must shrink inside its own cell instead of painting over Stop or Context.
+	const footer = page.locator('[data-testid=vader-composer-footer]').last();
+	await footer.evaluate(el => { el.style.width = '300px'; });
+	await page.waitForTimeout(100);
+	for (const id of ['vader-stop', 'vader-context-meter', 'vader-picker-button']) {
+		const control = footer.locator(`[data-testid=${id}]`);
+		check(`at 300px ${id} remains inside the composer and receives pointer events`, await control.evaluate(el => {
+			const box = el.getBoundingClientRect(), parent = el.closest('[data-testid=vader-composer-footer]').getBoundingClientRect();
+			const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+			return box.width > 0 && box.left >= parent.left && box.right <= parent.right && !!hit && el.contains(hit);
+		}));
+		await control.click({ trial: true });
+	}
+	await shot(page, '20b-narrow-composer-loading');
+	await footer.evaluate(el => { el.style.width = ''; });
 	await page.evaluate(() => {
 		const c = window.__chat, id = 't-first-open'; const now = new Date().toISOString();
 		c.state = { ...c.state, currentThreadId: id, allThreads: { [id]: { id, createdAt: now, lastModified: now, messages: [], state: { stagingSelections: [] }, filesWithUserChanges: new Set() } } };
