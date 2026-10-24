@@ -315,7 +315,7 @@
 		"serialize-javascript": "^7.0.3",
 		"yauzl": "^3.3.1",
 		"dify-ai-provider": {
-			"undici": "6.29.0"
+			"undici": "6.29.1"
 		},
 		"@jerome-benoit/sap-ai-provider": "$@jerome-benoit/sap-ai-provider",
 		"@microsoft/dev-tunnels-connections": {

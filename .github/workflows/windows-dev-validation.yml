@@ -125,6 +125,29 @@ jobs:
           path: dev-validation/smoke
           retention-days: 7
           if-no-files-found: error
+      - name: Real external model journeys with resource monitoring
+        id: live
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REAL_LLM_BASEURL: https://openrouter.ai/api/v1
+          REAL_LLM_MODEL: ${{ vars.VADER_TEST_MODEL || 'poolside/laguna-s-2.1:free' }}
+        run: node src/vs/workbench/contrib/vader/test/devValidation/run.mjs live
+      - name: Sanitize external-model diagnostics
+        if: ${{ !cancelled() && (steps.live.outcome == 'success' || steps.live.outcome == 'failure') }}
+        id: sanitize-live
+        env:
+          DEV_VALIDATION_OUT: dev-validation/live
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node src/vs/workbench/contrib/vader/test/devValidation/redact.mjs
+      - name: Upload external-model attempt evidence before longer scripted journeys
+        if: ${{ !cancelled() && steps.sanitize-live.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-dev-live-${{ github.sha }}
+          path: dev-validation/live
+          retention-days: 7
+          if-no-files-found: error
       - name: All existing real-app scripted journeys with resource monitoring
         id: scripted
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
@@ -143,13 +166,6 @@ jobs:
           path: dev-validation/scripted
           retention-days: 7
           if-no-files-found: error
-      - name: Real external model journeys with resource monitoring
-        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
-        env:
-          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
-          REAL_LLM_BASEURL: https://openrouter.ai/api/v1
-          REAL_LLM_MODEL: ${{ vars.VADER_TEST_MODEL || 'poolside/laguna-s-2.1:free' }}
-        run: node src/vs/workbench/contrib/vader/test/devValidation/run.mjs live
       - name: Sanitize diagnostic text before artifact upload, including failed runs
         if: always()
         id: sanitize
