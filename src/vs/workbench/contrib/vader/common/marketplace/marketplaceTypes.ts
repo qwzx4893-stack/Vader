@@ -111,6 +111,12 @@ export type MarketplaceSearchOptions = {
 	types?: MarketplaceItemType[];
 	/** one section of the page (an id from common/marketplace/categories.ts); providers ask their sources for it and keep what belongs */
 	category?: string;
+	/** Include source/settings identity so a changed enabled-source list cannot reuse the old answer. */
+	cacheScope?: string;
+	/** Bypass the short marketplace cache (upstream APIs may still apply their rate-limit cache). */
+	refresh?: boolean;
+	/** Completed providers so far, delivered without waiting for the slowest one. */
+	onProgress?: (result: MarketplaceSearchResult) => void;
 	signal?: AbortSignal;
 };
 
@@ -121,6 +127,9 @@ export type MarketplaceProviderSearchOutcome = {
 	error?: string;
 	/** a provider that asks several sources can still answer when one of them does not: what did not answer, for the page to say */
 	warnings?: string[];
+	/** Saved marketplace answer; stale means the live refresh failed. */
+	cachedAtMs?: number;
+	stale?: boolean;
 };
 
 export type MarketplaceSearchResult = {
@@ -151,7 +160,7 @@ export interface IMarketplaceProvider {
 	browse?(token: CancellationToken, category?: string): Promise<MarketplaceItem[]>;
 
 	/** the sources that did not answer in the last search or listing, said once (read and cleared) */
-	takeWarnings?(): string[];
+	takeWarnings?(token?: CancellationToken): string[];
 	/**
 	 * Looks the item up again, live, and gives it a fresh score from what the sources say now (stars, last change, licence, what its text asks for).
 	 * Called when a person opens an item and by the trust monitor for what is installed. Never throws: an item that cannot be looked up is returned as it was.

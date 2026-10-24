@@ -32,7 +32,7 @@ const TAB_TYPES: Record<Tab, MarketplaceItemType[]> = {
 const TABS: { id: Tab, label: string }[] = [{ id: 'all', label: 'All' }, { id: 'skills', label: 'Skills' }, { id: 'mcp', label: 'MCP servers' }, { id: 'extensions', label: 'Extensions' }, { id: 'agents', label: 'Agents' }]
 const TAB_OF_TYPE: Partial<Record<MarketplaceItemType, Tab>> = { SKILL: 'skills', MCP_SERVER: 'mcp', EXTENSION: 'extensions', ACP_AGENT: 'agents' }
 const PLACEHOLDER: Record<Tab, string> = {
-	all: 'Search skills, MCP servers, extensions and agents', skills: 'Search skills', mcp: 'Search the official MCP Registry', extensions: 'Search extensions on Open VSX', agents: 'Search agents',
+	all: 'Search skills, MCP servers, extensions and agents', skills: 'Search connected skill sources', mcp: 'Search connected MCP sources', extensions: 'Search extensions on Open VSX', agents: 'Search agents',
 }
 
 // The drop-downs beside the search box (boards A02 to A05): what a tab can be narrowed by differs, and only what the loaded items really have is offered

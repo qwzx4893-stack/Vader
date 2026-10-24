@@ -6,11 +6,8 @@
 // Gate: nothing with a known advisory of ANY severity may be in what Vader ships - and, since the build-tooling pass, nor in the development trees
 // (gulp, tailwind, mocha, the build/ and test/ packages): every lockfile in the repository is audited with its development dependencies too.
 //
-// `npm audit` reports every package in the repository, including build tooling (gulp, mocha, tailwind...) that never reaches
-// a user. What matters is the runtime (production) dependency tree minus what the installer leaves out (build/.moduleignore).
-// This test audits exactly that and fails on any high/critical advisory that is neither excluded from the installer nor
-// listed, with a written reason, in build/advisory-exceptions.json (and an exception that no longer applies is also a failure,
-// so the list cannot rot).
+// Audit production dependencies minus installer exclusions (build/.moduleignore), then all development lockfiles.
+// Every severity and every audit error fails the gate. Exceptions require a written reason, and stale exceptions fail too.
 //
 // Needs network access to the npm registry. Run: node src/vs/workbench/contrib/vader/test/shippedAdvisoriesE2E.mjs
 
@@ -45,14 +42,27 @@ for (const e of fs.readdirSync(path.join(root, 'extensions'), { withFileTypes: t
 // extensions that exist only for testing the editor are not part of the product
 const NOT_SHIPPED = new Set(['extensions/vscode-api-tests', 'extensions/vscode-colorize-tests', 'extensions/vscode-colorize-perf-tests', 'extensions/vscode-test-resolver']);
 
-const auditOf = (dir) => {
+const auditOf = (dir, includeDev = false) => {
 	const cwd = path.join(root, dir);
-	const args = ['audit', '--omit=dev', '--json', ...(dir === '.' ? [] : ['--package-lock-only'])];
+	const args = ['audit', '--json', '--package-lock-only', ...(includeDev ? [] : ['--omit=dev'])];
+	let output, status = 0;
 	try {
-		return JSON.parse(npmSync(args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }));
+		output = npmSync(args, { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'pipe'] });
 	} catch (e) {
-		return JSON.parse(e.stdout || '{}'); // npm audit exits non-zero when it finds something
+		// npm audit exits 1 for findings, but spawn/registry failures must never become an empty successful report.
+		status = e.status;
+		output = e.stdout;
 	}
+	let report;
+	try { report = JSON.parse(output); } catch { /* the report check below records malformed/missing output as a failure */ }
+	const valid = (status === 0 || status === 1) && report?.auditReportVersion === 2 && !report.error
+		&& report.vulnerabilities !== null && typeof report.vulnerabilities === 'object' && !Array.isArray(report.vulnerabilities)
+		&& Number.isInteger(report.metadata?.vulnerabilities?.total)
+		&& report.metadata.vulnerabilities.total === Object.keys(report.vulnerabilities).length
+		&& (status === 0 || report.metadata.vulnerabilities.total > 0);
+	check(`npm audit produced a report for ${dir} (${includeDev ? 'all dependencies' : 'production'})`, valid,
+		`exit ${status ?? 'unavailable'}; missing, invalid or errored report`);
+	return valid ? report : null;
 };
 
 let audited = 0;
@@ -62,50 +72,52 @@ let excludedFromInstaller = 0;
 for (const dir of lockDirs) {
 	if (NOT_SHIPPED.has(dir)) { continue; }
 	const audit = auditOf(dir);
-	if (!audit.vulnerabilities) { check(`npm audit produced a report for ${dir}`, false, 'no output (offline?)'); continue; }
+	if (!audit) { continue; }
 	audited++;
 	for (const [name, v] of Object.entries(audit.vulnerabilities)) {
 		if (dir === '.' && isIgnored(name)) { excludedFromInstaller++; continue; }
 		// a vulnerable package whose only vulnerable path runs through an excluded package is also not shipped
 		const viaNames = v.via.filter(x => typeof x === 'string');
-		if (dir === '.' && viaNames.length && viaNames.every(n => isIgnored(n))) { excludedFromInstaller++; continue; }
+		if (dir === '.' && v.via.length && v.via.every(n => typeof n === 'string' && isIgnored(n))) { excludedFromInstaller++; continue; }
 		const ex = exceptions.find(x => x.package === name && (x.in ?? '.') === dir);
 		if (ex) { usedExceptions.add(`${dir}:${name}`); continue; }
 		unexplained.push(`${dir}: ${v.severity} ${name} ${v.range} (${v.via.filter(x => typeof x !== 'string').map(x => x.title).slice(0, 1).join('; ') || 'via ' + viaNames.join(', ')})`);
 	}
 }
 console.log(`audited the production dependencies of ${audited} shipped packages; the installer leaves out ${ignored.length} package patterns (${excludedFromInstaller} advisory entries fall inside them)`);
-check('every shipped package.json with a lockfile was audited', audited >= 30, `${audited}`);
+check('every shipped package.json with a lockfile was audited', audited >= 30 && audited === lockDirs.filter(dir => !NOT_SHIPPED.has(dir)).length, `${audited}`);
 check('no known advisory (any severity) in what ships, excluded packages and documented exceptions aside', unexplained.length === 0, '\n  ' + unexplained.join('\n  '));
-for (const ex of exceptions) {
-	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
-}
-
 // ---- the development trees: build tooling and tests. Several of their advisories have no upstream fix (braces, extract-zip, sprintf-js, node-forge...), so
 // Vader patches or replaces those packages (build/stubs, package.json overrides). Everything must be at zero here; an exception needs a written reason.
 const allLockDirs = [];
-const findLocks = (dir, depth) => {
-	if (depth > 3) { return; }
+const findLocks = (dir) => {
 	for (const e of fs.readdirSync(path.join(root, dir), { withFileTypes: true })) {
 		if (!e.isDirectory() || ['node_modules', '.git', 'out', '.build', 'stubs', 'dist'].includes(e.name)) { continue; }
 		const rel = dir === '.' ? e.name : `${dir}/${e.name}`;
 		if (fs.existsSync(path.join(root, rel, 'package-lock.json'))) { allLockDirs.push(rel); }
-		findLocks(rel, depth + 1);
+		findLocks(rel);
 	}
 };
 if (fs.existsSync(path.join(root, 'package-lock.json'))) { allLockDirs.push('.'); }
-for (const top of ['build', 'test', 'extensions', 'remote']) { if (fs.existsSync(path.join(root, top))) { if (fs.existsSync(path.join(root, top, 'package-lock.json'))) { allLockDirs.push(top); } findLocks(top, 0); } }
+findLocks('.');
 const devFindings = [];
+let devAudited = 0;
 for (const dir of allLockDirs) {
-	const cwd = path.join(root, dir);
-	let a; try { a = JSON.parse(npmSync(['audit', '--json', '--package-lock-only'], { cwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] })); } catch (e) { a = JSON.parse(e.stdout || '{}'); }
-	for (const [name, v] of Object.entries(a.vulnerabilities ?? {})) {
-		if (exceptions.some(x => x.package === name && (x.in ?? '.') === dir)) { continue; }
+	const a = auditOf(dir, true);
+	if (!a) { continue; }
+	devAudited++;
+	for (const [name, v] of Object.entries(a.vulnerabilities)) {
+		const ex = exceptions.find(x => x.package === name && (x.in ?? '.') === dir);
+		if (ex) { usedExceptions.add(`${dir}:${name}`); continue; }
 		devFindings.push(`${dir}: ${v.severity} ${name} ${v.range}`);
 	}
 }
-console.log(`audited ${allLockDirs.length} lockfiles including development dependencies`);
+console.log(`audited ${devAudited} of ${allLockDirs.length} lockfiles including development dependencies`);
+check('every development lockfile produced a valid audit report', devAudited > 0 && devAudited === allLockDirs.length, `${devAudited}/${allLockDirs.length}`);
 check('every lockfile in the repository, development dependencies included, is free of known advisories', devFindings.length === 0, '\n  ' + devFindings.join('\n  '));
+for (const ex of exceptions) {
+	check(`exception "${ex.package}" (${ex.in ?? '.'}) is still needed and carries a reason`, usedExceptions.has(`${ex.in ?? '.'}:${ex.package}`) && typeof ex.reason === 'string' && ex.reason.length > 40, 'stale or without a reason');
+}
 
 console.log(`\n${passed} passed, ${failed} failed`);
 process.exit(failed ? 1 : 0);

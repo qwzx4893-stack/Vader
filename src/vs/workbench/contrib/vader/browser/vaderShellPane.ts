@@ -41,17 +41,18 @@ class VaderShellOverlay extends Disposable {
 		const win = getActiveWindow()
 		const workbench = win.document.querySelector('.monaco-workbench') as HTMLElement | null
 		if (!workbench) { return }
-		if (!this.root) { this.create(workbench) }
+		// The window owns the screen before mounting starts, including a failed
+		// mount. A failed modern page must never reveal the editor beneath it.
 		setVaderWindowLayer(workbench, 'shell', true)
+		if (!this.root) { this.create(workbench) }
 		this.position()
 		this.root!.style.display = 'flex'
 		this.shown = true
 	}
 
 	hide(): void {
-		if (!this.root) { return }
-		this.root.style.display = 'none'
-		const workbench = this.root.closest<HTMLElement>('.monaco-workbench')
+		if (this.root) this.root.style.display = 'none'
+		const workbench = this.root?.closest<HTMLElement>('.monaco-workbench') ?? getActiveWindow().document.querySelector<HTMLElement>('.monaco-workbench')
 		if (workbench) setVaderWindowLayer(workbench, 'shell', false)
 		this.shown = false
 	}
@@ -76,11 +77,12 @@ class VaderShellOverlay extends Disposable {
 		const resources = new DisposableStore()
 		const onResize = () => { if (this.shown) { this.position() } }
 		doc.defaultView?.addEventListener('resize', onResize)
-		resources.add(toDisposable(() => { doc.defaultView?.removeEventListener('resize', onResize); setVaderWindowLayer(workbench, 'shell', false); root.remove() }))
+		resources.add(toDisposable(() => { doc.defaultView?.removeEventListener('resize', onResize); root.remove() }))
 		try {
 			this.instantiationService.invokeFunction(accessor => {
 				const mounted = mountVaderShell(root, accessor) // lives as long as the window
-				if (mounted) { resources.add(toDisposable(mounted.dispose)) }
+				if (!mounted) throw new Error('Vader window could not be mounted')
+				resources.add(toDisposable(mounted.dispose))
 			})
 			this.root = root
 			this._register(resources)
@@ -88,6 +90,12 @@ class VaderShellOverlay extends Disposable {
 			resources.dispose()
 			throw error
 		}
+	}
+
+	override dispose(): void {
+		this.hide()
+		super.dispose()
+		this.root = undefined
 	}
 }
 
@@ -116,9 +124,10 @@ export class VaderShellContribution extends Disposable implements IWorkbenchCont
 		try {
 			if (this.shell.state.mode === 'window') { this.overlay.show() } else { this.overlay.hide() }
 		} catch (error) {
-			// Keep the workbench/error UI reachable and leave mounting retryable.
+			// Preserve window ownership while a later layout retries mounting. The
+			// real error still propagates to diagnostics; no classic fallback or
+			// misleading success screen is shown.
 			this.active.set(false)
-			getActiveWindow().document.body.classList.remove('vader-window-starting')
 			throw error
 		}
 		this.active.set(this.overlay.isShown)

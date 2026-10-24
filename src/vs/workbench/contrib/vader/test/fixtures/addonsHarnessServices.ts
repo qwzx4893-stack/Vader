@@ -2,3 +2,4 @@
 export const useAccessor = () => (window as any).__accessor
 export const useIsDark = () => true
 export const useSkillsState = () => (window as any).__skills ?? []
+export const useSettingsState = () => (window as any).__settings ?? { globalSettings: {} }

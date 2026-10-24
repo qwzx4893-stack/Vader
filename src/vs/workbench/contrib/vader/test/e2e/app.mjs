@@ -10,6 +10,8 @@ import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { protectScreenshots } from './screenshotPrivacy.mjs';
+import { waitForStartupSurface } from '../waitForStartupSurface.mjs';
 
 const require = createRequire(import.meta.url);
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
@@ -78,7 +80,9 @@ export async function launchApp(opts) {
 		if (!page) { await sleep(500); }
 	}
 	if (!page) { throw new Error('no workbench window appeared'); }
-	await page.waitForSelector('.monaco-workbench .part', { timeout: 60_000 });
+	protectScreenshots(page, process.env.REAL_LLM_API_KEY);
+	const startup = await waitForStartupSurface(page, { expectedMode: opts.window ? 'modern' : 'classic' });
+	if (!startup) { throw new Error(`The ${opts.window ? 'modern Vader window' : 'editor'} did not become usable`); }
 	// a click or a fill on something that is not on the screen fails after 12 seconds, not after Playwright's default 30: the longest
 	// things a scenario waits for have their own timeouts (waitForIdle, waitForApproval, waitFor)
 	page.setDefaultTimeout(12_000);

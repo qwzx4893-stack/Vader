@@ -26,6 +26,25 @@ const D = await import(pathToFileURL(path.join(tmp, 'd.mjs')).href);
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
 
+// Exercise the real entry method without starting Electron or its native updater.
+// The release request itself is covered by the real-app network scenario.
+{
+	const ts = require('typescript');
+	const source = fs.readFileSync(path.join(here, '../electron-main/vaderUpdateMainService.ts'), 'utf8');
+	const ast = ts.createSourceFile('update.ts', source, ts.ScriptTarget.Latest, true);
+	const cls = ast.statements.find(n => ts.isClassDeclaration(n) && n.members.some(m => m.name?.getText(ast) === 'check'));
+	const method = cls.members.find(m => m.name?.getText(ast) === 'check').getText(ast);
+	const js = ts.transpileModule(`class UpdateEntry { ${method} }`, { compilerOptions: { target: ts.ScriptTarget.ES2022 } }).outputText;
+	const Entry = new Function('StateType', `${js}; return UpdateEntry;`)({ Disabled: 'disabled' });
+	const entry = new Entry();
+	let requests = 0, nativeCalls = 0;
+	entry._envMainService = { isBuilt: false };
+	entry._updateService = { state: { type: 'disabled' }, checkForUpdates() { nativeCalls++; } };
+	entry._checkGitHubReleases = async explicit => { requests++; return { message: explicit ? 'actual fixture release result' : null }; };
+	check('development background checks remain silent and make no release request', (await entry.check(false)).message === null && requests === 0 && nativeCalls === 0);
+	check('a manual development check reaches the read-only release check without the native updater', (await entry.check(true)).message === 'actual fixture release result' && requests === 1 && nativeCalls === 0);
+}
+
 // ---- the rules
 const asset = (name, size = 1000, url = `https://github.com/qwzx4893-stack/Vader/releases/download/v1.4.0/${name}`) => ({ name, size, browser_download_url: url });
 check('the installer of this computer is the one named for its architecture and the version', M.pickInstaller([asset('Vader-Setup-x64-1.4.0.exe'), asset('Vader-Setup-arm64-1.4.0.exe')], '1.4.0', 'win32', 'arm64')?.name === 'Vader-Setup-arm64-1.4.0.exe');

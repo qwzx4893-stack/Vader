@@ -8,11 +8,8 @@ name: Windows E2E
 # Manual only; never builds or publishes anything.
 
 on:
-  # Dispatching by name only works once this file is on the default branch; until then a push that touches it
-  # (on the validation branch only) starts the same run against that branch's latest successful Windows Build.
-  push:
-    branches: [main]
-    paths: ['.github/workflows/windows-e2e.yml', '.github/e2e-only.txt', 'src/vs/workbench/contrib/vader/test/e2e/**']
+  # Test an explicitly selected packaged build. Source-only validation belongs to
+  # Windows Development Validation; a merge must not silently test an older installer.
   workflow_dispatch:
     inputs:
       run_id:

@@ -24,6 +24,8 @@
 // `errorClass`/`errorRetryable` protocol fields), not something Vader acts on by retrying again.
 export type ProviderErrorCategory =
 	| 'AUTHENTICATION'
+	| 'ACCESS_RESTRICTED'
+	| 'PERMISSION_DENIED'
 	| 'RATE_LIMIT'
 	| 'MODEL_NOT_FOUND'
 	| 'CONTEXT_LIMIT'
@@ -42,6 +44,21 @@ export type ClassifiedProviderError = {
 	/** whether retrying the exact same request without changing anything about it could plausibly help - informational only, see the retry note above */
 	retryable: boolean;
 };
+
+// A model can be forbidden despite valid credentials (e.g. OpenRouter's harness-only models).
+const ACCESS_RESTRICTED_PATTERNS = /only available (?:on|to|through) (?:approved |supported )?agentic harnesses|model[^.\n]{0,100}restricted to[^.\n]{0,100}(?:harness|coding agent|application)/i;
+// The agent runtime carries only the provider's message to the UI, losing the SDK status.
+// Accept an HTTP/error prefix, never an arbitrary count such as "401 tokens".
+const AUTH_STATUS_IN_MESSAGE = /(?:^|\b(?:error|http(?: status)?|status(?: code)?)\s*:?)\s*(401|403)\b/i;
+
+/** Read known diagnostic fields without serializing headers, requests or credentials. */
+function diagnosticFields(error: unknown, depth = 0): string[] {
+	if (typeof error === 'string') return [error];
+	if (typeof error !== 'object' || error === null || depth > 2) return [];
+	const e = error as { message?: unknown; code?: unknown; error?: unknown; body?: unknown; cause?: unknown };
+	return [e.message, e.code].filter((v): v is string => typeof v === 'string')
+		.concat(...[e.error, e.body, e.cause].map(v => diagnosticFields(v, depth + 1)));
+}
 
 const NETWORK_PATTERNS = /fetch failed|ECONNREFUSED|ECONNRESET|EAI_AGAIN|ENOTFOUND|network|socket hang up/i;
 const TIMEOUT_PATTERNS = /timed? ?out|ETIMEDOUT|deadline exceeded/i;
@@ -68,12 +85,14 @@ export function classifyProviderError(message: string, fullError: unknown, opts?
 		return { category: 'CANCELLED', retryable: false };
 	}
 
+	const diagnosticText = [message, ...diagnosticFields(fullError)].join(' ');
 	const status: number | undefined = typeof fullError === 'object' && fullError !== null && 'status' in fullError && typeof (fullError as { status: unknown }).status === 'number'
 		? (fullError as { status: number }).status
-		: undefined;
+		: Number(AUTH_STATUS_IN_MESSAGE.exec(diagnosticText)?.[1]) || undefined;
 
 	if (status !== undefined) {
-		if (status === 401 || status === 403) return { category: 'AUTHENTICATION', retryable: false };
+		if (status === 401) return { category: 'AUTHENTICATION', retryable: false };
+		if (status === 403) return { category: ACCESS_RESTRICTED_PATTERNS.test(diagnosticText) ? 'ACCESS_RESTRICTED' : 'PERMISSION_DENIED', retryable: false };
 		if (status === 404) return { category: 'MODEL_NOT_FOUND', retryable: false };
 		if (status === 429) return { category: 'RATE_LIMIT', retryable: true };
 		if (status === 400) {
@@ -86,17 +105,8 @@ export function classifyProviderError(message: string, fullError: unknown, opts?
 		if (status >= 500) return { category: 'PROVIDER_UNAVAILABLE', retryable: true };
 	}
 
-	// A network-level failure (e.g. a torn-down TCP connection, DNS failure) often doesn't carry
-	// its real signal in the top-level `message` string at all - the SDKs Vader uses (`openai`'s
-	// APIConnectionError being the concrete case found in this session's fault-injection testing)
-	// nest the actual OS-level error (`ECONNRESET`, "socket hang up", etc.) under `fullError.cause`.
-	// Build one combined diagnostic string from every place useful text could be, rather than
-	// only the top-level message, so classification doesn't silently miss it.
-	const causeText = typeof fullError === 'object' && fullError !== null
-		? [(fullError as { cause?: { message?: string; code?: string } }).cause?.message, (fullError as { cause?: { code?: string } }).cause?.code, (fullError as { code?: string }).code]
-			.filter((x): x is string => typeof x === 'string').join(' ')
-		: '';
-	const diagnosticText = `${message} ${causeText}`;
+	// Preserve restrictions in message-only runtime failures too.
+	if (status === undefined && ACCESS_RESTRICTED_PATTERNS.test(diagnosticText)) return { category: 'ACCESS_RESTRICTED', retryable: false };
 
 	if (CONTEXT_LIMIT_PATTERNS.test(diagnosticText)) return { category: 'CONTEXT_LIMIT', retryable: false };
 	if (MODEL_NOT_FOUND_PATTERNS.test(diagnosticText)) return { category: 'MODEL_NOT_FOUND', retryable: false };
@@ -114,6 +124,8 @@ export function classifyProviderError(message: string, fullError: unknown, opts?
 export function userFacingProviderError(category: ProviderErrorCategory, message: string): string {
 	const lead: Partial<Record<ProviderErrorCategory, string>> = {
 		AUTHENTICATION: 'The provider rejected your API key. Check the key in Settings > Main Providers (or Local Providers).',
+		ACCESS_RESTRICTED: 'The provider restricts access to this model. Choose another model, or check the provider’s access requirements. Changing your API key may not help.',
+		PERMISSION_DENIED: 'The provider denied access to this request. Check your account and model permissions, or choose another model.',
 		RATE_LIMIT: 'The provider is limiting how many requests you can send. Wait a moment and send the message again.',
 		CONTEXT_LIMIT: 'This conversation is longer than the model can take. Start a new chat, or pick a model with a larger context window.',
 		MODEL_NOT_FOUND: 'The provider has no model with this name. Pick another model in Settings > Models.',

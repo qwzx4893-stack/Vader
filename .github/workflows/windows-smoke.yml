@@ -9,9 +9,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag to install and test (ignored when run_id is set)'
+        description: 'Release tag to install and test (empty = latest; ignored when run_id is set)'
         required: false
-        default: 'v1.99.3'
+        default: ''
       run_id:
         description: 'Instead of a release: Windows Build run id whose installer artifact to test (validation builds)'
         required: false
@@ -38,6 +38,7 @@ jobs:
           sparse-checkout: |
             .github/e2e-client
             src/vs/workbench/contrib/vader/test/windowsLiveSmoke.mjs
+            src/vs/workbench/contrib/vader/test/smokeReadiness.mjs
             .nvmrc
           sparse-checkout-cone-mode: false
 
@@ -53,8 +54,10 @@ jobs:
         run: |
           if ($env:RUN_ID) {
             gh run download $env:RUN_ID --repo ${{ github.repository }} --name vader-win32-x64-setup --dir dl
-          } else {
+          } elseif ($env:TAG) {
             gh release download $env:TAG --repo ${{ github.repository }} --pattern '*.exe' --dir dl
+          } else {
+            gh release download --repo ${{ github.repository }} --pattern '*.exe' --dir dl
           }
           $exe = Get-ChildItem dl -Recurse -Filter *.exe | Select-Object -First 1
           if ($exe -and $exe.DirectoryName -ne (Resolve-Path dl).Path) { Move-Item $exe.FullName dl }
@@ -107,7 +110,6 @@ jobs:
       - name: Launch - default flags
         if: always()
         shell: pwsh
-        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: default
@@ -118,7 +120,6 @@ jobs:
       - name: Launch - software rendering (--disable-gpu)
         if: always()
         shell: pwsh
-        continue-on-error: true
         env:
           VADER_EXE: ${{ steps.inspect.outputs.exe }}
           RUN_LABEL: disable-gpu

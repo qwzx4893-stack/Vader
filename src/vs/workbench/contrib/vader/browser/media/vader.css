@@ -280,17 +280,29 @@
 /* The inherited titlebar's menus use z-index 2500, above our pages. Hide only
    its editor controls; keep actual window buttons available on every page. */
 body.vader-window-starting .monaco-workbench .part:not(.titlebar),
-.monaco-workbench.vader-window-layer .part:not(.titlebar) {
-	visibility: hidden;
+body.vader-window-starting .monaco-workbench .part:not(.titlebar) *,
+.monaco-workbench.vader-window-layer .part:not(.titlebar),
+.monaco-workbench.vader-window-layer .part:not(.titlebar) * {
+	/* Diff editors and other restored widgets explicitly set visibility:visible.
+	   Suppress their descendants too, without destroying editor layout/state. */
+	visibility: hidden !important;
 }
 body.vader-window-starting .monaco-workbench:not(.web):is(.windows, .mac) .part.titlebar,
 .monaco-workbench.vader-window-layer:not(.web):is(.windows, .mac) .part.titlebar {
 	visibility: hidden;
 	pointer-events: none;
 }
+/* Menus and titlebar toolbars can explicitly make descendants visible inline.
+   Keep their measurements, but never paint inherited editor chrome above Vader. */
+body.vader-window-starting .monaco-workbench:where(:not(.web):is(.windows, .mac)) .part.titlebar *,
+.monaco-workbench.vader-window-layer:where(:not(.web):is(.windows, .mac)) .part.titlebar * {
+	visibility: hidden !important;
+}
 body.vader-window-starting .monaco-workbench .part.titlebar .window-controls-container,
-.monaco-workbench.vader-window-layer .part.titlebar .window-controls-container {
-	visibility: visible;
+body.vader-window-starting .monaco-workbench .part.titlebar .window-controls-container *,
+.monaco-workbench.vader-window-layer .part.titlebar .window-controls-container,
+.monaco-workbench.vader-window-layer .part.titlebar .window-controls-container * {
+	visibility: visible !important;
 	pointer-events: auto;
 }
 body.vader-window-starting .monaco-workbench,

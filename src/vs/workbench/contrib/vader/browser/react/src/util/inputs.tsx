@@ -1376,7 +1376,7 @@ export const VaderCustomDropdownBox = <T extends NonNullable<any>>({
 		return null
 
 	return (
-		<div className={`inline-block relative ${className}`}>
+		<div className={`inline-block relative min-w-0 max-w-full ${className}`}>
 			{/* Hidden measurement div */}
 			<div
 				ref={measureRef}

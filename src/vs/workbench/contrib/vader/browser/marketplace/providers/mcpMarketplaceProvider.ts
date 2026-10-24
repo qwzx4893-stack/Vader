@@ -13,7 +13,8 @@ import { DockerMcpResult, IDiscoveryMainService, McpRegistryPackage, McpRegistry
 import { githubRepoUrlOf, ownerOfGithubUrl } from '../../../common/discovery/feedParsers.js';
 import { IMarketplaceProvider, ItemFact, IUnifiedMarketplaceService, MarketplaceItem } from '../../../common/marketplace/marketplaceTypes.js';
 import { categoryOf, classify } from '../../../common/marketplace/categories.js';
-import { computeTrust, KNOWN_PUBLISHERS, TrustInputs } from '../../../common/marketplace/trustScore.js';
+import { computeTrust, TrustInputs } from '../../../common/marketplace/trustScore.js';
+import { querySource } from '../../../common/marketplace/sourceQuery.js';
 import { isSourceOn } from '../../../common/marketplace/addonSources.js';
 import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
 
@@ -34,7 +35,6 @@ import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
 //   - a repository with nothing runnable described: its page is opened in the browser, because a command would be a guess
 // The existing mcp.json watcher then runs the real add-server/health-check flow, so there is one server lifecycle, not two.
 
-const FEATURED_MCP_QUERIES = ['github', 'playwright', 'filesystem', 'fetch', 'sentry', 'stripe', 'postgres', 'linear', 'notion', 'slack'];
 const SMITHERY_HOSTED = 'https://server.smithery.ai';
 
 /** who published a registry entry: the owner of its GitHub repository, else the name of its reverse-domain namespace ("com.stripe/mcp" is stripe) */
@@ -83,6 +83,7 @@ export class MCPMarketplaceProvider implements IMarketplaceProvider {
 	readonly cacheTtlMs = 60_000;
 
 	private _warnings: string[] = [];
+	private readonly _warningsByToken = new WeakMap<CancellationToken, string[]>();
 
 	constructor(
 		private readonly _mcpService: IMCPService,
@@ -92,7 +93,7 @@ export class MCPMarketplaceProvider implements IMarketplaceProvider {
 		private readonly _settings: IVaderSettingsService,
 	) { }
 
-	takeWarnings(): string[] { const w = this._warnings; this._warnings = []; return w; }
+	takeWarnings(token?: CancellationToken): string[] { const w = token ? this._warningsByToken.get(token) ?? [] : this._warnings; if (token) this._warningsByToken.delete(token); if (w === this._warnings) this._warnings = []; return w; }
 
 	private _on(sourceId: string): boolean { return isSourceOn(this._settings.state.globalSettings.addonSourcesOff, sourceId); }
 
@@ -239,42 +240,43 @@ export class MCPMarketplaceProvider implements IMarketplaceProvider {
 		return found;
 	}
 
-	private async _gather(query: string, browse: boolean, category?: string): Promise<Found[]> {
+	private async _gather(query: string, token: CancellationToken, category?: string): Promise<Found[]> {
 		type Part = Parameters<MCPMarketplaceProvider['_group']>[0][number];
 		// a section is looked for by name in every source; the front page is each source's own best
 		const cat = category ? categoryOf('mcp', category) : undefined;
-		const q = cat ? cat.seeds[0] : query;
+		const q = query.trim() || cat?.seeds[0] || '';
 		const feeds: { id: string; label: string; run: () => Promise<Part[]> }[] = [
 			{
 				id: 'mcp-registry', label: 'Official MCP Registry', run: async () => {
-					const lists = cat ? await Promise.all(cat.seeds.map(s => this._discoveryService.queryMcpRegistry(s))) : browse ? await Promise.all(FEATURED_MCP_QUERIES.map(s => this._discoveryService.queryMcpRegistry(s))) : [await this._discoveryService.queryMcpRegistry(query)];
-					// the registry lets anyone publish a server named "github" or "stripe": on the front page only a known organisation's entry is featured, one per query
-					const picked = browse && !cat ? lists.map(l => l.find(r => KNOWN_PUBLISHERS.has((mcpPublisherOf(r) ?? '').toLowerCase()))).filter((r): r is McpRegistrySearchResult => !!r) : lists.flat();
-					return picked.map(r => ({ sourceId: 'mcp-registry', label: 'MCP Registry', registry: r }));
+					const rows = await this._discoveryService.queryMcpRegistry(q);
+					return rows.map(r => ({ sourceId: 'mcp-registry', label: 'MCP Registry', registry: r }));
 				},
 			},
 			{ id: 'smithery', label: 'Smithery', run: async () => (await this._discoveryService.searchSmithery(q)).map(s => ({ sourceId: 'smithery', label: 'Smithery', smithery: s })) },
-			{ id: 'npm-mcp', label: 'npm', run: async () => (await this._discoveryService.searchNpmMcp(q)).filter(n => !browse || n.weeklyDownloads >= 500).map(n => ({ sourceId: 'npm-mcp', label: 'npm', npm: n })) },
+			{ id: 'npm-mcp', label: 'npm', run: async () => (await this._discoveryService.searchNpmMcp(q)).map(n => ({ sourceId: 'npm-mcp', label: 'npm', npm: n })) },
 			{ id: 'docker-mcp', label: 'Docker', run: async () => (await this._discoveryService.searchDockerMcp(q)).map(d => ({ sourceId: 'docker-mcp', label: 'Docker', docker: d })) },
 			{ id: 'github-topic-mcp', label: 'GitHub topic mcp-server', run: async () => (await this._discoveryService.searchGithubTopic('mcp-server', q)).map(g => ({ sourceId: 'github-topic-mcp', label: 'GitHub', repo: g })) },
 		];
 		const active = feeds.filter(f => this._on(f.id));
-		const settled = await Promise.allSettled(active.map(f => f.run()));
+		const warnings: string[] = [];
+		this._warningsByToken.set(token, warnings);
+		const settled = await Promise.allSettled(active.map(f => querySource(f.run, token)));
 		const parts: Part[] = [];
 		let failed = 0;
 		settled.forEach((r, i) => {
 			if (r.status === 'fulfilled') { parts.push(...r.value); return; }
 			failed++;
-			this._warnings.push(`${active[i].label} did not answer (${r.reason instanceof Error ? r.reason.message : String(r.reason)})`);
+			warnings.push(`${active[i].label} did not answer (${r.reason instanceof Error ? r.reason.message : String(r.reason)})`);
 		});
-		if (active.length > 0 && failed === active.length) throw new Error(this.takeWarnings().join('; '));
+		this._warnings = warnings;
+		if (active.length > 0 && failed === active.length) throw new Error(warnings.join('; '));
 		return this._group(parts);
 	}
 
 	async search(query: string, token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
 		const configured = this._configuredToItems();
 		const configuredNames = new Set(configured.map(c => c.id));
-		const found = await this._gather(query, false, category).catch(() => [] as Found[]);
+		const found = await this._gather(query, token, category).catch(e => { if (configured.length === 0) throw e; return [] as Found[]; });
 		if (token.isCancellationRequested) return [];
 		return [
 			...configured.filter(c => `${c.name}`.toLowerCase().includes(query.toLowerCase())),
@@ -290,7 +292,7 @@ export class MCPMarketplaceProvider implements IMarketplaceProvider {
 	async browse(token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
 		const configured = this._configuredToItems();
 		const configuredNames = new Set(configured.map(c => c.id));
-		const found = await this._gather('', true, category).catch(e => { if (configured.length === 0) throw e; return [] as Found[]; });
+		const found = await this._gather('', token, category).catch(e => { if (configured.length === 0) throw e; return [] as Found[]; });
 		if (token.isCancellationRequested) return configured;
 		return [...(category ? [] : configured), ...found.map(f => this._toItem(f)).filter(i => !configuredNames.has(String(i.metadata.serverKey)) && (!category || (i.metadata.categories as string[]).includes(category)))];
 	}

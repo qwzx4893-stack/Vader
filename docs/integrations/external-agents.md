@@ -1,7 +1,19 @@
 # Coding agents you already have an account with
 
-**Settings > Models > Coding Agents** lets a person use the subscription or free tier they already have with Codex, Cursor, OpenCode, GitHub Copilot, Mistral Vibe,
+**Settings > Connected agents** lets a person use the subscription or free tier they already have with Codex, Cursor, OpenCode, GitHub Copilot, Mistral Vibe,
 Grok Build, Kimi, Antigravity, Claude Code or Freebuff inside Vader, or add any other program that speaks the Agent Client Protocol. One card per agent, with its logo.
+
+## Release checks and connection semantics (23 October 2026)
+
+Opening this page checks the official ACP registry and repeats hourly while the page remains open. The main process shares requests and caches successful checks for an hour; manual checks bypass freshness, and failures/incomplete compatible releases remain visible. This reads public metadata only, never launches agents or installs updates automatically. Programs installed outside Vader retain their own updater.
+
+Before a managed install, `getInstallPlan` refreshes release metadata and returns the exact platform artifact/package, version and a fingerprint of the release metadata. The browser's consent describes this plan and forwards its fingerprint through `ExternalAgentService` to `install`; changed metadata requires a new confirmation. This fingerprint is not a checksum of the downloaded archive. The existing file-checksum verification and missing-checksum warning remain. npm updates must retain the reviewed package identity and pin the version declared in the registry. Updating active managed agents is refused.
+
+Codex uses the adapter maintained by the ACP project; it is not an OpenAI-published ACP executable. Other managed catalog entries keep their vendor release locations. Claude Code and Freebuff remain terminal programs, with an explicit vendor-installer update action; PATH readiness is not treated as proof that an update completed.
+
+`Connected` means the agent accepted an ACP session. It does not attest to account identity or billing. The agent owns authentication; when required, Vader runs the advertised auth flow and retries session creation. Anonymous/free sessions are not claimed as verified account logins. Negotiated protocol versions unsupported by the installed SDK are rejected explicitly before authentication/chat.
+
+Checks: `externalAgentE2E.mjs` exercises isolated protocol subprocesses and registry guards; `--live` additionally checks public install plans for all eight managed agents without downloads, prompts or credentials. `externalAgentSignInE2E.mjs` covers renderer IPC forwarding, current-plan consent, cancellation, registry failure/recovery and terminal update semantics. These do not establish live vendor-account connectivity or behavior in a rebuilt Windows package.
 
 Code: `common/externalAgents/` (catalog, types, protocol rules, the registry snapshot, logos), `electron-main/externalAgentMainService.ts` (install, start,
 protocol), `browser/externalAgents/externalAgentsService.ts` (status, install / test / remove actions, per-chat settings), `browser/chatThreadService.ts`

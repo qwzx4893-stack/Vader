@@ -45,8 +45,11 @@ async function readCapped(res: Response): Promise<string> {
 	return new TextDecoder().decode(all);
 }
 
-async function fetchJson(url: string): Promise<any> {
+async function fetchJson(url: string, signal?: AbortSignal): Promise<any> {
 	const controller = new AbortController();
+	const abort = () => controller.abort();
+	if (signal?.aborted) controller.abort();
+	signal?.addEventListener('abort', abort, { once: true });
 	const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 	try {
 		const res = await fetch(url, { signal: controller.signal, headers: { 'Accept': 'application/json' } });
@@ -57,11 +60,15 @@ async function fetchJson(url: string): Promise<any> {
 		return JSON.parse(await readCapped(res));
 	} finally {
 		clearTimeout(timeoutId);
+		signal?.removeEventListener('abort', abort);
 	}
 }
 
-async function fetchText(url: string): Promise<string | null> {
+async function fetchText(url: string, signal?: AbortSignal): Promise<string | null> {
 	const controller = new AbortController();
+	const abort = () => controller.abort();
+	if (signal?.aborted) controller.abort();
+	signal?.addEventListener('abort', abort, { once: true });
 	const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 	try {
 		const res = await fetch(url, { signal: controller.signal });
@@ -71,6 +78,7 @@ async function fetchText(url: string): Promise<string | null> {
 		return null;
 	} finally {
 		clearTimeout(timeoutId);
+		signal?.removeEventListener('abort', abort);
 	}
 }
 
@@ -80,13 +88,19 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 	// Every live feed is asked at most once every ten minutes for the same words; a store that is opened and closed must not spend the
 	// quota that GitHub (60 calls an hour, 10 searches a minute without a key) gives this computer.
 	private readonly _feedCache = new Map<string, { atMs: number; value: unknown }>();
+	private readonly _inFlight = new Map<string, Promise<unknown>>();
 	private async _cached<T>(key: string, ttlMs: number, load: () => Promise<T>): Promise<T> {
 		const hit = this._feedCache.get(key);
 		if (hit && Date.now() - hit.atMs < ttlMs) { return hit.value as T; }
-		const value = await load();
-		this._feedCache.set(key, { atMs: Date.now(), value });
-		if (this._feedCache.size > 200) { this._feedCache.delete(this._feedCache.keys().next().value!); }
-		return value;
+		const pending = this._inFlight.get(key);
+		if (pending) return pending as Promise<T>;
+		const request = Promise.resolve().then(load).then(value => {
+			this._feedCache.set(key, { atMs: Date.now(), value });
+			if (this._feedCache.size > 200) this._feedCache.delete(this._feedCache.keys().next().value!);
+			return value;
+		}).finally(() => this._inFlight.delete(key));
+		this._inFlight.set(key, request);
+		return request;
 	}
 
 	searchSkillsSh(query: string): Promise<SkillsShResult[]> {
@@ -174,7 +188,9 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 
 	private async _queryMcpRegistry(query: string): Promise<McpRegistrySearchResult[]> {
 		{
-			const url = `${MCP_REGISTRY_BASE_URL}/v0/servers?search=${encodeURIComponent(query)}&limit=20`;
+			// Ask for latest versions before the page limit, instead of discarding most of a page of historical versions.
+			// https://github.com/modelcontextprotocol/registry/blob/main/docs/reference/api/official-registry-api.md
+			const url = `${MCP_REGISTRY_BASE_URL}/v0.1/servers?search=${encodeURIComponent(query)}&version=latest&limit=40`;
 			const data = await fetchJson(url);
 			const all: any[] = Array.isArray(data?.servers) ? data.servers : [];
 			// the registry lists every published version of a server; only the latest one is offered, once
@@ -223,6 +239,13 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 
 	async searchSkillNet(query: string): Promise<SkillNetSearchResult[]> {
 		try {
+			return await this.querySkillNet(query);
+		} catch {
+			return [];
+		}
+	}
+
+	async querySkillNet(query: string): Promise<SkillNetSearchResult[]> {
 			const url = `${SKILLNET_BASE_URL}/v1/search?q=${encodeURIComponent(query)}&mode=keyword&limit=20`;
 			const data = await fetchJson(url);
 			const rawResults: any[] = Array.isArray(data?.results) ? data.results
@@ -236,35 +259,49 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 				stars: Number(s?.stars ?? s?.star_count ?? 0),
 				category: s?.category ? String(s.category) : undefined,
 			})).filter(s => !!s.repositoryUrl);
-		} catch (e) {
-			return [];
-		}
 	}
 
 	// A repository's listing is cached for a few minutes: GitHub allows 60 unauthenticated API calls an hour, and a store that is
 	// opened and closed would otherwise spend two of them every time.
 	private readonly _githubCache = new Map<string, { atMs: number; listing: GithubSkillListing }>();
+	private readonly _githubInFlight = new Map<string, Promise<GithubSkillListing>>();
 
 	async listGithubSkills(repoSpec: string): Promise<GithubSkillListing> {
+		const ref = parseRepoRef(repoSpec);
+		const key = ref ? `${ref.owner}/${ref.repo}`.toLowerCase() : repoSpec;
+		const pending = this._githubInFlight.get(key);
+		if (pending) return pending;
+		const request = this._listGithubSkills(repoSpec).finally(() => this._githubInFlight.delete(key));
+		this._githubInFlight.set(key, request);
+		return request;
+	}
+
+	private async _listGithubSkills(repoSpec: string): Promise<GithubSkillListing> {
 		const ref = parseRepoRef(repoSpec);
 		if (!ref) { return { repo: repoSpec, stars: 0, entries: [], error: 'Not a GitHub repository. Use owner/repo or a https://github.com address.' }; }
 		const name = `${ref.owner}/${ref.repo}`;
 		const cached = this._githubCache.get(name.toLowerCase());
-		if (cached && Date.now() - cached.atMs < GITHUB_CACHE_TTL_MS) { return cached.listing; }
+		if (cached && Date.now() - cached.atMs < (cached.listing.error ? 15_000 : GITHUB_CACHE_TTL_MS)) { return cached.listing; }
+		// A repository listing used to spend up to 80 x 10s downloading instructions before returning anything.
+		// Share one budget across metadata, tree and the six download workers; unread files keep real folder names.
+		const controller = new AbortController();
+		const deadline = setTimeout(() => controller.abort(), 9_000);
 		try {
-			const meta = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}`);
+			const meta = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}`, controller.signal);
 			const branch = typeof meta?.default_branch === 'string' && /^[A-Za-z0-9_.-]+$/.test(meta.default_branch) ? meta.default_branch : 'main';
-			const tree = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}/git/trees/${branch}?recursive=1`);
+			const tree = await fetchJson(`${GITHUB_API_BASE_URL}/repos/${ref.owner}/${ref.repo}/git/trees/${branch}?recursive=1`, controller.signal);
 			const folders = skillFoldersFromTree(Array.isArray(tree?.tree) ? tree.tree : []);
 			const entries: GithubSkillEntry[] = new Array(folders.length);
 			let next = 0;
+			let unread = 0;
 			// six downloads at a time: raw.githubusercontent.com is not rate limited like the API, but there is no reason to open eighty connections
 			await Promise.all(Array.from({ length: Math.min(6, folders.length) }, async () => {
 				for (; ;) {
 					const i = next++;
 					if (i >= folders.length) { return; }
 					const f = folders[i];
-					const text = await fetchText(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${branch}/${f.skillMdPath}`) ?? '';
+					const text = controller.signal.aborted ? '' : await fetchText(`https://raw.githubusercontent.com/${ref.owner}/${ref.repo}/${branch}/${f.skillMdPath}`, controller.signal) ?? '';
+					if (!text) unread++;
 					const fm = parseSkillFrontmatter(text);
 					const fallbackName = f.dir ? f.dir.split('/').pop()! : ref.repo;
 					entries[i] = {
@@ -273,12 +310,16 @@ export class DiscoveryMainService extends Disposable implements IDiscoveryMainSe
 					};
 				}
 			}));
-			const listing: GithubSkillListing = { repo: name, stars: Number(meta?.stargazers_count ?? 0), signals: parseRepoSignals(meta), entries };
+			const listing: GithubSkillListing = { repo: name, stars: Number(meta?.stargazers_count ?? 0), signals: parseRepoSignals(meta), entries,
+				error: unread ? `${unread} skill instruction files could not be read; folder names are shown. Open or install a skill to retry its text.` : undefined };
 			this._githubCache.set(name.toLowerCase(), { atMs: Date.now(), listing });
+			if (this._githubCache.size > 200) this._githubCache.delete(this._githubCache.keys().next().value!);
 			return listing;
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e);
 			return { repo: name, stars: 0, entries: [], error: /HTTP (403|429)/.test(message) ? 'GitHub is limiting requests from this computer for now. Try again in a few minutes.' : /HTTP 404/.test(message) ? 'That repository was not found.' : `Could not read the repository (${message}).` };
+		} finally {
+			clearTimeout(deadline);
 		}
 	}
 

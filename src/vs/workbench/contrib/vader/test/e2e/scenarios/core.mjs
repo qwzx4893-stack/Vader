@@ -9,11 +9,27 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { seq } from '../modelServer.mjs';
 
 const SR = (orig, repl) => `<<<<<<< ORIGINAL\n${orig}\n=======\n${repl}\n>>>>>>> UPDATED`;
 
 export const coreScenarios = [
+	{
+		name: 'index: codebase_search retrieves real indexed project code through the main service',
+		fn: async (t) => {
+			t.use(seq([
+				{ toolCalls: [{ name: 'codebase_search', args: { query: 'function add app.js' } }] },
+				{ text: 'Search completed.' },
+			]));
+			await t.send('Search this project for the add function.');
+			const run = await t.runUntilIdle({ timeout: 120_000 });
+			t.check('indexed search returns to idle', run.idle);
+			t.check('indexed search shows no runtime error', (await t.ui.errorTexts(t.page)).length === 0);
+			const result = t.server.chatRequests()[1]?.ctx.lastToolResult ?? '';
+			t.check('the actual project file and implementation reach the model', result.includes('app.js') && /return a - b/.test(result), result.slice(0, 400));
+		},
+	},
 	{
 		name: 'chat: a streamed reply is rendered and the request is well formed',
 		fn: async (t) => {
@@ -277,12 +293,13 @@ export const coreScenarios = [
 	{
 		name: 'stop: cancelling a streaming reply returns the UI to idle and the app stays usable',
 		fn: async (t) => {
-			const long = 'This is a long streamed answer. '.repeat(80);
+			// Exercise cancellation, not the separate repeated-output safety guard.
+			const long = Array.from({ length: 120 }, () => randomUUID()).join(' ');
 			t.use((c) => c.lastUser.includes('again') ? ({ text: 'Back to normal.' }) : ({ text: long, msPerChunk: 40 }));
 			await t.send('write a long essay');
 			const started = await t.waitFor(() => t.ui.isRunning(t.page), 15_000);
 			t.check('the stop button appears while streaming', started);
-			await t.sleep(1200);
+			t.check('text has started arriving before cancellation', await t.waitFor(async () => (await t.ui.assistantTexts(t.page)).some(text => text.length > 0), 15_000));
 			await t.page.locator('[data-testid="vader-stop"]').first().click();
 			t.check('the UI returns to idle after stopping', await t.idle({ timeout: 20_000 }));
 			const texts = await t.ui.assistantTexts(t.page);

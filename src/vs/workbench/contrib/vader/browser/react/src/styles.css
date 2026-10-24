@@ -101,7 +101,12 @@
 } */
 
 /* keyboard focus: a button reached with Tab shows where it is, also outside the Vader window (the side bar, Edit here); the window has its own in shell.css */
+/* Match the window's utility hit area even when the editor uses a 13px root rem. */
+& [data-testid='vader-message-actions'] .vader-message-action {
+	width: 28px;
+	height: 28px;
+}
 & button:focus-visible, & [role=button]:focus-visible, & select:focus-visible, & a:focus-visible, & [role=tab]:focus-visible, & [role=switch]:focus-visible {
-	outline: 1px solid var(--vscode-focusBorder, #6ea0ff) !important;
+	outline: 1px solid var(--t2, #b0b0b5) !important;
 	outline-offset: 1px !important;
 }

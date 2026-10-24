@@ -23,12 +23,12 @@ The **marketplace** (this doc) is a *discovery and management* layer: search, in
 ## Federated search: ranking, failure isolation, caching
 
 `IUnifiedMarketplaceService.search()` (`unifiedMarketplaceService.ts`):
-- Queries every registered provider **concurrently**, each with its own timeout (8s) via a fresh `CancellationTokenSource`.
+- Queries registered providers **concurrently**, with a fresh cancellation token and a raced deadline (15 seconds for search, 30 for browse). Slow feed queries inside Skill/MCP providers have their own 12-second deadline; GitHub repository metadata and instruction reads share a nine-second budget. The UI receives completed provider results progressively rather than waiting for every provider.
 - **Per-provider failure isolation**: a `try`/`catch` around each provider's call means one dead/offline source degrades to "0 results, error noted" in `providerOutcomes` - it never breaks the rest of the federated search. This is also the offline-degradation mechanism: cached results are served if a live call fails, with the outage still surfaced.
 - **Dedup** by `${providerId}:${id}`.
 - **Ranking** (`_score`): exact name match scores far above everything else (1000), then prefix match (300), then substring match in name (100) or description (20); installed/local items get a flat bonus (150); a small per-type weight (`TYPE_RELEVANCE_WEIGHT`) breaks remaining ties so, e.g., a weak Skill description match doesn't outrank a weak Extension one - but never so much that it overrides an exact-name match, matching the mission's explicit "python" example.
 - **Cancel-stale-searches**: a generation counter means a slower, superseded search's results are dropped rather than overwriting a newer search's output.
-- **Caching**: per-`(providerId, query)` with each provider's own `cacheTtlMs` (30s-120s depending on ecosystem; the in-process ACP registry has a 0ms TTL since there's nothing to go stale).
+- **Caching**: provider, browse/search mode, normalized query, category and enabled-source scope all participate in the key. Each provider retains its TTL; partial responses have a shorter retry lifetime. Discovery IPC shares identical in-flight requests. Expired answers can be shown during refresh, labelled as saved/incomplete when applicable; errors remain visible. Refresh can still encounter the main-process feed cache (up to ten minutes) to respect upstream request quotas.
 
 ## Agent-facing discovery flow (never a silent install)
 

@@ -86,3 +86,16 @@ export const friendlyModelName = (providerName: string, id: string): { text: str
 	}
 	return { text: id, mono: true }
 }
+
+/** A compact display caption only. Keep the original id for selection, requests and tooltips. */
+export const compactModelName = (providerName: string, id: string): string => {
+	if (providerName === 'anthropic') return friendlyModelName(providerName, id).text
+	const parts = id.split('/')
+	const vendor = parts.length > 1 ? parts.shift()! : ''
+	const vendors: Record<string, string> = { nvidia: 'NVIDIA', google: 'Google', 'meta-llama': 'Meta', microsoft: 'Microsoft', openai: 'OpenAI', anthropic: 'Anthropic', qwen: 'Qwen' }
+	const name = parts.join('/').replace(/:(?:free|nitro|extended|online)$/i, '')
+		.replace(/-a?\d+(?:\.\d+)?[bmae](?=-|$)/gi, '').replace(/-(?:instruct|it|preview)(?=-|$)/gi, '')
+		.replace(/-(?:\d{8}|\d{4}-\d{2}-\d{2})$/g, '').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+	const title = name.replace(/\b[a-z]/g, char => char.toUpperCase())
+	return `${vendors[vendor.toLowerCase()] ?? ''} ${title || id}`.trim()
+}

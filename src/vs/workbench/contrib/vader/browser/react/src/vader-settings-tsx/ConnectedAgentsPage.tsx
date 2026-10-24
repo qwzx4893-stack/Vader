@@ -3,7 +3,6 @@
  *--------------------------------------------------------------------------------------*/
 
 import React, { useEffect, useState } from 'react'
-import { URI } from '../../../../../../../base/common/uri.js'
 import { ExternalAgentDef, externalAgentCatalog } from '../../../../common/externalAgents/externalAgentCatalog.js'
 import { CustomAcpAgent, ProbeResult } from '../../../../common/externalAgents/externalAgentTypes.js'
 import { SignInState } from '../../../externalAgents/externalAgentsService.js'
@@ -24,7 +23,7 @@ const stateWord = (def: ExternalAgentDef, state: string | undefined, sign: SignI
 	switch (state) {
 		case 'ready':
 			if (def.kind === 'terminal') return { text: 'Installed', tone: 'plain' }
-			return sign?.state === 'in' ? { text: 'Signed in', tone: 'ok' } : sign?.state === 'out' ? { text: 'Not signed in', tone: 'warn' } : sign?.state === 'checking' ? { text: 'Checking sign-in...', tone: 'plain' } : { text: 'Installed', tone: 'plain' }
+			return sign?.state === 'in' ? { text: 'Connected', tone: 'ok' } : sign?.state === 'out' ? { text: 'Not signed in', tone: 'warn' } : sign?.state === 'checking' ? { text: 'Checking sign-in...', tone: 'plain' } : { text: 'Installed', tone: 'plain' }
 		case 'not-installed': return { text: 'Not installed', tone: 'plain' }
 		case 'needs-node': return { text: 'Needs Node.js', tone: 'warn' }
 		case 'unsupported': return { text: 'Not available for this computer', tone: 'plain' }
@@ -40,7 +39,6 @@ const AgentRow = ({ def }: Row) => {
 	const accessor = useAccessor()
 	const service = accessor.get('IExternalAgentsService')
 	const settings = accessor.get('IVaderSettingsService')
-	const opener = accessor.get('IOpenerService')
 	const g = useSettingsState().globalSettings
 	const { statuses, busy, errors, probes, signIn, opened } = useExternalAgentsState()
 	const [more, setMore] = useState(false)
@@ -60,7 +58,7 @@ const AgentRow = ({ def }: Row) => {
 	const word = stateWord(def, status?.state, sign, inUse)
 	const version = status?.installedVersion
 
-	return <div data-testid={`vader-external-agent-${def.id}`} data-state={status?.state ?? 'checking'} data-signed-in={sign?.state ?? ''} data-in-use={inUse ? 'true' : 'false'} style={{ borderBottom: '1px solid var(--ln)' }}>
+	return <div className='agent-card' data-testid={`vader-external-agent-${def.id}`} data-state={status?.state ?? 'checking'} data-signed-in={sign?.state ?? ''} data-in-use={inUse ? 'true' : 'false'}>
 		<div className='r' style={{ gap: 14, minHeight: 48, padding: '4px 2px' }}>
 			<span className='r t2' style={{ gap: 10, width: 150, flex: 'none' }}><AgentLogo logo={def.logo} size={16} /><span className='t1 tr' style={{ fontWeight: 500 }}>{def.name}</span></span>
 			<span className='t3 tr fl' title={def.tagline} style={{ fontSize: 12.5 }}>{def.tagline}</span>
@@ -68,7 +66,7 @@ const AgentRow = ({ def }: Row) => {
 			{version ? <span className='mo t3' style={{ width: 56, textAlign: 'right' }}>{version}</span> : null}
 			<span className='r' style={{ gap: 8, minWidth: 96, justifyContent: 'flex-end', flex: 'none' }}>
 				{working ? <span className='t3' data-testid={`vader-external-agent-${def.id}-busy`} role='status'>{working}</span> : <>
-					{installable ? <button className='pb' data-testid={`vader-external-agent-${def.id}-install`} onClick={() => service.install(def.id)}>Install</button> : null}
+					{installable ? <button className='pb' data-testid={`vader-external-agent-${def.id}-install`} onClick={() => def.acp ? service.connect(def.id) : service.install(def.id)}>{def.acp ? 'Connect' : 'Install'}</button> : null}
 					{mustConnect ? <button className='pb' data-testid={`vader-external-agent-${def.id}-connect`} onClick={() => service.connect(def.id)}>Connect</button> : null}
 					{canUse && !inUse ? <button className='pb' data-testid={`vader-external-agent-${def.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', def.id)}>Use</button> : null}
 					{inUse ? <button className='gb' data-testid={`vader-external-agent-${def.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : null}
@@ -83,14 +81,14 @@ const AgentRow = ({ def }: Row) => {
 		{more ? <div className='c' style={{ gap: 8, padding: '0 2px 14px 50px' }}>
 			{def.note ? <span className='hint' style={{ lineHeight: 1.5, maxWidth: 600 }}>{def.note}</span> : null}
 			{ready && isChat && status?.source === 'local' ? <span className='hint' data-testid={`vader-external-agent-${def.id}-found`}>Found on this computer{version ? ` (version ${version})` : ''}: Vader uses it as it is, nothing is downloaded.</span> : null}
-			{own ? <span className='hint' data-testid={`vader-external-agent-${def.id}-version`}>Installed by Vader, version {version}{status!.latestVersion ? <>, <span style={{ color: 'var(--ac)' }}>{status!.latestVersion} is available</span></> : ', up to date'}</span> : null}
+			{own ? <span className='hint' data-testid={`vader-external-agent-${def.id}-version`}>Installed by Vader, version {version}{status!.latestVersion ? <>, <span style={{ color: 'var(--ac)' }}>{status!.latestVersion} is available</span></> : null}</span> : null}
 			{def.acp && !ready ? <span className='hint' style={{ lineHeight: 1.5 }}>Sign-in: {def.acp.loginNote}</span> : null}
 			{mustConnect ? <span className='hint'>{def.acp?.loginNote}</span> : null}
 			<span className='r' style={{ gap: 8, flexWrap: 'wrap' }}>
 				{ready && isChat ? <button className='gb' data-testid={`vader-external-agent-${def.id}-test`} onClick={() => service.testConnection(def.id)}>Test connection</button> : null}
 				{ready && isChat && sign?.state === 'in' && sign.canSignOut ? <button className='gb' data-testid={`vader-external-agent-${def.id}-signout`} onClick={() => service.signOut(def.id)}>Sign out</button> : null}
+				{ready && !isChat ? <button className='gb' data-testid={`vader-external-agent-${def.id}-update`} onClick={() => service.install(def.id)}>Update</button> : null}
 				{own ? <button className='gb' data-testid={`vader-external-agent-${def.id}-remove`} onClick={() => service.uninstall(def.id)}>Remove</button> : null}
-				<button className='gb' onClick={() => { void opener.open(URI.parse(def.website)) }}>Website</button>
 			</span>
 		</div> : null}
 	</div>
@@ -101,7 +99,7 @@ const CustomAgents = () => {
 	const service = accessor.get('IExternalAgentsService')
 	const settings = accessor.get('IVaderSettingsService')
 	const g = useSettingsState().globalSettings
-	const { statuses, busy, probes, signIn } = useExternalAgentsState()
+	const { statuses, busy, probes, signIn, errors } = useExternalAgentsState()
 	const agents = g.customAcpAgents
 	const [name, setName] = useState('')
 	const [command, setCommand] = useState('')
@@ -115,7 +113,7 @@ const CustomAgents = () => {
 		{agents.map((a: CustomAcpAgent) => {
 			const ready = statuses[a.id]?.state === 'ready'
 			const sign = signIn[a.id]
-			const chip = busy[a.id] ?? (ready ? (sign?.state === 'out' ? 'Not signed in' : sign?.state === 'in' ? 'Signed in' : sign?.state === 'checking' ? 'Checking sign-in...' : 'Ready') : statuses[a.id]?.state === 'missing-command' ? 'Program not found' : 'Checking...')
+			const chip = busy[a.id] ?? (ready ? (sign?.state === 'out' ? 'Not signed in' : sign?.state === 'in' ? 'Connected' : sign?.state === 'checking' ? 'Checking sign-in...' : sign?.error ? 'Could not check sign-in' : 'Sign-in not checked') : statuses[a.id]?.state === 'missing-command' ? 'Program not found' : 'Checking...')
 			return <div key={a.id} data-testid={`vader-external-agent-${a.id}`} data-signed-in={sign?.state ?? ''} style={{ borderTop: '1px solid var(--ln)', padding: '8px 2px' }}>
 				<div className='r' style={{ gap: 12 }}>
 					<span className='logo sm t2'><AgentLogo logo='custom' size={16} /></span>
@@ -124,11 +122,12 @@ const CustomAgents = () => {
 					<span className='t2'>{chip}</span>
 				</div>
 				<div className='r' style={{ gap: 8, padding: '8px 0 0 42px', flexWrap: 'wrap' }}>
-					{ready && !busy[a.id] && sign?.state === 'out' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-connect`} onClick={() => service.connect(a.id)}>Connect</button> : null}
-					{g.externalAgentId === a.id ? <button className='gb' data-testid={`vader-external-agent-${a.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : ready && !busy[a.id] && sign?.state !== 'out' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', a.id)}>Use</button> : null}
+					{ready && !busy[a.id] && sign?.state !== 'in' && sign?.state !== 'checking' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-connect`} onClick={() => service.connect(a.id)}>Connect</button> : null}
+					{g.externalAgentId === a.id ? <button className='gb' data-testid={`vader-external-agent-${a.id}-unuse`} onClick={() => settings.setGlobalSetting('externalAgentId', null)}>Use my models</button> : ready && !busy[a.id] && sign?.state === 'in' ? <button className='pb' data-testid={`vader-external-agent-${a.id}-use`} onClick={() => settings.setGlobalSetting('externalAgentId', a.id)}>Use</button> : null}
 					{ready && !busy[a.id] ? <button className='gb' data-testid={`vader-external-agent-${a.id}-test`} onClick={() => service.testConnection(a.id)}>Test connection</button> : null}
 					<button className='tx' data-testid={`vader-external-agent-${a.id}-remove`} onClick={() => service.removeCustomAgent(a.id)}>Remove</button>
 				</div>
+				{errors[a.id] || sign?.error ? <div style={{ padding: '8px 0 0 42px' }} data-testid={`vader-external-agent-${a.id}-error`}><Note kind='warn'>{errors[a.id] ?? sign?.error}</Note></div> : null}
 				{probes[a.id] ? <div style={{ padding: '8px 0 0 42px' }}><ProbeLine id={a.id} probe={probes[a.id]!} /></div> : null}
 			</div>
 		})}
@@ -147,11 +146,18 @@ export const ConnectedAgentsPage = () => {
 	const notifications = accessor.get('INotificationService')
 	const g = useSettingsState().globalSettings
 	const [checking, setChecking] = useState(false)
+	const { registry } = useExternalAgentsState()
 	const customKey = JSON.stringify(g.customAcpAgents)
 	useEffect(() => { service.refresh() }, [service, customKey])
+	useEffect(() => {
+		const checkOnline = () => { void service.checkRegistry(false).catch(() => { /* the service publishes the failure below */ }) }
+		checkOnline()
+		const timer = setInterval(checkOnline, 60 * 60_000)
+		return () => clearInterval(timer)
+	}, [service])
 	const check = async () => {
 		setChecking(true)
-		try { const updated = await service.checkRegistry(); notifications.info(updated.length ? `Newer versions found for: ${updated.join(', ')}.` : 'The agents are up to date.') }
+		try { const updated = await service.checkRegistry(true); notifications.info(updated.length ? `Newer versions found for: ${updated.join(', ')}.` : 'No newer managed releases found. Programs installed outside Vader use their own updater.') }
 		catch (e) { notifications.warn(`Could not read the agent list: ${e instanceof Error ? e.message : String(e)}`) }
 		setChecking(false)
 	}
@@ -160,7 +166,13 @@ export const ConnectedAgentsPage = () => {
 
 	return <div data-testid='vader-settings-external-agents'>
 		<PageHead title='Connected agents' desc='Programs from other companies that you already pay for, used inside Vader’s chat. You sign in with your own account in the vendor’s program. Vader never sees the token. The agent keeps its own tools and permission rules, and its usage is counted on your account.' />
-		<div className='r' style={{ paddingBottom: 8 }}><span className='hint fl'>In the chat</span><span className='hint narrow-hide' style={{ marginRight: 8 }}>Versions from the public agent registry</span><button className='tx' data-testid='vader-external-agents-check' disabled={checking} onClick={() => void check()}>{checking ? 'Checking...' : 'Check for newer versions'}</button></div>
+		<details className='hint' style={{ marginBottom: 14 }}>
+			<summary style={{ cursor: 'pointer' }}>Connection and updates</summary>
+			<p>Connected means the agent accepted an ACP session. Sign-in follows the agent’s requirements; some agents also support use without an account.</p>
+			<p data-testid='vader-external-agents-update-policy'>Releases are checked online when this page opens and hourly while it stays open. Updates need your approval. Programs installed outside Vader use their own updater.</p>
+		</details>
+		<div className='r' style={{ paddingBottom: 8 }}><span className='hint fl'>In the chat</span><button className='tx' data-testid='vader-external-agents-check' disabled={checking || registry?.checking} onClick={() => void check()}>{checking || registry?.checking ? 'Checking...' : 'Check for newer versions'}</button></div>
+		{registry?.error ? <div role='alert' data-testid='vader-external-agents-registry-error'><Note kind='warn'>Could not check the latest releases. Saved versions are still available. {registry.error}</Note></div> : registry?.checkedAt ? <p className='hint' title={new Date(registry.checkedAt).toLocaleString()} data-testid='vader-external-agents-last-checked'>Latest releases checked online.</p> : null}
 		<div style={{ borderTop: '1px solid var(--ln)' }}>{chat.map(def => <AgentRow key={def.id} def={def} />)}</div>
 		<div className='hint' style={{ padding: '26px 2px 8px' }}>In a terminal</div>
 		<div style={{ borderTop: '1px solid var(--ln)' }}>{terminal.map(def => <AgentRow key={def.id} def={def} />)}</div>

@@ -215,7 +215,8 @@ export const mcpScenarios = [
 		name: 'mcp: a configured stdio MCP server is started and its tool can be called',
 		timeout: 240_000,
 		fn: async (t) => {
-			const cfgDir = path.join(t.app.home, '.vader-editor');
+			// Development Electron uses the same product folder with a -dev suffix.
+			const cfgDir = path.join(t.app.home, process.env.VSCODE_DEV ? '.vader-editor-dev' : '.vader-editor');
 			fs.mkdirSync(cfgDir, { recursive: true });
 			const server = process.env.E2E_MCP_FIXTURE || path.resolve(here, '../../fixtures/fixtureMcpServer.mjs'); // CI machines without a full checkout point this at a copy next to an installed SDK
 			fs.writeFileSync(path.join(cfgDir, 'mcp.json'), JSON.stringify({ mcpServers: { fixture: { command: process.execPath, args: [server] } } }, null, 2));

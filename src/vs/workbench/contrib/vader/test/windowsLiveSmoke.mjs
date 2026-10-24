@@ -10,13 +10,23 @@
 // whether the workbench actually rendered, plus every renderer error and the tail of the app's own logs.
 //
 // Env: VADER_EXE (required), RUN_LABEL, EXTRA_ARGS, CDP_PORT, SMOKE_OUT, PW_CORE (playwright-core path),
-//      SMOKE_IGNORE (extra regex of renderer messages to treat as known noise)
+//      SMOKE_IGNORE (extra regex of renderer messages to treat as known noise),
+//      SMOKE_EXPECTED_MODE (modern by default; classic only for an intentional classic-layout run).
 
 import { spawn, spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { inspectStartupSurface } from './smokeReadiness.mjs';
+import { waitForStartupSurface } from './waitForStartupSurface.mjs';
+
+const expectedMode = process.env.SMOKE_EXPECTED_MODE ?? 'modern';
+if (expectedMode !== 'modern' && expectedMode !== 'classic') {
+	console.error(`SMOKE_EXPECTED_MODE must be modern or classic: ${expectedMode}`);
+	process.exit(2);
+}
+const readinessOptions = { expectedMode, expectedSurface: process.env.SMOKE_EXPECTED_SURFACE };
 
 const require = createRequire(import.meta.url);
 const { chromium } = require(process.env.PW_CORE || 'playwright-core');
@@ -32,6 +42,7 @@ const userData = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-ud-'));
 const extDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vader-ext-'));
 
 const results = [];
+let initialSurface;
 const check = (name, ok, detail = '') => { results.push({ name, ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${detail ? ` - ${detail}` : ''}`); };
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const short = (s, n = 400) => String(s).replace(/\s+/g, ' ').slice(0, n);
@@ -91,8 +102,9 @@ async function main() {
 	if (!page) { return; }
 
 	// Give the workbench time to bootstrap, but poll for the signal instead of a fixed sleep.
-	const rendered = await page.waitForSelector('.monaco-workbench .part', { timeout: 60_000 }).then(() => true, () => false);
-	await sleep(3000);
+	const surface = await waitForStartupSurface(page, readinessOptions);
+	initialSurface = surface?.surface;
+	const rendered = !!surface;
 	await page.screenshot({ path: path.join(outDir, 'window.png') }).catch(() => { });
 
 	const dom = await page.evaluate(() => ({
@@ -111,10 +123,33 @@ async function main() {
 	console.log('DOM:', JSON.stringify(dom));
 	fs.writeFileSync(path.join(outDir, 'dom.json'), JSON.stringify(dom, null, 2));
 
-	check('workbench parts rendered (not a blank/gray window)', rendered && dom.parts >= 3, `parts=${dom.parts} bodyBg=${dom.bodyBg} htmlLen=${dom.html}`);
+	check(`the expected ${expectedMode} window rendered with visible usable controls (not a blank/gray window)`, rendered && !!surface, JSON.stringify(surface || dom));
 	check('window title mentions Vader', /vader/i.test(dom.title || ''), `title="${dom.title}"`);
+	if (expectedMode === 'modern') {
+		check('the classic menubar does not overlap the modern window', !!surface && !surface.classicMenuVisible, JSON.stringify(surface));
+	}
 
-	if (rendered) {
+	if (surface?.surface === 'onboarding') {
+		await page.locator('[data-testid="vader-onboarding-language"]').click();
+		const options = page.getByRole('option');
+		await options.first().waitFor({ state: 'visible', timeout: 15_000 });
+		const labels = await options.allTextContents();
+		check('onboarding responds to input and offers all three languages', labels.some(s => /English/.test(s)) && labels.some(s => /العربية/.test(s)) && labels.some(s => /中文/.test(s)), labels.join(' | '));
+		await page.keyboard.press('Escape');
+	} else if (surface?.surface === 'shell') {
+		await page.locator('[data-testid="vader-shell-settings"]').click();
+		const settings = page.locator('[data-testid="vader-settings-page"]');
+		await settings.waitFor({ state: 'visible', timeout: 15_000 });
+		check('the modern window opens Settings', await settings.isVisible());
+		await page.locator('[data-testid="vader-settings-close"]').click();
+		await settings.waitFor({ state: 'hidden', timeout: 15_000 });
+		// On a fresh profile the AfterRestored contribution may finish mounting
+		// onboarding while Settings is open. Both are valid modern return surfaces.
+		const restored = await page.evaluate(inspectStartupSurface, readinessOptions);
+		check('closing Settings returns to the shell or first-run setup without the classic menu',
+			!!restored && (restored.surface === 'shell' || restored.surface === 'onboarding') && !restored.classicMenuVisible,
+			JSON.stringify(restored));
+	} else if (surface?.surface === 'classic') {
 		await page.keyboard.press('F1');
 		const palette = await page.waitForSelector('.quick-input-widget', { state: 'visible', timeout: 15_000 }).then(() => true, () => false);
 		check('command palette opens (UI responds to input)', palette);
@@ -168,7 +203,7 @@ let crashed = false;
 try { await main(); } catch (e) { crashed = true; check('smoke harness ran to completion', false, String(e).slice(0, 300)); }
 dumpLogs();
 try { spawnSync('taskkill', ['/PID', String(child.pid), '/T', '/F'], { stdio: 'ignore' }); } catch { /* best effort */ }
-fs.writeFileSync(path.join(outDir, 'results.json'), JSON.stringify({ label, results }, null, 2));
+fs.writeFileSync(path.join(outDir, 'results.json'), JSON.stringify({ label, expectedMode, initialSurface, results }, null, 2));
 const failed = results.filter(r => !r.ok).length;
 console.log(`\n[${label}] ${results.length - failed} passed, ${failed} failed${crashed ? ' (harness crashed)' : ''}`);
 process.exit(failed ? 1 : 0);

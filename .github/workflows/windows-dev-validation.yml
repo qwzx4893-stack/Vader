@@ -1,0 +1,184 @@
+name: Windows Development Validation
+
+# The first push runs this workflow before it exists on main. No installer or release job.
+on:
+  push:
+    branches: [test/windows-dev-validation]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-dev-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  development:
+    runs-on: windows-2022
+    timeout-minutes: 150
+    env:
+      ARCH: x64
+      NPM_CONFIG_ARCH: x64
+      DEV_VALIDATION_OUT: dev-validation
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11'
+      - name: Restore native dependency cache (never compiled app output)
+        id: dependency-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            node_modules
+            build/node_modules
+            extensions/**/node_modules
+            .vscode/extensions/**/node_modules
+            test/**/node_modules
+            remote/**/node_modules
+          key: windows-dev-dependencies-${{ runner.arch }}-${{ hashFiles('**/package-lock.json', '**/package.json', '**/.npmrc', '!**/node_modules/**', '.nvmrc', 'build/npm/**') }}
+      - name: Install actual native and extension dependencies
+        env:
+          VSCODE_FORCE_INSTALL: 1
+        run: npm install
+      - name: Cache installed dependencies for later source-only iterations
+        if: steps.dependency-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            node_modules
+            build/node_modules
+            extensions/**/node_modules
+            .vscode/extensions/**/node_modules
+            test/**/node_modules
+            remote/**/node_modules
+          key: ${{ steps.dependency-cache.outputs.cache-primary-key }}
+      - name: Generate React and agent runtime bundles
+        run: |
+          npm run buildreact
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm run buildcline
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+      - name: Full source type check
+        run: node_modules/.bin/tsc -p src/tsconfig.json --noEmit
+      - name: Compile development runtime (no packaging or installer)
+        run: npm run compile-client
+      - name: Prepare the actual two local search models with locked checksums
+        run: |
+          node build/embedding/prepare.mjs --out "$env:RUNNER_TEMP\vader-embedding" --platform win32 --arch x64
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          "VADER_EMBEDDING_DIR=$env:RUNNER_TEMP\vader-embedding" >> $env:GITHUB_ENV
+      - name: Prepare development Electron and test client
+        id: prepare
+        run: |
+          node build/lib/preLaunch.ts
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\pw" | Out-Null
+          Copy-Item .github\e2e-client\package.json, .github\e2e-client\package-lock.json "$env:RUNNER_TEMP\pw\"
+          Push-Location "$env:RUNNER_TEMP\pw"
+          npm ci --ignore-scripts --no-audit --no-fund
+          $clientExit = $LASTEXITCODE
+          Pop-Location
+          if ($clientExit) { exit $clientExit }
+          $product = Get-Content product.json -Raw | ConvertFrom-Json
+          $exe = Join-Path (Get-Location) ".build\electron\$($product.nameShort).exe"
+          if (!(Test-Path -LiteralPath $exe)) { throw "Development Electron executable is missing" }
+          "VADER_EXE=$exe" >> $env:GITHUB_ENV
+          "PW_CORE=$env:RUNNER_TEMP\pw\node_modules\playwright-core" >> $env:GITHUB_ENV
+          "E2E_MCP_FIXTURE=$env:GITHUB_WORKSPACE\src\vs\workbench\contrib\vader\test\fixtures\fixtureMcpServer.mjs" >> $env:GITHUB_ENV
+          New-Item -ItemType Directory -Force dev-validation | Out-Null
+          git rev-parse HEAD | Set-Content dev-validation\commit.txt
+          node --version | Set-Content dev-validation\node-version.txt
+      - name: Verify monitoring and failure gates
+        run: node src/vs/workbench/contrib/vader/test/devValidationE2E.mjs
+      - name: Verify Windows job containment and deliberate leak/observer failures
+        run: |
+          python -I -B src/vs/workbench/contrib/vader/test/devValidation/windowsJobExitRaceE2E.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node src/vs/workbench/contrib/vader/test/devValidationJobE2E.mjs
+      - name: Exercise both actual local search models and native inference worker
+        run: node src/vs/workbench/contrib/vader/test/embedWorkerRuntimeE2E.mjs
+      - name: Modern window startup and legacy-layer smoke with resource monitoring
+        id: smoke
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          SMOKE_EXPECTED_SURFACE: onboarding
+        run: node src/vs/workbench/contrib/vader/test/devValidation/run.mjs smoke
+      - name: Sanitize startup diagnostics
+        if: ${{ !cancelled() && (steps.smoke.outcome == 'success' || steps.smoke.outcome == 'failure') }}
+        id: sanitize-smoke
+        env:
+          DEV_VALIDATION_OUT: dev-validation/smoke
+        run: node src/vs/workbench/contrib/vader/test/devValidation/redact.mjs
+      - name: Upload startup diagnostics before longer journeys
+        if: ${{ !cancelled() && steps.sanitize-smoke.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-dev-startup-${{ github.sha }}
+          path: dev-validation/smoke
+          retention-days: 7
+          if-no-files-found: error
+      - name: Real external model journeys with resource monitoring
+        id: live
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        env:
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          REAL_LLM_BASEURL: https://openrouter.ai/api/v1
+          REAL_LLM_MODEL: ${{ vars.VADER_TEST_MODEL || 'poolside/laguna-s-2.1:free' }}
+        run: node src/vs/workbench/contrib/vader/test/devValidation/run.mjs live
+      - name: Sanitize external-model diagnostics
+        if: ${{ !cancelled() && (steps.live.outcome == 'success' || steps.live.outcome == 'failure') }}
+        id: sanitize-live
+        env:
+          DEV_VALIDATION_OUT: dev-validation/live
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: node src/vs/workbench/contrib/vader/test/devValidation/redact.mjs
+      - name: Upload external-model attempt evidence before longer scripted journeys
+        if: ${{ !cancelled() && steps.sanitize-live.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-dev-live-${{ github.sha }}
+          path: dev-validation/live
+          retention-days: 7
+          if-no-files-found: error
+      - name: All existing real-app scripted journeys with resource monitoring
+        id: scripted
+        if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
+        run: node src/vs/workbench/contrib/vader/test/devValidation/run.mjs scripted
+      - name: Sanitize scripted diagnostics
+        if: ${{ !cancelled() && (steps.scripted.outcome == 'success' || steps.scripted.outcome == 'failure') }}
+        id: sanitize-scripted
+        env:
+          DEV_VALIDATION_OUT: dev-validation/scripted
+        run: node src/vs/workbench/contrib/vader/test/devValidation/redact.mjs
+      - name: Upload scripted journey diagnostics before external-model tests
+        if: ${{ !cancelled() && steps.sanitize-scripted.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-dev-scripted-${{ github.sha }}
+          path: dev-validation/scripted
+          retention-days: 7
+          if-no-files-found: error
+      - name: Sanitize diagnostic text before artifact upload, including failed runs
+        if: always()
+        id: sanitize
+        env:
+          REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+        run: |
+          New-Item -ItemType Directory -Force dev-validation | Out-Null
+          node src/vs/workbench/contrib/vader/test/devValidation/redact.mjs
+      - name: Upload reports, samples, screenshots and diagnostics even after failure
+        if: ${{ always() && steps.sanitize.outcome == 'success' }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: windows-dev-validation-${{ github.sha }}
+          path: dev-validation
+          retention-days: 7
+          if-no-files-found: error

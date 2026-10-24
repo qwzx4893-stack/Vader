@@ -284,8 +284,6 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	const cp = { role: 'checkpoint', type: 'tool_edit', voxelSnapshot: {}, userModifications: { files: {} } };
 	await page.evaluate((a) => {
 		window.__chatMethods.jumpToCheckpointBeforeMessageIdx = (o) => { window.__log.push(`jump:${o.messageIdx}`); };
-		window.__chatMethods.branchThread = (t, idx) => { window.__log.push(`branch:${idx}`); return 'branch-1'; };
-		window.__chatMethods.switchToThread = (id) => { window.__log.push(`switch:${id}`); };
 		window.__setThread({ messages: [a.u1, a.a1, a.cp, a.u2, a.a2] });
 	}, { u1: userMsg('Add a rate limiter'), a1: asstMsg('Added it.'), cp, u2: userMsg('Also add a header'), a2: asstMsg('Added the header.') });
 	await page.waitForSelector(TID('vader-checkpoint'));
@@ -302,6 +300,8 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('the first message has no Branch (there is nothing before it), the later ones have it', (await second.count()) === 1);
 	check('every message can be copied and sent again from there', (await page.locator(TID('vader-copy-message')).count()) === (await page.locator(TID('vader-redo')).count()) && (await page.locator(TID('vader-redo')).count()) >= 2);
 	await page.locator(TID('vader-redo')).first().evaluate(e => e.click());
+	check('retry explains the history replacement and waits for confirmation', !(await log(page)).some(x => /^revise:/.test(x)) && (await page.locator(TID('vader-retry-confirm')).innerText()).includes('Existing file changes stay'));
+	await page.locator(TID('vader-retry-confirm-go')).click();
 	check('Redo from here sends that message again from its place in the chat', (await log(page)).some(x => /^revise:0:./.test(x)));
 	await page.locator(`${TID('vader-branch')}`).evaluate(e => e.click());
 	await page.waitForSelector(TID('vader-branched'));
@@ -311,6 +311,203 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.locator(TID('vader-branched-open')).click();
 	check('Open the new chat goes to it', (await log(page)).includes('switch:branch-1') && (await page.locator(TID('vader-branched')).count()) === 0);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== message actions: clipboard service outcomes and keyboard access
+{
+	const { page, errors } = await newPage();
+	const text = 'Keep **markdown**\nand العربية 中文';
+	await page.evaluate(a => window.__setThread({ messages: [a.u, a.a] }), { u: userMsg(text), a: asstMsg('Answer **as written**') });
+	const copy = page.locator(TID('vader-copy-message'));
+	await copy.focus();
+	await page.keyboard.press('Tab');
+	check('Tab reaches a named visible edit button', await page.getByRole('button', { name: 'Edit message', exact: true }).evaluate(e => e === document.activeElement && getComputedStyle(e).opacity === '1'));
+	await copy.focus();
+	await page.keyboard.press('Space');
+	await page.waitForFunction(() => window.__copiedText?.includes('العربية'));
+	check('keyboard copy writes the exact user text through the clipboard service', await page.evaluate(t => window.__copiedText === t, text));
+	const actions = copy.locator('xpath=../..');
+	check('copy acknowledges success in a live status', (await actions.locator('[role="status"]').innerText()) === 'Copied');
+	const style = await copy.evaluate(e => { const s = getComputedStyle(e), r = e.getBoundingClientRect(); return { bg: s.backgroundColor, border: s.borderTopWidth, width: r.width, height: r.height, icon: e.querySelector('svg')?.getAttribute('width') }; });
+	check('copy stays a small transparent utility button', style.bg === 'rgba(0, 0, 0, 0)' && style.border === '0px' && style.width === 28 && style.height === 28 && style.icon === '14', JSON.stringify(style));
+	await page.evaluate(() => { window.__clipboardFailure = true; });
+	await copy.click();
+	await actions.locator(TID('vader-message-action-error')).waitFor();
+	check('a clipboard rejection shows an alert and clears the old success', (await actions.locator(TID('vader-message-action-error')).innerText()).includes('Clipboard unavailable') && await actions.locator('[role="status"]').count() === 0);
+	await page.evaluate(() => { window.__clipboardFailure = false; });
+	await page.locator(TID('vader-copy-answer')).click();
+	await page.waitForFunction(() => window.__copiedText === 'Answer **as written**');
+	check('assistant copy uses the answer text and is separate from user copy', await page.evaluate(() => window.__log.filter(x => x === 'clipboard:write').length === 2));
+	await page.evaluate(() => { window.__onClipboard = () => new Promise(resolve => { window.__finishCopy = resolve; }); });
+	await copy.click();
+	await page.waitForFunction(() => !!window.__finishCopy);
+	check('pending clipboard work disables duplicate actions on that message', await copy.isDisabled() && await actions.getAttribute('aria-busy') === 'true' && await actions.locator(TID('vader-redo')).isDisabled());
+	await copy.evaluate(e => { e.click(); e.click(); });
+	check('pending copy cannot write twice', await page.evaluate(() => window.__log.filter(x => x === 'clipboard:attempt').length === 4));
+	await page.evaluate(() => { window.__switchThread('t2'); window.__finishCopy(); });
+	await page.waitForSelector(TID('vader-landing'));
+	check('late clipboard completion cannot show Copied in a different chat', await page.locator(`${TID('vader-message-actions')} [role="status"]`).count() === 0);
+	check('message clipboard paths have no uncaught error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== retries: confirmation, exact target/context, failure, pending lifecycle
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(a => window.__setThread({ messages: [a.u, a.a] }), { u: userMsg('Retry this prompt'), a: asstMsg('First answer') });
+	const redo = page.locator(TID('vader-redo'));
+	await redo.focus();
+	await page.keyboard.press('Enter');
+	await page.locator(TID('vader-retry-confirm')).waitFor();
+	check('opening retry only asks and focuses the safe Cancel choice', await page.locator(TID('vader-retry-confirm-cancel')).evaluate(e => e === document.activeElement) && await page.evaluate(() => window.__revisions.length === 0));
+	await page.keyboard.press('Escape');
+	check('Escape dismisses confirmation and returns focus to its trigger', await page.locator(TID('vader-retry-confirm')).count() === 0 && await redo.evaluate(e => e === document.activeElement));
+	await redo.press('Space');
+	await page.locator(TID('vader-retry-confirm-cancel')).click();
+	check('Cancel never revises history or calls the gateway', await page.evaluate(() => window.__revisions.length === 0) && await page.locator(TID('vader-retry-confirm')).count() === 0);
+	await page.evaluate(() => {
+		const u = window.__chat.state.allThreads.t1.messages[0];
+		u.selections = [{ type: 'CodeSelection', uri: { scheme: 'file', path: '/work/vader-app/a.ts', fsPath: 'C:/work/vader-app/a.ts' }, range: [2, 4], language: 'typescript', state: { wasAddedAsCurrentFile: false } }];
+		window.__onRevise = () => { throw new Error('Gateway unavailable'); };
+	});
+	await page.locator(TID('vader-regenerate-answer')).click();
+	const confirm = page.locator(TID('vader-retry-confirm'));
+	check('regeneration explains history, existing files, and account allowance', (await confirm.innerText()).includes('This replaces the reply and later messages. Existing file changes stay. A new request uses your account allowance.'));
+	await page.locator(TID('vader-retry-confirm-go')).click();
+	await page.locator(TID('vader-message-action-error')).waitFor();
+	check('gateway rejection stays visible and confirmation remains recoverable', (await page.locator(TID('vader-message-action-error')).innerText()).includes('Gateway unavailable') && await confirm.count() === 1 && !(await page.locator(TID('vader-retry-confirm-go')).isDisabled()));
+	check('regeneration targets the original thread and nearest user prompt with its sent context', await page.evaluate(() => { const r = window.__revisions[0]; return r.threadId === 't1' && r.fromMessageIdx === 0 && r.userMessage === 'Retry this prompt' && r.selections.length === 1 && r.selections[0].range.join() === '2,4'; }));
+	await page.evaluate(() => { window.__onRevise = () => new Promise(resolve => { window.__finishRetry = resolve; }); });
+	await page.locator(TID('vader-retry-confirm-go')).click();
+	await page.waitForFunction(() => !!window.__finishRetry);
+	check('pending retry disables confirmation and duplicate regeneration', await page.locator(TID('vader-retry-confirm-go')).isDisabled() && await page.locator(TID('vader-regenerate-answer')).isDisabled() && await page.locator(TID('vader-retry-confirm-cancel')).isDisabled());
+	await page.locator(TID('vader-retry-confirm-go')).evaluate(e => { e.click(); e.click(); });
+	check('a pending gateway request is not duplicated', await page.evaluate(() => window.__revisions.length === 2));
+	await page.evaluate(() => window.__finishRetry());
+	await page.waitForFunction(() => !document.querySelector('[data-testid="vader-retry-confirm"]'));
+	check('successful retry closes confirmation and clears the previous failure', await page.locator(TID('vader-message-action-error')).count() === 0);
+	await page.evaluate(() => { window.__onRevise = () => new Promise(resolve => { window.__finishRetry = resolve; }); });
+	await redo.click();
+	await page.locator(TID('vader-retry-confirm-go')).click();
+	await page.waitForFunction(() => window.__revisions.length === 3);
+	await page.evaluate(() => { window.__switchThread('t2'); window.__finishRetry(); });
+	await page.waitForSelector(TID('vader-landing'));
+	check('retry completion after a thread switch cannot focus or mutate the new chat', await page.evaluate(() => window.__revisions[2].threadId === 't1' && window.__chat.state.allThreads.t2.messages.length === 0 && !window.__log.includes('focus:t2')) && await page.locator(TID('vader-retry-confirm')).count() === 0);
+	check('retry paths have no uncaught error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== assistant branches include this answer, never later messages
+{
+	const { page, errors } = await newPage();
+	const history = [userMsg('First prompt'), asstMsg('First answer'), userMsg('Later prompt'), asstMsg('Later answer')];
+	await page.evaluate(messages => window.__setThread({ messages }), history);
+	await page.locator(TID('vader-branch-answer')).first().focus();
+	await page.keyboard.press('Enter');
+	await page.locator(TID('vader-answer-branched')).waitFor();
+	check('assistant branch passes answer index plus one and contains that answer only through the boundary', await page.evaluate(() => { const b = window.__branches[0]; return b.threadId === 't1' && b.end === 2 && b.messages.length === 2 && b.messages[1].displayContent === 'First answer' && window.__chat.state.allThreads.t1.messages.length === 4; }));
+	await page.locator(TID('vader-answer-branch-stay')).click();
+	check('Stay here dismisses the branch notice without navigation', !(await log(page)).some(x => x.startsWith('switch:')) && await page.locator(TID('vader-answer-branched')).count() === 0);
+	await page.locator(TID('vader-branch')).click();
+	await page.locator(TID('vader-branched')).waitFor();
+	check('user branch passes the user index and excludes that user message', await page.evaluate(() => { const b = window.__branches[1]; return b.threadId === 't1' && b.end === 2 && b.messages[1].role === 'assistant'; }));
+	await page.locator(TID('vader-branched-stay')).click();
+	await page.evaluate(() => { window.__branchFailure = true; });
+	await page.locator(TID('vader-branch-answer')).last().click();
+	await page.locator(TID('vader-message-action-error')).waitFor();
+	check('branch failure reports an alert without claiming a new chat', (await page.locator(TID('vader-message-action-error')).innerText()).includes('Could not branch this chat.') && await page.locator(TID('vader-answer-branched')).count() === 0 && await page.evaluate(() => window.__branches.length === 2));
+	check('branch paths have no uncaught error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== run ownership and changes between render and click
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(a => window.__setThread({ messages: [a.u, a.a] }), { u: userMsg('Original prompt'), a: asstMsg('Original answer') });
+	for (const stream of [running, { isRunning: 'idle', interrupt: 'not_needed' }, { isRunning: undefined, isPreparing: true }]) {
+		await page.evaluate(s => window.__setStream(s), stream);
+		check(`message mutations wait while the run owns history (${stream.isRunning})`, await page.locator(TID('vader-edit-message')).isDisabled() && await page.locator(TID('vader-redo')).isDisabled() && await page.locator(TID('vader-regenerate-answer')).isDisabled() && await page.locator(TID('vader-branch-answer')).isDisabled());
+		check(`copy remains useful during the run (${stream.isRunning})`, !(await page.locator(TID('vader-copy-message')).isDisabled()) && !(await page.locator(TID('vader-copy-answer')).isDisabled()));
+	}
+	await page.evaluate(() => window.__setStream(undefined));
+	await page.locator(TID('vader-regenerate-answer')).click();
+	// No notify: exercise an old rendered handler before React can replace it.
+	await page.evaluate(() => {
+		window.__chat.streamState.t1 = { isRunning: 'idle', interrupt: 'not_needed' };
+		document.querySelector('[data-testid="vader-retry-confirm-go"]').click();
+	});
+	await page.locator(TID('vader-message-action-error')).waitFor();
+	check('retry rechecks live run state at confirmation', await page.evaluate(() => window.__revisions.length === 0) && (await page.locator(TID('vader-message-action-error')).innerText()).includes('Wait for the current reply'));
+	await page.evaluate(() => window.__setStream(undefined));
+	await page.locator(TID('vader-retry-confirm-cancel')).click();
+	await page.locator(TID('vader-regenerate-answer')).click();
+	await page.evaluate(() => {
+		const t = window.__chat.state.allThreads.t1;
+		t.messages = t.messages.map((m, i) => i === 0 ? { ...m, displayContent: 'Replaced prompt' } : m);
+		document.querySelector('[data-testid="vader-retry-confirm-go"]').click();
+	});
+	await page.locator(TID('vader-message-action-error')).waitFor();
+	check('a changed source prompt cannot be resent by a stale confirmation', await page.evaluate(() => window.__revisions.length === 0) && (await page.locator(TID('vader-message-action-error')).innerText()).includes('This message changed'));
+	await page.locator(TID('vader-retry-confirm-cancel')).click();
+	await page.evaluate(() => {
+		window.__chat.state.currentThreadId = 'other-thread';
+		document.querySelector('[data-testid="vader-branch-answer"]').click();
+	});
+	await page.locator(TID('vader-message-action-error')).waitFor();
+	check('an old branch handler cannot act after the displayed thread changed', await page.evaluate(() => window.__branches.length === 0));
+	check('stale action guards have no uncaught error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== edit is a real keyboard-accessible revision with failure recovery
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(a => window.__setThread({ messages: [a.u, a.a] }), { u: userMsg('Original prompt'), a: asstMsg('Original answer') });
+	const edit = page.locator(TID('vader-edit-message'));
+	await edit.focus();
+	await page.keyboard.press('Enter');
+	const input = page.locator(TID('vader-edit-input'));
+	await input.waitFor();
+	check('Edit opens the real editor prefilled and focused', await input.inputValue() === 'Original prompt' && await input.evaluate(e => e === document.activeElement));
+	await input.fill('Updated prompt');
+	await page.keyboard.press('Escape');
+	await edit.waitFor();
+	await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'vader-edit-message');
+	check('Escape cancels editing and returns focus without a request', await input.count() === 0 && await page.evaluate(() => window.__revisions.length === 0));
+	await edit.press('Space');
+	await input.fill('Updated prompt');
+	await page.evaluate(() => { window.__onRevise = () => { throw new Error('Gateway unavailable'); }; });
+	await input.press('Enter');
+	await page.locator(TID('vader-edit-error')).waitFor();
+	check('edit rejection keeps the draft and announces recovery', await input.inputValue() === 'Updated prompt' && (await page.locator(TID('vader-edit-error')).innerText()).includes('Your edit is still here'));
+	await page.evaluate(() => { window.__onRevise = () => new Promise(resolve => { window.__finishEdit = resolve; }); });
+	await input.press('Enter');
+	await page.waitForFunction(() => !!window.__finishEdit);
+	check('pending edit disables its editor and cancel control', await input.isDisabled() && await page.locator(TID('vader-edit-cancel')).isDisabled());
+	await page.evaluate(() => window.__finishEdit());
+	await edit.waitFor();
+	check('edit submits the exact text, message index and thread through the gateway', await page.evaluate(() => window.__revisions.length === 2 && window.__revisions.every(r => r.threadId === 't1' && r.fromMessageIdx === 0 && r.userMessage === 'Updated prompt')) && await page.locator(TID('vader-edit-error')).count() === 0);
+	await edit.click();
+	await input.fill('Edit before switching');
+	await input.press('Enter');
+	await page.waitForFunction(() => window.__revisions.length === 3);
+	await page.evaluate(() => { window.__switchThread('t2'); window.__finishEdit(); });
+	await page.waitForSelector(TID('vader-landing'));
+	check('late edit completion stays tied to its source thread', await page.evaluate(() => window.__revisions[2].threadId === 't1' && window.__chat.state.allThreads.t2.messages.length === 0 && !window.__log.includes('focus:t2')));
+	check('edit paths have no uncaught error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// ===================================================================== all message-action copy is available through the generated language tables
+{
+	const { page, errors } = await newPage();
+	const keys = ['Copy', 'Copied', 'Edit message', 'Edit your message', 'Cancel editing', 'Regenerate reply', 'Redo from here', 'Branch the chat', 'Start a new chat including this reply', 'Start a new chat before this message', 'Send this message again?', 'This replaces the reply and later messages. Existing file changes stay. A new request uses your account allowance.', 'Send again', 'Cancel', 'The action failed. Try again.', 'This message changed. Try again.', 'Wait for the current reply to finish.', 'Could not branch this chat.', 'The message could not be updated. Your edit is still here. Try again.'];
+	for (const language of ['ar', 'zh']) {
+		const missing = await page.evaluate(({ keys, language }) => keys.filter(k => { const t = window.__translate(k, language); return !t || t === k; }), { keys, language });
+		check(`message-action labels, confirmations and recovery text have ${language} translations`, missing.length === 0, missing.join(' | '));
+	}
+	check('translation lookup has no uncaught error', errors.length === 0, errors.join(' | '));
 	await page.close();
 }
 
@@ -328,16 +525,16 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 }
 {
 	const { page, errors } = await newPage(() => { window.__projectKey = null; window.__groups = [{ key: 'C:/work/vader-app', name: 'vader-app', threadIds: [] }, { key: 'C:/work/docs-site', name: 'docs-site', threadIds: [] }]; });
-	check('with no folder open the first thing is to open one', (await page.locator(TID('vader-no-project')).innerText()).includes('Vader works inside a folder'));
+	check('a new plain chat has one project selector above its composer and no duplicate opening card', (await page.locator(TID('vader-no-project')).count()) === 0 && (await page.locator(TID('vader-open-folder')).count()) === 0 && (await page.locator(TID('vader-project-picker')).count()) === 1);
 	await shot(page, '10-no-project');
-	await page.locator(TID('vader-open-folder')).click();
-	await page.locator(TID('vader-clone')).click();
-	check('Open a folder and Clone a repository run the editor’s own commands', (await log(page)).includes('command:workbench.action.files.openFolder') && (await log(page)).includes('command:git.clone'));
-	check('the projects it has had chats in are listed as Recent', (await page.locator(TID('vader-recent-projects')).innerText()).includes('vader-app') && (await page.locator(TID('vader-recent-project')).count()) === 2);
-	await page.locator(TID('vader-recent-project')).nth(1).click();
-	check('a click on one opens that folder', (await log(page)).some(x => /command:vscode\.openFolder/.test(x)));
-	await page.locator(TID('vader-chat-only')).click();
-	check('Chat only puts the card away and leaves a plain conversation', (await page.locator(TID('vader-no-project')).count()) === 0 && (await page.locator(INPUT).count()) === 1);
+	await page.locator(TID('vader-project-picker')).click();
+	await page.locator(TID('vader-project-picker-option')).first().waitFor();
+	check('known projects are offered by the single selector', (await page.locator(TID('vader-project-picker-option')).first().innerText()).includes('vader-app'));
+	await page.locator(TID('vader-project-new')).click();
+	check('New project goes through the native-folder service', (await log(page)).includes('project:new'));
+	await page.locator(TID('vader-project-picker')).click();
+	await page.locator(TID('vader-project-chat-only')).click();
+	check('the same selector also offers a real chat without a project', (await log(page)).includes('project:') && (await page.locator(INPUT).count()) === 1);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
 	await page.close();
 }
@@ -402,7 +599,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	await page.waitForTimeout(300);
 	check('the box asks what to change, and that / gives commands', (await page.locator(INPUT).getAttribute('placeholder')) === 'Tell the agent what to change, or press / for commands');
 	const radius = await page.evaluate(() => parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-send"]')).borderTopLeftRadius));
-	check('the send button is a rounded square, not a circle', radius > 3 && radius < 12, String(radius));
+	check('the send button is circular while retaining its size', radius >= 14 && (await page.locator(TID('vader-send')).boundingBox()).width === 28, String(radius));
 	check('the line under the box says what this chat and today have cost', flat(await page.locator('body').innerText()).includes('36K tokens') || flat(await page.locator('body').innerText()).includes('41k tokens') || /tokens/.test(await page.locator('body').innerText()));
 	await page.waitForTimeout(260);
 	await shot(page, '21-window-r01');
@@ -960,9 +1157,7 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	check('and the real thresholds under them', (await page.locator(TID('vader-context-panel')).innerText()).includes('Old tool output is dropped from 50%. Earlier steps are summarised from 70%.'));
 	await page.waitForTimeout(260);
 	await shot(page, '15-context-panel');
-	await page.locator(TID('vader-context-compact')).click();
-	await page.waitForSelector(TID('vader-context-panel-result'));
-	check('Compact now asks the chat to summarise, and says so', (await log(page)).includes('compact') && (await page.locator(TID('vader-context-panel-result')).innerText()).includes('summarised'));
+	check('the context panel reports usage without changing the model budget or the conversation', (await page.locator(`${TID('vader-context-panel')} input, ${TID('vader-context-panel')} [role=slider], ${TID('vader-context-panel')} button`).count()) === 0 && !(await log(page)).includes('compact'));
 	await page.keyboard.press('Escape');
 	check('Escape puts the panel away', (await page.locator(TID('vader-context-panel')).count()) === 0);
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
@@ -977,12 +1172,14 @@ const running = { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasonin
 	const sizes = await page.evaluate(() => ({ user: parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-user-text"]')).fontSize), asst: parseFloat(getComputedStyle(document.querySelector('[data-testid="vader-assistant-text"] [data-testid="md"]')).fontSize), ta: getComputedStyle(document.querySelector('textarea')).backgroundColor }));
 	check('what is read is at least 13 pixels, in the person’s message and in the answer', sizes.user >= 13 && sizes.asst >= 13, JSON.stringify(sizes));
 	check('the text sits on the message box itself, not on a darker patch', sizes.ta === 'rgba(0, 0, 0, 0)', sizes.ta);
-	await page.locator(TID('vader-thinking')).click();
-	check('Thinking is one chip, and opens a small panel with the control', (await page.locator(TID('vader-thinking-panel')).count()) === 1 && (await page.locator(TID('vader-thinking-panel')).innerText()).includes('Thinking'));
-	await page.waitForTimeout(260);
+	check('the composer has no reasoning-budget slider or token-limit control', (await page.locator(TID('vader-thinking')).count()) === 0 && (await page.locator('input[type=range]').count()) === 0);
+	await page.evaluate(() => window.__setThread({ messages: [{ role: 'user', content: 'Check the implementation', displayContent: 'Check the implementation', selections: [], state: {} }, { role: 'assistant', displayContent: 'The implementation is ready to review.', reasoning: 'I checked the validation and the failure paths.', anthropicReasoning: null }] }));
+	await page.locator(TID('vader-reasoning-toggle')).click();
+	check('Thinking opens its actual text without a card background', (await page.locator(TID('vader-reasoning-text')).innerText()).includes('validation and the failure paths') && await page.locator(TID('vader-reasoning-text')).evaluate(e => getComputedStyle(e).backgroundColor === 'rgba(0, 0, 0, 0)'));
 	await shot(page, '12-thinking-panel');
-	await page.keyboard.press('Escape');
-	check('Escape puts the panel away', (await page.locator(TID('vader-thinking-panel')).count()) === 0);
+	await page.locator(TID('vader-reasoning-toggle')).click();
+	check('Thinking can be collapsed again', (await page.locator(TID('vader-reasoning-text')).count()) === 0);
+	check('assistant prose permits ordinary mouse selection', await page.locator(`${TID('vader-assistant-text')} [data-testid=md]`).evaluate(e => getComputedStyle(e).userSelect !== 'none'));
 	check('with nothing changed there is no empty "No files with changes" bar', !(await page.locator('body').innerText()).includes('No files with changes'));
 	await page.close();
 }
@@ -1125,6 +1322,79 @@ const policyAsk = (ruleId, reason) => ({ content: `(Vader policy requires approv
 	await page.waitForFunction(() => window.__log.some(x => x.startsWith('task:')));
 	check('the message without the key is sent as it is', (await log(page)).some(x => x === 'task:use this key sk-pr…Zq91 for the tests'));
 	check('no error in the page console', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+// Native picker boundary is substituted; the actual attachment component reads,
+// validates, deduplicates and updates the originating conversation's context.
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(() => {
+		window.__files['/work/vader-app/notes.txt'] = 'Context from the selected file';
+		window.__pickedContextFiles = ['/work/vader-app/notes.txt'];
+	});
+	await page.locator(TID('vader-add-files')).click();
+	await page.waitForFunction(() => window.__chat.state.allThreads.t1.state.stagingSelections.length === 1);
+	check('Add files puts the real selected path in the draft and displays its chip',
+		(await page.locator('body').innerText()).includes('notes.txt')
+		&& await page.evaluate(() => window.__chat.state.allThreads.t1.state.stagingSelections[0].uri.path === '/work/vader-app/notes.txt'));
+	await page.locator(TID('vader-add-files')).click();
+	await page.waitForFunction(() => !document.querySelector('[data-testid=vader-add-files]').disabled);
+	check('selecting a file again does not duplicate the attached context', await page.evaluate(() => window.__chat.state.allThreads.t1.state.stagingSelections.length === 1));
+	await page.evaluate(() => { window.__pickedContextFiles = ['/work/missing.txt']; });
+	await page.locator(TID('vader-add-files')).click();
+	await page.locator(TID('vader-add-files-note')).waitFor();
+	check('an unreadable file is reported and existing context is preserved',
+		(await page.locator(TID('vader-add-files-note')).innerText()).includes('could not be read')
+		&& await page.evaluate(() => window.__chat.state.allThreads.t1.state.stagingSelections.length === 1));
+	check('the file picker component has no browser error', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+// Equal-size drafts must still invalidate callbacks when switching conversations.
+{
+	const { page, errors } = await newPage();
+	await page.evaluate(() => window.__switchThread('t2'));
+	await page.locator(TID('vader-attach-input')).setInputFiles({ name: 'only-in-second.txt', mimeType: 'text/plain', buffer: Buffer.from('second conversation context') });
+	await page.waitForFunction(() => window.__chat.state.allThreads.t2.state.composerAttachments?.length === 1);
+	check('equal-count thread switch attaches text to the displayed conversation only', await page.evaluate(() => !window.__chat.state.allThreads.t1.state.composerAttachments?.length && window.__chat.state.allThreads.t2.state.composerAttachments[0].title === 'only-in-second.txt'));
+	await page.evaluate(() => window.__switchThread('t3'));
+	await page.evaluate(async () => {
+		const canvas = document.createElement('canvas'); canvas.width = 3; canvas.height = 3;
+		const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
+		const dt = new DataTransfer(); dt.items.add(new File([blob], 'only-in-third.png', { type: 'image/png' }));
+		document.querySelector('textarea').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+	});
+	await page.waitForFunction(() => window.__chat.state.allThreads.t3.state.composerImages?.length === 1);
+	check('equal-count thread switch attaches the decoded image to the displayed conversation only', await page.evaluate(() => !window.__chat.state.allThreads.t1.state.composerImages?.length && !window.__chat.state.allThreads.t2.state.composerImages?.length && window.__chat.state.allThreads.t3.state.composerImages[0].name === 'only-in-third.png'));
+	check('thread-switch attachment regression has no browser errors', errors.length === 0, errors.join(' | '));
+	await page.close();
+}
+
+// Real component handlers with a deliberately pending gateway preparation.
+// A newer draft must survive the earlier request's eventual completion.
+{
+	const { page, errors } = await newPage();
+	await page.locator(TID('vader-attach-input')).setInputFiles({ name: 'submitted.txt', mimeType: 'text/plain', buffer: Buffer.from('submitted context') });
+	await page.waitForSelector(TID('vader-paste-chip'));
+	await page.evaluate(() => { window.__onTask = () => new Promise(resolve => { window.__releaseStart = resolve; }); });
+	await page.locator(INPUT).fill('First request');
+	await page.locator(TID('vader-send')).click();
+	await page.waitForFunction(() => typeof window.__releaseStart === 'function');
+	await page.locator(INPUT).fill('Next unsent request');
+	await page.locator(TID('vader-attach-input')).setInputFiles({ name: 'next-draft.txt', mimeType: 'text/plain', buffer: Buffer.from('newer context') });
+	await page.waitForFunction(() => window.__chat.state.allThreads.t1.state.composerAttachments?.length === 2);
+	await page.evaluate(() => {
+		window.__files['/work/vader-app/newer.ts'] = 'export const newer = true';
+		window.__pickedContextFiles = ['/work/vader-app/newer.ts'];
+	});
+	await page.locator(TID('vader-add-files')).click();
+	await page.waitForFunction(() => window.__chat.state.allThreads.t1.state.stagingSelections.length === 1);
+	check('send visibly disables while request preparation owns this conversation', await page.locator(TID('vader-send')).isDisabled());
+	await page.locator(TID('vader-send')).evaluate(e => e.click());
+	check('pending preparation cannot send a second request through the old handler', (await log(page)).filter(x => x.startsWith('task:')).length === 1);
+	await page.evaluate(() => window.__releaseStart());
+	await page.waitForFunction(() => window.__chat.state.allThreads.t1.state.composerAttachments?.length === 1);
+	check('send completion consumes submitted attachments and preserves later files and text', await page.evaluate(() => window.__chat.state.allThreads.t1.state.composerAttachments[0].title === 'next-draft.txt' && window.__chat.state.allThreads.t1.state.stagingSelections.length === 1) && await page.locator(INPUT).inputValue() === 'Next unsent request');
+	check('delayed preparation regression has no browser errors', errors.length === 0, errors.join(' | '));
 	await page.close();
 }
 await browser.close();

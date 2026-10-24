@@ -10,8 +10,14 @@ data remain available. Explicit classic mode retains its original startup.
 Vader pages hide inherited editor menus/parts and window border, while real
 window controls retain visibility and pointer events. Host-outline suppression
 does not remove keyboard-focus indicators from controls. A synchronous shell
-mount failure removes partial resources, releases the startup mask, propagates
-the error, and permits retry on a later layout. Completed onboarding unmounts;
+mount failure removes partial resources, preserves modern screen ownership,
+propagates the actual error to diagnostics, and permits retry on a later layout.
+It never reveals the classic editor as an automatic fallback and adds no new
+failure/retry page. All inherited part descendants are suppressed, including
+widgets that set `visibility:visible` themselves. Native window controls remain
+visible and clickable. Explicit editor mode still intentionally exposes the
+editor; this is distinct from accidental startup/transition leakage.
+Completed onboarding unmounts;
 returning users do not mount its provider discovery hooks.
 
 Agent inventory is passive: manifests/file locations only, no handshake or
@@ -42,7 +48,12 @@ Run `npm run buildreact` before UI suites. Execute UI suites serially.
   transports/config/IPC. `--source-ref=HEAD` demonstrates pre-fix failures.
 - `windowLayersE2E.mjs`: Chromium with production CSS/layer helper and the actual
   shell contribution, controlled host/mount; startup, nested layers, window
-  button clicks, focus, mount failure/retry and disposal.
+  button clicks, focus, mount failure/retry and disposal. Executes the production
+  bootstrap function against saved splash geometry and samples 72 frames across
+  Settings transitions. `--baseline-css` uses released HEAD CSS and must fail the
+  visible-menu regression; it is a sensitivity experiment, not a passing gate.
+- `smokeReadinessE2E.mjs`: checks the packaged observer also detects a visible
+  MenuBar descendant even when its ancestor has `visibility:hidden`.
 - `semanticIndexerE2E.mjs`: real indexer and temporary folders, synthetic vectors;
   power hold, persistence and delayed-factory disposal.
 - Existing external-agent protocol, MCP review, shell, onboarding, Settings,
@@ -53,7 +64,7 @@ Run `npm run buildreact` before UI suites. Execute UI suites serially.
 These establish controlled local behavior. They do not measure installed-app
 CPU/RAM, native dragging/window-control behavior, live vendor connectivity or
 real model-worker termination. CI entries are configured in the working tree;
-new checks are not externally enforced until pushed and executed. The October
-2026 local typecheck has 348 pre-existing diagnostics, mainly missing Electron
-types; preserving that baseline is not a clean typecheck. No installer/release
-was produced for this fix set.
+new checks are not externally enforced until pushed and executed. The earlier
+348 missing-Electron-type diagnostics were resolved by restoring checksum-verified
+Electron type declarations; the full local TypeScript baseline is now zero.
+No installer/release was produced for this fix set.

@@ -82,7 +82,7 @@ const base = `http://127.0.0.1:${server.address().port}/`;
 
 let passed = 0, failed = 0;
 const check = (name, ok, detail = '') => { ok ? passed++ : failed++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${!ok && detail ? ` - ${detail}` : ''}`); };
-const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png') }); };
+const shot = async (page, name) => { await auditShot(page, name); await page.screenshot({ path: path.join(shots, name + '.png'), animations: 'disabled' }); };
 
 {
 	const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -151,6 +151,122 @@ const shot = async (page, name) => { await auditShot(page, name); await page.scr
 	await page.locator('[data-testid="vader-input"]').fill('Explain ');
 	await page.keyboard.type('@');
 	await page.waitForTimeout(350); await shot(page, '16-at-menu');
+	// Explicitly illustrative isolated fixtures requested by the owner. These do not
+	// populate production data or establish real provider connectivity.
+	await page.keyboard.press('Escape');
+	await page.evaluate(() => {
+		const c = window.__chat;
+		const id = 't-ui-preview';
+		const now = new Date().toISOString();
+		c.state = { ...c.state, currentThreadId: id, allThreads: { ...c.state.allThreads, [id]: {
+			id, createdAt: now, lastModified: now, projectFolders: ['c:/work/vader-app'], filesWithUserChanges: new Set(), state: {},
+			messages: [
+				{ role: 'user', content: 'Check the project and add tests for the rate limiter.', displayContent: 'Check the project and add tests for the rate limiter.', selections: [], state: {} },
+				{ role: 'assistant', displayContent: 'I checked the request handler and the token bucket. The tests now cover exhausted quotas, independent accounts, and cancellation.\n\nYou can review the changes before applying them to the project.', reasoning: 'I compared the request path with the existing tests, checked how the quota is updated, and kept each account independent.', anthropicReasoning: null },
+			],
+		} } };
+		c.streamState = {};
+		const selection = { providerName: 'openRouter', modelName: 'nvidia/nemotron-3-super-120b-a12b:free' };
+		window.__settings = { ...window.__settings,
+			settingsOfProvider: { ...window.__settings.settingsOfProvider, openRouter: { ...window.__settings.settingsOfProvider.anthropic, apiKey: 'isolated-fixture', _didFillInProviderSettings: true, models: [{ modelName: selection.modelName, isHidden: false }] } },
+			_modelOptions: [{ name: selection.modelName, selection }],
+			modelSelectionOfFeature: { ...window.__settings.modelSelectionOfFeature, Chat: selection },
+			overridesOfModel: { openRouter: { [selection.modelName]: { contextWindow: 262144 } } },
+			globalSettings: { ...window.__settings.globalSettings, chatMode: 'normal' },
+		};
+		window.__shell.show('conversation', 'conversation'); window.__notify();
+	});
+	await page.locator('[data-testid=vader-reasoning-toggle]').waitFor({ state: 'visible' });
+	await page.locator('[data-testid=vader-reasoning-toggle]').click();
+	await page.locator('[data-testid=vader-assistant-text]').hover();
+	await page.waitForFunction(() => getComputedStyle(document.querySelector('[data-testid=vader-copy-answer]').parentElement).opacity === '1');
+	const actionStyle = await page.locator('[data-testid=vader-copy-answer]').evaluate(el => {
+		const s = getComputedStyle(el); return { border: s.borderTopColor, background: s.backgroundColor, height: el.getBoundingClientRect().height, width: el.getBoundingClientRect().width };
+	});
+	check('copy is a small transparent icon without a painted button background or border', actionStyle.background === 'rgba(0, 0, 0, 0)' && actionStyle.border === 'rgba(0, 0, 0, 0)' && actionStyle.height === 28 && actionStyle.width === 28);
+	check('message actions use icons with accessible names instead of visible labels', await page.locator('[data-testid=vader-copy-answer]').evaluate(el => !!el.querySelector('svg') && el.textContent.trim() === '' && el.getAttribute('aria-label') === 'Copy'));
+	const answer = page.locator('[data-testid=vader-assistant-text] [data-testid=md]').first();
+	// Start on actual first-line glyphs, rather than the empty gap between paragraphs.
+	const bounds = await answer.evaluate(el => {
+		const node = document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
+		const range = document.createRange(); range.setStart(node, 0); range.setEnd(node, Math.min(38, node.textContent.length));
+		const r = range.getClientRects()[0]; return { x: r.x, y: r.y, width: r.width, height: r.height };
+	});
+	await page.mouse.move(bounds.x + 1, bounds.y + bounds.height / 2);
+	await page.mouse.down(); await page.mouse.move(bounds.x + bounds.width - 1, bounds.y + bounds.height / 2, { steps: 8 }); await page.mouse.up();
+	const selectedText = await page.evaluate(() => window.getSelection()?.toString() ?? '');
+	check('assistant prose can actually be selected with the mouse', selectedText.includes('checked'), JSON.stringify(selectedText));
+	await page.evaluate(() => window.getSelection()?.removeAllRanges());
+	await shot(page, '17-preview-message-and-thinking');
+	check('the routed model caption is compact while its full id stays in the tooltip',
+		(await page.locator('[data-testid=vader-picker-caption]').innerText()) === 'NVIDIA Nemotron 3 Super'
+		&& (await page.locator('[data-testid=vader-picker-button]').getAttribute('title')).includes('120b-a12b:free'));
+	await page.locator('[data-testid=vader-context-meter]').click();
+	await page.locator('[data-testid=vader-context-panel]').waitFor({ state: 'visible' });
+	const consumed = await page.locator('[data-testid=vader-context-meter]').innerText();
+	await page.evaluate(async () => {
+		const s = window.__settings; const id = s.modelSelectionOfFeature.Chat.modelName;
+		window.__settings = { ...s, overridesOfModel: { ...s.overridesOfModel, openRouter: { [id]: { ...s.overridesOfModel.openRouter[id], reservedOutputTokenSpace: 131072 } } } };
+		window.__notify(); await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+	});
+	check('reserving more answer space does not inflate reported consumed context', (await page.locator('[data-testid=vader-context-meter]').innerText()) === consumed);
+	await shot(page, '18-preview-context-usage');
+	check('the context popover is informational only', await page.locator('[data-testid=vader-context-panel] input,[data-testid=vader-context-panel] [role=slider],[data-testid=vader-context-panel] button').count() === 0);
+	await page.keyboard.press('Escape');
+	await page.locator('[data-testid=vader-project-picker]').click();
+	await page.locator('[data-testid=vader-project-picker-option]').first().waitFor({ state: 'visible' });
+	await shot(page, '19-preview-project-picker');
+	await page.keyboard.press('Escape');
+	check('keyboard focus uses a neutral outline instead of the editor blue', await page.locator('[data-testid=vader-project-picker]').evaluate(el => getComputedStyle(el).outlineColor === 'rgb(176, 176, 181)'));
+	await page.evaluate(() => {
+		const c = window.__chat; const id = c.state.currentThreadId;
+		c.streamState = { [id]: { isRunning: 'LLM', llmInfo: { displayContentSoFar: '', reasoningSoFar: 'Checking the final edge cases.', toolCallSoFar: null } } };
+		window.__notify();
+	});
+	await page.locator('[data-testid=vader-loading]').first().waitFor({ state: 'visible' });
+	await shot(page, '20-preview-loading');
+	// The editor sidebar can be only 300px wide. A long provider/model label
+	// must shrink inside its own cell instead of painting over Stop or Context.
+	const footer = page.locator('[data-testid=vader-composer-footer]').last();
+	await footer.evaluate(el => { el.style.width = '300px'; });
+	await page.waitForTimeout(100);
+	for (const id of ['vader-stop', 'vader-context-meter', 'vader-picker-button']) {
+		const control = footer.locator(`[data-testid=${id}]`);
+		check(`at 300px ${id} remains inside the composer and receives pointer events`, await control.evaluate(el => {
+			const box = el.getBoundingClientRect(), parent = el.closest('[data-testid=vader-composer-footer]').getBoundingClientRect();
+			const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
+			return box.width > 0 && box.left >= parent.left && box.right <= parent.right && !!hit && el.contains(hit);
+		}));
+		await control.click({ trial: true });
+	}
+	await shot(page, '20b-narrow-composer-loading');
+	await footer.evaluate(el => { el.style.width = ''; });
+	await page.evaluate(() => {
+		const c = window.__chat, id = 't-first-open'; const now = new Date().toISOString();
+		c.state = { ...c.state, currentThreadId: id, allThreads: { [id]: { id, createdAt: now, lastModified: now, messages: [], state: { stagingSelections: [] }, filesWithUserChanges: new Set() } } };
+		c.streamState = {}; c.getCurrentProjectKey = () => null; c.listProjectGroups = () => [];
+		c.getUsageToday = () => ({ costUsd: 0, billedCostUsd: 0, inputTokens: 0, outputTokens: 0, unpricedTurns: 0 });
+		window.__shell.listProjects = async () => ({ projects: [], historyUnavailable: false });
+		window.__notify();
+	});
+	await page.locator('[data-testid=vader-landing-title]').waitFor();
+	const projectBounds = await page.locator('[data-testid=vader-project-picker]').boundingBox();
+	const inputBounds = await page.locator('[data-testid=vader-input]').boundingBox();
+	check('first open offers one project selector above the input and no duplicated opening card', projectBounds.y < inputBounds.y && await page.locator('[data-testid=vader-open-folder],[data-testid=vader-no-project]').count() === 0);
+	await shot(page, '21-preview-first-open');
+	await page.evaluate(() => {
+		const c = window.__chat, id = c.state.currentThreadId;
+		c.streamState = { [id]: { isRunning: undefined, isPreparing: true } };
+		window.__notify(); window.__shell.show('agents');
+	});
+	await page.waitForFunction(() => !document.querySelector('[data-testid=vader-input]'));
+	await page.evaluate(() => window.__shell.show('conversation', 'conversation'));
+	await page.locator('[data-testid=vader-input]').waitFor();
+	await page.locator('[data-testid=vader-input]').fill('A newer draft after returning');
+	check('returning to an unmounted conversation retains service-owned preparation and keeps Send disabled', await page.locator('[data-testid=vader-send]').isDisabled());
+	await page.evaluate(() => { window.__chat.streamState = {}; window.__notify(); });
+	await page.waitForFunction(() => !document.querySelector('[data-testid=vader-send]').disabled);
+	check('settled service preparation re-enables Send without losing the returned draft', await page.locator('[data-testid=vader-input]').inputValue() === 'A newer draft after returning');
 	check('no error in the console on any page', errors.length === 0, errors.join(' | ').slice(0, 600));
 	await page.close();
 }

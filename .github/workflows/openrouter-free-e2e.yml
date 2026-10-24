@@ -136,13 +136,13 @@ jobs:
 
       - name: Run the real-model group on each free model
         shell: pwsh
-        continue-on-error: true
         env:
           REAL_LLM_BASEURL: https://openrouter.ai/api/v1
           REAL_LLM_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
           E2E_ONLY: 'real-llm'
           E2E_SCENARIO_TIMEOUT: '900000'
         run: |
+          $failedModels = @()
           foreach ($m in ($env:MODELS -split ',')) {
             $safe = ($m -replace '[^A-Za-z0-9]+','_')
             "=================== $m"
@@ -150,9 +150,16 @@ jobs:
             $env:E2E_OUT = "e2e-out-$safe"
             $env:E2E_PRISTINE = '1'
             node src/vs/workbench/contrib/vader/test/e2e/suite.mjs
-            "exit code for ${m}: $LASTEXITCODE"
+            $modelExitCode = $LASTEXITCODE
+            "exit code for ${m}: $modelExitCode"
+            if ($modelExitCode -ne 0) { $failedModels += $m }
             Start-Sleep 20
           }
+          if ($failedModels.Count -gt 0) {
+            Write-Output "::error::Real-model scenarios failed for: $($failedModels -join ', ')"
+            exit 1
+          }
+          exit 0
 
       - name: Upload results
         if: always()

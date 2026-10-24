@@ -25,14 +25,10 @@ on:
         required: false
         default: false
         type: boolean
-  push:
-    branches: [main]
-    paths:
-      - 'product.json'
-      - 'package.json'
-      - 'build/win32/**'
-      - 'build/gulpfile.vscode.win32.js'
-      - '.github/workflows/windows-build.yml'
+
+# Packaging requires an explicit owner-requested dispatch. Merging verified
+# source changes must not create an installer implicitly; development validation
+# and ordinary CI run independently of this manual packaging workflow.
 
 # Least privilege: the build only reads the repository. Publishing a release is a separate job that alone
 # holds `contents: write`, and it only runs when a release is explicitly requested.

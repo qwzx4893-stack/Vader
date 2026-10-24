@@ -1,0 +1,21 @@
+# Project picker and native file attachments
+Choose project ::: اختر مشروعًا ::: 选择项目
+Chat (no project) ::: محادثة (بدون مشروع) ::: 聊天（无项目）
+New project… ::: مشروع جديد… ::: 新建项目…
+Loading projects… ::: جارٍ تحميل المشاريع… ::: 正在加载项目…
+No recent projects. Choose a folder to get started. ::: لا توجد مشاريع حديثة. اختر مجلدًا للبدء. ::: 没有最近的项目。请选择文件夹以开始。
+Recent folders are unavailable. You can still choose a folder. ::: المجلدات الحديثة غير متاحة. لا يزال بإمكانك اختيار مجلد. ::: 最近的文件夹不可用。您仍可选择文件夹。
+Projects could not be loaded. Try again or choose a folder. ::: تعذّر تحميل المشاريع. أعد المحاولة أو اختر مجلدًا. ::: 无法加载项目。请重试或选择文件夹。
+A project is opening. Wait for it to finish. ::: جارٍ فتح مشروع. انتظر حتى يكتمل. ::: 正在打开项目。请等待完成。
+Stop the running task before switching projects. ::: أوقف المهمة الجارية قبل تبديل المشروع. ::: 切换项目前请停止正在运行的任务。
+Stop the running task or wait for message preparation before switching projects. ::: أوقف المهمة الجارية أو انتظر اكتمال تحضير الرسالة قبل تبديل المشروع. ::: 切换项目前请停止正在运行的任务，或等待消息准备完成。
+This project folder is unavailable. Choose another folder. ::: مجلد المشروع غير متاح. اختر مجلدًا آخر. ::: 此项目文件夹不可用。请选择其他文件夹。
+The project did not open. Try again or choose another folder. ::: لم يُفتح المشروع. أعد المحاولة أو اختر مجلدًا آخر. ::: 项目未打开。请重试或选择其他文件夹。
+Choose a folder on this computer. ::: اختر مجلدًا على هذا الكمبيوتر. ::: 请选择此计算机上的文件夹。
+This conversation is no longer available. ::: هذه المحادثة لم تعد متاحة. ::: 此对话已不可用。
+Add files ::: أضف ملفات ::: 添加文件
+Add files to this message ::: أضف ملفات إلى هذه الرسالة ::: 向此消息添加文件
+Files could not be attached. Try choosing them again. ::: تعذّر إرفاق الملفات. حاول اختيارها مجددًا. ::: 无法附加文件。请重新选择。
+Remove attachment ::: أزل المرفق ::: 移除附件
+A message with files or images cannot wait for the run to end. Send it when the run is done, or stop the run first. ::: لا يمكن وضع رسالة تحتوي على ملفات أو صور في قائمة الانتظار. أرسلها بعد انتهاء المهمة أو أوقف المهمة أولًا. ::: 包含文件或图片的消息无法排队。请在任务结束后发送，或先停止任务。
+The message could not be sent. Your files are still attached. Try again. ::: تعذّر إرسال الرسالة. لا تزال ملفاتك مرفقة. أعد المحاولة. ::: 消息发送失败。文件仍已附加。请重试。

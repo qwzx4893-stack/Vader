@@ -11,6 +11,7 @@ import { IMarketplaceProvider, ItemFact, IUnifiedMarketplaceService, Marketplace
 import { categoryOf, classify } from '../../../common/marketplace/categories.js';
 import { computeTrust, TrustInputs } from '../../../common/marketplace/trustScore.js';
 import { isSourceOn } from '../../../common/marketplace/addonSources.js';
+import { querySource } from '../../../common/marketplace/sourceQuery.js';
 import { IVaderSettingsService } from '../../../common/vaderSettingsService.js';
 
 // Vader addition, part of the Unified Capability Marketplace (docs/integrations/marketplace.md).
@@ -82,6 +83,7 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 	readonly cacheTtlMs = 30_000;
 
 	private _warnings: string[] = [];
+	private readonly _warningsByToken = new WeakMap<CancellationToken, string[]>();
 
 	constructor(
 		private readonly _skillService: ISkillService,
@@ -89,7 +91,7 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 		private readonly _settings: IVaderSettingsService,
 	) { }
 
-	takeWarnings(): string[] { const w = this._warnings; this._warnings = []; return w; }
+	takeWarnings(token?: CancellationToken): string[] { const w = token ? this._warningsByToken.get(token) ?? [] : this._warnings; if (token) this._warningsByToken.delete(token); if (w === this._warnings) this._warnings = []; return w; }
 
 	private _on(sourceId: string): boolean { return isSourceOn(this._settings.state.globalSettings.addonSourcesOff, sourceId); }
 
@@ -185,16 +187,17 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 
 	// ---- the live feeds, each one a list of candidates; one that fails is said so and the others still answer
 
-	private async _githubRepoCandidates(): Promise<Candidate[]> {
+	private async _githubRepoCandidates(warnings: string[]): Promise<Candidate[]> {
 		const listings = await Promise.all(this._skillService.listSources().map(r => this._discoveryService.listGithubSkills(r)));
 		const out: Candidate[] = [];
 		const errors: string[] = [];
 		for (const l of listings) {
-			if (l.error) { errors.push(`${l.repo}: ${l.error}`); continue; }
+			if (l.error) { errors.push(`${l.repo}: ${l.error}`); }
 			const signals = signalsOf(l.signals);
 			for (const e of l.entries) out.push(this._entryCandidate(e, l.stars, signals, 'github-repos', `GitHub: ${e.owner}/${e.repo}`));
 		}
 		if (out.length === 0 && errors.length > 0) throw new Error(errors.join(' '));
+		warnings.push(...errors);
 		return out;
 	}
 
@@ -227,7 +230,7 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 	}
 
 	private async _skillNetCandidates(query: string): Promise<Candidate[]> {
-		const results = await this._discoveryService.searchSkillNet(query);
+		const results = await this._discoveryService.querySkillNet(query);
 		return results.map((r): Candidate => ({
 			name: r.name, description: r.description, repositoryUrl: r.repositoryUrl, repo: githubRepoUrlOf(r.repositoryUrl)?.slice('https://github.com/'.length), publisher: ownerOfGithubUrl(r.repositoryUrl),
 			sourceId: 'skillnet', sourceLabel: 'SkillNet', signals: { stars: r.stars },
@@ -242,17 +245,20 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 		}));
 	}
 
-	private async _gather(feeds: readonly { id: string; label: string; run: () => Promise<Candidate[]> }[]): Promise<Candidate[]> {
+	private async _gather(feeds: readonly { id: string; label: string; run: (warnings: string[]) => Promise<Candidate[]> }[], token: CancellationToken): Promise<Candidate[]> {
 		const active = feeds.filter(f => this._on(f.id));
-		const settled = await Promise.allSettled(active.map(f => f.run()));
+		const warnings: string[] = [];
+		this._warningsByToken.set(token, warnings);
+		const settled = await Promise.allSettled(active.map(f => querySource(() => f.run(warnings), token)));
 		const out: Candidate[] = [];
 		let failed = 0;
 		settled.forEach((r, i) => {
 			if (r.status === 'fulfilled') { out.push(...r.value); return; }
 			failed++;
-			this._warnings.push(`${active[i].label} did not answer (${r.reason instanceof Error ? r.reason.message : String(r.reason)})`);
+			warnings.push(`${active[i].label} did not answer (${r.reason instanceof Error ? r.reason.message : String(r.reason)})`);
 		});
-		if (active.length > 0 && failed === active.length) throw new Error(this.takeWarnings().join('; '));
+		this._warnings = warnings;
+		if (active.length > 0 && failed === active.length) throw new Error(warnings.join('; '));
 		return out;
 	}
 
@@ -260,17 +266,17 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 		return new Set(this._skillService.list().map(s => s.source.repositoryUrl).filter((u): u is string => !!u));
 	}
 
-	async browse(_token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
+	async browse(token: CancellationToken, category?: string): Promise<MarketplaceItem[]> {
 		const cat = category ? categoryOf('skill', category) : undefined;
 		// a section is looked for by name in every source; the front page is each source's own best
 		const seeds = cat?.seeds ?? SKILLS_SH_BROWSE_QUERIES;
 		const candidates = await this._gather([
-			{ id: 'github-repos', label: 'GitHub repositories', run: () => this._githubRepoCandidates() },
+			{ id: 'github-repos', label: 'GitHub repositories', run: w => this._githubRepoCandidates(w) },
 			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates(seeds) },
 			{ id: 'skillsmp', label: 'SkillsMP', run: () => this._skillsMpCandidates(cat ? seeds : SKILLSMP_BROWSE_QUERIES) },
 			{ id: 'smithery-skills', label: 'Smithery skills', run: () => this._smitherySkillCandidates(cat ? seeds : ['']) },
 			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates(cat ? seeds[0] : '') },
-		]).catch(e => { if (this._skillService.list().length === 0) throw e; return [] as Candidate[]; });
+		], token).catch(e => { if (this._skillService.list().length === 0) throw e; return [] as Candidate[]; });
 		const remote = this._merge(candidates, this._installedUrls()).filter(i => !cat || (i.metadata.categories as string[]).includes(cat.id));
 		const remoteUrls = new Set(remote.map(r => r.id));
 		const installed = this._skillService.list().map(s => this._installedToItem(s));
@@ -284,13 +290,13 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 		const q = query.toLowerCase();
 		const installed = this._skillService.list().filter(s => `${s.name} ${s.description}`.toLowerCase().includes(q));
 		const candidates = await this._gather([
-			{ id: 'github-repos', label: 'GitHub repositories', run: async () => (await this._githubRepoCandidates()).filter(c => `${c.name} ${c.description}`.toLowerCase().includes(q)) },
+			{ id: 'github-repos', label: 'GitHub repositories', run: async w => (await this._githubRepoCandidates(w)).filter(c => `${c.name} ${c.description}`.toLowerCase().includes(q)) },
 			{ id: 'skills-sh', label: 'skills.sh', run: () => this._skillsShCandidates([query]) },
 			{ id: 'skillsmp', label: 'SkillsMP', run: () => this._skillsMpCandidates([query]) },
 			{ id: 'smithery-skills', label: 'Smithery skills', run: () => this._smitherySkillCandidates([query]) },
 			{ id: 'skillnet', label: 'SkillNet', run: () => this._skillNetCandidates(query) },
 			{ id: 'github-topic-skills', label: 'GitHub topic agent-skills', run: () => this._topicCandidates(query) },
-		]).catch(() => [] as Candidate[]);
+		], token).catch(e => { if (installed.length === 0) throw e; return [] as Candidate[]; });
 		if (token.isCancellationRequested) return [];
 		const installedIds = new Set(installed.map(s => s.source.repositoryUrl));
 		const cat = category ? categoryOf('skill', category) : undefined;
@@ -322,6 +328,9 @@ export class SkillMarketplaceProvider implements IMarketplaceProvider {
 		if (!instructions && sh) {
 			const entry = await this._discoveryService.resolveGithubSkill(sh.repo, sh.skillId);
 			if (entry) { instructions = entry.instructions || undefined; repositoryUrl = entry.repositoryUrl; description = description || entry.description; sizeBytes = entry.sizeBytes; }
+		}
+		if (!instructions && repositoryUrl && !item.metadata.wholeRepo) {
+			instructions = (await this._discoveryService.fetchSkillInstructions(repositoryUrl)) ?? undefined;
 		}
 		const listedBy = typeof item.metadata.listedBy === 'number' ? item.metadata.listedBy : undefined;
 		return {

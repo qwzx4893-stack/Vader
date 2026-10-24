@@ -1,0 +1,35 @@
+# Compact message actions, confirmations, and edit recovery. Regenerate with genI18nTables.py.
+Copy ::: نسخ ::: 复制
+Copied ::: تم النسخ ::: 已复制
+Edit message ::: تعديل الرسالة ::: 编辑消息
+Edit your message ::: عدّل رسالتك ::: 编辑你的消息
+Edit your message... ::: عدّل رسالتك... ::: 编辑你的消息…
+Cancel editing ::: إلغاء التعديل ::: 取消编辑
+Regenerate reply ::: إعادة إنشاء الرد ::: 重新生成回复
+Redo from here ::: إعادة المحاولة من هنا ::: 从此处重试
+Branch the chat ::: إنشاء محادثة متفرعة ::: 创建分支对话
+Start a new chat including this reply ::: بدء محادثة جديدة تتضمن هذا الرد ::: 新建包含此回复的对话
+Start a new chat before this message ::: بدء محادثة جديدة قبل هذه الرسالة ::: 从此消息之前新建对话
+Send this message again? ::: هل تريد إرسال هذه الرسالة مجددًا؟ ::: 重新发送此消息？
+This replaces the reply and later messages. Existing file changes stay. A new request uses your account allowance. ::: سيُستبدل الرد والرسائل اللاحقة. ستبقى تغييرات الملفات الحالية. سيستهلك الطلب الجديد من حصة حسابك. ::: 这将替换回复及后续消息。现有文件更改会保留。新请求将使用你的账户额度。
+Send again ::: إرسال مجددًا ::: 重新发送
+Cancel ::: إلغاء ::: 取消
+Branched here ::: تم إنشاء تفرّع من هنا ::: 已从此处分支
+A new chat started with everything before this message. This chat is unchanged. ::: بدأت محادثة جديدة تتضمن كل ما سبق هذه الرسالة. لم تتغير هذه المحادثة. ::: 已创建包含此消息之前所有内容的新对话。当前对话保持不变。
+Open the new chat ::: فتح المحادثة الجديدة ::: 打开新对话
+Stay here ::: البقاء هنا ::: 留在此处
+The action failed. Try again. ::: تعذّر تنفيذ الإجراء. أعد المحاولة. ::: 操作失败。请重试。
+This message changed. Try again. ::: تغيّرت هذه الرسالة. أعد المحاولة. ::: 此消息已更改。请重试。
+Wait for the current reply to finish. ::: انتظر حتى يكتمل الرد الحالي. ::: 请等待当前回复完成。
+Could not branch this chat. ::: تعذّر إنشاء تفرّع من هذه المحادثة. ::: 无法创建此对话的分支。
+The message could not be updated. Your edit is still here. Try again. ::: تعذّر تحديث الرسالة. لا يزال تعديلك هنا. أعد المحاولة. ::: 无法更新消息。你的编辑内容仍在。请重试。
+
+# Preserve existing pending table-only translations during supported regeneration.
+More attachment options ::: خيارات إرفاق إضافية ::: 更多附件选项
+Connection and updates ::: الاتصال والتحديثات ::: 连接与更新
+Connected means the agent accepted an ACP session. Sign-in follows the agent’s requirements; some agents also support use without an account. ::: متصل تعني أن الوكيل قبل جلسة ACP. يتبع تسجيل الدخول متطلبات الوكيل؛ وبعض الوكلاء يدعم الاستخدام دون حساب أيضاً. ::: 已连接表示代理接受了 ACP 会话。是否需要登录由代理决定；部分代理也支持无需账户使用。
+Releases are checked online when this page opens and hourly while it stays open. Updates need your approval. Programs installed outside Vader use their own updater. ::: تُفحص الإصدارات عبر الإنترنت عند فتح هذه الصفحة وكل ساعة ما دامت مفتوحة. تثبيت التحديثات يحتاج موافقتك. البرامج المثبتة خارج فيدر تستخدم أداة تحديثها الخاصة. ::: 打开此页面时会在线检查版本，并在页面保持打开期间每小时检查。安装更新需要您批准。在 Vader 外安装的程序使用其自身更新工具。
+Latest releases checked online. ::: تم فحص الإصدارات الحديثة عبر الإنترنت. ::: 已在线检查最新版本。
+Could not check the latest releases. Saved versions are still available. ::: تعذر فحص أحدث الإصدارات. ما زالت الإصدارات المحفوظة متاحة. ::: 无法检查最新版本，仍可使用已保存的版本。
+Uses the ACP-maintained Codex adapter, not an OpenAI-published ACP binary. Needs Node.js. You sign in with your OpenAI account in the browser; OpenAI counts the usage on your plan. ::: يستخدم محوّل Codex الذي يديره مشروع ACP، وليس برنامج ACP منشوراً من OpenAI. يحتاج Node.js. تسجّل الدخول بحساب OpenAI في المتصفح، وتحتسب OpenAI الاستخدام ضمن خطتك. ::: 使用由 ACP 项目维护的 Codex 适配器，而非 OpenAI 发布的 ACP 程序。需要 Node.js。您在浏览器中登录 OpenAI 账户，使用量计入您的计划。
+Estimates are for the current context, not lifetime token usage. Automatic cleanup uses the input budget after reserving room for the reply. ::: التقديرات للسياق الحالي، وليست لإجمالي الرموز المستهلكة. يعتمد التنظيف التلقائي على مساحة الإدخال بعد حجز مساحة للرد. ::: 此处估算当前上下文，而非累计 Token 用量。自动清理根据预留回复空间后的输入预算执行。

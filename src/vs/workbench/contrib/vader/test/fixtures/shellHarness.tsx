@@ -74,6 +74,10 @@ w.__settings = { modelSelectionOfFeature: { Chat: { providerName: 'anthropic', m
 const shell: any = {
 	state: { mode: 'window', page: 'conversation', tab: 'conversation', searchOpen: false, file: null },
 	show(page = this.state.page, tab = page === 'conversation' ? this.state.tab : 'conversation') { this.state = { ...this.state, mode: 'window', page, tab, searchOpen: false }; notify() },
+	async openThread(id: string) { w.__chat.switchToThread(id); this.show('conversation', 'conversation') },
+	async listProjects() { return { projects: [{ key: 'c:/work/vader-app', name: 'vader-app', folders: ['c:/work/vader-app'] }, { key: 'c:/work/docs-site', name: 'docs-site', folders: ['c:/work/docs-site'] }], historyUnavailable: false } },
+	async selectProject(folders: string[]) { w.__log.push(`project:${folders.join(',')}`); this.show('conversation', 'conversation') },
+	async newProject() { w.__log.push('project:new') },
 	openEditor() { this.state = { ...this.state, mode: 'editor' }; w.__log.push('editor'); notify() },
 	openFile(path?: string | null) { this.state = { ...this.state, mode: 'window', page: 'files', tab: 'conversation', searchOpen: false, file: path === undefined ? this.state.file : path }; w.__log.push(`files:${path ?? ''}`); notify() },
 	setTab(tab: string) { this.state = { ...this.state, page: 'conversation', tab }; notify() },

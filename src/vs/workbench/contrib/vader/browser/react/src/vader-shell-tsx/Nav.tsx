@@ -70,8 +70,13 @@ export const Nav = () => {
 	const data = useShellData()
 	const updates = useAddonUpdates()
 	const [closed, setClosed] = useState<Record<string, boolean | undefined>>({})
+	const [openError, setOpenError] = useState<string>()
+	useEffect(() => { setClosed(c => ({ ...c, [data.currentProjectKey ?? '__chats__']: false })) }, [data.currentProjectKey])
 
-	const open = (id: string) => { chat.switchToThread(id); shellService.show('conversation') }
+	const open = (id: string) => {
+		setOpenError(undefined)
+		void shellService.openThread(id).catch(e => setOpenError(e instanceof Error ? e.message : 'The project did not open. Try again or choose another folder.'))
+	}
 	const onConversation = shell.page === 'conversation'
 	const projects = data.groups.filter(g => g.key !== null)
 	const chats = data.groups.find(g => g.key === null)
@@ -90,6 +95,7 @@ export const Nav = () => {
 		</button>
 
 		<div className='c fl scroll' style={{ minHeight: 0 }}>
+			{openError ? <div role='alert' data-testid='vader-shell-project-error' className='hint' style={{ padding: '4px 10px' }}>{openError}</div> : null}
 			{data.needsYou.length > 0 ? <>
 				<div className='nvh'>Needs you</div>
 				{data.needsYou.map(t => <ThreadRow key={t.id} t={t} selected={onConversation && t.id === data.currentId} onOpen={open} />)}

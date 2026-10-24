@@ -4,8 +4,8 @@
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Check, Loader2 } from 'lucide-react'
-import { useAccessor, useSkillsState } from '../util/services.js'
-import type { MarketplaceItem, MarketplaceItemType } from '../../../../common/marketplace/marketplaceTypes.js'
+import { useAccessor, useSettingsState, useSkillsState } from '../util/services.js'
+import type { MarketplaceItem, MarketplaceItemType, MarketplaceSearchResult } from '../../../../common/marketplace/marketplaceTypes.js'
 import { trustLevelOf } from '../../../../common/marketplace/trustScore.js'
 import { TrustMeter } from './TrustMeter.js'
 import { ItemLogo, ItemPage } from './ItemPage.js'
@@ -26,33 +26,56 @@ function useStoreItems(types: MarketplaceItemType[], query: string, includeExten
 	const accessor = useAccessor()
 	const marketplace = accessor.get('IUnifiedMarketplaceService')
 	const skills = useSkillsState()
+	const settings = useSettingsState()
+	const cacheScope = JSON.stringify([settings.globalSettings.addonSourcesOff ?? [], accessor.get('ISkillService').listSources()])
 	const [items, setItems] = useState<MarketplaceItem[]>([])
 	const [loading, setLoading] = useState(true)
 	const [failed, setFailed] = useState<string[]>([])
+	const [saved, setSaved] = useState(false)
+	const [stale, setStale] = useState(false)
 	const generation = useRef(0)
+	const active = useRef<AbortController | null>(null)
 	const typeKey = types.join(',')
 	const skillsKey = skills.map(s => `${s.id}:${s.enabled}:${s.trustState}`).join('|')
 
-	const load = useCallback(async () => {
+	const load = useCallback(async (refresh = false) => {
 		const g = ++generation.current
+		active.current?.abort()
+		const controller = new AbortController()
+		active.current = controller
 		setLoading(true)
-		try {
-			const opts = { types: typeKey.split(',') as MarketplaceItemType[], ...(category ? { category } : {}) }
-			const res = query.trim() ? await marketplace.search(query.trim(), opts) : await marketplace.browse(opts)
-			if (g !== generation.current) return
+		const receive = (res: MarketplaceSearchResult) => {
+			if (g !== generation.current || controller.signal.aborted) return
 			setItems(res.items.filter(i => includeExtensions || i.type !== 'EXTENSION'))
-			setFailed(res.providerOutcomes.flatMap(o => [...(o.error ? [`${o.providerId}: ${o.error}`] : []), ...(o.warnings ?? [])]))
-		} finally {
-			if (g === generation.current) setLoading(false)
+			setFailed([...new Set(res.providerOutcomes.flatMap(o => [...(o.error ? [`${o.providerId}: ${o.error}`] : []), ...(o.warnings ?? [])]))])
+			setSaved(res.providerOutcomes.some(o => o.cachedAtMs !== undefined))
+			setStale(res.providerOutcomes.some(o => o.stale))
 		}
-	}, [marketplace, typeKey, query, includeExtensions, category])
+		try {
+			const opts = { types: typeKey.split(',') as MarketplaceItemType[], category, cacheScope, refresh, signal: controller.signal, onProgress: receive }
+			const res = query.trim() ? await marketplace.search(query.trim(), opts) : await marketplace.browse(opts)
+			receive(res)
+		} catch (e) {
+			if (g === generation.current && !controller.signal.aborted) {
+				setFailed([e instanceof Error ? e.message : String(e)])
+				setStale(true)
+			}
+		} finally {
+			if (g === generation.current && !controller.signal.aborted) setLoading(false)
+		}
+	}, [marketplace, typeKey, query, includeExtensions, category, cacheScope])
 
 	useEffect(() => {
-		const t = setTimeout(load, query ? 250 : 0) // wait for a pause in typing before asking the network
-		return () => clearTimeout(t)
+		setItems([])
+		setFailed([])
+		setSaved(false)
+		setStale(false)
+		setLoading(true)
+		const t = setTimeout(() => { void load() }, query ? 250 : 0)
+		return () => { clearTimeout(t); ++generation.current; active.current?.abort() }
 	}, [load, query, skillsKey])
 
-	return { items, loading, failed, reload: load }
+	return { items, loading, failed, saved, stale, reload: () => load(true) }
 }
 
 // the editor's own tooling (language servers, debuggers, formatters, grammars, notebook kernels) is listed with extensions: one place for what extends the editor
@@ -122,7 +145,7 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 	const accessor = useAccessor()
 	const marketplace = accessor.get('IUnifiedMarketplaceService')
 	const q = query ?? ''
-	const { items, loading, failed, reload } = useStoreItems(types, q, includeExtensions, category)
+	const { items, loading, failed, saved, stale, reload } = useStoreItems(types, q, includeExtensions, category)
 	const [selectedKey, setSelectedKey] = useState<string | null>(null)
 	const [busyKey, setBusyKey] = useState<string | null>(null)
 	const [errorOf, setErrorOf] = useState<Record<string, string>>({})
@@ -209,10 +232,14 @@ export const StoreView = ({ types, query, includeExtensions, installedOnly, grou
 	return <div className='flex min-w-0 min-h-0 flex-1 text-root'>
 		<div className='flex flex-col min-w-0 flex-1 overflow-y-auto scroll' style={{ gap: 18, paddingBottom: 24 }}>
 			{before}
-			{failed.length > 0 ? <div className='text-yellow-600'>{failed.length === 1 ? 'One source' : `${failed.length} sources`} could not be read just now: {failed.join(' ')}</div> : null}
+			<div className='r hint' style={{ gap: 12 }} role='status' data-testid='vader-addons-load-status'>
+				<span className='fl'>{loading ? 'Checking connected sources…' : stale ? 'Some results are saved from an earlier load.' : saved ? 'Showing recently saved results.' : 'Sources checked. Source responses may be cached for up to 10 minutes.'}</span>
+				<button className='tx' title='Check sources again. Source responses may be cached for up to 10 minutes.' disabled={loading} onClick={() => { void reload() }}>Refresh</button>
+			</div>
+			{failed.length > 0 ? <div role='alert' className='text-yellow-600'>Some sources could not be read just now. Results may be incomplete. {failed.join(' ')}</div> : null}
 			{Object.entries(errorOf).map(([k, msg]) => <div key={k} data-testid='vader-addon-error' role='alert' className='flex items-start gap-3 text-red-500'><span className='flex-1'>Could not add {items.find(i => keyOf(i) === k)?.name ?? 'it'}: {msg}</span><button className='text-vader-fg-2 hover:text-vader-fg-1 shrink-0' onClick={() => setErrorOf(e => { const { [k]: _drop, ...rest } = e; return rest })}>Dismiss</button></div>)}
 			{loading && items.length === 0 ? <div className='text-vader-fg-3 py-6'>Loading...</div> : null}
-			{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{q.trim() ? `Nothing matches "${q.trim()}". Searched every source that is turned on.` : installedOnly ? 'Nothing is installed yet.' : 'Nothing to show yet.'}</div> : null}
+			{!loading && shown.length === 0 ? <div className='text-vader-fg-3 py-6'>{failed.length ? 'No results available. Try Refresh or check your sources in Settings.' : q.trim() ? `No matches in the results returned for "${q.trim()}". Try another search or filter.` : installedOnly ? 'Nothing is installed yet.' : 'Nothing to show yet. Check your sources in Settings.'}</div> : null}
 			{grouped && groups.length > 0 ? groups.map(g => <div key={g.type} className='flex flex-col' style={{ gap: 2 }}>
 				<div className='r' style={{ height: 34, gap: 12 }}><span className='t1' data-testid='vader-addons-group-title' style={{ fontWeight: 600, fontSize: 14 }}>{GROUP_TITLE[g.type]}</span><span className='hint tr narrow-hide'>{GROUP_HINT[g.type]}</span><span className='fl' />{onSeeAll ? <button className='tx' style={{ color: 'var(--t2)' }} data-testid='vader-addons-see-all' onClick={() => onSeeAll(g.type === 'TOOLING' ? 'EXTENSION' : g.type)}>{SEE_ALL[g.type] ?? 'See all'}<Icon k='right' small /></button> : null}</div>
 				<div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', columnGap: 40 }}>{g.list.slice(0, 4).map(rowOf)}</div>

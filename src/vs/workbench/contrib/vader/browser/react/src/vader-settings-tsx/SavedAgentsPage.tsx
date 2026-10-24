@@ -44,7 +44,7 @@ export const SavedAgentsPage = () => {
 	const [pickedId, setPickedId] = useState<string | undefined>()
 	const [creating, setCreating] = useState(false)
 	const current = creating ? undefined : state.agents.find(a => a.id === pickedId) ?? state.agents[0]
-	const [draft, setDraft] = useState<Draft>(BLANK)
+	const [draft, setDraft] = useState<Draft>(() => current ? draftOf(current) : BLANK)
 	const [problem, setProblem] = useState('')
 	const [confirmDelete, setConfirmDelete] = useState(false)
 	const [toolText, setToolText] = useState('')

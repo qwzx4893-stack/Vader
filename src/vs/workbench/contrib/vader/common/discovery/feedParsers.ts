@@ -186,7 +186,9 @@ export function parseSmitherySkills(data: any): SmitherySkillResult[] {
 	const items: any[] = Array.isArray(data?.skills) ? data.skills : [];
 	const out: SmitherySkillResult[] = [];
 	for (const s of items) {
-		const q = str(s?.qualifiedName);
+		// Current listings expose namespace + slug; older responses used qualifiedName.
+		const namespace = str(s?.namespace), slug = str(s?.slug);
+		const q = str(s?.qualifiedName) ?? (namespace && slug ? `${namespace}/${slug}` : undefined);
 		const gitUrl = githubFolderUrlOf(str(s?.gitUrl));
 		if (!q || !gitUrl || s?.listed === false) continue;
 		out.push({

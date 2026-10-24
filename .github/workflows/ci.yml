@@ -84,9 +84,15 @@ jobs:
 
       - name: Startup and MCP lifecycle regressions (isolated services)
         run: |
+          node src/vs/workbench/contrib/vader/test/devValidationE2E.mjs
           node src/vs/workbench/contrib/vader/test/startupServicesE2E.mjs
           node src/vs/workbench/contrib/vader/test/mcpLifecycleE2E.mjs
-            node src/vs/workbench/contrib/vader/test/fileWatchLifecycleE2E.mjs
+          node src/vs/workbench/contrib/vader/test/fileWatchLifecycleE2E.mjs
+          node src/vs/workbench/contrib/vader/test/projectPickerE2E.mjs
+          node src/vs/workbench/contrib/vader/test/messageRevisionE2E.mjs
+          node src/vs/workbench/contrib/vader/test/addonsLiveDataE2E.mjs
+          node src/vs/workbench/contrib/vader/test/externalAgentSignInE2E.mjs
+          node src/vs/workbench/contrib/vader/test/providerErrorE2E.mjs
 
       - name: Test model server speaks the OpenAI protocol as the official SDK expects
         run: node src/vs/workbench/contrib/vader/test/e2e/modelServerE2E.mjs
@@ -94,6 +100,7 @@ jobs:
       - name: Agent runtime bundle in a real browser (no Node)
         run: |
           npx playwright-core install --with-deps chromium
+          node src/vs/workbench/contrib/vader/test/smokeReadinessE2E.mjs
           node src/vs/workbench/contrib/vader/test/windowLayersE2E.mjs
           node src/vs/workbench/contrib/vader/test/clineBundleBrowserE2E.mjs
           node src/vs/workbench/contrib/vader/test/addonsUiE2E.mjs
